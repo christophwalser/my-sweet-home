@@ -65,6 +65,15 @@ export type Sash = {
   end_angle: number;
 };
 
+/** Light source of a lamp; x, y and z are relative to the piece's width, depth and height. */
+export type LightSource = {
+  x: number;
+  y: number;
+  z: number;
+  color: number;
+  diameter: number | null;
+};
+
 export type Piece = {
   type: "piece";
   kind: PieceKind;
@@ -104,6 +113,7 @@ export type Piece = {
     power: number | null;
   };
   sashes?: Sash[];
+  light_sources?: LightSource[];
   texture: Texture | null;
   materials?: Material[];
   text_style: TextStyle | null;
@@ -135,6 +145,18 @@ export type Wall = {
     right_side_color: number | null;
   };
   textures?: Texture[];
+  baseboards?: Baseboard[];
+};
+
+export type Baseboard = {
+  attrs: {
+    /** `leftSideBaseboard` or `rightSideBaseboard` */
+    role: string;
+    thickness: number;
+    height: number;
+    color: number | null;
+  };
+  texture: Texture | null;
 };
 
 export type Room = {
@@ -164,6 +186,7 @@ export type Polyline = {
     level: string | null;
     thickness: number | null;
     dash_style: string | null;
+    elevation: number | null;
     color: number | null;
     closed_path: boolean | null;
   };
@@ -177,8 +200,13 @@ export type DimensionLine = {
     y_start: number;
     x_end: number;
     y_end: number;
+    elevation_start: number | null;
+    elevation_end: number | null;
     offset: number;
+    end_mark_size: number | null;
+    pitch: number | null;
     color: number | null;
+    visible_in_3d: boolean | null;
   };
   text_style: TextStyle | null;
 };
@@ -189,7 +217,10 @@ export type Label = {
     x: number;
     y: number;
     angle: number | null;
+    elevation: number | null;
+    pitch: number | null;
     color: number | null;
+    outline_color: number | null;
   };
   text_style: TextStyle | null;
   text: string;

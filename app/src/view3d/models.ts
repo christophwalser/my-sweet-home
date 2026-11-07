@@ -227,6 +227,14 @@ export function createPieceObject(
       if (a.model_mirrored) scale.x = -scale.x;
       rotated.scale.copy(scale);
       applyPieceMaterials(inner, piece);
+      inner.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.receiveShadow = true;
+        // Transparent parts like window panes let the sun through
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mesh.castShadow = !mats.some((m) => m.transparent && m.opacity < 0.9);
+      });
       outer.add(rotated);
       onLoaded();
     })
