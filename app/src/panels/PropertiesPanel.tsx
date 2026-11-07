@@ -182,6 +182,20 @@ export default function PropertiesPanel() {
       </button>
       <button
         type="button"
+        onClick={() => void run("edit_flip", { ids: selection, axis: "horizontal" })}
+        title="Mirror left ↔ right (furniture gets a mirrored model)"
+      >
+        Flip ↔
+      </button>
+      <button
+        type="button"
+        onClick={() => void run("edit_flip", { ids: selection, axis: "vertical" })}
+        title="Mirror top ↔ bottom (furniture gets a mirrored model)"
+      >
+        Flip ↕
+      </button>
+      <button
+        type="button"
         title="Ctrl+D"
         onClick={() =>
           void run("edit_duplicate", { ids: selection }).then((r) => {

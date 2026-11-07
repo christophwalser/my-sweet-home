@@ -252,6 +252,37 @@ fn copy_paste_duplicate_and_room_detection() {
     run(&r, &mut doc, "edit_undo", json!({}));
     assert_eq!(doc.home().walls[0].attrs.thickness, 20.0);
 
+    // Flipping the closed outline horizontally keeps it in place (symmetric) and keeps the
+    // joins; a second flip restores the original coordinates
+    let before: Vec<_> = doc.home().walls.iter().map(|w| w.attrs.clone()).collect();
+    run(
+        &r,
+        &mut doc,
+        "edit_flip",
+        json!({ "ids": walls, "axis": "horizontal" }),
+    );
+    let w0 = doc
+        .home()
+        .walls
+        .iter()
+        .find(|w| w.attrs.id == walls[0])
+        .unwrap();
+    assert_eq!(
+        (w0.attrs.x_start, w0.attrs.x_end),
+        (0.0, 600.0),
+        "symmetric outline: mirrored and reversed gives the same wall"
+    );
+    run(
+        &r,
+        &mut doc,
+        "edit_flip",
+        json!({ "ids": walls, "axis": "horizontal" }),
+    );
+    let after: Vec<_> = doc.home().walls.iter().map(|w| w.attrs.clone()).collect();
+    assert_eq!(before, after);
+    run(&r, &mut doc, "edit_undo", json!({}));
+    run(&r, &mut doc, "edit_undo", json!({}));
+
     // Two separate walls are joined at the intersection of their axes (mitered corner)
     let h = run(
         &r,

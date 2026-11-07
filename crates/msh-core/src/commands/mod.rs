@@ -9,6 +9,7 @@
 
 mod annotate;
 mod edit;
+mod flip;
 mod furniture;
 mod group;
 mod home;
@@ -31,6 +32,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     group::register(r);
     annotate::register(r);
     edit::register(r);
+    flip::register(r);
     view::register(r);
 }
 
