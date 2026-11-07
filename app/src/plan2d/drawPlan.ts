@@ -337,8 +337,11 @@ function drawDoorOrWindow(
     const r = s.width * w;
     ctx.beginPath();
     ctx.moveTo(ax, ay);
-    ctx.lineTo(ax + Math.cos(s.end_angle) * r, ay + Math.sin(s.end_angle) * r);
-    ctx.arc(ax, ay, r, s.end_angle, s.start_angle, s.end_angle > s.start_angle);
+    // Sash angles follow Java's Arc2D (counter-clockwise on screen): negate them for canvas
+    const end = -s.end_angle;
+    const start = -s.start_angle;
+    ctx.lineTo(ax + Math.cos(end) * r, ay + Math.sin(end) * r);
+    ctx.arc(ax, ay, r, end, start, end > start);
     ctx.stroke();
   }
   if (!p.sashes?.length) {

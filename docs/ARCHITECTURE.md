@@ -146,6 +146,40 @@ Known gaps (planned for later phases):
 - Selection, tooltips and editing (P3/P4)
 - Memory and CPU measurement of the release build (P7 benchmark; only dev builds were run so far)
 
+### 4.7 Status after P3a (2026-11-07)
+
+P3 is split in two steps. **P3a (done):** command registry and headless operation.
+**P3b (next):** live mode through a named pipe to the running app, 3D screenshot from the app.
+
+Implemented in P3a:
+- `msh-core`: `Document` (home, resources, path, snapshot-based undo/redo with 100 steps; failed
+  commands restore the previous state), `Registry` with typed parameters (`schemars` JSON Schema).
+  23 commands: `home_new/open/save/describe/set`, `level_add/update/select`,
+  `wall_add/add_path/update`, `room_add/update`, `catalog_search`,
+  `furniture_add/add_in_wall/update`, `label_add`, `dimension_add`, `edit_delete/undo/redo`,
+  `view_plan_image`.
+- Catalog furniture and textures are **embedded** into the home (single-file models as `N`,
+  multi-part models as folder `N/…`, icons, texture images). Catalog values in cm/degrees are
+  converted to the relative values of `Home.xml` (sash axes, wall thickness/distance, light
+  sources, drop-on-top elevation). Unreferenced resources are pruned on save; `ContentDigests` is
+  dropped when resources changed (Sweet Home 3D accepts files without it — verified).
+- `msh-export`: plan as SVG and PNG (`resvg`) with rooms, areas, furniture names, doors/windows,
+  dimensions, labels and scale bar.
+- CLI: subcommands generated from the registry, `--file` with auto-save, `exec` (JSON lines),
+  `commands` (schemas).
+- MCP server (`msh mcp`): JSON-RPC 2.0 over stdio (`initialize`, `ping`, `tools/list`,
+  `tools/call`), tools generated from the registry, plan image returned as MCP image content,
+  conventions as server instructions. Implemented without SDK to avoid churn of the young
+  Rust MCP SDKs; the protocol surface is small.
+- Verified: a house built through MCP (walls, room with floor texture, door, window, furniture)
+  is read by the original Sweet Home 3D reader without errors and with all resources
+  (`scripts/mcp-smoke.ps1`).
+
+Findings:
+- Door/window sash angles follow Java's `Arc2D` convention (counter-clockwise on screen): a point
+  at angle θ lies at (cos θ, −sin θ) in plan coordinates. The P2 plan view drew them mirrored;
+  fixed in the app and in the export.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

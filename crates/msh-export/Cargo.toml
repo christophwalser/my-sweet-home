@@ -1,0 +1,15 @@
+[package]
+name = "msh-export"
+description = "Exports of My Sweet Home: plan as SVG and PNG"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+msh-model.workspace = true
+msh-geometry.workspace = true
+resvg.workspace = true
+
+[lints]
+workspace = true

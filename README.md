@@ -45,11 +45,57 @@ msh info house.sh3d                   # summary: levels, walls, rooms with area,
 msh dump house.sh3d                   # complete model as JSON
 msh resave house.sh3d copy.sh3d       # read and save again
 msh catalog scan                      # find installed furniture/texture libraries
-msh catalog search "sofa"             # search all libraries
 msh catalog list Trees.sh3f           # content of one library
+msh commands                          # all editing commands with their JSON schemas
 ```
 
-All commands accept `--json` for machine-readable output.
+Editing commands are generated from the command registry of `msh-core` (`group_action` →
+`msh group action`). With `--file`, the home is loaded and saved after each modifying command:
+
+```powershell
+msh --file house.sh3d home new --name "My house"
+msh --file house.sh3d wall add-path --points "[[0,0],[900,0],[900,700],[0,700]]" --closed --thickness 30
+msh --file house.sh3d room add --name "Living room" --points "[[15,15],[885,15],[885,685],[15,685]]"
+msh catalog search --query "door"
+msh --file house.sh3d furniture add-in-wall --catalog-id "eTeks#frontDoor" --wall-id <id> --offset 400
+msh --file house.sh3d furniture add --catalog-id "eTeks#sofa" --x 300 --y 500 --angle-deg 180
+msh --file house.sh3d view plan-image --out plan.png
+msh --file house.sh3d edit undo
+```
+
+Several commands in one go (saved once at the end): `msh --file house.sh3d exec < commands.jsonl`
+with one `{"command": "...", "params": {...}}` per line.
+
+Conventions: lengths in cm, y axis points down, angles in degrees (clockwise), colors `#RRGGBB`.
+
+## MCP server (AI control)
+
+`msh mcp` starts a Model Context Protocol server on stdin/stdout. Every registry command is a
+tool (`home_new`, `wall_add_path`, `room_add`, `catalog_search`, `furniture_add`,
+`furniture_add_in_wall`, `view_plan_image`, `home_save`, `edit_undo`, …). `view_plan_image`
+returns the plan as an image so the AI can check its result.
+
+Claude Code:
+
+```powershell
+claude mcp add my-sweet-home -- D:\Data\Programming\_repos\my-sweet-home\target\debug\msh.exe mcp
+```
+
+Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "my-sweet-home": {
+      "command": "D:\\Data\\Programming\\_repos\\my-sweet-home\\target\\debug\\msh.exe",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+`msh mcp --file house.sh3d` starts with an existing home. `.\scripts\mcp-smoke.ps1` runs a
+scripted MCP session and verifies the result with the original Sweet Home 3D reader.
 
 ## Layout
 
@@ -59,15 +105,16 @@ All commands accept `--json` for machine-readable output.
 | `crates/msh-format` | Read and write `.sh3d` / `Home.xml` |
 | `crates/msh-catalog` | Furniture and texture libraries (`.sh3f`, `.sh3t`, `.jar`) |
 | `crates/msh-geometry` | Geometry: wall outlines with joins, arc walls |
-| `crates/msh-core` | Core: document, commands, undo/redo (from P3) |
-| `crates/msh-cli` | Binary `msh` (CLI, later MCP server) |
+| `crates/msh-core` | Core: document, command registry, undo/redo, catalog access |
+| `crates/msh-export` | Plan as SVG/PNG |
+| `crates/msh-cli` | Binary `msh` (CLI and MCP server) |
 | `app/src-tauri` | Tauri backend of the desktop app |
 | `app/src` | React/TypeScript frontend (`plan2d/`, `view3d/`, `catalog/`) |
 | `tools/compat` | Java test program using the original Sweet Home 3D reader |
 | `tests/corpus` | Test files (example projects; personal files in `private/`) |
 | `docs/` | Architecture and decisions |
 
-More crates (`msh-export`, `msh-ipc`) are added in the phases that need them.
+The crate `msh-ipc` (live connection to the running app) follows in phase P3b.
 
 ## License
 

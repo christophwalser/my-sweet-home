@@ -1,87 +1,387 @@
 //! `msh` – command line interface of My Sweet Home.
 //!
-//! In phase P3 the editing subcommands are generated from the command registry
-//! of `msh-core`, and `msh mcp` starts the MCP server.
+//! Besides a few fixed commands (`info`, `dump`, `resave`, `catalog scan|list`,
+//! `commands`, `exec`, `mcp`), all subcommands are generated from the command
+//! registry of `msh-core`: the command `wall_add_path` becomes
+//! `msh wall add-path --points '[[0,0],[500,0]]'`. With `--file`, the home is
+//! loaded from that file and saved back after a modifying command.
 
-use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use anyhow::{Context, Result, anyhow, bail};
+use clap::{Arg, ArgAction, ArgMatches, Command, FromArgMatches, Subcommand, value_parser};
+use msh_core::{Document, Registry};
 use msh_format::Sh3dDocument;
 use serde::Serialize;
+use serde_json::{Map, Value, json};
+use std::collections::BTreeMap;
+use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
 mod catalog_cmd;
-
-#[derive(Parser)]
-#[command(
-    name = "msh",
-    version,
-    about = "My Sweet Home – command line interface"
-)]
-struct Cli {
-    /// Output as JSON (for scripts and AI agents)
-    #[arg(long, global = true)]
-    json: bool,
-
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand)]
-enum Command {
-    /// Shows the application name and version
-    Version,
-    /// Shows a summary of a project (.sh3d or Home.xml)
-    Info { file: PathBuf },
-    /// Prints the complete project model as JSON
-    Dump { file: PathBuf },
-    /// Reads a project and saves it again (format test)
-    Resave { input: PathBuf, output: PathBuf },
-    /// Furniture and texture libraries
-    #[command(subcommand)]
-    Catalog(catalog_cmd::CatalogCommand),
-}
+mod mcp;
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
-    match cli.command {
-        Command::Version => {
+    let registry = Registry::standard();
+    let matches = build_cli(&registry).get_matches();
+    let json_output = matches.get_flag("json");
+    match matches.subcommand() {
+        Some(("version", _)) => {
             let info = msh_core::app_info();
-            if cli.json {
+            if json_output {
                 println!("{}", serde_json::to_string(&info)?);
             } else {
                 println!("{} {}", info.name, info.version);
             }
         }
-        Command::Info { file } => {
-            let doc = open(&file)?;
+        Some(("info", m)) => {
+            let doc = open_file(m.get_one::<PathBuf>("path").expect("required"))?;
             let summary = Summary::of(&doc);
-            if cli.json {
+            if json_output {
                 println!("{}", serde_json::to_string_pretty(&summary)?);
             } else {
                 summary.print();
             }
         }
-        Command::Dump { file } => {
-            let doc = open(&file)?;
+        Some(("dump", m)) => {
+            let doc = open_file(m.get_one::<PathBuf>("path").expect("required"))?;
             println!("{}", serde_json::to_string_pretty(&doc.home)?);
         }
-        Command::Resave { input, output } => {
-            let doc = open(&input)?;
-            doc.save(&output)
+        Some(("resave", m)) => {
+            let doc = open_file(m.get_one::<PathBuf>("input").expect("required"))?;
+            let output = m.get_one::<PathBuf>("output").expect("required");
+            doc.save(output)
                 .with_context(|| format!("failed to save {}", output.display()))?;
-            if cli.json {
-                println!("{}", serde_json::json!({ "saved": output }));
+            if json_output {
+                println!("{}", json!({ "saved": output }));
             } else {
                 println!("Saved: {}", output.display());
             }
         }
-        Command::Catalog(cmd) => catalog_cmd::run(cmd, cli.json)?,
+        Some(("commands", _)) => {
+            let list: Vec<Value> = registry
+                .list()
+                .iter()
+                .map(|c| {
+                    json!({
+                        "name": c.name,
+                        "description": c.description,
+                        "modifies": c.modifies,
+                        "params": c.params_schema,
+                    })
+                })
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&list)?);
+        }
+        Some(("exec", _)) => exec(&registry, &matches)?,
+        Some(("mcp", _)) => {
+            let file = matches.get_one::<PathBuf>("home_file").cloned();
+            mcp::serve(&registry, file)?;
+        }
+        Some(("catalog", m)) if matches!(m.subcommand_name(), Some("scan" | "list")) => {
+            let cmd = catalog_cmd::CatalogCommand::from_arg_matches(m)?;
+            catalog_cmd::run(cmd, json_output)?;
+        }
+        Some((group, m)) => {
+            let (action, am) = m
+                .subcommand()
+                .ok_or_else(|| anyhow!("missing action for '{group}'"))?;
+            let name = format!("{group}_{}", action.replace('-', "_"));
+            run_registry_command(&registry, &matches, &name, am)?;
+        }
+        None => {
+            build_cli(&registry).print_help()?;
+        }
     }
     Ok(())
 }
 
-/// Opens a `.sh3d` file or a standalone `Home.xml`.
-fn open(path: &Path) -> Result<Sh3dDocument> {
+/// Builds the clap command tree: fixed commands plus one group per registry prefix.
+fn build_cli(registry: &Registry) -> Command {
+    let mut cli = Command::new("msh")
+        .version(env!("CARGO_PKG_VERSION"))
+        .about("My Sweet Home – command line interface")
+        .after_help(
+            "Lengths in cm, y axis points down, angles in degrees (clockwise), colors #RRGGBB.\n\
+             Example: msh --file house.sh3d wall add-path --points '[[0,0],[800,0],[800,600],[0,600]]' --closed",
+        )
+        .arg(
+            Arg::new("json")
+                .long("json")
+                .global(true)
+                .action(ArgAction::SetTrue)
+                .help("Output as JSON (for scripts and AI agents)"),
+        )
+        .arg(
+            Arg::new("home_file")
+                .long("file")
+                .short('f')
+                .global(true)
+                .value_parser(value_parser!(PathBuf))
+                .help("Home file (.sh3d) to work on; saved after modifying commands"),
+        )
+        .arg(
+            Arg::new("out")
+                .long("out")
+                .short('o')
+                .global(true)
+                .value_parser(value_parser!(PathBuf))
+                .help("Output file for images (view plan-image)"),
+        )
+        .arg(
+            Arg::new("dry_run")
+                .long("dry-run")
+                .global(true)
+                .action(ArgAction::SetTrue)
+                .help("Do not save the home after a modifying command"),
+        )
+        .subcommand(Command::new("version").about("Shows the application name and version"))
+        .subcommand(
+            Command::new("info")
+                .about("Shows a summary of a project (.sh3d or Home.xml)")
+                .arg(Arg::new("path").required(true).value_parser(value_parser!(PathBuf))),
+        )
+        .subcommand(
+            Command::new("dump")
+                .about("Prints the complete project model as JSON")
+                .arg(Arg::new("path").required(true).value_parser(value_parser!(PathBuf))),
+        )
+        .subcommand(
+            Command::new("resave")
+                .about("Reads a project and saves it again (format test)")
+                .arg(Arg::new("input").required(true).value_parser(value_parser!(PathBuf)))
+                .arg(Arg::new("output").required(true).value_parser(value_parser!(PathBuf))),
+        )
+        .subcommand(Command::new("commands").about("Lists all registry commands with their JSON schemas"))
+        .subcommand(Command::new("exec").about(
+            "Executes commands from stdin, one JSON object per line: {\"command\": \"wall_add\", \"params\": {...}}",
+        ))
+        .subcommand(Command::new("mcp").about(
+            "Starts the MCP server on stdin/stdout (for Claude and other AI agents)",
+        ));
+
+    // One subcommand group per registry prefix; "catalog" also keeps scan/list
+    let mut groups: BTreeMap<&str, Command> = BTreeMap::new();
+    groups.insert(
+        "catalog",
+        catalog_cmd::CatalogCommand::augment_subcommands(
+            Command::new("catalog").about("Furniture and texture catalogs"),
+        ),
+    );
+    for spec in registry.list() {
+        let (group, action) = spec.group_action();
+        let entry = groups
+            .remove(group)
+            .unwrap_or_else(|| Command::new(group).about(group_about(group)));
+        let mut sub = Command::new(action.replace('_', "-")).about(spec.description);
+        let required: Vec<&str> = spec.params_schema["required"]
+            .as_array()
+            .map(|a| a.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default();
+        if let Some(props) = spec.params_schema["properties"].as_object() {
+            for (name, schema) in props {
+                let mut arg = Arg::new(name.clone())
+                    .long(name.replace('_', "-"))
+                    .required(required.contains(&name.as_str()))
+                    .help(schema["description"].as_str().unwrap_or("").to_owned());
+                if json_type(schema) == Some("boolean") {
+                    // `--closed` alone means true; `--closed=false` is also accepted
+                    arg = arg
+                        .num_args(0..=1)
+                        .default_missing_value("true")
+                        .require_equals(true);
+                } else {
+                    // Coordinates may be negative: `--y -80`
+                    arg = arg.allow_hyphen_values(true);
+                }
+                sub = sub.arg(arg);
+            }
+        }
+        groups.insert(group, entry.subcommand(sub));
+    }
+    for (_, g) in groups {
+        cli = cli.subcommand(g.subcommand_required(true));
+    }
+    cli
+}
+
+fn group_about(group: &str) -> &'static str {
+    match group {
+        "home" => "Create, open, save and inspect homes",
+        "level" => "Levels (storeys)",
+        "wall" => "Walls",
+        "room" => "Rooms",
+        "furniture" => "Furniture, doors and windows",
+        "label" => "Text labels",
+        "dimension" => "Dimension lines",
+        "edit" => "Delete, undo, redo",
+        "view" => "Images of the home",
+        _ => "Commands",
+    }
+}
+
+/// Primary JSON type of a property schema (ignoring `null` of optional values).
+fn json_type(schema: &Value) -> Option<&str> {
+    match &schema["type"] {
+        Value::String(s) => Some(s.as_str()),
+        Value::Array(a) => a.iter().filter_map(Value::as_str).find(|t| *t != "null"),
+        _ => None,
+    }
+}
+
+/// Converts CLI argument strings into JSON parameters according to the schema.
+fn params_from_matches(schema: &Value, m: &ArgMatches) -> Result<Value> {
+    let mut params = Map::new();
+    if let Some(props) = schema["properties"].as_object() {
+        for (name, prop) in props {
+            let Some(raw) = m.get_one::<String>(name) else {
+                continue;
+            };
+            let value = match json_type(prop) {
+                Some("number") => json!(
+                    raw.parse::<f64>()
+                        .with_context(|| format!("--{name}: not a number"))?
+                ),
+                Some("integer") => json!(
+                    raw.parse::<i64>()
+                        .with_context(|| format!("--{name}: not an integer"))?
+                ),
+                Some("boolean") => json!(
+                    raw.parse::<bool>()
+                        .with_context(|| format!("--{name}: expected true or false"))?
+                ),
+                Some("string") => Value::String(raw.clone()),
+                // Arrays, objects and enums: JSON if possible, otherwise a plain string
+                _ => serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.clone())),
+            };
+            params.insert(name.clone(), value);
+        }
+    }
+    Ok(Value::Object(params))
+}
+
+/// Loads the document for a registry command (from `--file` if given).
+fn load_document(file: Option<&PathBuf>, command: &str) -> Result<Document> {
+    match file {
+        Some(path) if path.exists() && command != "home_new" => {
+            Document::open(path).with_context(|| format!("cannot open {}", path.display()))
+        }
+        Some(path) if command != "home_new" && command != "home_open" => {
+            bail!(
+                "{} does not exist (create it with `msh --file … home new`)",
+                path.display()
+            )
+        }
+        _ => Ok(Document::default()),
+    }
+}
+
+fn run_registry_command(
+    registry: &Registry,
+    global: &ArgMatches,
+    name: &str,
+    m: &ArgMatches,
+) -> Result<()> {
+    let spec = registry
+        .get(name)
+        .ok_or_else(|| anyhow!("unknown command '{name}'"))?;
+    let params = params_from_matches(&spec.params_schema, m)?;
+    let file = global.get_one::<PathBuf>("home_file");
+    let mut doc = load_document(file, name)?;
+    if name == "home_new" {
+        doc.path = file.cloned();
+    }
+    let result = registry.execute(&mut doc, name, params)?;
+    if (spec.modifies || name == "home_new")
+        && !global.get_flag("dry_run")
+        && let Some(path) = file
+    {
+        doc.save(Some(path))?;
+    }
+    print_result(result, global.get_one::<PathBuf>("out"))
+}
+
+/// Prints a command result; images are written to `--out`.
+fn print_result(mut result: Value, out: Option<&PathBuf>) -> Result<()> {
+    use base64::Engine;
+    if let Some(b64) = result.get("image_base64").and_then(Value::as_str) {
+        let bytes = base64::engine::general_purpose::STANDARD.decode(b64)?;
+        match out {
+            Some(path) => {
+                std::fs::write(path, &bytes)?;
+                result = json!({ "written": path, "bytes": bytes.len() });
+            }
+            None => {
+                result["image_base64"] =
+                    json!(format!("<{} bytes, use --out to save>", bytes.len()));
+            }
+        }
+    } else if let (Some(svg), Some(path)) = (result.get("svg").and_then(Value::as_str), out) {
+        std::fs::write(path, svg)?;
+        result = json!({ "written": path });
+    }
+    println!("{}", serde_json::to_string_pretty(&result)?);
+    Ok(())
+}
+
+/// `msh exec`: runs JSON commands from stdin on one document and saves once.
+fn exec(registry: &Registry, global: &ArgMatches) -> Result<()> {
+    let file = global.get_one::<PathBuf>("home_file");
+    let mut doc: Option<Document> = None;
+    let mut modified = false;
+    let stdin = std::io::stdin();
+    for (n, line) in stdin.lock().lines().enumerate() {
+        let line = line?;
+        if line.trim().is_empty() || line.trim_start().starts_with('#') {
+            continue;
+        }
+        let req: Value =
+            serde_json::from_str(&line).with_context(|| format!("line {}: invalid JSON", n + 1))?;
+        let name = req["command"]
+            .as_str()
+            .ok_or_else(|| anyhow!("line {}: missing \"command\"", n + 1))?;
+        let d = match &mut doc {
+            Some(d) => d,
+            None => {
+                let mut d = load_document(file, name)?;
+                if name == "home_new" {
+                    d.path = file.cloned();
+                }
+                doc.insert(d)
+            }
+        };
+        match registry.execute(d, name, req["params"].clone()) {
+            Ok(v) => {
+                modified |= registry.get(name).is_some_and(|s| s.modifies) || name == "home_new";
+                println!(
+                    "{}",
+                    json!({ "ok": true, "command": name, "result": strip_image(v) })
+                );
+            }
+            Err(e) => {
+                println!(
+                    "{}",
+                    json!({ "ok": false, "command": name, "error": e.to_string() })
+                );
+                bail!("line {}: {e}", n + 1);
+            }
+        }
+    }
+    if let (Some(d), Some(path), true) = (&mut doc, file, modified)
+        && !global.get_flag("dry_run")
+    {
+        d.save(Some(path))?;
+    }
+    Ok(())
+}
+
+fn strip_image(mut v: Value) -> Value {
+    if v.get("image_base64").is_some() {
+        v["image_base64"] = json!("<omitted>");
+    }
+    v
+}
+
+/// Opens a `.sh3d` file or a standalone `Home.xml` (fixed commands).
+fn open_file(path: &Path) -> Result<Sh3dDocument> {
     let is_xml = path
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("xml"));

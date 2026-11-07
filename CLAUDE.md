@@ -30,6 +30,7 @@ CLI and MCP all get it from the same registry.
 ```powershell
 .\scripts\check.ps1          # rustfmt, clippy (-D warnings), tests, Biome, tsc
 .\scripts\compat-check.ps1   # verify written files with the original Sweet Home 3D reader
+.\scripts\mcp-smoke.ps1      # scripted MCP session, result verified with the SH3D reader
 cd app; pnpm tauri dev       # run the desktop app
 ```
 

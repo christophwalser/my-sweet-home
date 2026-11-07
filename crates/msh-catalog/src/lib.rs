@@ -168,6 +168,45 @@ pub fn read_resource(library: &Path, resource: &str) -> Result<Vec<u8>, CatalogE
     Ok(data)
 }
 
+/// Reads all files below the folder `dir` of a library (e.g. the parts of a
+/// multi-part model). Returns paths relative to `dir` with their content.
+pub fn read_resource_dir(
+    library: &Path,
+    dir: &str,
+) -> Result<Vec<(String, Vec<u8>)>, CatalogError> {
+    let file = std::fs::File::open(library).map_err(|source| CatalogError::Io {
+        path: library.to_owned(),
+        source,
+    })?;
+    let mut zip =
+        zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(|e| CatalogError::Zip {
+            path: library.to_owned(),
+            message: e.to_string(),
+        })?;
+    let prefix = format!("{}/", dir.trim_start_matches('/').trim_end_matches('/'));
+    let names: Vec<String> = zip
+        .file_names()
+        .filter(|n| n.starts_with(&prefix) && !n.ends_with('/'))
+        .map(str::to_owned)
+        .collect();
+    let mut out = Vec::with_capacity(names.len());
+    for name in names {
+        let mut entry = zip.by_name(&name).map_err(|e| CatalogError::Zip {
+            path: library.to_owned(),
+            message: e.to_string(),
+        })?;
+        let mut data = Vec::with_capacity(entry.size() as usize);
+        entry
+            .read_to_end(&mut data)
+            .map_err(|source| CatalogError::Io {
+                path: library.to_owned(),
+                source,
+            })?;
+        out.push((name[prefix.len()..].to_owned(), data));
+    }
+    Ok(out)
+}
+
 fn main_catalog_kind(entry: &str) -> Option<CatalogKind> {
     let file = entry.rsplit('/').next().unwrap_or(entry);
     match file {
