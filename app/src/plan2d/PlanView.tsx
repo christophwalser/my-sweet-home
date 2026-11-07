@@ -5,8 +5,8 @@
 // pan; wheel zooms.
 //
 // Drawing (walls, rooms, lines, dimensions): click the points; magnetism snaps
-// to points, alignment guides, 15° steps and the directions of nearby walls (Alt
-// disables it). Typing a number sets the length of the current segment (Enter
+// to points, alignment guides, right angles to the joined wall, multiples of 45°,
+// the directions of nearby walls and 5° steps (1° with Shift); Alt disables it. Typing a number sets the length of the current segment (Enter
 // confirms). A drawing is finished by clicking its first point (closes it),
 // Enter, Escape, a right click or a double-click; Backspace removes the last
 // point. Dragging with the wall tool draws a single wall. A double-click inside
@@ -208,7 +208,7 @@ export default function PlanView() {
       case "wall":
         return drawing
           ? `Click the next point, or type a length + Enter · click the first point to close · ${FINISH}`
-          : "Click the start point, or drag to draw a single wall · Alt: no magnetism";
+          : "Click the start point, or drag to draw a single wall · Shift: 1° steps · Alt: no magnetism";
       case "room":
         return drawing
           ? `Click the next corner · click the first corner, ${FINISH}`
@@ -355,7 +355,7 @@ export default function PlanView() {
   const levelParam = () => (effectiveLevel ? { level: effectiveLevel } : {});
 
   /** Cursor point for drawing tools, with magnetism unless Alt is pressed. */
-  const snapped = (p: Pt, altKey: boolean): Pt => {
+  const snapped = (p: Pt, altKey: boolean, shiftKey = false): Pt => {
     if (!input || altKey || !isPathTool(tool)) {
       snapState.current = null;
       snapHints.current = null;
@@ -369,7 +369,13 @@ export default function PlanView() {
       input.wallShapes,
       effectiveLevel,
       pxToCm(SNAP_PX),
-      { path, near: p, thickness: wallThickness, anchor: previous ?? undefined },
+      {
+        path,
+        near: p,
+        thickness: wallThickness,
+        anchor: previous ?? undefined,
+        fine: shiftKey,
+      },
     );
     const s = snapDraw(p, previous, ctx);
     snapState.current = s;
@@ -556,7 +562,7 @@ export default function PlanView() {
         });
       }
     } else {
-      const s = snapped(p, e.altKey);
+      const s = snapped(p, e.altKey, e.shiftKey);
       if (draft.current.length === 0) {
         gesture.current = { kind: "draw", screen: [e.clientX, e.clientY], dragged: false };
       }
@@ -592,6 +598,7 @@ export default function PlanView() {
         p,
         pxToCm(SNAP_PX),
         !e.altKey,
+        e.shiftKey,
       );
       draw();
       return;
@@ -651,7 +658,7 @@ export default function PlanView() {
       draw();
     } else if (isPathTool(tool)) {
       // Before the first click the snap marker and guides already show where it lands
-      const s = snapped(p, e.altKey);
+      const s = snapped(p, e.altKey, e.shiftKey);
       cursor.current = draft.current.length > 0 ? s : null;
       draw();
     }

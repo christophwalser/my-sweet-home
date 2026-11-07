@@ -1,7 +1,9 @@
 // Magnetism of the 2D plan, modeled on Sweet Home 3D and extended with guides:
 // 1. points (wall ends, wall side corners, room corners, the first point of the path),
-// 2. a direction from the previous point: 15° steps, or parallel/perpendicular to
-//    nearby walls; along that direction the point snaps to alignment guides
+// 2. a direction from the previous point, in stages: right angles to the wall at the
+//    corner (±10°), multiples of 45° (±5°), parallel/perpendicular to nearby walls
+//    (±4°), otherwise 5° steps (1° with Shift); along that direction the point snaps
+//    to alignment guides
 //    (same x or y as a reference point) and to wall or room lines,
 // 3. without a previous point: lines (projection), alignment guides, whole cm.
 // All coordinates in cm (y down).
@@ -20,7 +22,7 @@ export type SnapContext = {
   lines: Segment[];
   /** Reference points for horizontal and vertical alignment guides */
   refs: Pt[];
-  /** Preferred directions (rad) besides the 15° steps, e.g. of nearby walls */
+  /** Preferred directions (rad) besides the angle steps, e.g. of nearby walls */
   directions: number[];
   /** Names of special points, shown when the cursor snaps to them (key: `pointKey`) */
   labels?: Map<string, string>;
@@ -28,6 +30,8 @@ export type SnapContext = {
   lineLabel?: string;
   /** Snap points of nearby elements, drawn as markers so the user sees where to click */
   hints?: { pt: Pt; label: string }[];
+  /** Fine angle steps (1° instead of 5°), e.g. while Shift is pressed */
+  fine?: boolean;
   /**
    * Directions (rad) of the walls meeting at the previous point (the joined wall or the
    * previous segment). Right angles and straight continuations to them win over all
@@ -54,9 +58,26 @@ export type Snapped = {
   note: string | null;
 };
 
-const STEP = Math.PI / 12;
-/** Directions of nearby walls win over the 15° steps within this tolerance. */
-const WALL_DIRECTION_TOLERANCE = (4 * Math.PI) / 180;
+const DEG = Math.PI / 180;
+/** Important directions (multiples of 45°) and how far they attract. */
+const MAJOR_STEP = 45 * DEG;
+const MAJOR_TOLERANCE_DEG = 5;
+/** Steps between the important directions: normal and fine (Shift). */
+const STEP_DEG = 5;
+const FINE_STEP_DEG = 1;
+/** Directions of nearby walls win over the small steps within this tolerance. */
+const WALL_DIRECTION_TOLERANCE = 4 * DEG;
+
+/**
+ * Staged angle magnetism in degrees: multiples of 45° attract within ±5°, other angles
+ * snap to 5° steps (1° when `fine`, e.g. with Shift).
+ */
+export function snapAngleDeg(deg: number, fine: boolean): number {
+  const major = Math.round(deg / 45) * 45;
+  if (Math.abs(deg - major) < MAJOR_TOLERANCE_DEG) return major;
+  const step = fine ? FINE_STEP_DEG : STEP_DEG;
+  return Math.round(deg / step) * step;
+}
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
@@ -117,9 +138,14 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
     // 2. Direction from the previous point
     const raw = Math.atan2(p[1] - previous[1], p[0] - previous[0]);
     const length = dist(p, previous);
-    let dirAngle = Math.round(raw / STEP) * STEP;
+    let dirAngle = snapAngleDeg(raw / DEG, !!ctx.fine) * DEG;
     let note: string | null = null;
-    let bestWall = WALL_DIRECTION_TOLERANCE;
+    // A wall direction wins over a 45° multiple only if it is closer
+    const onMajor =
+      Math.abs(raw / MAJOR_STEP - Math.round(raw / MAJOR_STEP)) * 45 < MAJOR_TOLERANCE_DEG;
+    let bestWall = onMajor
+      ? Math.min(WALL_DIRECTION_TOLERANCE, angleDiff(dirAngle, raw))
+      : WALL_DIRECTION_TOLERANCE;
     // Right angles to the wall at the corner come first
     let bestCorner = CORNER_TOLERANCE;
     for (const d of ctx.corner ?? []) {
@@ -138,7 +164,7 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
       for (let k = 0; k < 4; k++) {
         const a = d + (k * Math.PI) / 2;
         const diff = angleDiff(a, raw);
-        // Only directions that are not already a 15° step need a note
+        // Only directions that differ from the snapped step need a note
         if (diff < bestWall && angleDiff(a, dirAngle) > 1e-3) {
           bestWall = diff;
           dirAngle = a;
@@ -244,9 +270,11 @@ export function snapContext(
     thickness?: number;
     /** Previous point (fixed end): walls meeting there give right-angle magnetism */
     anchor?: Pt;
+    /** Fine angle steps (Shift) */
+    fine?: boolean;
   } = {},
 ): SnapContext {
-  const { path = [], excludeId, excludePoint, near, thickness, anchor } = options;
+  const { path = [], excludeId, excludePoint, near, thickness, anchor, fine } = options;
   const corner: number[] = [];
   const points: Pt[] = [];
   const labels = new Map<string, string>();
@@ -362,6 +390,7 @@ export function snapContext(
     labels,
     lineLabel: purpose === "wall" ? "on wall axis" : purpose === "polyline" ? undefined : "on edge",
     corner,
+    fine,
     hints,
   };
 }
@@ -370,12 +399,12 @@ function distanceToWall(p: Pt, a: Pt, b: Pt): number {
   return dist(p, projectOnSegment(p, [a, b]));
 }
 
-/** Directions modulo 90° without duplicates; 15° steps are covered anyway. */
+/** Directions modulo 90° without duplicates; multiples of 45° are covered anyway. */
 function dedupeAngles(angles: number[]): number[] {
   const out: number[] = [];
   for (const a of angles) {
     const m = ((a % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2);
-    const isStep = Math.abs(m / STEP - Math.round(m / STEP)) < 1e-3;
+    const isStep = Math.abs(m / MAJOR_STEP - Math.round(m / MAJOR_STEP)) < 1e-3;
     if (!isStep && !out.some((o) => angleDiff(o, m) < 1e-3)) out.push(m);
   }
   return out;

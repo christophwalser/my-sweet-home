@@ -7,7 +7,14 @@
 
 import { forEachPiece, type Home, type Piece, type Pt, type WallShape } from "../model";
 import { editedWallJoints, type Joint } from "./moving";
-import { offsetOutline, type Segment, snapContext, snapDraw, wallAxis } from "./snapping";
+import {
+  offsetOutline,
+  type Segment,
+  snapAngleDeg,
+  snapContext,
+  snapDraw,
+  wallAxis,
+} from "./snapping";
 
 export type HandleKind =
   | "wall-start"
@@ -41,17 +48,17 @@ export const HANDLE_SHAPE: Record<HandleKind, HandleShape> = {
 
 /** Tooltip-like explanation shown while hovering a handle. */
 export const HANDLE_HINT: Record<HandleKind, string> = {
-  "wall-start": "Drag to move the wall start (length and angle)",
-  "wall-end": "Drag to move the wall end (length and angle)",
+  "wall-start": "Drag to move the wall start (length and angle) · Shift: 1° steps",
+  "wall-end": "Drag to move the wall end (length and angle) · Shift: 1° steps",
   "wall-thickness": "Drag to change the thickness",
-  "wall-arc": "Drag sideways to bend the wall into an arc",
-  "wall-rotate": "Drag to rotate the wall around its center",
+  "wall-arc": "Drag sideways to bend the wall into an arc · Shift: 1° steps",
+  "wall-rotate": "Drag to rotate the wall around its center · Shift: 1° steps",
   "room-point": "Drag to move this corner",
   "polyline-point": "Drag to move this point",
   "dimension-start": "Drag to move the start of the dimension",
   "dimension-end": "Drag to move the end of the dimension",
   "piece-resize": "Drag to resize",
-  "piece-rotate": "Drag to rotate",
+  "piece-rotate": "Drag to rotate · Shift: 1° steps",
 };
 
 export type Handle = {
@@ -78,10 +85,6 @@ export type HandleDrag = {
   params: Record<string, unknown>;
 };
 
-/** Rotation step with magnetism (degrees). */
-const ROTATION_STEP_DEG = 15;
-/** Arc extent step with magnetism (degrees). */
-const ARC_STEP_DEG = 5;
 /** Distance of offset handles from the element, in screen pixels. */
 const HANDLE_OFFSET_PX = 22;
 
@@ -230,7 +233,8 @@ export function directionDeg(a: Pt, b: Pt): number {
 
 /**
  * Computes the change for dragging `handle` to `p`. `snapRadius` is the magnetism
- * radius in cm; `magnetism` is false while Alt is pressed.
+ * radius in cm; `magnetism` is false while Alt is pressed; `fine` (Shift) uses 1°
+ * angle steps instead of 5°.
  */
 export function dragHandle(
   home: Home,
@@ -240,6 +244,7 @@ export function dragHandle(
   p: Pt,
   snapRadius: number,
   magnetism: boolean,
+  fine = false,
 ): HandleDrag | null {
   const { id } = handle;
   const none = { snap: null, guides: [] as Segment[] };
@@ -260,6 +265,7 @@ export function dragHandle(
               excludeId: id,
               thickness: a.thickness,
               anchor: fixed,
+              fine,
               excludePoint: handle.pos,
               near: p,
             }),
@@ -317,7 +323,7 @@ export function dragHandle(
       // Signed sagitta towards the left side → arc extent = 4·atan(2h / chord)
       const h = (p[0] - mx) * lx + (p[1] - my) * ly;
       let deg = (4 * Math.atan((2 * h) / chord) * 180) / Math.PI;
-      deg = magnetism ? Math.round(deg / ARC_STEP_DEG) * ARC_STEP_DEG : Math.round(deg);
+      deg = magnetism ? snapAngleDeg(deg, fine) : Math.round(deg);
       if (Math.abs(deg) < 1) deg = 0;
       const extent = (deg * Math.PI) / 180;
       return {
@@ -335,9 +341,7 @@ export function dragHandle(
       const half = Math.hypot(a.x_end - a.x_start, a.y_end - a.y_start) / 2;
       const c: Pt = [(a.x_start + a.x_end) / 2, (a.y_start + a.y_end) / 2];
       let deg = (Math.atan2(p[1] - c[1], p[0] - c[0]) * 180) / Math.PI;
-      deg = magnetism
-        ? Math.round(deg / ROTATION_STEP_DEG) * ROTATION_STEP_DEG
-        : Math.round(deg * 10) / 10;
+      deg = magnetism ? snapAngleDeg(deg, fine) : Math.round(deg * 10) / 10;
       const r = (deg * Math.PI) / 180;
       const start: Pt = [c[0] - Math.cos(r) * half, c[1] - Math.sin(r) * half];
       const end: Pt = [c[0] + Math.cos(r) * half, c[1] + Math.sin(r) * half];
@@ -445,7 +449,7 @@ export function dragHandle(
       // The handle sits on the top-left corner: angle of the pointer minus angle of that corner
       let angle = Math.atan2(p[1] - a.y, p[0] - a.x) - Math.atan2(-d / 2, -w / 2);
       let deg = ((((angle * 180) / Math.PI) % 360) + 360) % 360;
-      if (magnetism) deg = (Math.round(deg / ROTATION_STEP_DEG) * ROTATION_STEP_DEG) % 360;
+      if (magnetism) deg = snapAngleDeg(deg, fine) % 360;
       else deg = Math.round(deg * 10) / 10;
       angle = (deg * Math.PI) / 180;
       return {

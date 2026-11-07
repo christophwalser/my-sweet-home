@@ -32,7 +32,8 @@ bar at the bottom of the plan explains the next step.
 - Drawing: click the points; finish by clicking the first point (closes the outline), Enter,
   Esc, a right click or a double-click; Backspace removes the last point; type a number + Enter
   for an exact length; drag with the wall tool for a single wall. Magnetism snaps to wall ends
-  and corners, alignment guides, 15° steps and the directions of nearby walls (Alt disables it).
+  and corners, alignment guides, right angles to the joined wall, multiples of 45°, the
+  directions of nearby walls and 5° steps (Shift: 1° steps, Alt: no magnetism).
 - Double-click inside walls with the room tool creates the room of that area.
 - Handles of a selected wall: ends (length/angle), side square (thickness), middle diamond
   (arc), circle (rotation). Furniture: resize and rotate handles; furniture docks to walls.

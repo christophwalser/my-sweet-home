@@ -302,7 +302,15 @@ Based on user feedback; Sweet Home 3D's interaction is the baseline, with additi
   lets the wall joined at its other end follow.
 - Corner magnetism: when drawing or dragging a wall end, right angles and straight
   continuations relative to the wall joined at the previous point (or the previous segment)
-  win over the 15° steps within 10° ("90° to wall"); Alt disables magnetism.
+  win over all other directions within 10° ("90° to wall"); Alt disables magnetism.
+- Staged angle magnetism (replaces Sweet Home 3D's fixed 15° steps, `snapAngleDeg`):
+  1. right angles / straight continuation to the wall at the corner (±10°),
+  2. multiples of 45° (±5°),
+  3. parallel/perpendicular to nearby walls (±4°, only if closer than a 45° multiple),
+  4. otherwise 5° steps, or 1° steps while Shift is pressed; Alt disables magnetism.
+  The same staging applies to wall end, wall rotation, arc and furniture rotation handles.
+  Finer steps alone would make the important angles harder to hit (±2.5° capture instead of
+  ±7.5°); the stages keep them easy while allowing 5° and 1° angles.
 
 Next (P4c): multi-level editing details (elements of other levels as background, walls through
 levels), arc walls and wall splitting in the plan, furniture groups, text style and room label
