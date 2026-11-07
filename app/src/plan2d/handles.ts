@@ -372,6 +372,7 @@ export function dragHandle(
             null,
             snapContext("room", home, wallShapes, levelId, snapRadius, {
               excludePoint: handle.pos,
+              near: p,
               path: room.points.filter((_, i) => i !== handle.index).map((q) => [q.x, q.y]),
             }),
           )
@@ -381,7 +382,7 @@ export function dragHandle(
         preview: [{ pts: points, closed: true }],
         snap: s.marker,
         guides: s.guides,
-        info: lengthText(Math.hypot(s.pt[0] - prev.x, s.pt[1] - prev.y)),
+        info: `${lengthText(Math.hypot(s.pt[0] - prev.x, s.pt[1] - prev.y))}${s.note ? ` · ${s.note}` : ""}`,
         command: "room_update",
         params: { id, points },
       };

@@ -114,6 +114,25 @@ function raySegment(origin: Pt, dir: Pt, [a, b]: Segment): Pt | null {
   return [origin[0] + t * dir[0], origin[1] + t * dir[1]];
 }
 
+/** Intersection of two segments (with a small tolerance at their ends), or null. */
+function segmentIntersection([a, b]: Segment, [c, d]: Segment): Pt | null {
+  const rx = b[0] - a[0];
+  const ry = b[1] - a[1];
+  const sx = d[0] - c[0];
+  const sy = d[1] - c[1];
+  const den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-9) return null;
+  const qx = c[0] - a[0];
+  const qy = c[1] - a[1];
+  const t = (qx * sy - qy * sx) / den;
+  const u = (qx * ry - qy * rx) / den;
+  // Tolerance of 0.5 cm along each segment
+  const et = 0.5 / (Math.hypot(rx, ry) || 1);
+  const eu = 0.5 / (Math.hypot(sx, sy) || 1);
+  if (t < -et || t > 1 + et || u < -eu || u > 1 + eu) return null;
+  return [a[0] + t * rx, a[1] + t * ry];
+}
+
 /** Snaps a drawing point. `previous` is the last point of the path (or the fixed end). */
 export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped {
   const r = ctx.radius;
@@ -292,6 +311,7 @@ export function snapContext(
 ): SnapContext {
   const { path = [], excludeId, excludePoint, near, thickness, anchor, fine } = options;
   const corner: number[] = [];
+  const nearSides: { seg: Segment; wall: number }[] = [];
   const points: Pt[] = [];
   const labels = new Map<string, string>();
   const hints: { pt: Pt; label: string }[] = [];
@@ -340,6 +360,15 @@ export function snapContext(
       }
     } else if (purpose === "room" || purpose === "dimension") {
       points.push(...corners.filter(keep));
+      // Sides near the cursor: their crossings with other walls' sides are corners too
+      for (const side of [s.left, s.right]) {
+        for (let k = 0; k + 1 < side.length; k++) {
+          const seg: Segment = [side[k], side[k + 1]];
+          if (near && dist(near, projectOnSegment(near, seg)) < radius * 6) {
+            nearSides.push({ seg, wall: i });
+          }
+        }
+      }
       if (purpose === "dimension") points.push(...[start, end].filter(keep));
       for (const side of [s.left, s.right]) {
         for (let k = 0; k + 1 < side.length; k++) lines.push([side[k], side[k + 1]]);
@@ -369,6 +398,19 @@ export function snapContext(
     forEachPiece(home.furniture, (p) => {
       if (sameLevel(p.attrs.level, levelId)) refs.push([p.attrs.x, p.attrs.y]);
     });
+  }
+
+  // Corners where sides of different walls cross (e.g. the inner corner of two walls
+  // that overlap instead of being joined)
+  for (let a = 0; a < nearSides.length; a++) {
+    for (let b = a + 1; b < nearSides.length; b++) {
+      if (nearSides[a].wall === nearSides[b].wall) continue;
+      const x = segmentIntersection(nearSides[a].seg, nearSides[b].seg);
+      if (x && keep(x)) {
+        points.push(x);
+        labels.set(pointKey(x), "wall corner");
+      }
+    }
   }
 
   // Right-angle magnetism at the previous point: walls ending there and the previous segment
