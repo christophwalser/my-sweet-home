@@ -594,6 +594,41 @@ fn group_and_ungroup_furniture() {
         panic!("piece expected");
     };
     assert_eq!(p.attrs.x, 110.0);
+
+    // Material changes: color one material, give another a shininess, then reset
+    let bed = p.attrs.id.clone().unwrap();
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": bed, "materials": [
+            { "name": "wood", "color": "#804020" },
+            { "name": "sheet", "shininess": 0.5 }
+        ] }),
+    );
+    let piece = |doc: &Document| match &doc.home().furniture[0] {
+        msh_model::Furniture::Piece(p) => p.clone(),
+        _ => panic!("piece expected"),
+    };
+    let mats = piece(&doc).materials;
+    assert_eq!(mats.len(), 2);
+    assert_eq!(mats[0].attrs.color, Some(msh_model::Color(0xFF80_4020)));
+    assert_eq!(mats[1].attrs.shininess, Some(0.5));
+    // "" removes the color; a material without changes disappears
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": bed, "materials": [{ "name": "wood", "color": "" }] }),
+    );
+    assert_eq!(piece(&doc).materials.len(), 1);
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": bed, "reset_materials": true }),
+    );
+    assert!(piece(&doc).materials.is_empty());
 }
 
 #[test]

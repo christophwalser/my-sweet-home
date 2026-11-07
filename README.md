@@ -51,6 +51,8 @@ bar at the bottom of the plan explains the next step.
 - Levels: tabs above the plan; the level below is shown faded. Furniture groups (Ctrl+G /
   Ctrl+Shift+G), Flip ↔ / ↕, compass settings in the home panel, and the furniture of the home
   as a sortable list ("In home" tab next to the catalog).
+- Materials of a piece of furniture (color, texture, shininess per model material) in the
+  "Materials" section of its properties.
 - Libraries: "Libraries…" imports .sh3f/.sh3t files and removes your own ones; "Import
   furniture…" imports OBJ, DAE, 3DS, glTF or GLB models, "Import…" in the texture chooser
   imports images. Imported items go to "My furniture" / "My textures" in Sweet Home 3D's user

@@ -273,7 +273,7 @@ export function createPieceObject(
       );
       if (a.model_mirrored) scale.x = -scale.x;
       rotated.scale.copy(scale);
-      applyPieceMaterials(inner, piece);
+      applyPieceMaterials(inner, piece, docId, onLoaded);
       inner.traverse((o) => {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
@@ -313,9 +313,33 @@ function applyWindowPanes(obj: THREE.Object3D): void {
 }
 
 /** Applies color and material overrides of a piece to its (cloned) model. */
-function applyPieceMaterials(obj: THREE.Object3D, piece: Piece): void {
+/** Names of the materials of a model (for the material editor), in model order. */
+export async function modelMaterialNames(url: string): Promise<string[]> {
+  const model = await loadModel(url);
+  const names: string[] = [];
+  model.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      if (m.name && !names.includes(m.name)) names.push(m.name);
+    }
+  });
+  return names;
+}
+
+function applyPieceMaterials(
+  obj: THREE.Object3D,
+  piece: Piece,
+  docId: number,
+  onLoaded: () => void,
+): void {
   const a = piece.attrs;
   const overrides = new Map((piece.materials ?? []).map((m) => [m.attrs.name, m.attrs]));
+  const texturesByName = new Map(
+    (piece.materials ?? [])
+      .filter((m) => m.texture)
+      .map((m) => [m.attrs.name, (m.texture as { image: string }).image]),
+  );
   const side = a.back_face_shown ? THREE.DoubleSide : THREE.FrontSide;
   if (a.color === null && overrides.size === 0 && side === THREE.FrontSide && !a.model_mirrored)
     return;
@@ -331,6 +355,16 @@ function applyPieceMaterials(obj: THREE.Object3D, piece: Piece): void {
       if (color !== null && color !== undefined) {
         c.color = new THREE.Color(color & 0xffffff);
         c.map = null;
+      }
+      // A texture of the material editor replaces the model's texture and color
+      if (o && texturesByName.has(m.name)) {
+        const image = texturesByName.get(m.name) as string;
+        const tex = new THREE.TextureLoader().load(docResourceUrl(docId, image), onLoaded);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.colorSpace = THREE.SRGBColorSpace;
+        c.map = tex;
+        c.color = new THREE.Color(0xffffff);
       }
       if (o?.shininess !== null && o?.shininess !== undefined && "shininess" in c) {
         c.shininess = o.shininess * 128;

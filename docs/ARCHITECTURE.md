@@ -373,7 +373,15 @@ Verified: Sweet Home 3D's `DefaultFurnitureCatalog` / `DefaultTexturesCatalog` r
 written libraries (`tools/compat/ReadCatalog.java`), and a home with imported OBJ and glTF
 furniture is read by its home reader.
 
-Next (P5c): material editor (colors, textures and shininess per model material).
+### 4.14 Status after P5c (2026-11-07)
+
+- Material editor: the furniture panel lists the materials of the model ("Materials",
+  names read from the loaded model) with color, texture and shininess per material, "Model
+  material" per row and "Reset all materials". `furniture_update` takes `materials`
+  ([{name, color, texture, shininess}], "" or a negative shininess restores the model's
+  value) and `reset_materials`; materials without changes are removed. The 3D view applies
+  material textures (model UVs, repeating). Written as `<material>` elements with a texture
+  child like Sweet Home 3D; verified with its home reader.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

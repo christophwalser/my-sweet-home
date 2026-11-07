@@ -352,11 +352,12 @@ input[type="search"]:focus {
 
 .texture-picker-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .texture-picker-bar input {
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
   font: inherit;
   color: inherit;
@@ -814,4 +815,21 @@ input[type="search"]:focus {
 
 .catalog-tools {
   gap: 12px;
+}
+
+.material-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 0;
+}
+
+.material-row legend {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 4px;
 }

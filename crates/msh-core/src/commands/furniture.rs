@@ -88,6 +88,70 @@ struct UpdateParams {
     color: Option<String>,
     mirrored: Option<bool>,
     visible: Option<bool>,
+    /// Changes of single materials of the model (by material name, see the model file)
+    materials: Option<Vec<MaterialParams>>,
+    /// Remove all material changes: the model shows its own materials again
+    reset_materials: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct MaterialParams {
+    /// Name of the material in the model
+    name: String,
+    /// Color as #RRGGBB, "" for the model's color
+    color: Option<String>,
+    /// Catalog ID of a texture, "" for the model's texture
+    texture: Option<String>,
+    /// Shininess from 0 (matt) to 1 (shiny), a negative value for the model's shininess
+    shininess: Option<f32>,
+}
+
+/// Applies material changes to a piece; materials without any change are removed.
+fn apply_materials(
+    piece: &mut Piece,
+    changes: &[MaterialParams],
+    textures: &[Option<msh_model::Texture>],
+) -> Result<(), CommandError> {
+    for (change, texture) in changes.iter().zip(textures) {
+        let index = match piece
+            .materials
+            .iter()
+            .position(|m| m.attrs.name == change.name)
+        {
+            Some(i) => i,
+            None => {
+                piece.materials.push(msh_model::Material {
+                    attrs: msh_model::MaterialAttrs {
+                        name: change.name.clone(),
+                        ..Default::default()
+                    },
+                    texture: None,
+                    extra_children: Vec::new(),
+                });
+                piece.materials.len() - 1
+            }
+        };
+        let m = &mut piece.materials[index];
+        if let Some(c) = &change.color {
+            m.attrs.color = super::optional_color(c)?;
+            if m.attrs.color.is_some() {
+                m.texture = None;
+            }
+        }
+        if change.texture.is_some() {
+            m.texture = texture.clone();
+            if m.texture.is_some() {
+                m.attrs.color = None;
+            }
+        }
+        if let Some(s) = change.shininess {
+            m.attrs.shininess = (s >= 0.0).then(|| s.clamp(0.0, 1.0));
+        }
+    }
+    piece
+        .materials
+        .retain(|m| m.attrs.color.is_some() || m.texture.is_some() || m.attrs.shininess.is_some());
+    Ok(())
 }
 
 pub(super) fn register(r: &mut Registry) {
@@ -267,6 +331,13 @@ pub(super) fn register(r: &mut Registry) {
          several pieces with ids; x and y only for one piece).",
         true,
         |doc, p: UpdateParams| {
+            // Textures of material changes are embedded once for all pieces
+            let mut material_textures = Vec::new();
+            for change in p.materials.iter().flatten() {
+                let tex = super::wall::texture_for(doc, super::non_empty(&change.texture), "")?;
+                // Sweet Home 3D writes material textures without a role attribute
+                material_textures.push(tex.map(|t| msh_model::Texture { role: None, ..t }));
+            }
             let targets = target_ids(p.id.clone(), p.ids.clone())?;
             if targets.len() > 1 && (p.x.is_some() || p.y.is_some()) {
                 return Err(CommandError::failed(
@@ -304,6 +375,12 @@ pub(super) fn register(r: &mut Registry) {
                 }
                 if let Some(v) = p.visible {
                     a.visible = Some(v);
+                }
+                if p.reset_materials == Some(true) {
+                    piece.materials.clear();
+                }
+                if let Some(changes) = &p.materials {
+                    apply_materials(piece, changes, &material_textures)?;
                 }
             }
             Ok(updated(&targets))

@@ -1,9 +1,12 @@
 // Properties of the selected element (or of the home and level if nothing is
 // selected). Every change runs an *_update command: one undo step per field.
 
+import { useEffect, useState } from "react";
+import { docResourceUrl } from "../api";
 import { forEachPiece, type Home, type Piece, type Wall } from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { useStore } from "../store";
+import { modelMaterialNames } from "../view3d/models";
 import {
   ARROW_STYLES,
   byRole,
@@ -216,6 +219,97 @@ function CompassSection({
         value={deg(c?.longitude)}
         onCommit={set("longitude_deg")}
       />
+    </>
+  );
+}
+
+/** Material editor: color, texture and shininess of each material of the model. */
+function MaterialsSection({
+  piece,
+  docId,
+  run,
+}: {
+  piece: Piece;
+  docId: number;
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const [names, setNames] = useState<string[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const model = piece.attrs.model;
+  useEffect(() => {
+    if (!open || !model) return;
+    let alive = true;
+    modelMaterialNames(docResourceUrl(docId, model))
+      .then((n) => alive && setNames(n))
+      .catch(() => alive && setNames([]));
+    return () => {
+      alive = false;
+    };
+  }, [open, model, docId]);
+  if (!model) return null;
+  const id = piece.attrs.id;
+  const change = (name: string, values: Record<string, unknown>) =>
+    void run("furniture_update", { id, materials: [{ name, ...values }] });
+  const changed = piece.materials ?? [];
+  return (
+    <>
+      <button
+        type="button"
+        className="link-button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+      >
+        {open ? "▾" : "▸"} Materials{changed.length > 0 ? ` (${changed.length} changed)` : ""}
+      </button>
+      {open && names === null && <p className="muted small">Loading materials…</p>}
+      {open && names?.length === 0 && (
+        <p className="muted small">The model has no named materials.</p>
+      )}
+      {open &&
+        names?.map((name) => {
+          const m = changed.find((c) => c.attrs.name === name);
+          return (
+            <fieldset key={name} className="material-row">
+              <legend>{name}</legend>
+              <Field
+                label="Color"
+                type="color"
+                value={toHex(m?.attrs.color ?? 0xffffff)}
+                onCommit={(v) => change(name, { color: v })}
+              />
+              <TextureField
+                label="Texture"
+                current={m?.texture ?? null}
+                onCommit={(v) => change(name, { texture: v })}
+              />
+              <Field
+                label="Shininess"
+                type="number"
+                unit="0–1"
+                value={m?.attrs.shininess ?? null}
+                onCommit={(v) => change(name, { shininess: v })}
+              />
+              {m && (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => change(name, { color: "", texture: "", shininess: -1 })}
+                >
+                  Model material
+                </button>
+              )}
+            </fieldset>
+          );
+        })}
+      {open && changed.length > 0 && (
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => void run("furniture_update", { id, reset_materials: true })}
+        >
+          Reset all materials
+        </button>
+      )}
     </>
   );
 }
@@ -536,6 +630,7 @@ export default function PropertiesPanel() {
           value={a.visible !== false}
           onCommit={set("visible")}
         />
+        <MaterialsSection piece={p} docId={opened.id} run={run} />
         {a.catalog_id && <p className="muted small">Catalog ID: {a.catalog_id}</p>}
         {actions}
       </div>
