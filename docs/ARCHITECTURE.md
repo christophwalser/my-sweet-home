@@ -307,7 +307,9 @@ Based on user feedback; Sweet Home 3D's interaction is the baseline, with additi
   1. right angles / straight continuation to the wall at the corner (±10°),
   2. multiples of 45° (±5°),
   3. parallel/perpendicular to nearby walls (±4°, only if closer than a 45° multiple),
-  4. otherwise 5° steps, or 1° steps while Shift is pressed; Alt disables magnetism.
+  4. otherwise 5° steps; Alt disables magnetism.
+  With Shift only 1° steps apply (no other stage), counted from the wall at the corner if
+  there is one, so corner angles like 89° or 91° can be set precisely.
   The same staging applies to wall end, wall rotation, arc and furniture rotation handles.
   Finer steps alone would make the important angles harder to hit (±2.5° capture instead of
   ±7.5°); the stages keep them easy while allowing 5° and 1° angles.

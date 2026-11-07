@@ -70,9 +70,11 @@ const WALL_DIRECTION_TOLERANCE = 4 * DEG;
 
 /**
  * Staged angle magnetism in degrees: multiples of 45° attract within ±5°, other angles
- * snap to 5° steps (1° when `fine`, e.g. with Shift).
+ * snap to 5° steps. With `fine` (Shift) only plain 1° steps apply, so angles next to
+ * 45° multiples can be set too.
  */
 export function snapAngleDeg(deg: number, fine: boolean): number {
+  if (fine) return Math.round(deg / FINE_STEP_DEG) * FINE_STEP_DEG;
   const major = Math.round(deg / 45) * 45;
   if (Math.abs(deg - major) < MAJOR_TOLERANCE_DEG) return major;
   const step = fine ? FINE_STEP_DEG : STEP_DEG;
@@ -146,9 +148,23 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
     let bestWall = onMajor
       ? Math.min(WALL_DIRECTION_TOLERANCE, angleDiff(dirAngle, raw))
       : WALL_DIRECTION_TOLERANCE;
-    // Right angles to the wall at the corner come first
-    let bestCorner = CORNER_TOLERANCE;
-    for (const d of ctx.corner ?? []) {
+    const corner = ctx.corner ?? [];
+    if (ctx.fine) {
+      // Shift: only 1° steps, counted from the wall at the corner if there is one, so the
+      // corner angle is a whole degree; no other stage may override them
+      bestWall = -1;
+      if (corner.length > 0) {
+        const base = corner[0];
+        const rel = Math.round((raw - base) / (FINE_STEP_DEG * DEG)) * FINE_STEP_DEG;
+        dirAngle = base + rel * DEG;
+        note = "1° steps to wall";
+      } else {
+        note = "1° steps";
+      }
+    }
+    // Right angles to the wall at the corner come first (not with Shift)
+    let bestCorner = ctx.fine ? -1 : CORNER_TOLERANCE;
+    for (const d of corner) {
       for (let k = 0; k < 4; k++) {
         const a = d + (k * Math.PI) / 2;
         const diff = angleDiff(a, raw);
