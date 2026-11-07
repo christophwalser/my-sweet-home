@@ -11,6 +11,7 @@ import {
 } from "../api";
 import { useStore } from "../store";
 import FurnitureList from "./FurnitureList";
+import LibraryDialog from "./LibraryDialog";
 
 const MAX_RESULTS = 300;
 
@@ -67,6 +68,7 @@ export default function CatalogPanel() {
   const [kind, setKind] = useState<CatalogKind>("furniture");
   /** "home": the furniture of the open home instead of the catalog */
   const [showHome, setShowHome] = useState(false);
+  const [librariesOpen, setLibrariesOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
 
@@ -157,6 +159,17 @@ export default function CatalogPanel() {
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search catalog"
         />
+        <div className="catalog-tools">
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => setLibrariesOpen(true)}
+            title="Import and manage furniture and texture libraries"
+          >
+            Libraries…
+          </button>
+        </div>
+        {librariesOpen && <LibraryDialog onClose={() => setLibrariesOpen(false)} />}
         <div className="catalog-count muted" hidden={showHome}>
           {loading
             ? "Loading libraries…"

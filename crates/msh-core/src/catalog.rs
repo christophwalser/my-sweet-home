@@ -5,7 +5,7 @@ use crate::document::Document;
 use crate::registry::CommandError;
 use msh_catalog::{CatalogKind, FurnitureItem, TextureItem, find_all_libraries, open_library};
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Arc, RwLock};
 
 /// A furniture item together with its library file.
 #[derive(Debug, Clone)]
@@ -23,14 +23,15 @@ pub struct TextureEntry {
     pub item: TextureItem,
 }
 
-/// All catalogs of this machine, loaded once per process.
+/// All catalogs of this machine, loaded on first use and reloaded after libraries
+/// were added or removed.
 #[derive(Default)]
 pub struct CatalogIndex {
     pub furniture: Vec<FurnitureEntry>,
     pub textures: Vec<TextureEntry>,
 }
 
-static INDEX: OnceLock<CatalogIndex> = OnceLock::new();
+static INDEX: RwLock<Option<Arc<CatalogIndex>>> = RwLock::new(None);
 
 /// Language of catalog names used by commands (override with `MSH_CATALOG_LANG`).
 fn catalog_lang() -> String {
@@ -39,8 +40,26 @@ fn catalog_lang() -> String {
 
 impl CatalogIndex {
     /// The catalog index, loading all libraries on first use.
-    pub fn get() -> &'static CatalogIndex {
-        INDEX.get_or_init(|| {
+    pub fn get() -> Arc<CatalogIndex> {
+        if let Some(index) = INDEX.read().ok().and_then(|g| g.clone()) {
+            return index;
+        }
+        let index = Arc::new(Self::load());
+        if let Ok(mut g) = INDEX.write() {
+            *g = Some(index.clone());
+        }
+        index
+    }
+
+    /// Forgets the loaded libraries; the next [`CatalogIndex::get`] reads them again.
+    pub fn reload() {
+        if let Ok(mut g) = INDEX.write() {
+            *g = None;
+        }
+    }
+
+    fn load() -> CatalogIndex {
+        {
             let lang = catalog_lang();
             let mut index = CatalogIndex::default();
             for path in find_all_libraries(&[]) {
@@ -71,7 +90,7 @@ impl CatalogIndex {
                 }
             }
             index
-        })
+        }
     }
 
     /// Finds a furniture item by catalog ID (first match wins).

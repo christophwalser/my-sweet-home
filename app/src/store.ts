@@ -171,7 +171,20 @@ function allIds(opened: OpenedHome): Set<string> {
   return ids;
 }
 
-/** Subscribes to home changes from the backend. Returns the unsubscribe function. */
-export function subscribeToHomeChanges(): Promise<() => void> {
-  return listen<OpenedHome>(HOME_CHANGED_EVENT, (e) => applyHome(e.payload));
+/** Event of the backend after libraries were imported or removed. */
+const CATALOG_CHANGED_EVENT = "catalog-changed";
+
+/**
+ * Subscribes to home changes and catalog changes (library import/removal) from the
+ * backend. Returns the unsubscribe function.
+ */
+export async function subscribeToHomeChanges(): Promise<() => void> {
+  const offHome = await listen<OpenedHome>(HOME_CHANGED_EVENT, (e) => applyHome(e.payload));
+  const offCatalog = await listen(CATALOG_CHANGED_EVENT, () => {
+    void useStore.getState().loadCatalog(navigator.language.split("-")[0] || "en");
+  });
+  return () => {
+    offHome();
+    offCatalog();
+  };
 }

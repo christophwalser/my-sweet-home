@@ -9,12 +9,14 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::oneshot;
 
 /// Event sent to the frontend whenever the open home changed.
 pub const HOME_CHANGED_EVENT: &str = "home-changed";
+/// Event sent after libraries were imported or removed: the frontend reloads the catalog.
+pub const CATALOG_CHANGED_EVENT: &str = "catalog-changed";
 
 /// The home shown in the window.
 pub struct ActiveDoc {
@@ -57,7 +59,7 @@ pub struct AppState {
     pub registry: Registry,
     active: Mutex<Option<ActiveDoc>>,
     next_id: AtomicU32,
-    libraries: OnceLock<Arc<LibraryStore>>,
+    libraries: Mutex<Option<Arc<LibraryStore>>>,
     captures: Mutex<HashMap<u64, CaptureSender>>,
     next_capture: AtomicU64,
 }
@@ -68,7 +70,7 @@ impl Default for AppState {
             registry: Registry::standard(),
             active: Mutex::new(None),
             next_id: AtomicU32::new(0),
-            libraries: OnceLock::new(),
+            libraries: Mutex::new(None),
             captures: Mutex::new(HashMap::new()),
             next_capture: AtomicU64::new(1),
         }
@@ -100,9 +102,17 @@ impl AppState {
 
     /// Library files on this machine, discovered on first use.
     pub fn libraries(&self) -> Arc<LibraryStore> {
-        self.libraries
-            .get_or_init(|| Arc::new(LibraryStore::new(msh_catalog::find_all_libraries(&[]))))
+        let mut guard = self.libraries.lock().unwrap_or_else(|e| e.into_inner());
+        guard
+            .get_or_insert_with(|| {
+                Arc::new(LibraryStore::new(msh_catalog::find_all_libraries(&[])))
+            })
             .clone()
+    }
+
+    /// Discovers the library files again (after an import or removal).
+    pub fn reload_libraries(&self) {
+        *self.libraries.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// Registers a pending 3D capture and returns its ID and receiver.
@@ -151,6 +161,10 @@ pub fn execute<R: Runtime>(app: &AppHandle<R>, name: &str, params: Value) -> Res
     };
     if let Some(view) = view {
         let _ = app.emit(HOME_CHANGED_EVENT, view);
+    }
+    if matches!(name, "library_import" | "library_remove") {
+        state.reload_libraries();
+        let _ = app.emit(CATALOG_CHANGED_EVENT, ());
     }
     Ok(result)
 }

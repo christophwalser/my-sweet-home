@@ -393,6 +393,25 @@ pub fn store_resources_dir() -> Option<PathBuf> {
     dir.is_dir().then_some(dir)
 }
 
+/// Folder of the user's libraries of a kind, shared with Sweet Home 3D
+/// (`%APPDATA%\eTeks\Sweet Home 3D\furniture` or `\textures`).
+pub fn user_library_dir(kind: CatalogKind) -> Option<PathBuf> {
+    let appdata = std::env::var_os("APPDATA")?;
+    let base = PathBuf::from(appdata).join("eTeks").join("Sweet Home 3D");
+    Some(base.join(match kind {
+        CatalogKind::Furniture => "furniture",
+        CatalogKind::Textures => "textures",
+    }))
+}
+
+/// Whether `path` lies in one of the user's library folders (so it may be removed).
+pub fn is_user_library(path: &Path) -> bool {
+    [CatalogKind::Furniture, CatalogKind::Textures]
+        .into_iter()
+        .filter_map(user_library_dir)
+        .any(|dir| path.parent().is_some_and(|p| p == dir))
+}
+
 /// All library files on this machine: Sweet Home 3D installation, user
 /// libraries, Store version and `extra_dirs`.
 pub fn find_all_libraries(extra_dirs: &[PathBuf]) -> Vec<PathBuf> {
