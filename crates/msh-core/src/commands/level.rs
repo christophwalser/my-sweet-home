@@ -15,7 +15,8 @@ const DEFAULT_FLOOR_THICKNESS: f32 = 12.0;
 struct AddParams {
     /// Name, e.g. "Upper floor"
     name: String,
-    /// Elevation of the floor in cm; defaults to the top of the highest level
+    /// Elevation of the top of the floor in cm; defaults to the top of the highest level
+    /// plus the floor thickness (as in Sweet Home 3D)
     elevation: Option<f32>,
     /// Height of the level in cm; defaults to the home's wall height
     height: Option<f32>,
@@ -66,8 +67,10 @@ pub(super) fn register(r: &mut Registry) {
                 .iter()
                 .map(|l| l.attrs.elevation + l.attrs.height)
                 .fold(0.0f32, f32::max);
-            let elevation = p.elevation.unwrap_or(top);
             let floor = p.floor_thickness.unwrap_or(DEFAULT_FLOOR_THICKNESS);
+            // Like Sweet Home 3D: the floor of the new level lies on top of the highest
+            // level, so its elevation (top of the floor) is that top plus the floor thickness
+            let elevation = p.elevation.unwrap_or(top + floor);
             let index = home
                 .levels
                 .iter()

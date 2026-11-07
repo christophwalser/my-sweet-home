@@ -16,14 +16,25 @@ import {
 } from "../model";
 import { baseboardOf, baseboardPolygon } from "./wallSides";
 
-export type LevelInfo = { elevation: number; height: number };
+export type LevelInfo = { elevation: number; height: number; floorThickness: number };
 
-/** Elevation and height of every level; `null` key = home without levels. */
+/** Floor thickness of homes without levels (Sweet Home 3D's default preference). */
+const DEFAULT_FLOOR_THICKNESS = 12;
+
+/** Elevation, height and floor thickness of every level; `null` key = home without levels. */
 export function levelInfos(home: Home): Map<string | null, LevelInfo> {
   const map = new Map<string | null, LevelInfo>();
-  map.set(null, { elevation: 0, height: home.attrs.wall_height ?? 250 });
+  map.set(null, {
+    elevation: 0,
+    height: home.attrs.wall_height ?? 250,
+    floorThickness: DEFAULT_FLOOR_THICKNESS,
+  });
   for (const l of home.levels) {
-    map.set(l.attrs.id, { elevation: l.attrs.elevation, height: l.attrs.height });
+    map.set(l.attrs.id, {
+      elevation: l.attrs.elevation,
+      height: l.attrs.height,
+      floorThickness: l.attrs.floor_thickness,
+    });
   }
   return map;
 }
@@ -377,9 +388,13 @@ export function buildRooms(
 
     if (a.floor_visible !== false) {
       const floorTexture = room.textures?.find((t) => t.role === "floorTexture");
+      // Polygon offset: where furniture stands exactly on the floor, the furniture wins the
+      // depth test, so nothing flickers and nothing pokes through the floor
       const mat = new THREE.MeshLambertMaterial({
         color: floorTexture ? 0xffffff : colorOf(a.floor_color, 0xd8d2c4),
-        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
       });
       if (floorTexture) {
         mat.map = loadTiledTexture(
@@ -388,8 +403,21 @@ export function buildRooms(
           requestRender,
         );
       }
-      const floor = new THREE.Mesh(geom, mat);
-      floor.position.y = (level?.elevation ?? 0) + 0.2;
+      // The floor is a slab with the level's floor thickness below the level elevation (like
+      // Sweet Home 3D); its edges get the plain floor color
+      const slab = new THREE.ExtrudeGeometry(shape, {
+        depth: Math.max(level?.floorThickness ?? DEFAULT_FLOOR_THICKNESS, 0.1),
+        bevelEnabled: false,
+      });
+      slab.rotateX(Math.PI / 2); // (x, y, z) → (x, -z, y): top at 0, bottom at -thickness
+      const edges = new THREE.MeshLambertMaterial({
+        color: colorOf(a.floor_color, 0xd8d2c4),
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      });
+      const floor = new THREE.Mesh(slab, [mat, edges]);
+      floor.position.y = level?.elevation ?? 0;
       floor.name = `floor:${a.id ?? ""}`;
       group.add(floor);
     }
