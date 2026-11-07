@@ -28,7 +28,16 @@ export type SnapContext = {
   lineLabel?: string;
   /** Snap points of nearby elements, drawn as markers so the user sees where to click */
   hints?: { pt: Pt; label: string }[];
+  /**
+   * Directions (rad) of the walls meeting at the previous point (the joined wall or the
+   * previous segment). Right angles and straight continuations to them win over all
+   * other directions within `CORNER_TOLERANCE`; Alt disables magnetism.
+   */
+  corner?: number[];
 };
+
+/** Tolerance of the right-angle magnetism to the wall at the corner. */
+const CORNER_TOLERANCE = (10 * Math.PI) / 180;
 
 /** Key of a point in `SnapContext.labels`. */
 export function pointKey(p: Pt): string {
@@ -111,6 +120,20 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
     let dirAngle = Math.round(raw / STEP) * STEP;
     let note: string | null = null;
     let bestWall = WALL_DIRECTION_TOLERANCE;
+    // Right angles to the wall at the corner come first
+    let bestCorner = CORNER_TOLERANCE;
+    for (const d of ctx.corner ?? []) {
+      for (let k = 0; k < 4; k++) {
+        const a = d + (k * Math.PI) / 2;
+        const diff = angleDiff(a, raw);
+        if (diff < bestCorner) {
+          bestCorner = diff;
+          dirAngle = a;
+          note = k % 2 === 1 ? "90° to wall" : "in line with wall";
+          bestWall = -1;
+        }
+      }
+    }
     for (const d of ctx.directions) {
       for (let k = 0; k < 4; k++) {
         const a = d + (k * Math.PI) / 2;
@@ -219,9 +242,12 @@ export function snapContext(
     near?: Pt;
     /** Thickness of the wall being drawn, for the points where it ends flush */
     thickness?: number;
+    /** Previous point (fixed end): walls meeting there give right-angle magnetism */
+    anchor?: Pt;
   } = {},
 ): SnapContext {
-  const { path = [], excludeId, excludePoint, near, thickness } = options;
+  const { path = [], excludeId, excludePoint, near, thickness, anchor } = options;
+  const corner: number[] = [];
   const points: Pt[] = [];
   const labels = new Map<string, string>();
   const hints: { pt: Pt; label: string }[] = [];
@@ -301,6 +327,24 @@ export function snapContext(
     });
   }
 
+  // Right-angle magnetism at the previous point: walls ending there and the previous segment
+  if (anchor && purpose !== "polyline") {
+    for (const w of home.walls) {
+      const a = w.attrs;
+      if (!sameLevel(a.level, levelId) || a.id === excludeId || a.arc_extent) continue;
+      const s: Pt = [a.x_start, a.y_start];
+      const e: Pt = [a.x_end, a.y_end];
+      if (dist(s, anchor) < 0.01 || dist(e, anchor) < 0.01) {
+        corner.push(Math.atan2(e[1] - s[1], e[0] - s[0]));
+      }
+    }
+  }
+  if (path.length >= 2) {
+    const a = path[path.length - 2];
+    const b = path[path.length - 1];
+    corner.push(Math.atan2(b[1] - a[1], b[0] - a[0]));
+  }
+
   // The path being drawn: its first point closes it, all its points align
   if (path.length > 0) {
     points.push(path[0]);
@@ -317,6 +361,7 @@ export function snapContext(
     directions: dedupeAngles(directions).slice(0, 8),
     labels,
     lineLabel: purpose === "wall" ? "on wall axis" : purpose === "polyline" ? undefined : "on edge",
+    corner,
     hints,
   };
 }

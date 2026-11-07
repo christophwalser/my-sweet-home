@@ -295,6 +295,14 @@ Based on user feedback; Sweet Home 3D's interaction is the baseline, with additi
   there ends flush with the end face of the existing wall.
 - Walls are drawn as one area in the plan (outlines first, fills on top), so overlapping walls
   show no inner lines, like Sweet Home 3D.
+- Corner angles: selected walls show the angle at each of their joined corners (green square
+  for exactly 90°); handle drags of wall ends and rotations show them live. The properties panel
+  has "Angle at start/end" (one wall) or "Angle between" (two joined walls) and "Make 90°";
+  they run `wall_set_angle`, which rotates the wall around the corner, keeps its length and
+  lets the wall joined at its other end follow.
+- Corner magnetism: when drawing or dragging a wall end, right angles and straight
+  continuations relative to the wall joined at the previous point (or the previous segment)
+  win over the 15° steps within 10° ("90° to wall"); Alt disables magnetism.
 
 Next (P4c): multi-level editing details (elements of other levels as background, walls through
 levels), arc walls and wall splitting in the plan, furniture groups, text style and room label

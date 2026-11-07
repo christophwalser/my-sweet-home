@@ -19,6 +19,23 @@ struct DetachParams {
     ids: Vec<String>,
 }
 
+#[derive(Deserialize, JsonSchema, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum WallEnd {
+    Start,
+    End,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct AngleParams {
+    /// Wall that is rotated
+    id: String,
+    /// End of the wall where it is joined to the reference wall; the wall rotates around it
+    at: WallEnd,
+    /// Angle between the two walls at that corner in degrees (0 < angle < 360, e.g. 90)
+    angle_deg: f32,
+}
+
 #[derive(Deserialize, JsonSchema)]
 struct SplitParams {
     id: String,
@@ -109,6 +126,81 @@ fn round(p: P) -> P {
 }
 
 pub(super) fn register(r: &mut Registry) {
+    r.add(
+        "wall_set_angle",
+        "Sets the angle between a wall and the wall joined at one of its ends (e.g. exactly 90°). \
+         The wall rotates around that corner and keeps its length; walls joined at its other end \
+         follow. The side of the rotation stays the same.",
+        true,
+        |doc, p: AngleParams| {
+            if !(p.angle_deg > 0.0 && p.angle_deg < 360.0) {
+                return Err(CommandError::failed("angle_deg must be between 0 and 360"));
+            }
+            let home = doc.home_mut();
+            let i = index_of(home, &p.id)?;
+            let a = home.walls[i].attrs.clone();
+            if !is_straight(&a) {
+                return Err(CommandError::failed("arc walls cannot be rotated this way"));
+            }
+            let at_start = p.at == WallEnd::Start;
+            let joined_id = if at_start {
+                &a.wall_at_start
+            } else {
+                &a.wall_at_end
+            }
+            .clone()
+            .ok_or_else(|| CommandError::failed("this end of the wall is not joined"))?;
+            let other = home.walls[index_of(home, &joined_id)?].attrs.clone();
+            let corner = if at_start { start(&a) } else { end(&a) };
+            let far = if at_start { end(&a) } else { start(&a) };
+            // Far end of the reference wall, seen from the corner
+            let other_far = if dist(start(&other), corner) < dist(end(&other), corner) {
+                end(&other)
+            } else {
+                start(&other)
+            };
+            let len = dist(corner, far);
+            let ol = dist(corner, other_far);
+            if len < 1e-3 || ol < 1e-3 {
+                return Err(CommandError::failed("a wall has no length"));
+            }
+            let u = [
+                (other_far[0] - corner[0]) / ol,
+                (other_far[1] - corner[1]) / ol,
+            ];
+            let v = [(far[0] - corner[0]) / len, (far[1] - corner[1]) / len];
+            // Keep the wall on the same side of the reference wall
+            let side = if u[0] * v[1] - u[1] * v[0] < 0.0 {
+                -1.0
+            } else {
+                1.0
+            };
+            let r = side * p.angle_deg.to_radians();
+            let nv = [
+                u[0] * r.cos() - u[1] * r.sin(),
+                u[0] * r.sin() + u[1] * r.cos(),
+            ];
+            let new_far = round([corner[0] + nv[0] * len, corner[1] + nv[1] * len]);
+            set_end(&mut home.walls[i].attrs, !at_start, new_far);
+            // The wall joined at the far end follows
+            let far_joined = if at_start {
+                a.wall_at_end.clone()
+            } else {
+                a.wall_at_start.clone()
+            };
+            if let Some(fj) = far_joined
+                && let Some(w) = home.walls.iter_mut().find(|w| w.attrs.id == fj)
+            {
+                super::wall::move_joined_end(
+                    &mut w.attrs,
+                    &a.id,
+                    (far[0], far[1]),
+                    (new_far[0], new_far[1]),
+                );
+            }
+            Ok(json!({ "id": a.id, "moved_end": new_far }))
+        },
+    );
     r.add(
         "wall_join",
         "Connects two walls. Their axes are extended or shortened to their intersection: if it \

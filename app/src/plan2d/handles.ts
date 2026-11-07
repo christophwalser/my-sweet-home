@@ -6,6 +6,7 @@
 // position into a preview outline and the registry command that applies it.
 
 import { forEachPiece, type Home, type Piece, type Pt, type WallShape } from "../model";
+import { editedWallJoints, type Joint } from "./moving";
 import { offsetOutline, type Segment, snapContext, snapDraw, wallAxis } from "./snapping";
 
 export type HandleKind =
@@ -71,6 +72,8 @@ export type HandleDrag = {
   guides: Segment[];
   /** Short text shown next to the cursor (length, size or angle) */
   info: string;
+  /** Angles at the corners of an edited wall */
+  joints?: Joint[];
   command: string;
   params: Record<string, unknown>;
 };
@@ -256,6 +259,7 @@ export function dragHandle(
             snapContext("wall", home, wallShapes, levelId, snapRadius, {
               excludeId: id,
               thickness: a.thickness,
+              anchor: fixed,
               excludePoint: handle.pos,
               near: p,
             }),
@@ -271,6 +275,7 @@ export function dragHandle(
         snap: s.marker,
         guides: s.guides,
         info: `${lengthText(len)} · ${directionDeg(start, end)}°${s.note ? ` · ${s.note}` : ""}`,
+        joints: editedWallJoints(home, id, start, end),
         command: "wall_update",
         params: isStart
           ? { id, x_start: pt[0], y_start: pt[1] }
@@ -341,6 +346,7 @@ export function dragHandle(
         preview: [{ pts: wallOutline(start, end, a.thickness, a.arc_extent), closed: true }],
         ...none,
         info: `${directionDeg(start, end)}°`,
+        joints: editedWallJoints(home, id, start, end),
         command: "wall_update",
         params: {
           id,

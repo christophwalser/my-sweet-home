@@ -36,6 +36,9 @@ bar at the bottom of the plan explains the next step.
 - Double-click inside walls with the room tool creates the room of that area.
 - Handles of a selected wall: ends (length/angle), side square (thickness), middle diamond
   (arc), circle (rotation). Furniture: resize and rotate handles; furniture docks to walls.
+- Corner angles are shown for selected walls (green = exactly 90°) and can be typed in the
+  properties ("Angle at start/end", "Angle between", "Make 90°"); drawing and dragging snap to
+  right angles relative to the joined wall (Alt: free).
 - Walls: select two and press J (or "Join walls") to connect them at the intersection of their
   axes; "Detach" removes connections, "Split" cuts a wall in two. Near an existing wall, the
   wall tool shows where a new wall can start (ends, middle, flush with the end face).

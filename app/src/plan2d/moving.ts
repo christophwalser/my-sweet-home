@@ -31,7 +31,7 @@ export type MovePreview = {
   joints: Joint[];
 };
 
-type WallGeom = { id: string; start: Pt; end: Pt; thickness: number; arc: number | null };
+export type WallGeom = { id: string; start: Pt; end: Pt; thickness: number; arc: number | null };
 
 /** Wall geometry after moving `ids` by (dx, dy): selected walls move, joined ends follow. */
 function movedWalls(home: Home, ids: Set<string>, dx: number, dy: number): Map<string, WallGeom> {
@@ -76,49 +76,10 @@ export function movePreview(
   const ids = new Set(selection);
   const geoms = movedWalls(home, ids, dx, dy);
   const outlines: Pt[][] = [];
-  const joints: Joint[] = [];
-  const seen = new Set<string>();
-  const geomOf = (id: string): WallGeom | null => {
-    const g = geoms.get(id);
-    if (g) return g;
-    const w = home.walls.find((x) => x.attrs.id === id);
-    if (!w) return null;
-    const a = w.attrs;
-    return {
-      id,
-      start: [a.x_start, a.y_start],
-      end: [a.x_end, a.y_end],
-      thickness: a.thickness,
-      arc: a.arc_extent,
-    };
-  };
   for (const g of geoms.values()) {
     if (!ids.has(g.id)) outlines.push(wallOutline(g.start, g.end, g.thickness, g.arc));
-    const wall = home.walls.find((w) => w.attrs.id === g.id);
-    if (!wall) continue;
-    for (const [joinedId, atStart] of [
-      [wall.attrs.wall_at_start, true],
-      [wall.attrs.wall_at_end, false],
-    ] as [string | null, boolean][]) {
-      if (!joinedId) continue;
-      const key = [g.id, joinedId].sort().join("|");
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const other = geomOf(joinedId);
-      if (!other) continue;
-      const at = atStart ? g.start : g.end;
-      const mine = atStart ? g.end : g.start;
-      // The end of the other wall that touches this corner
-      const otherFar =
-        Math.hypot(other.start[0] - at[0], other.start[1] - at[1]) <
-        Math.hypot(other.end[0] - at[0], other.end[1] - at[1])
-          ? other.end
-          : other.start;
-      const a = unit(at, mine);
-      const b = unit(at, otherFar);
-      joints.push({ at, a, b, deg: angleBetween(a, b) });
-    }
   }
+  const joints = wallJoints(home, geoms, new Set(geoms.keys()));
   // Doors and windows standing in a moved wall move with it (like edit_move)
   const movedPolygons = home.walls
     .map((w, i) => ({ w, poly: wallPolygon(wallShapes[i]) }))
@@ -144,6 +105,97 @@ export function movePreview(
     });
   }
   return { outlines, joints: joints.filter((j) => j.deg < 179.5) };
+}
+
+/**
+ * Corners between the walls `ids` and the walls joined to them, with their angles.
+ * `geoms` overrides the geometry of walls being changed.
+ */
+export function wallJoints(home: Home, geoms: Map<string, WallGeom>, ids: Set<string>): Joint[] {
+  const joints: Joint[] = [];
+  const seen = new Set<string>();
+  const geomOf = (id: string): WallGeom | null => {
+    const g = geoms.get(id);
+    if (g) return g;
+    const w = home.walls.find((x) => x.attrs.id === id);
+    if (!w) return null;
+    const a = w.attrs;
+    return {
+      id,
+      start: [a.x_start, a.y_start],
+      end: [a.x_end, a.y_end],
+      thickness: a.thickness,
+      arc: a.arc_extent,
+    };
+  };
+  for (const id of ids) {
+    const g = geomOf(id);
+    const wall = home.walls.find((w) => w.attrs.id === id);
+    if (!g || !wall) continue;
+    for (const [joinedId, atStart] of [
+      [wall.attrs.wall_at_start, true],
+      [wall.attrs.wall_at_end, false],
+    ] as [string | null, boolean][]) {
+      if (!joinedId) continue;
+      const key = [g.id, joinedId].sort().join("|");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const other = geomOf(joinedId);
+      if (!other) continue;
+      const at = atStart ? g.start : g.end;
+      const mine = atStart ? g.end : g.start;
+      // The end of the other wall that touches this corner
+      const otherFar =
+        Math.hypot(other.start[0] - at[0], other.start[1] - at[1]) <
+        Math.hypot(other.end[0] - at[0], other.end[1] - at[1])
+          ? other.end
+          : other.start;
+      const a = unit(at, mine);
+      const b = unit(at, otherFar);
+      joints.push({ at, a, b, deg: angleBetween(a, b) });
+    }
+  }
+  return joints;
+}
+
+/** Angles at the corners of the selected walls (shown while they are selected). */
+export function selectionJoints(home: Home, selection: string[]): Joint[] {
+  const ids = new Set(selection.filter((id) => home.walls.some((w) => w.attrs.id === id)));
+  return ids.size > 0 ? wallJoints(home, new Map(), ids).filter((j) => j.deg < 179.5) : [];
+}
+
+/**
+ * Angles at the corners of a wall whose ends change (handle drags): the wall itself and
+ * the walls joined at a moved end, which follow.
+ */
+export function editedWallJoints(home: Home, id: string, start: Pt, end: Pt): Joint[] {
+  const wall = home.walls.find((w) => w.attrs.id === id);
+  if (!wall) return [];
+  const a = wall.attrs;
+  const geoms = new Map<string, WallGeom>();
+  geoms.set(id, { id, start, end, thickness: a.thickness, arc: a.arc_extent });
+  const ids = new Set([id]);
+  for (const [joinedId, oldPt, newPt] of [
+    [a.wall_at_start, [a.x_start, a.y_start], start],
+    [a.wall_at_end, [a.x_end, a.y_end], end],
+  ] as [string | null, Pt, Pt][]) {
+    if (!joinedId || (oldPt[0] === newPt[0] && oldPt[1] === newPt[1])) continue;
+    const j = home.walls.find((w) => w.attrs.id === joinedId);
+    if (!j) continue;
+    const ja = j.attrs;
+    const s: Pt = [ja.x_start, ja.y_start];
+    const e: Pt = [ja.x_end, ja.y_end];
+    const startTouches = Math.hypot(s[0] - oldPt[0], s[1] - oldPt[1]) < 0.01;
+    geoms.set(joinedId, {
+      id: joinedId,
+      start: startTouches ? newPt : s,
+      end: startTouches ? e : newPt,
+      thickness: ja.thickness,
+      arc: ja.arc_extent,
+    });
+    ids.add(joinedId);
+  }
+  return wallJoints(home, geoms, ids).filter((j) => j.deg < 179.5);
 }
 
 /** Tolerance of the direction magnetism for moving a single wall. */

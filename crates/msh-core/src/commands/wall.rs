@@ -313,7 +313,7 @@ fn join_free_end(
 }
 
 /// Moves the end of `joined` that is connected to the wall `id` from `old` to `new`.
-fn move_joined_end(joined: &mut WallAttrs, id: &str, old: (f32, f32), new: (f32, f32)) {
+pub(super) fn move_joined_end(joined: &mut WallAttrs, id: &str, old: (f32, f32), new: (f32, f32)) {
     let end_joined = joined.wall_at_end.as_deref() == Some(id);
     let start_joined = joined.wall_at_start.as_deref() == Some(id);
     let start_touches = (joined.x_start, joined.y_start) == old;

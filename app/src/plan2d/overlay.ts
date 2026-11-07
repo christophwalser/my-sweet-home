@@ -20,6 +20,8 @@ export type PlanOverlay = {
   dragGhost: Pt[] | null;
   /** Joined walls and corner angles while walls are moved */
   movePreview: MovePreview | null;
+  /** Angles at the corners of the selected walls */
+  selectionJoints: Joint[];
   /** Points of the path being drawn, including the cursor point */
   draft: { points: Pt[]; kind: DraftKind; thickness: number } | null;
   /** Alignment guides of the current snap */
@@ -86,6 +88,11 @@ export function drawOverlay(
     for (const j of overlay.movePreview?.joints ?? []) drawJoint(ctx, j, overlay.accent, px);
   }
 
+  // Angles at the corners of the selected walls (while nothing is dragged)
+  if (!overlay.dragOffset && !overlay.handleDrag) {
+    for (const j of overlay.selectionJoints) drawJoint(ctx, j, overlay.accent, px);
+  }
+
   // Handles of a single selected element
   if (!overlay.dragOffset && !overlay.handleDrag) {
     const r = 4.5 * px;
@@ -120,6 +127,7 @@ export function drawOverlay(
     ctx.lineWidth = 1.5 * px;
     for (const o of drag.preview) strokePath(ctx, o.pts, o.closed);
     ctx.setLineDash([]);
+    for (const j of drag.joints ?? []) drawJoint(ctx, j, overlay.accent, px);
     if (drag.info) drawTag(ctx, drag.info, cursor[0] + 14 * px, cursor[1] + 22 * px, px);
   }
 

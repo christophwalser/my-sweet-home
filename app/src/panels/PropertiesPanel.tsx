@@ -1,7 +1,7 @@
 // Properties of the selected element (or of the home and level if nothing is
 // selected). Every change runs an *_update command: one undo step per field.
 
-import { forEachPiece, type Piece, type Texture, type Wall } from "../model";
+import { forEachPiece, type Home, type Piece, type Texture, type Wall } from "../model";
 import { useStore } from "../store";
 import TextureField from "./TextureField";
 
@@ -118,6 +118,84 @@ const ARROW_STYLES: [string, string][] = [
   ["OPEN", "Open"],
   ["DISC", "Disc"],
 ];
+
+/**
+ * Angle in degrees between `wall` and the wall joined at its start (or end), measured
+ * at their common corner; null if that end is not joined.
+ */
+function cornerAngle(home: Home, wall: Wall, atStart: boolean): number | null {
+  const a = wall.attrs;
+  const joinedId = atStart ? a.wall_at_start : a.wall_at_end;
+  const other = joinedId ? home.walls.find((w) => w.attrs.id === joinedId) : null;
+  if (!other) return null;
+  const corner: [number, number] = atStart ? [a.x_start, a.y_start] : [a.x_end, a.y_end];
+  const far: [number, number] = atStart ? [a.x_end, a.y_end] : [a.x_start, a.y_start];
+  const o = other.attrs;
+  const dStart = Math.hypot(o.x_start - corner[0], o.y_start - corner[1]);
+  const dEnd = Math.hypot(o.x_end - corner[0], o.y_end - corner[1]);
+  const otherFar: [number, number] = dStart < dEnd ? [o.x_end, o.y_end] : [o.x_start, o.y_start];
+  const ux = otherFar[0] - corner[0];
+  const uy = otherFar[1] - corner[1];
+  const vx = far[0] - corner[0];
+  const vy = far[1] - corner[1];
+  const lu = Math.hypot(ux, uy);
+  const lv = Math.hypot(vx, vy);
+  if (lu < 1e-6 || lv < 1e-6) return null;
+  const cos = Math.max(-1, Math.min(1, (ux * vx + uy * vy) / (lu * lv)));
+  return (Math.acos(cos) * 180) / Math.PI;
+}
+
+/** Field for the angle at a joined corner of a wall (degrees, one undo step per change). */
+function CornerAngleField({
+  label,
+  home,
+  wall,
+  atStart,
+  run,
+}: {
+  label: string;
+  home: Home;
+  wall: Wall;
+  atStart: boolean;
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const angle = cornerAngle(home, wall, atStart);
+  if (angle === null) return null;
+  const rounded = Math.round(angle * 100) / 100;
+  return (
+    <>
+      <Field
+        label={label}
+        type="number"
+        unit="°"
+        value={rounded}
+        onCommit={(v) =>
+          void run("wall_set_angle", {
+            id: wall.attrs.id,
+            at: atStart ? "start" : "end",
+            angle_deg: v,
+          })
+        }
+      />
+      {Math.abs(rounded - 90) > 0.005 && (
+        <button
+          type="button"
+          className="link-button"
+          title="Rotate this wall around the corner to a right angle (length stays)"
+          onClick={() =>
+            void run("wall_set_angle", {
+              id: wall.attrs.id,
+              at: atStart ? "start" : "end",
+              angle_deg: 90,
+            })
+          }
+        >
+          Make 90°
+        </button>
+      )}
+    </>
+  );
+}
 
 const byRole = (textures: Texture[] | undefined, role: string) =>
   textures?.find((t) => t.role === role) ?? null;
@@ -270,6 +348,22 @@ export default function PropertiesPanel() {
       <div className="props">
         <h2>{selection.length} elements selected</h2>
         <p className="muted">Drag to move, arrow keys move by 1 cm (Shift: 10 cm).</p>
+        {selectedWalls.length === 2 &&
+          (() => {
+            const [w1, w2] = selectedWalls;
+            // The corner where the second wall is joined to the first one
+            const atStart = w2.attrs.wall_at_start === w1.attrs.id;
+            const joined = atStart || w2.attrs.wall_at_end === w1.attrs.id;
+            return joined ? (
+              <CornerAngleField
+                label="Angle between"
+                home={home}
+                wall={w2}
+                atStart={atStart}
+                run={run}
+              />
+            ) : null;
+          })()}
         {selectedWalls.length === 2 && (
           <p className="muted small">
             Join walls connects both walls at the intersection of their axes (corner or T junction).
@@ -425,6 +519,8 @@ export default function PropertiesPanel() {
         />
         <Field label="X end" type="number" unit="cm" value={a.x_end} onCommit={set("x_end")} />
         <Field label="Y end" type="number" unit="cm" value={a.y_end} onCommit={set("y_end")} />
+        <CornerAngleField label="Angle at start" home={home} wall={wall} atStart run={run} />
+        <CornerAngleField label="Angle at end" home={home} wall={wall} atStart={false} run={run} />
         <Field
           label="Thickness"
           type="number"

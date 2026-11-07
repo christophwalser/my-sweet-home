@@ -261,6 +261,30 @@ fn copy_paste_duplicate_and_room_detection() {
     assert_eq!((va.x_start, va.y_start), (1300.0, 0.0));
     assert_eq!(ha.wall_at_end.as_deref(), Some(v.as_str()));
     assert_eq!(va.wall_at_start.as_deref(), Some(h.as_str()));
+    // Set the corner to 60° and back to exactly 90°; the length stays
+    run(
+        &r,
+        &mut doc,
+        "wall_set_angle",
+        json!({ "id": v, "at": "start", "angle_deg": 60 }),
+    );
+    let va = get(&doc, &v);
+    let len = (va.x_end - va.x_start).hypot(va.y_end - va.y_start);
+    assert!((len - 300.0).abs() < 0.05, "length {len}");
+    run(
+        &r,
+        &mut doc,
+        "wall_set_angle",
+        json!({ "id": v, "at": "start", "angle_deg": 90 }),
+    );
+    let va = get(&doc, &v);
+    assert!(
+        (va.x_end - 1300.0).abs() < 0.02 && (va.y_end - 300.0).abs() < 0.02,
+        "{va:?}"
+    );
+    run(&r, &mut doc, "edit_undo", json!({}));
+    run(&r, &mut doc, "edit_undo", json!({}));
+
     // Split the vertical wall, then detach everything
     let split = run(&r, &mut doc, "wall_split", json!({ "id": v }));
     let parts: Vec<String> = serde_json::from_value(split["ids"].clone()).unwrap();

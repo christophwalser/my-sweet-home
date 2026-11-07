@@ -36,7 +36,7 @@ import {
   handleAt,
 } from "./handles";
 import { elementsInRect, hitTest, nearestWall } from "./interaction";
-import { constrainMove, type Docked, dockToWall, movePreview } from "./moving";
+import { constrainMove, type Docked, dockToWall, movePreview, selectionJoints } from "./moving";
 import { type DraftKind, drawOverlay, type PlanOverlay } from "./overlay";
 import { type SnapPurpose, type Snapped, snapContext, snapDraw } from "./snapping";
 
@@ -260,6 +260,7 @@ export default function PlanView() {
         g?.kind === "move" && !g.dock
           ? movePreview(input.home, input.wallShapes, sel, g.offset[0], g.offset[1])
           : null,
+      selectionJoints: tool === "select" ? selectionJoints(input.home, sel) : [],
       draft:
         drawing && points.length > 0
           ? { points, kind: tool as DraftKind, thickness: wallThickness }
@@ -368,7 +369,7 @@ export default function PlanView() {
       input.wallShapes,
       effectiveLevel,
       pxToCm(SNAP_PX),
-      { path, near: p, thickness: wallThickness },
+      { path, near: p, thickness: wallThickness, anchor: previous ?? undefined },
     );
     const s = snapDraw(p, previous, ctx);
     snapState.current = s;
