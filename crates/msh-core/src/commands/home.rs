@@ -42,7 +42,70 @@ struct SetParams {
     wall_height: Option<f32>,
 }
 
+#[derive(Deserialize, JsonSchema)]
+struct CompassParams {
+    /// Center of the compass in the plan (cm)
+    x: Option<f32>,
+    y: Option<f32>,
+    /// Diameter in cm
+    diameter: Option<f32>,
+    /// Direction of north in degrees, clockwise from the top of the plan
+    north_direction_deg: Option<f32>,
+    /// Geographic position (degrees, north and east positive), used for the sun position
+    latitude_deg: Option<f32>,
+    longitude_deg: Option<f32>,
+    /// Show the compass in the plan
+    visible: Option<bool>,
+}
+
 pub(super) fn register(r: &mut Registry) {
+    r.add(
+        "compass_update",
+        "Changes position, size, north direction, geographic position or visibility of the \
+         compass (created if the home has none).",
+        true,
+        |doc, p: CompassParams| {
+            let home = doc.home_mut();
+            let compass = home.compass.get_or_insert_with(|| msh_model::Compass {
+                attrs: msh_model::CompassAttrs {
+                    x: -100.0,
+                    y: 50.0,
+                    diameter: 100.0,
+                    north_direction: Some(0.0),
+                    visible: Some(true),
+                    ..Default::default()
+                },
+                properties: Vec::new(),
+                extra_children: Vec::new(),
+            });
+            let a = &mut compass.attrs;
+            if let Some(v) = p.x {
+                a.x = v;
+            }
+            if let Some(v) = p.y {
+                a.y = v;
+            }
+            if let Some(v) = p.diameter {
+                if v <= 0.0 {
+                    return Err(CommandError::failed("diameter must be positive"));
+                }
+                a.diameter = v;
+            }
+            if let Some(v) = p.north_direction_deg {
+                a.north_direction = Some(v.rem_euclid(360.0).to_radians());
+            }
+            if let Some(v) = p.latitude_deg {
+                a.latitude = Some(v.clamp(-90.0, 90.0).to_radians());
+            }
+            if let Some(v) = p.longitude_deg {
+                a.longitude = Some(v.clamp(-180.0, 180.0).to_radians());
+            }
+            if let Some(v) = p.visible {
+                a.visible = Some(v);
+            }
+            Ok(json!({ "updated": true }))
+        },
+    );
     r.add(
         "home_new",
         "Creates a new, empty home and discards the current one (unsaved changes are lost).",

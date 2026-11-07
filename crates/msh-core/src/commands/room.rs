@@ -52,6 +52,10 @@ struct UpdateParams {
     /// Offset of the area label in cm from the center of the room's bounding box
     area_x_offset: Option<f32>,
     area_y_offset: Option<f32>,
+    /// Font size of the room name in cm
+    name_font_size: Option<f32>,
+    /// Font size of the area in cm
+    area_font_size: Option<f32>,
     /// Remove the label offsets: name and area are placed automatically again
     reset_label_positions: Option<bool>,
     /// Remove only the offset of the name label
@@ -129,6 +133,21 @@ pub(super) fn register(r: &mut Registry) {
                 if let Some(v) = &p.name {
                     a.name = Some(v.clone());
                 }
+                for (role, size) in [("nameStyle", p.name_font_size), ("areaStyle", p.area_font_size)] {
+                    let Some(size) = size else { continue };
+                    if size <= 0.0 {
+                        return Err(CommandError::failed("font size must be positive"));
+                    }
+                    match room.text_styles.iter_mut().find(|t| t.role.as_deref() == Some(role)) {
+                        Some(style) => style.font_size = size,
+                        None => room.text_styles.push(msh_model::TextStyle {
+                            role: Some(role.to_owned()),
+                            font_size: size,
+                            ..Default::default()
+                        }),
+                    }
+                }
+                let a = &mut room.attrs;
                 let reset_all = p.reset_label_positions == Some(true);
                 if reset_all || p.reset_name_position == Some(true) {
                     a.name_x_offset = None;

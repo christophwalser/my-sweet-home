@@ -48,6 +48,9 @@ bar at the bottom of the plan explains the next step.
   another home), Ctrl+A selects all; Ctrl+Z / Ctrl+Y.
 - Several selected walls, rooms or pieces of furniture can be edited together in the
   properties panel (common values are shown, different ones as "mixed").
+- Levels: tabs above the plan; the level below is shown faded. Furniture groups (Ctrl+G /
+  Ctrl+Shift+G), Flip ↔ / ↕, compass settings in the home panel, and the furniture of the home
+  as a sortable list ("In home" tab next to the catalog).
 - Drag furniture from the catalog onto the plan (doors and windows snap into walls); properties
   of the selection on the right (incl. textures and baseboards).
 

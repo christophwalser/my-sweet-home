@@ -321,9 +321,30 @@ Based on user feedback; Sweet Home 3D's interaction is the baseline, with additi
   `wall_update`, `room_update` and `furniture_update` accept `ids` instead of `id`
   (coordinates, outlines and x/y only for one element).
 
-Next (P4c): multi-level editing details (elements of other levels as background, walls through
-levels), arc walls and wall splitting in the plan, furniture groups, text style and room label
-positions, mirrored copy, keyboard input of lengths while drawing.
+
+### 4.12 Status after P4c (2026-11-07)
+
+Implemented:
+- Levels: the level below is drawn faded behind the selected level in the plan; level
+  panel with "Visible in 3D", "Add level at same elevation" and "Delete level" (undoable);
+  hidden levels are shown in italics in the level tabs.
+- Furniture groups: `furniture_group` / `furniture_ungroup` (Ctrl+G / Ctrl+Shift+G, panel
+  buttons). A click on a piece of a group selects the group; groups move, copy and flip as a
+  whole; the group gets the bounding box of its pieces.
+- Furniture list: "In home" tab next to the catalog with sortable columns (name, size,
+  elevation, level, price), search, visibility checkbox and selection (also of the level).
+- `edit_flip` (Flip ↔ / Flip ↕): mirrors the selection around its center; walls reverse their
+  direction so their left/right sides keep their physical sides, furniture gets a mirrored
+  model (doors open to the other side), dimension offsets are mirrored.
+- `compass_update` and a compass section in the home panel (position, diameter, north
+  direction, latitude/longitude, visibility).
+- Room name and area font sizes (`room_update` `name_font_size` / `area_font_size`).
+
+Verified: tests for groups, flipping and label offsets; a file with a group, a flipped group,
+two levels, compass settings and room text styles is read by the original Sweet Home 3D reader.
+
+Still open from the feature scope (moved to later phases): stairs and walls spanning several
+levels, a draggable compass, font families and text alignment, prices with VAT in the list.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

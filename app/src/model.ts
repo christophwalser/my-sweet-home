@@ -278,6 +278,8 @@ export type Home = {
       y: number;
       diameter: number;
       north_direction: number | null;
+      latitude: number | null;
+      longitude: number | null;
       visible: boolean | null;
     };
   } | null;

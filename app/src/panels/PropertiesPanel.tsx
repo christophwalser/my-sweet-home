@@ -2,6 +2,7 @@
 // selected). Every change runs an *_update command: one undo step per field.
 
 import { forEachPiece, type Home, type Piece, type Wall } from "../model";
+import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { useStore } from "../store";
 import {
   ARROW_STYLES,
@@ -160,6 +161,62 @@ function WallSide({
         </>
       )}
     </SideSection>
+  );
+}
+
+/** Compass of the home: position, size, north direction and geographic position. */
+function CompassSection({
+  home,
+  run,
+}: {
+  home: Home;
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const c = home.compass?.attrs;
+  const set = (field: string) => (v: string | number | boolean) =>
+    void run("compass_update", { [field]: v });
+  const deg = (rad: number | null | undefined) =>
+    rad == null ? null : Math.round(((rad * 180) / Math.PI) * 100) / 100;
+  return (
+    <>
+      <h2>Compass</h2>
+      <Field
+        label="Visible"
+        type="checkbox"
+        value={c ? c.visible !== false : false}
+        onCommit={set("visible")}
+      />
+      <Field label="X" type="number" unit="cm" value={c?.x ?? -100} onCommit={set("x")} />
+      <Field label="Y" type="number" unit="cm" value={c?.y ?? 50} onCommit={set("y")} />
+      <Field
+        label="Diameter"
+        type="number"
+        unit="cm"
+        value={c?.diameter ?? 100}
+        onCommit={set("diameter")}
+      />
+      <Field
+        label="North"
+        type="number"
+        unit="°"
+        value={deg(c?.north_direction) ?? 0}
+        onCommit={set("north_direction_deg")}
+      />
+      <Field
+        label="Latitude"
+        type="number"
+        unit="°"
+        value={deg(c?.latitude)}
+        onCommit={set("latitude_deg")}
+      />
+      <Field
+        label="Longitude"
+        type="number"
+        unit="°"
+        value={deg(c?.longitude)}
+        onCommit={set("longitude_deg")}
+      />
+    </>
   );
 }
 
@@ -383,6 +440,7 @@ export default function PropertiesPanel() {
             </div>
           </>
         )}
+        <CompassSection home={home} run={run} />
         <p className="muted">Click an element in the plan to edit it.</p>
       </div>
     );
@@ -563,6 +621,24 @@ export default function PropertiesPanel() {
         <h2>Room</h2>
         <p className="muted small">Area: {(Math.abs(area) / 20000).toFixed(2)} m²</p>
         <Field label="Name" type="text" value={a.name} onCommit={set("name")} />
+        <Field
+          label="Name size"
+          type="number"
+          unit="cm"
+          value={
+            room.text_styles?.find((t) => t.role === "nameStyle")?.font_size ?? DEFAULT_ROOM_FONT
+          }
+          onCommit={set("name_font_size")}
+        />
+        <Field
+          label="Area size"
+          type="number"
+          unit="cm"
+          value={
+            room.text_styles?.find((t) => t.role === "areaStyle")?.font_size ?? DEFAULT_ROOM_FONT
+          }
+          onCommit={set("area_font_size")}
+        />
         <Field
           label="Show area"
           type="checkbox"
