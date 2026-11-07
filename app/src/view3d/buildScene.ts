@@ -21,10 +21,10 @@ export type LevelInfo = { elevation: number; height: number; floorThickness: num
 /** Floor thickness of homes without levels (Sweet Home 3D's default preference). */
 const DEFAULT_FLOOR_THICKNESS = 12;
 /**
- * Walls of upper levels stop this far above the walls below (Sweet Home 3D's
- * `Wall3D.LEVEL_ELEVATION_SHIFT`), so the faces do not overlap and flicker.
+ * Walls of upper levels reach this far into the walls below. A gap, even of 1 mm, shows
+ * as a dark crack where the wall tops meet; the tiny overlap is not visible.
  */
-const LEVEL_ELEVATION_SHIFT = 0.1;
+const LEVEL_WALL_OVERLAP = 0.1;
 
 /** Elevation, height and floor thickness of every level; `null` key = home without levels. */
 export function levelInfos(home: Home): Map<string | null, LevelInfo> {
@@ -312,7 +312,7 @@ export function buildWalls(
     // of the walls below, otherwise a gap of the floor thickness shows between the storeys
     const drop =
       level && a.level !== null && level.elevation !== lowestElevation
-        ? Math.max(0, level.floorThickness - LEVEL_ELEVATION_SHIFT)
+        ? Math.max(0, level.floorThickness + LEVEL_WALL_OVERLAP)
         : 0;
     const geom = prismGeometry(poly, kinds, baseY - drop, (p) => heightAt(p) + drop, axis);
     const mesh = new THREE.Mesh(cutOpenings(geom, materials, a.level, baseY), materials);
