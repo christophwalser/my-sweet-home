@@ -10,6 +10,9 @@ import { elementOutlines } from "./interaction";
 import type { Joint, MovePreview } from "./moving";
 import { offsetOutline, type Segment } from "./snapping";
 
+/** Colors of the wall sides; the properties panel uses the same (App.css `.side-left/right`). */
+export const SIDE_COLORS = { left: "#e8913a", right: "#2bb3a3" } as const;
+
 export type DraftKind = "wall" | "room" | "dimension" | "polyline";
 
 export type PlanOverlay = {
@@ -22,6 +25,8 @@ export type PlanOverlay = {
   movePreview: MovePreview | null;
   /** Angles at the corners of the selected walls */
   selectionJoints: Joint[];
+  /** Left and right sides of the selected walls (colored like in the properties panel) */
+  wallSides: { left: Pt[][]; right: Pt[][]; highlight: "left" | "right" | null } | null;
   /** Points of the path being drawn, including the cursor point */
   draft: { points: Pt[]; kind: DraftKind; thickness: number } | null;
   /** Alignment guides of the current snap */
@@ -86,6 +91,23 @@ export function drawOverlay(
     for (const o of overlay.movePreview?.outlines ?? []) strokePath(ctx, o, true);
     ctx.setLineDash([]);
     for (const j of overlay.movePreview?.joints ?? []) drawJoint(ctx, j, overlay.accent, px);
+  }
+
+  // Left (orange) and right (teal) sides of the selected walls
+  if (overlay.wallSides && !overlay.dragOffset && !overlay.handleDrag) {
+    const { left, right, highlight } = overlay.wallSides;
+    ctx.lineCap = "round";
+    for (const [lines, color, side] of [
+      [left, SIDE_COLORS.left, "left"],
+      [right, SIDE_COLORS.right, "right"],
+    ] as const) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = (highlight === side ? 6 : 3) * px;
+      ctx.globalAlpha = highlight && highlight !== side ? 0.35 : 1;
+      for (const line of lines) strokePath(ctx, line, false);
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineCap = "butt";
   }
 
   // Angles at the corners of the selected walls (while nothing is dragged)

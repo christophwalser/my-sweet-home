@@ -3,7 +3,7 @@
 // selected elements of that kind in one command (one undo step).
 
 import { forEachPiece, type Home, type Piece, type Room, type Texture, type Wall } from "../model";
-import { byRole, Field, SelectField, toHex, WALL_PATTERNS } from "./fields";
+import { byRole, Field, SelectField, SideSection, toHex, WALL_PATTERNS } from "./fields";
 import TextureField from "./TextureField";
 
 type Run = (command: string, params: Record<string, unknown>) => Promise<unknown>;
@@ -102,11 +102,11 @@ function WallsSide({
   const bbHeight = common(present.map((b) => b.attrs.height));
   const bbThickness = common(present.map((b) => b.attrs.thickness));
   const bbColor = common(present.map((b) => b.attrs.color));
+  const bbTexture = commonTexture(present.map((b) => b.texture));
   const updateBaseboard = (values: Record<string, unknown>) =>
     update({ [field("baseboard")]: values });
   return (
-    <>
-      <h3>{side === "left" ? "Left sides" : "Right sides"}</h3>
+    <SideSection side={side} title={side === "left" ? "Left sides" : "Right sides"}>
       <Field
         label="Color"
         type="color"
@@ -164,9 +164,15 @@ function WallsSide({
             mixed={bbColor.mixed}
             onCommit={(v) => updateBaseboard({ color: v })}
           />
+          <TextureField
+            label="Texture"
+            current={bbTexture.value}
+            mixed={bbTexture.mixed}
+            onCommit={(v) => updateBaseboard({ texture: v })}
+          />
         </>
       )}
-    </>
+    </SideSection>
   );
 }
 

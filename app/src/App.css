@@ -276,6 +276,39 @@ input[type="search"]:focus {
   min-width: 0;
 }
 
+.side-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0 -6px;
+  padding: 2px 6px 6px;
+  border: 0;
+  border-left: 3px solid var(--side-color);
+  border-radius: 4px;
+}
+
+.side-section:hover {
+  background: var(--panel-2);
+}
+
+.side-left {
+  --side-color: #e8913a;
+}
+
+.side-right {
+  --side-color: #2bb3a3;
+}
+
+.side-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  background: var(--side-color);
+}
+
 .prop-actions {
   display: flex;
   flex-wrap: wrap;

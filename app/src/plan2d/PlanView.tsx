@@ -124,12 +124,29 @@ const cursorStyle: Record<Tool, string> = {
 
 const FINISH = "Enter, Esc, right-click or double-click to finish · Backspace: remove last point";
 
+/** Side lines of the selected walls for the overlay. */
+function selectedWallSides(
+  input: PlanInput,
+  selection: string[],
+  highlight: "left" | "right" | null,
+): PlanOverlay["wallSides"] {
+  const left: Pt[][] = [];
+  const right: Pt[][] = [];
+  input.home.walls.forEach((w, i) => {
+    if (!selection.includes(w.attrs.id)) return;
+    left.push(input.wallShapes[i].left);
+    right.push(input.wallShapes[i].right);
+  });
+  return left.length > 0 ? { left, right, highlight } : null;
+}
+
 export default function PlanView() {
   const opened = useStore((s) => s.opened);
   const levelId = useStore((s) => s.selectedLevel);
   const selection = useStore((s) => s.selection);
   const tool = useStore((s) => s.tool);
   const wallThickness = useStore((s) => s.wallThickness);
+  const highlightSide = useStore((s) => s.highlightSide);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<ViewTransform>({ scale: 1, offsetX: 0, offsetY: 0 });
   const [icons, setIcons] = useState(() => new Map<string, HTMLImageElement>());
@@ -261,6 +278,7 @@ export default function PlanView() {
           ? movePreview(input.home, input.wallShapes, sel, g.offset[0], g.offset[1])
           : null,
       selectionJoints: tool === "select" ? selectionJoints(input.home, sel) : [],
+      wallSides: tool === "select" ? selectedWallSides(input, sel, highlightSide) : null,
       draft:
         drawing && points.length > 0
           ? { points, kind: tool as DraftKind, thickness: wallThickness }
@@ -279,7 +297,7 @@ export default function PlanView() {
       guide: guideColor,
     };
     drawOverlay(ctx, viewRef.current, input.home, input.wallShapes, overlay);
-  }, [input, colors, tool, accent, guideColor, wallThickness]);
+  }, [input, colors, tool, accent, guideColor, wallThickness, highlightSide]);
 
   const fit = useCallback(() => {
     const canvas = canvasRef.current;

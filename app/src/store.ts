@@ -19,6 +19,9 @@ type State = {
   tool: Tool;
   /** Thickness of new walls drawn in the plan (cm) */
   wallThickness: number;
+  /** Wall side emphasized in the plan while its properties are hovered */
+  highlightSide: "left" | "right" | null;
+  setHighlightSide: (side: "left" | "right" | null) => void;
   setSelection: (ids: string[]) => void;
   setTool: (tool: Tool) => void;
   setWallThickness: (cm: number) => void;
@@ -59,6 +62,8 @@ export const useStore = create<State>((set, get) => ({
   selection: [],
   tool: "select",
   wallThickness: 10,
+  highlightSide: null,
+  setHighlightSide: (highlightSide) => set({ highlightSide }),
   setSelection: (selection) => set({ selection }),
   setTool: (tool) => set({ tool }),
   setWallThickness: (wallThickness) => set({ wallThickness }),

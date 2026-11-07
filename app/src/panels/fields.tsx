@@ -2,8 +2,38 @@
 // command and undo step per change) and can show "mixed" values when several
 // elements with different values are selected.
 
-import { useRef } from "react";
+import { type ReactNode, useRef } from "react";
 import type { Texture } from "../model";
+import { useStore } from "../store";
+
+/**
+ * Properties of one wall side. Its color matches the marking of that side in the
+ * plan, and hovering the section emphasizes the side there.
+ */
+export function SideSection({
+  side,
+  title,
+  children,
+}: {
+  side: "left" | "right";
+  title: string;
+  children: ReactNode;
+}) {
+  const setHighlight = useStore((s) => s.setHighlightSide);
+  return (
+    <fieldset
+      className={`side-section side-${side}`}
+      onMouseEnter={() => setHighlight(side)}
+      onMouseLeave={() => setHighlight(null)}
+    >
+      <h3 title="Seen when walking along the wall from its start to its end">
+        <span className="side-swatch" aria-hidden="true" />
+        {title}
+      </h3>
+      {children}
+    </fieldset>
+  );
+}
 
 type FieldType = "number" | "text" | "color" | "checkbox" | "angle";
 

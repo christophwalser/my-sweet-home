@@ -9,6 +9,7 @@ import {
   DASH_STYLES,
   Field,
   SelectField,
+  SideSection,
   toHex,
   WALL_PATTERNS,
 } from "./fields";
@@ -111,8 +112,7 @@ function WallSide({
     void run("wall_update", { id, [`${side}_side_${field}`]: value });
   const updateBaseboard = (values: Record<string, unknown>) => update("baseboard", values);
   return (
-    <>
-      <h3>{title}</h3>
+    <SideSection side={side} title={title}>
       <Field label="Color" type="color" value={toHex(color)} onCommit={(v) => update("color", v)} />
       {color !== null && (
         <button type="button" className="link-button" onClick={() => update("color", "")}>
@@ -159,7 +159,7 @@ function WallSide({
           />
         </>
       )}
-    </>
+    </SideSection>
   );
 }
 
