@@ -14,6 +14,21 @@ use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 /// Event asking the frontend to capture the 3D view.
 pub const CAPTURE_EVENT: &str = "capture-3d";
 
+/// Event asking the frontend to render a photo of the 3D view.
+pub const RENDER_PHOTO_EVENT: &str = "render-photo";
+/// How long a client waits for a photo (path tracing at "best" quality takes minutes).
+const PHOTO_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PhotoRequest {
+    request_id: u64,
+    width: u32,
+    height: u32,
+    quality: String,
+    path: Option<String>,
+}
+
 /// Event asking the frontend to export the 3D view as OBJ.
 pub const EXPORT_OBJ_EVENT: &str = "export-obj";
 
@@ -118,6 +133,10 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
             Ok(v) => Response::ok(id, v),
             Err(e) => Response::err(id, e),
         },
+        "render_photo" => match render_photo(app, &req.params).await {
+            Ok(v) => Response::ok(id, v),
+            Err(e) => Response::err(id, e),
+        },
         "export_obj" => match export_obj(app, req.params["path"].as_str()).await {
             Ok(v) => Response::ok(id, v),
             Err(e) => Response::err(id, e),
@@ -139,6 +158,46 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
         }
         other => Response::err(id, format!("unknown method '{other}'")),
     }
+}
+
+/// Asks the frontend to render a photo and waits for it (written to `path` if given).
+async fn render_photo(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let state = app.state::<AppState>();
+    if state.current().is_none() {
+        return Err("no home is open in the app".into());
+    }
+    let quality = params["quality"].as_str().unwrap_or("good").to_string();
+    if !matches!(quality.as_str(), "draft" | "good" | "best") {
+        return Err(format!("unknown quality '{quality}' (draft, good or best)"));
+    }
+    let size =
+        |key: &str, default: u64| params[key].as_u64().unwrap_or(default).clamp(16, 8000) as u32;
+    let path = match params["path"].as_str() {
+        Some(p) => Some(
+            std::path::absolute(p)
+                .map_err(|e| e.to_string())?
+                .display()
+                .to_string(),
+        ),
+        None => None,
+    };
+    let (request_id, rx) = state.new_capture();
+    app.emit(
+        RENDER_PHOTO_EVENT,
+        PhotoRequest {
+            request_id,
+            width: size("width", 1600),
+            height: size("height", 1200),
+            quality,
+            path,
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    let result = tokio::time::timeout(PHOTO_TIMEOUT, rx)
+        .await
+        .map_err(|_| "the app did not finish the photo in time".to_string())?
+        .map_err(|_| "the photo was cancelled".to_string())??;
+    serde_json::from_str(&result).map_err(|e| e.to_string())
 }
 
 /// Asks the frontend to export the 3D view as OBJ and waits for the written files.

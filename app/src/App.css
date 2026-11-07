@@ -1034,3 +1034,61 @@ body.resizing-horizontal {
   align-items: center;
   gap: 5px;
 }
+
+/* ---- Photo ---- */
+
+.view3d-photo {
+  position: absolute;
+  top: 8px;
+  left: 108px;
+  padding: 2px 10px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+}
+
+.photo-dialog {
+  width: min(640px, calc(100vw - 32px));
+  overflow-y: auto;
+}
+
+.photo-check {
+  justify-content: flex-end;
+}
+
+.photo-quality {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.photo-quality label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.photo-preview {
+  display: flex;
+  justify-content: center;
+  max-height: 46vh;
+}
+
+.photo-preview:empty {
+  display: none;
+}
+
+.photo-preview canvas {
+  max-width: 100%;
+  max-height: 46vh;
+  object-fit: contain;
+  border: 1px solid var(--border);
+}
+
+.photo-progress {
+  width: 100%;
+}

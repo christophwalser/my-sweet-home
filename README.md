@@ -61,6 +61,8 @@ bar at the bottom of the plan explains the next step.
   level, 3D view; with print preview) or saves it as PDF, and exports the plan as PDF (paper
   size, orientation, scale such as 1:100, all levels as pages), SVG or PNG, the furniture list
   as CSV and the 3D view as OBJ with MTL and textures.
+- "Photo…" in the 3D view renders the current view as image: draft (with sun shadows, in
+  seconds) or path traced on the GPU ("Good" / "Best": soft shadows, indirect light, glass).
 - Window layout: drag the borders of the side panels and between plan and 3D view; plan and 3D
   view can be maximized or minimized, the 3D view can open in its own window.
 - Drag furniture from the catalog onto the plan (doors and windows snap into walls); properties
@@ -154,8 +156,9 @@ msh --live wall add-path --points "[[0,0],[600,0],[600,400],[0,400]]" --closed
 msh --live view plan-image --out plan.png
 msh screenshot --mode aerial --out view3d.png     # 3D view rendered by the app
 msh export-obj house.obj                          # 3D view as OBJ + MTL + textures
+msh photo --quality good --width 1600 --height 1000 --out photo.png   # photo of the 3D view
 msh --live export document --path house.pdf       # printed home incl. the 3D view
-msh mcp --live                                    # MCP server controlling the app (+ tools view_3d_image, export_obj)
+msh mcp --live                                    # MCP server controlling the app (+ tools view_3d_image, render_photo, export_obj)
 ```
 
 Claude Code with live control:

@@ -82,6 +82,19 @@ fn main() -> Result<()> {
             let result = client.call("capture_3d", json!({ "mode": mode }))?;
             print_result(result, matches.get_one::<PathBuf>("out"))?;
         }
+        Some(("photo", m)) => {
+            let mut client = msh_ipc::Client::connect()?;
+            let mut params = json!({
+                "quality": m.get_one::<String>("quality").cloned().unwrap_or_else(|| "good".into()),
+                "width": m.get_one::<u32>("width").copied().unwrap_or(1600),
+                "height": m.get_one::<u32>("height").copied().unwrap_or(1200),
+            });
+            if let Some(out) = matches.get_one::<PathBuf>("out") {
+                params["path"] = json!(std::path::absolute(out)?);
+            }
+            let result = client.call("render_photo", params)?;
+            print_result(result, None)?;
+        }
         Some(("export-obj", m)) => {
             let mut client = msh_ipc::Client::connect()?;
             let path = m.get_one::<PathBuf>("path").cloned().unwrap_or_default();
@@ -192,6 +205,28 @@ fn build_cli(registry: &Registry) -> Command {
                         .long("mode")
                         .value_parser(["aerial", "observer"])
                         .help("aerial (default) or observer (virtual visit)"),
+                ),
+        )
+        .subcommand(
+            Command::new("photo")
+                .about("Renders a photo of the 3D view of the running app (use with --out)")
+                .arg(
+                    Arg::new("quality")
+                        .long("quality")
+                        .value_parser(["draft", "good", "best"])
+                        .help("draft (seconds), good (default) or best (path traced)"),
+                )
+                .arg(
+                    Arg::new("width")
+                        .long("width")
+                        .value_parser(clap::value_parser!(u32))
+                        .help("Width in pixels (default 1600)"),
+                )
+                .arg(
+                    Arg::new("height")
+                        .long("height")
+                        .value_parser(clap::value_parser!(u32))
+                        .help("Height in pixels (default 1200)"),
                 ),
         )
         .subcommand(

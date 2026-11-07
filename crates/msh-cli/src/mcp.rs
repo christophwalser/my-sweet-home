@@ -23,6 +23,8 @@ const DEFAULT_PROTOCOL_VERSION: &str = "2025-06-18";
 const VIEW_3D_TOOL: &str = "view_3d_image";
 /// Name of the live-only tool for the OBJ export of the 3D view.
 const EXPORT_OBJ_TOOL: &str = "export_obj";
+/// Name of the live-only tool for photos of the 3D view.
+const PHOTO_TOOL: &str = "render_photo";
 
 enum Backend {
     Local(Box<Document>),
@@ -37,6 +39,8 @@ impl Backend {
                 client.call("capture_3d", args)
             } else if name == EXPORT_OBJ_TOOL {
                 client.call("export_obj", args)
+            } else if name == PHOTO_TOOL {
+                client.call("render_photo", args)
             } else {
                 client.execute(name, args)
             }
@@ -69,7 +73,7 @@ pub fn serve(registry: &Registry, file: Option<PathBuf>, live: bool) -> Result<(
     };
     eprintln!(
         "my-sweet-home MCP server ready ({} tools, {})",
-        registry.list().len() + if live { 2 } else { 0 },
+        registry.list().len() + if live { 3 } else { 0 },
         if live {
             "live: controlling the running app"
         } else {
@@ -173,6 +177,20 @@ fn tool_list(registry: &Registry, live: bool) -> Vec<Value> {
                         "enum": ["aerial", "observer"],
                         "description": "\"aerial\" (default view from above) or \"observer\" (virtual visitor)",
                     },
+                },
+            },
+            "annotations": { "readOnlyHint": true },
+        }));
+        tools.push(json!({
+            "name": PHOTO_TOOL,
+            "description": "Renders a photo of the current 3D view of the running app: \"draft\" (rasterized with sun shadows, seconds), \"good\" or \"best\" (GPU path tracing with soft shadows and indirect light; up to minutes). Returns the image, or writes it to path.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "width": { "type": "integer", "description": "Width in pixels (default 1600)" },
+                    "height": { "type": "integer", "description": "Height in pixels (default 1200)" },
+                    "quality": { "type": "string", "enum": ["draft", "good", "best"], "description": "Default \"good\"" },
+                    "path": { "type": "string", "description": "PNG file to write instead of returning the image" },
                 },
             },
             "annotations": { "readOnlyHint": true },

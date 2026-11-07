@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { api, CAPTURE_EVENT, EXPORT_OBJ_EVENT } from "../api";
+import { api, CAPTURE_EVENT, EXPORT_OBJ_EVENT, RENDER_PHOTO_EVENT } from "../api";
 import { forEachPiece } from "../model";
 import { useStore, type ViewMode } from "../store";
 import { buildAnnotations } from "./annotations";
@@ -21,6 +21,8 @@ import {
 import { buildLampLights, lampLights } from "./lights";
 import { clearModelCache, createPieceObject, disposeObject, waitForModels } from "./models";
 import { buildObj } from "./objExport";
+import PhotoDialog from "./PhotoDialog";
+import { type PhotoJob, type PhotoQuality, renderPhoto } from "./photo";
 
 /**
  * Highest pitch used for the aerial view. A camera looking straight down sits on
@@ -53,6 +55,7 @@ export default function View3D() {
   const levelId = useStore((s) => s.selectedLevel);
   const viewMode = useStore((s) => s.viewMode);
   const [shadows, setShadows] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const ctx = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -343,6 +346,69 @@ export default function View3D() {
     };
   }, []);
 
+  /** Starts a photo of the current view (see photo.ts). */
+  const startPhoto = (
+    width: number,
+    height: number,
+    quality: PhotoQuality,
+    onProgress?: (p: number) => void,
+  ): PhotoJob => {
+    const c = ctx.current;
+    if (!c) throw new Error("3D view not available");
+    const ground = c.content.getObjectByName("ground") as THREE.Mesh | undefined;
+    const groundColor =
+      (ground?.material as THREE.MeshLambertMaterial | undefined)?.color?.clone() ??
+      new THREE.Color(0xa8a8a8);
+    return renderPhoto(
+      {
+        scene: c.scene,
+        content: c.content,
+        lamps: c.lamps,
+        sun: c.sun,
+        sky: c.sky,
+        camera: c.camera,
+        hfov: c.hfov,
+        groundColor,
+      },
+      { width, height, quality, onProgress },
+    );
+  };
+  const startPhotoRef = useRef(startPhoto);
+  startPhotoRef.current = startPhoto;
+
+  // Photos requested by the CLI or the MCP server
+  useEffect(() => {
+    const unlisten = listen<{
+      requestId: number;
+      width: number;
+      height: number;
+      quality: PhotoQuality;
+      path: string | null;
+    }>(RENDER_PHOTO_EVENT, async (e) => {
+      const { requestId, width, height, quality, path } = e.payload;
+      try {
+        await waitForModels(60000);
+        const url = await startPhotoRef.current(width, height, quality).done;
+        if (path) {
+          await api.saveImage(path, url);
+          await api.captureResult(requestId, JSON.stringify({ path }), null);
+        } else {
+          const base64 = url.split(",")[1] ?? "";
+          await api.captureResult(
+            requestId,
+            JSON.stringify({ mime_type: "image/png", image_base64: base64 }),
+            null,
+          );
+        }
+      } catch (err) {
+        await api.captureResult(requestId, null, String(err));
+      }
+    });
+    return () => {
+      void unlisten.then((off) => off());
+    };
+  }, []);
+
   // OBJ export requested by the export dialog, the CLI or the MCP server
   useEffect(() => {
     const unlisten = listen<{ requestId: number; path: string }>(EXPORT_OBJ_EVENT, async (e) => {
@@ -376,6 +442,24 @@ export default function View3D() {
           />
           Shadows
         </label>
+      )}
+      {opened && (
+        <button
+          type="button"
+          className="view3d-photo"
+          onClick={() => setPhotoOpen(true)}
+          title="Create a photo of the current view (draft or path traced)"
+        >
+          Photo…
+        </button>
+      )}
+      {photoOpen && opened && (
+        <PhotoDialog
+          viewAspect={ctx.current?.camera.aspect ?? 4 / 3}
+          baseName={(opened.home.attrs.name ?? "Photo").replace(/\.sh3d$/i, "")}
+          start={(w, h, q, onProgress) => startPhoto(w, h, q, onProgress)}
+          onClose={() => setPhotoOpen(false)}
+        />
       )}
     </>
   );

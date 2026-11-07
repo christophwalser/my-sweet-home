@@ -46,6 +46,8 @@ export const api = {
   /** Runs a command of the msh-core registry (same commands as CLI and MCP). */
   execute: (command: string, params: Record<string, unknown> = {}) =>
     invoke<unknown>("execute", { command, params }),
+  /** Writes a PNG data URL to a file. */
+  saveImage: (path: string, dataUrl: string) => invoke<void>("save_image", { path, dataUrl }),
   /** PNG (base64) of the 3D view, rendered by the window that shows it. */
   capture3d: () => invoke<string>("capture_3d_image"),
   /** Exports the 3D view as OBJ through the window that shows it. */
@@ -71,6 +73,8 @@ export const HOME_CHANGED_EVENT = "home-changed";
 export const CAPTURE_EVENT = "capture-3d";
 /** Event of the live control asking for an OBJ export ({ requestId, path }). */
 export const EXPORT_OBJ_EVENT = "export-obj";
+/** Event of the live control asking for a photo ({ requestId, width, height, quality, path }). */
+export const RENDER_PHOTO_EVENT = "render-photo";
 
 /** MIME type of catalog items dragged onto the plan. */
 export const CATALOG_DRAG_TYPE = "application/x-msh-catalog";

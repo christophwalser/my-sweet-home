@@ -426,6 +426,23 @@ furniture is read by its home reader.
   pages) and the WebView's print dialog (preview, printer choice). Ctrl+P opens the dialog
   ("Print / Export…", now with a shared page setup).
 
+### 4.17 Status after P6c (2026-11-07)
+
+- Photo rendering of the current 3D view ("Photo…" in the 3D view, also in the separate 3D
+  window): "draft" rasterizes the scene at the photo size with sun shadows; "good" (256
+  samples) and "best" (1024 samples, more bounces) path trace on the GPU with
+  `three-gpu-pathtracer` 0.0.27 (WebGL, own renderer and canvas, tiles for long renders,
+  progress preview, "Finish now" keeps the samples so far).
+- The path tracing scene is a copy of the 3D view's content: Lambert / Phong materials
+  become physical ones (shininess -> roughness, see-through untextured materials -> glass by
+  transmission, cut-out textures keep alpha), the sky color and ground color become a
+  gradient environment at the hemisphere light's intensity, labels and dimensions and hidden
+  objects are left out. The path tracer supports one material per mesh, so meshes with
+  geometry groups are split into one mesh per group (shared vertex attributes).
+- Live control: pipe method `render_photo` ({width, height, quality, path}), CLI `msh photo`,
+  live MCP tool `render_photo`. The BVH is built synchronously (no BVH worker yet), which
+  blocks the window for a few seconds on large homes.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

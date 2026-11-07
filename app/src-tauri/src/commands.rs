@@ -96,6 +96,19 @@ pub fn write_obj_files(
     Ok(written)
 }
 
+/// Writes an image given as data URL (e.g. a photo) to a file.
+#[tauri::command]
+pub fn save_image(path: String, data_url: String) -> Result<(), String> {
+    use base64::Engine;
+    let data = data_url
+        .split_once(',')
+        .map_or(data_url.as_str(), |(_, b)| b);
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|e| e.to_string())?;
+    std::fs::write(&path, bytes).map_err(|e| format!("cannot write {path}: {e}"))
+}
+
 /// PNG (base64) of the 3D view, rendered by the window that shows it.
 #[tauri::command]
 pub async fn capture_3d_image(app: tauri::AppHandle) -> Result<String, String> {
