@@ -29,6 +29,22 @@ struct PhotoRequest {
     path: Option<String>,
 }
 
+/// Event asking the frontend to render a video along the camera path.
+pub const RENDER_VIDEO_EVENT: &str = "render-video";
+/// How long a client waits for a video (path traced videos take hours).
+const VIDEO_TIMEOUT: Duration = Duration::from_secs(12 * 3600);
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct VideoRequest {
+    request_id: u64,
+    width: Option<u32>,
+    height: Option<u32>,
+    frame_rate: Option<u32>,
+    quality: String,
+    path: String,
+}
+
 /// Event asking the frontend to export the 3D view as OBJ.
 pub const EXPORT_OBJ_EVENT: &str = "export-obj";
 
@@ -137,6 +153,10 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
             Ok(v) => Response::ok(id, v),
             Err(e) => Response::err(id, e),
         },
+        "render_video" => match render_video(app, &req.params).await {
+            Ok(v) => Response::ok(id, v),
+            Err(e) => Response::err(id, e),
+        },
         "export_obj" => match export_obj(app, req.params["path"].as_str()).await {
             Ok(v) => Response::ok(id, v),
             Err(e) => Response::err(id, e),
@@ -197,6 +217,50 @@ async fn render_photo(app: &AppHandle, params: &Value) -> Result<Value, String> 
         .await
         .map_err(|_| "the app did not finish the photo in time".to_string())?
         .map_err(|_| "the photo was cancelled".to_string())??;
+    serde_json::from_str(&result).map_err(|e| e.to_string())
+}
+
+/// Asks the frontend to render a video along the camera path of the home and waits
+/// until it is written to `path`.
+async fn render_video(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let state = app.state::<AppState>();
+    let Some(current) = state.current() else {
+        return Err("no home is open in the app".into());
+    };
+    let points = msh_core::camera_path_len(&current.home);
+    if points < 2 {
+        return Err(format!(
+            "the camera path has {points} key point(s), at least two are needed \
+             (add them with camera_path_add)"
+        ));
+    }
+    let quality = params["quality"].as_str().unwrap_or("draft").to_string();
+    if !matches!(quality.as_str(), "draft" | "good" | "best") {
+        return Err(format!("unknown quality '{quality}' (draft, good or best)"));
+    }
+    let path = params["path"].as_str().ok_or("missing \"path\"")?;
+    let path = std::path::absolute(path)
+        .map_err(|e| e.to_string())?
+        .display()
+        .to_string();
+    let size = |key: &str| params[key].as_u64().map(|v| v.clamp(16, 3840) as u32);
+    let (request_id, rx) = state.new_capture();
+    app.emit(
+        RENDER_VIDEO_EVENT,
+        VideoRequest {
+            request_id,
+            width: size("width"),
+            height: size("height"),
+            frame_rate: params["frame_rate"].as_u64().map(|v| v.clamp(1, 60) as u32),
+            quality,
+            path,
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    let result = tokio::time::timeout(VIDEO_TIMEOUT, rx)
+        .await
+        .map_err(|_| "the app did not finish the video in time".to_string())?
+        .map_err(|_| "the video was cancelled".to_string())??;
     serde_json::from_str(&result).map_err(|e| e.to_string())
 }
 

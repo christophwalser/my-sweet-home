@@ -95,6 +95,28 @@ fn main() -> Result<()> {
             let result = client.call("render_photo", params)?;
             print_result(result, None)?;
         }
+        Some(("video", m)) if m.subcommand_name() == Some("render") => {
+            let m = m.subcommand_matches("render").unwrap_or(m);
+            let out = matches
+                .get_one::<PathBuf>("out")
+                .ok_or_else(|| anyhow!("give the MP4 file with --out"))?;
+            let mut client = msh_ipc::Client::connect()?;
+            let mut params = json!({
+                "quality": m.get_one::<String>("quality").cloned().unwrap_or_else(|| "draft".into()),
+                "path": std::path::absolute(out)?,
+            });
+            if let Some(w) = m.get_one::<u32>("width") {
+                params["width"] = json!(w);
+            }
+            if let Some(h) = m.get_one::<u32>("height") {
+                params["height"] = json!(h);
+            }
+            if let Some(f) = m.get_one::<u32>("frame_rate") {
+                params["frame_rate"] = json!(f);
+            }
+            let result = client.call("render_video", params)?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
         Some(("export-obj", m)) => {
             let mut client = msh_ipc::Client::connect()?;
             let path = m.get_one::<PathBuf>("path").cloned().unwrap_or_default();
@@ -280,6 +302,44 @@ fn build_cli(registry: &Registry) -> Command {
         }
         groups.insert(group, entry.subcommand(sub));
     }
+    // Rendering a video is a live-only operation of the app, next to the video settings
+    let video = groups
+        .remove("video")
+        .unwrap_or_else(|| Command::new("video").about(group_about("video")));
+    groups.insert(
+        "video",
+        video.subcommand(
+            Command::new("render")
+                .about(
+                    "Renders a video along the camera path in the running app \
+                     (use with --out file.mp4; add key points with `camera path-add`)",
+                )
+                .arg(
+                    Arg::new("quality")
+                        .long("quality")
+                        .value_parser(["draft", "good", "best"])
+                        .help("draft (default, fast) or good / best (path traced, slow)"),
+                )
+                .arg(
+                    Arg::new("width")
+                        .long("width")
+                        .value_parser(clap::value_parser!(u32))
+                        .help("Width in pixels (default: video settings of the home)"),
+                )
+                .arg(
+                    Arg::new("height")
+                        .long("height")
+                        .value_parser(clap::value_parser!(u32))
+                        .help("Height in pixels (default: from the aspect ratio of the home)"),
+                )
+                .arg(
+                    Arg::new("frame_rate")
+                        .long("frame-rate")
+                        .value_parser(clap::value_parser!(u32))
+                        .help("Frames per second (default: video settings of the home)"),
+                ),
+        ),
+    );
     for (_, g) in groups {
         cli = cli.subcommand(g.subcommand_required(true));
     }
@@ -302,6 +362,8 @@ fn group_about(group: &str) -> &'static str {
         "polyline" => "Polylines",
         "library" => "Furniture and texture libraries",
         "texture" => "Textures",
+        "camera" => "Camera path of the video",
+        "video" => "Video settings and rendering along the camera path",
         _ => "Commands",
     }
 }

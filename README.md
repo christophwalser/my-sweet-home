@@ -63,6 +63,10 @@ bar at the bottom of the plan explains the next step.
   as CSV and the 3D view as OBJ with MTL and textures.
 - "Photo…" in the 3D view renders the current view as image: draft (with sun shadows, in
   seconds) or path traced on the GPU ("Good" / "Best": soft shadows, indirect light, glass).
+- "Video…" in the 3D view creates an MP4 video along a camera path: add the current view or a
+  stored point of view as key points, choose size, frame rate and speed; the video moves from
+  point to point (draft in seconds, path traced frames on request). The path is saved in the
+  home, as in Sweet Home 3D.
 - Window layout: drag the borders of the side panels and between plan and 3D view; plan and 3D
   view can be maximized or minimized, the 3D view can open in its own window.
 - Drag furniture from the catalog onto the plan (doors and windows snap into walls); properties
@@ -157,8 +161,10 @@ msh --live view plan-image --out plan.png
 msh screenshot --mode aerial --out view3d.png     # 3D view rendered by the app
 msh export-obj house.obj                          # 3D view as OBJ + MTL + textures
 msh photo --quality good --width 1600 --height 1000 --out photo.png   # photo of the 3D view
+msh --live camera path-add --stored Kitchen      # key point of the video (or --x --y --yaw)
+msh video render --out tour.mp4                   # video along the camera path (MP4, H.264)
 msh --live export document --path house.pdf       # printed home incl. the 3D view
-msh mcp --live                                    # MCP server controlling the app (+ tools view_3d_image, render_photo, export_obj)
+msh mcp --live                                    # MCP server controlling the app (+ tools view_3d_image, render_photo, render_video, export_obj)
 ```
 
 Claude Code with live control:

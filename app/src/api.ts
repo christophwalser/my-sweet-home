@@ -48,6 +48,9 @@ export const api = {
     invoke<unknown>("execute", { command, params }),
   /** Writes a PNG data URL to a file. */
   saveImage: (path: string, dataUrl: string) => invoke<void>("save_image", { path, dataUrl }),
+  /** Writes binary data (e.g. a video) to a file. */
+  saveFile: (path: string, data: Uint8Array) =>
+    invoke<void>("save_file", data, { headers: { path: encodeURIComponent(path) } }),
   /** PNG (base64) of the 3D view, rendered by the window that shows it. */
   capture3d: () => invoke<string>("capture_3d_image"),
   /** Exports the 3D view as OBJ through the window that shows it. */
@@ -75,6 +78,11 @@ export const CAPTURE_EVENT = "capture-3d";
 export const EXPORT_OBJ_EVENT = "export-obj";
 /** Event of the live control asking for a photo ({ requestId, width, height, quality, path }). */
 export const RENDER_PHOTO_EVENT = "render-photo";
+/**
+ * Event of the live control asking for a video along the camera path
+ * ({ requestId, width, height, frameRate, quality, path }; null sizes use the home's settings).
+ */
+export const RENDER_VIDEO_EVENT = "render-video";
 
 /** MIME type of catalog items dragged onto the plan. */
 export const CATALOG_DRAG_TYPE = "application/x-msh-catalog";

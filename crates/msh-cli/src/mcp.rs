@@ -25,6 +25,10 @@ const VIEW_3D_TOOL: &str = "view_3d_image";
 const EXPORT_OBJ_TOOL: &str = "export_obj";
 /// Name of the live-only tool for photos of the 3D view.
 const PHOTO_TOOL: &str = "render_photo";
+/// Name of the live-only tool for videos along the camera path.
+const VIDEO_TOOL: &str = "render_video";
+/// Number of tools that only exist in live mode.
+const LIVE_TOOLS: usize = 4;
 
 enum Backend {
     Local(Box<Document>),
@@ -41,6 +45,8 @@ impl Backend {
                 client.call("export_obj", args)
             } else if name == PHOTO_TOOL {
                 client.call("render_photo", args)
+            } else if name == VIDEO_TOOL {
+                client.call("render_video", args)
             } else {
                 client.execute(name, args)
             }
@@ -73,7 +79,7 @@ pub fn serve(registry: &Registry, file: Option<PathBuf>, live: bool) -> Result<(
     };
     eprintln!(
         "my-sweet-home MCP server ready ({} tools, {})",
-        registry.list().len() + if live { 3 } else { 0 },
+        registry.list().len() + if live { LIVE_TOOLS } else { 0 },
         if live {
             "live: controlling the running app"
         } else {
@@ -136,7 +142,8 @@ fn instructions(live: bool) -> String {
     if live {
         s.push_str(
             "\nLive mode: every change is applied to the home shown in the running My Sweet Home app \
-             and appears in its window immediately. Use view_3d_image to see the 3D view.",
+             and appears in its window immediately. Use view_3d_image to see the 3D view, \
+             render_photo for a photo of it and render_video for a video along the camera path.",
         );
     }
     s
@@ -194,6 +201,22 @@ fn tool_list(registry: &Registry, live: bool) -> Vec<Value> {
                 },
             },
             "annotations": { "readOnlyHint": true },
+        }));
+        tools.push(json!({
+            "name": VIDEO_TOOL,
+            "description": "Renders a video (MP4) along the camera path of the home in the running app and writes it to path. Add key points first with camera_path_add (at least two); camera_path_get shows the path, the video settings and the resulting duration. \"draft\" is rasterized (fast), \"good\" and \"best\" are path traced (slow: seconds per frame).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "MP4 file to write" },
+                    "quality": { "type": "string", "enum": ["draft", "good", "best"], "description": "Default \"draft\"" },
+                    "width": { "type": "integer", "description": "Width in pixels (default: video settings of the home)" },
+                    "height": { "type": "integer", "description": "Height in pixels (default: from the aspect ratio)" },
+                    "frame_rate": { "type": "integer", "description": "Frames per second (default: video settings of the home)" },
+                },
+                "required": ["path"],
+            },
+            "annotations": { "readOnlyHint": false },
         }));
         tools.push(json!({
             "name": EXPORT_OBJ_TOOL,

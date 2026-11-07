@@ -11,6 +11,7 @@ pub mod document;
 pub mod model_package;
 pub mod registry;
 
+pub use commands::camera_path_len;
 pub use document::Document;
 pub use registry::{CommandError, CommandResult, CommandSpec, Registry};
 

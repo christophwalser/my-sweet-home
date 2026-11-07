@@ -443,6 +443,33 @@ furniture is read by its home reader.
   live MCP tool `render_photo`. The BVH is built synchronously (no BVH worker yet), which
   blocks the window for a few seconds on large homes.
 
+### 4.18 Status after P6d (2026-11-07)
+
+- Camera path of the video: commands `camera_path_get`, `camera_path_add` (stored point of view
+  by name, or position with yaw / pitch or a point to look at), `camera_path_remove`,
+  `camera_path_clear` and `video_settings_update` (width, aspect ratio 4:3 / 16:9 / 24:10, frame
+  rate, speed in m/s). As in Sweet Home 3D the key points are `<camera attribute="cameraPath">`
+  elements in the environment and the settings are the `video*` attributes of the environment;
+  the Sweet Home 3D reader reads both (checked with `HomeEnvironment.getVideoCameraPath()`).
+- Timing (same in msh-core and the frontend): each segment lasts as long as the slower of moving
+  at the video speed and turning at 45°/s; position, yaw (shortest way), pitch and field of view
+  are interpolated linearly, like Sweet Home 3D. The path goes straight from point to point, also
+  through walls.
+- "Video…" in the 3D view opens a panel that is not modal, so the 3D view can be moved to the
+  next key point while it is open ("Add current view", stored points of view, remove, clear,
+  settings, quality, preview with progress, save as MP4).
+- Rendering (`app/src/view3d/video.ts`): every frame is rendered on its own canvas like a photo,
+  "draft" rasterized with sun shadows, "good" / "best" path traced with 32 / 128 samples per
+  frame (one scene and BVH for all frames, only the camera moves). Frames are encoded with
+  WebCodecs (H.264 High, fallback VP9 or AV1) and muxed into MP4 with `mp4-muxer` 5.2.2; the file
+  is written by the `save_file` command (raw request body, path in a header).
+- Live control: pipe method `render_video` ({path, quality, width, height, frame_rate}; sizes and
+  frame rate default to the home's video settings), CLI `msh video render --out file.mp4`, live
+  MCP tool `render_video`.
+- Measured: 285 draft frames at 640 x 480 in 3.7 s; path traced at 320 x 240 and 32 samples
+  about 1.2 s per frame. Path traced frames of interiors are noisy and dark at 32 samples
+  without lamps (aerial view), and the noise changes from frame to frame.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

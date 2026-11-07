@@ -109,6 +109,24 @@ pub fn save_image(path: String, data_url: String) -> Result<(), String> {
     std::fs::write(&path, bytes).map_err(|e| format!("cannot write {path}: {e}"))
 }
 
+/// Writes binary data sent as raw request body (e.g. a video) to the file named by the
+/// percent-encoded `path` header.
+#[tauri::command]
+pub fn save_file(request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
+        return Err("expected binary data".into());
+    };
+    let header = request
+        .headers()
+        .get("path")
+        .and_then(|v| v.to_str().ok())
+        .ok_or("missing path")?;
+    let path = percent_encoding::percent_decode_str(header)
+        .decode_utf8()
+        .map_err(|e| e.to_string())?;
+    std::fs::write(path.as_ref(), data).map_err(|e| format!("cannot write {path}: {e}"))
+}
+
 /// PNG (base64) of the 3D view, rendered by the window that shows it.
 #[tauri::command]
 pub async fn capture_3d_image(app: tauri::AppHandle) -> Result<String, String> {

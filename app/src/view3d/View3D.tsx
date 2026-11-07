@@ -4,7 +4,13 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { api, CAPTURE_EVENT, EXPORT_OBJ_EVENT, RENDER_PHOTO_EVENT } from "../api";
+import {
+  api,
+  CAPTURE_EVENT,
+  EXPORT_OBJ_EVENT,
+  RENDER_PHOTO_EVENT,
+  RENDER_VIDEO_EVENT,
+} from "../api";
 import { forEachPiece } from "../model";
 import { useStore, type ViewMode } from "../store";
 import { buildAnnotations } from "./annotations";
@@ -18,11 +24,22 @@ import {
   skyColor,
   visibleLevels,
 } from "./buildScene";
+import { cameraDirection, cameraPose, verticalFov } from "./camera";
 import { buildLampLights, lampLights } from "./lights";
 import { clearModelCache, createPieceObject, disposeObject, waitForModels } from "./models";
 import { buildObj } from "./objExport";
 import PhotoDialog from "./PhotoDialog";
-import { type PhotoJob, type PhotoQuality, renderPhoto } from "./photo";
+import { type PhotoJob, type PhotoQuality, type PhotoSource, renderPhoto } from "./photo";
+import VideoDialog from "./VideoDialog";
+import {
+  type CameraPathInfo,
+  type CameraPoint,
+  even,
+  fromDegrees,
+  renderVideo,
+  type VideoJob,
+  type VideoQuality,
+} from "./video";
 
 /**
  * Highest pitch used for the aerial view. A camera looking straight down sits on
@@ -32,30 +49,13 @@ const MAX_AERIAL_PITCH = Math.PI / 2 - 0.05;
 /** Direction from the scene towards the sun (fixed for now; no compass-based sun yet). */
 const SUN_DIRECTION = new THREE.Vector3(-1000, 2500, 1500).normalize();
 
-/**
- * View direction of a Sweet Home 3D camera in three.js coordinates.
- * Sweet Home 3D orients the view with rotY(π − yaw) · rotX(−pitch) applied to
- * the default view direction (0, 0, −1); a positive pitch looks down.
- */
-function cameraDirection(yaw: number, pitch: number): THREE.Vector3 {
-  return new THREE.Vector3(
-    -Math.sin(yaw) * Math.cos(pitch),
-    -Math.sin(pitch),
-    Math.cos(yaw) * Math.cos(pitch),
-  );
-}
-
-/** Sweet Home 3D stores the horizontal field of view; three.js expects the vertical one. */
-function verticalFov(horizontal: number, aspect: number): number {
-  return THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(horizontal / 2) / aspect));
-}
-
 export default function View3D() {
   const opened = useStore((s) => s.opened);
   const levelId = useStore((s) => s.selectedLevel);
   const viewMode = useStore((s) => s.viewMode);
   const [shadows, setShadows] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const ctx = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -346,35 +346,102 @@ export default function View3D() {
     };
   }, []);
 
-  /** Starts a photo of the current view (see photo.ts). */
-  const startPhoto = (
-    width: number,
-    height: number,
-    quality: PhotoQuality,
-    onProgress?: (p: number) => void,
-  ): PhotoJob => {
+  /** Scene, lights and camera of the view for photos and videos. */
+  const photoSource = (): PhotoSource => {
     const c = ctx.current;
     if (!c) throw new Error("3D view not available");
     const ground = c.content.getObjectByName("ground") as THREE.Mesh | undefined;
     const groundColor =
       (ground?.material as THREE.MeshLambertMaterial | undefined)?.color?.clone() ??
       new THREE.Color(0xa8a8a8);
-    return renderPhoto(
-      {
-        scene: c.scene,
-        content: c.content,
-        lamps: c.lamps,
-        sun: c.sun,
-        sky: c.sky,
-        camera: c.camera,
-        hfov: c.hfov,
-        groundColor,
-      },
-      { width, height, quality, onProgress },
-    );
+    return {
+      scene: c.scene,
+      content: c.content,
+      lamps: c.lamps,
+      sun: c.sun,
+      sky: c.sky,
+      camera: c.camera,
+      hfov: c.hfov,
+      groundColor,
+    };
   };
+
+  /** Starts a photo of the current view (see photo.ts). */
+  const startPhoto = (
+    width: number,
+    height: number,
+    quality: PhotoQuality,
+    onProgress?: (p: number) => void,
+  ): PhotoJob => renderPhoto(photoSource(), { width, height, quality, onProgress });
   const startPhotoRef = useRef(startPhoto);
   startPhotoRef.current = startPhoto;
+
+  /** Starts a video along the camera path (see video.ts). */
+  const startVideo = (
+    points: CameraPoint[],
+    width: number,
+    height: number,
+    frameRate: number,
+    speed: number,
+    quality: VideoQuality,
+    onProgress?: (frame: number, frames: number) => void,
+  ): VideoJob =>
+    renderVideo(photoSource(), { points, width, height, frameRate, speed, quality, onProgress });
+  const startVideoRef = useRef(startVideo);
+  startVideoRef.current = startVideo;
+
+  // Videos requested by the CLI or the MCP server: path and settings of the home
+  useEffect(() => {
+    const unlisten = listen<{
+      requestId: number;
+      width: number | null;
+      height: number | null;
+      frameRate: number | null;
+      quality: VideoQuality;
+      path: string;
+    }>(RENDER_VIDEO_EVENT, async (e) => {
+      const { requestId, quality, path } = e.payload;
+      try {
+        const info = (await api.execute("camera_path_get")) as CameraPathInfo;
+        const width = even(e.payload.width ?? info.video.width);
+        const height = even(
+          e.payload.height ??
+            (e.payload.width
+              ? (e.payload.width * info.video.height) / info.video.width
+              : info.video.height),
+        );
+        const frameRate = e.payload.frameRate ?? info.video.frame_rate;
+        await waitForModels(60000);
+        const job = startVideoRef.current(
+          info.points.map(fromDegrees),
+          width,
+          height,
+          frameRate,
+          info.video.speed,
+          quality,
+        );
+        const video = await job.done;
+        await api.saveFile(path, video.data);
+        await api.captureResult(
+          requestId,
+          JSON.stringify({
+            path,
+            width,
+            height,
+            frames: video.frames,
+            duration_seconds: Math.round((video.frames / frameRate) * 100) / 100,
+            codec: video.codec,
+          }),
+          null,
+        );
+      } catch (err) {
+        await api.captureResult(requestId, null, String(err));
+      }
+    });
+    return () => {
+      void unlisten.then((off) => off());
+    };
+  }, []);
 
   // Photos requested by the CLI or the MCP server
   useEffect(() => {
@@ -452,6 +519,28 @@ export default function View3D() {
         >
           Photo…
         </button>
+      )}
+      {opened && (
+        <button
+          type="button"
+          className="view3d-video"
+          onClick={() => setVideoOpen(true)}
+          title="Create a video along a camera path"
+        >
+          Video…
+        </button>
+      )}
+      {videoOpen && opened && (
+        <VideoDialog
+          baseName={(opened.home.attrs.name ?? "Video").replace(/\.sh3d$/i, "")}
+          currentPose={() => {
+            const c = ctx.current;
+            if (!c) throw new Error("3D view not available");
+            return cameraPose(c.camera, c.hfov);
+          }}
+          start={startVideo}
+          onClose={() => setVideoOpen(false)}
+        />
       )}
       {photoOpen && opened && (
         <PhotoDialog

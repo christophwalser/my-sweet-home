@@ -51,23 +51,61 @@ export interface PhotoJob {
 /** Groups of the 3D view's content that do not belong in a photo. */
 const LEFT_OUT = new Set(["annotations"]);
 
-export function renderPhoto(src: PhotoSource, opts: PhotoOptions): PhotoJob {
+/** WebGL renderer on its own canvas; the drawing buffer is kept so it can be read. */
+export function offscreenRenderer(width: number, height: number): THREE.WebGLRenderer {
   const canvas = document.createElement("canvas");
-  canvas.width = opts.width;
-  canvas.height = opts.height;
+  canvas.width = width;
+  canvas.height = height;
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: true,
     preserveDrawingBuffer: true,
   });
   renderer.setPixelRatio(1);
-  renderer.setSize(opts.width, opts.height, false);
+  renderer.setSize(width, height, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  return renderer;
+}
 
+/** Copy of the view's camera for an image of the given size (same horizontal field of view). */
+export function photoCamera(
+  src: PhotoSource,
+  width: number,
+  height: number,
+): THREE.PerspectiveCamera {
   const camera = src.camera.clone();
-  camera.aspect = opts.width / opts.height;
+  camera.aspect = width / height;
   camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(src.hfov / 2) / camera.aspect));
   camera.updateProjectionMatrix();
+  return camera;
+}
+
+/** Path tracer that renders straight to the renderer's canvas, in tiles for large images. */
+export function createPathTracer(
+  renderer: THREE.WebGLRenderer,
+  width: number,
+  height: number,
+  bounces: number,
+): WebGLPathTracer {
+  const tracer = new WebGLPathTracer(renderer);
+  tracer.renderToCanvas = true;
+  tracer.minSamples = 0;
+  tracer.renderDelay = 0;
+  tracer.fadeDuration = 0;
+  tracer.dynamicLowRes = false;
+  tracer.bounces = bounces;
+  tracer.filterGlossyFactor = 0.5;
+  tracer.multipleImportanceSampling = true;
+  // Tiles keep each GPU pass short, so the window stays responsive
+  const tiles = Math.max(1, Math.ceil((width * height) / (1024 * 768)));
+  tracer.tiles.set(tiles, tiles);
+  return tracer;
+}
+
+export function renderPhoto(src: PhotoSource, opts: PhotoOptions): PhotoJob {
+  const renderer = offscreenRenderer(opts.width, opts.height);
+  const canvas = renderer.domElement;
+  const camera = photoCamera(src, opts.width, opts.height);
 
   let stopped = false;
   let finishEarly = false;
@@ -94,19 +132,13 @@ export function renderPhoto(src: PhotoSource, opts: PhotoOptions): PhotoJob {
       const target = PHOTO_SAMPLES[opts.quality];
       const { scene, dispose } = pathTracingScene(src, camera);
       cleanups.push(dispose);
-      const tracer = new WebGLPathTracer(renderer);
+      const tracer = createPathTracer(
+        renderer,
+        opts.width,
+        opts.height,
+        opts.quality === "best" ? 8 : 5,
+      );
       cleanups.unshift(() => tracer.dispose());
-      tracer.renderToCanvas = true;
-      tracer.minSamples = 0;
-      tracer.renderDelay = 0;
-      tracer.fadeDuration = 0;
-      tracer.dynamicLowRes = false;
-      tracer.bounces = opts.quality === "best" ? 8 : 5;
-      tracer.filterGlossyFactor = 0.5;
-      tracer.multipleImportanceSampling = true;
-      // Tiles keep each GPU pass short, so the window stays responsive
-      const tiles = Math.max(1, Math.ceil((opts.width * opts.height) / (1024 * 768)));
-      tracer.tiles.set(tiles, tiles);
       // Builds the BVH of the scene; synchronous (no BVH worker), so let the dialog paint first
       setTimeout(() => {
         try {
@@ -155,7 +187,7 @@ export function renderPhoto(src: PhotoSource, opts: PhotoOptions): PhotoJob {
 }
 
 /** Rasterized photo with sun shadows, using the scene of the 3D view. */
-function renderDraft(
+export function renderDraft(
   src: PhotoSource,
   renderer: THREE.WebGLRenderer,
   camera: THREE.PerspectiveCamera,
@@ -192,7 +224,7 @@ function hideLeftOut(content: THREE.Object3D): THREE.Object3D[] {
  * Lambert / Phong ones, the sky as environment light instead of the sky dome and the
  * hemisphere light, labels and dimensions left out. Geometry and textures are shared.
  */
-function pathTracingScene(
+export function pathTracingScene(
   src: PhotoSource,
   camera: THREE.PerspectiveCamera,
 ): { scene: THREE.Scene; dispose: () => void } {

@@ -2286,6 +2286,7 @@ dependencies = [
  "msh-geometry",
  "msh-ipc",
  "msh-model",
+ "percent-encoding",
  "serde",
  "serde_json",
  "tauri",
