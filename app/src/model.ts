@@ -187,6 +187,7 @@ export type Room = {
 
 export type Polyline = {
   attrs: {
+    id: string | null;
     level: string | null;
     thickness: number | null;
     dash_style: string | null;
@@ -199,6 +200,7 @@ export type Polyline = {
 
 export type DimensionLine = {
   attrs: {
+    id: string | null;
     level: string | null;
     x_start: number;
     y_start: number;
@@ -217,6 +219,7 @@ export type DimensionLine = {
 
 export type Label = {
   attrs: {
+    id: string | null;
     level: string | null;
     x: number;
     y: number;

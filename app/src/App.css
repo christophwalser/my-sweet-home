@@ -82,13 +82,13 @@ input[type="search"]:focus {
 .shell {
   display: grid;
   height: 100%;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: 280px 1fr 250px;
   grid-template-rows: 44px auto 1fr 1fr;
   grid-template-areas:
-    "toolbar toolbar"
-    "error error"
-    "catalog plan"
-    "catalog view3d";
+    "toolbar toolbar toolbar"
+    "error error error"
+    "catalog plan inspector"
+    "catalog view3d inspector";
   gap: 1px;
   background: var(--border);
 }
@@ -179,11 +179,107 @@ input[type="search"]:focus {
 
 /* ---- Plan ---- */
 
+.plan-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-toolbar .segmented {
+  margin-bottom: 4px;
+}
+
 .level-tabs {
   display: flex;
   gap: 2px;
-  padding: 4px 8px 0;
-  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.level-tabs .add-level {
+  border: 1px dashed var(--border);
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+/* ---- Inspector ---- */
+
+.inspector {
+  grid-area: inspector;
+  overflow-y: auto;
+}
+
+.props {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+}
+
+.props h2 {
+  margin: 8px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.prop-row {
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.prop-row input[type="text"] {
+  font: inherit;
+  color: inherit;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  min-width: 0;
+}
+
+.prop-row input[type="text"]:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.prop-row input[type="color"] {
+  width: 100%;
+  height: 26px;
+  padding: 0 2px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.prop-check {
+  grid-template-columns: auto 1fr;
+}
+
+.prop-label,
+.prop-unit {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.small {
+  font-size: 12px;
+}
+
+.link-button {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 0;
+  font-size: 12px;
 }
 
 .level-tabs button {

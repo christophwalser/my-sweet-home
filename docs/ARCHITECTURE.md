@@ -205,6 +205,31 @@ Implemented:
 Findings:
 - The DTD default of a room's `nameYOffset` is -40 (name above the area); the plan view used 0.
 
+### 4.9 Status after P4a (2026-11-07)
+
+Implemented (editing in the 2D plan; every action is a registry command and one undo step):
+- Selection: click, Shift+click, rubber band; highlight in the plan; properties panel on the
+  right for furniture, walls, rooms, labels, home and level.
+- Moving by dragging (`edit_move`, joined walls keep their connection), arrow keys (1 cm,
+  Shift 10 cm), rotating furniture with R / Shift+R (15°), Delete.
+- Tools: walls (click chain with magnetism to wall ends, 15° angles and whole centimeters,
+  click the first point to close, double-click/Enter to finish), rooms (snap to the corners of
+  the wall sides), dimension lines, text labels; Alt disables magnetism.
+- Catalog drag & drop: furniture at the drop point, doors/windows into the nearest wall
+  (`furniture_add_in_wall`); the translated catalog name becomes the piece name.
+- "+ Level" in the level tabs.
+- Core: `edit_move`, `label_update`; homes of older versions get IDs on open (needed for
+  selection and commands; Sweet Home 3D reads them — verified).
+
+Findings:
+- Tauri intercepts drag & drop on Windows for file drops; HTML5 drag & drop in the WebView only
+  works with `dragDropEnabled: false` on the window.
+- Tilted furniture (roofs): Sweet Home 3D uses rotY(−angle) · rotZ(−roll) · rotX(−pitch) and
+  centers at elevation + heightInPlan / 2; the 3D view used +pitch (roofs were upside down).
+
+Next (P4b): wall end and furniture resize handles, copy/paste, room detection by double-click
+inside walls, polylines, multi-level editing details, more properties (textures, baseboards).
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

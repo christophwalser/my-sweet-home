@@ -1,7 +1,7 @@
 //! Labels and dimension lines.
 
 use super::{new_id, parse_color, rad, resolve_level};
-use crate::registry::Registry;
+use crate::registry::{CommandError, Registry};
 use msh_model::{DimensionLine, DimensionLineAttrs, Label, LabelAttrs, TextStyle};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -32,7 +32,58 @@ struct DimensionParams {
     level: Option<String>,
 }
 
+#[derive(Deserialize, JsonSchema)]
+struct LabelUpdateParams {
+    id: String,
+    text: Option<String>,
+    x: Option<f32>,
+    y: Option<f32>,
+    font_size: Option<f32>,
+    angle_deg: Option<f32>,
+    color: Option<String>,
+}
+
 pub(super) fn register(r: &mut Registry) {
+    r.add(
+        "label_update",
+        "Changes text, position, size, angle or color of a label.",
+        true,
+        |doc, p: LabelUpdateParams| {
+            let l = doc
+                .home_mut()
+                .labels
+                .iter_mut()
+                .find(|l| l.attrs.id.as_deref() == Some(p.id.as_str()))
+                .ok_or_else(|| CommandError::failed(format!("unknown label '{}'", p.id)))?;
+            if let Some(t) = p.text {
+                if t.trim().is_empty() {
+                    return Err(CommandError::failed("label text must not be empty"));
+                }
+                l.text = t;
+            }
+            if let Some(v) = p.x {
+                l.attrs.x = v;
+            }
+            if let Some(v) = p.y {
+                l.attrs.y = v;
+            }
+            if let Some(v) = p.angle_deg {
+                l.attrs.angle = Some(rad(v));
+            }
+            if let Some(c) = &p.color {
+                l.attrs.color = Some(parse_color(c)?);
+            }
+            if let Some(size) = p.font_size {
+                l.text_style
+                    .get_or_insert_with(|| TextStyle {
+                        font_size: size,
+                        ..Default::default()
+                    })
+                    .font_size = size;
+            }
+            Ok(json!({ "id": p.id }))
+        },
+    );
     r.add(
         "label_add",
         "Adds a text label to the plan.",

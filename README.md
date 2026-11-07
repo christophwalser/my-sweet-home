@@ -27,6 +27,10 @@ The app opens `.sh3d` files and standalone `Home.xml` files (e.g. `tests/corpus/
 It shows the 2D plan, the 3D view (aerial view and virtual visit) and the catalog of all
 installed Sweet Home 3D libraries.
 
+Editing in the plan: tools Select, Walls, Room, Dimension, Text above the plan; drag furniture
+from the catalog onto the plan (doors and windows snap into walls); drag to move, R to rotate,
+Del to delete, arrow keys to nudge; properties of the selection on the right; Ctrl+Z / Ctrl+Y.
+
 ```powershell
 .\scripts\check.ps1                   # formatting, lints, tests
 .\scripts\compat-check.ps1            # verify against the original Sweet Home 3D reader

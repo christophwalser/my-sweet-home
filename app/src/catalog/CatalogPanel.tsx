@@ -2,7 +2,13 @@
 // category, with full-text search over name, category, tags and creator.
 
 import { useEffect, useMemo, useState } from "react";
-import { type CatalogItem, type CatalogKind, libResourceUrl } from "../api";
+import {
+  CATALOG_DRAG_TYPE,
+  type CatalogDragData,
+  type CatalogItem,
+  type CatalogKind,
+  libResourceUrl,
+} from "../api";
 import { useStore } from "../store";
 
 const MAX_RESULTS = 300;
@@ -24,7 +30,22 @@ function ItemRow({ item, libraryName }: { item: CatalogItem; libraryName: string
     .filter(Boolean)
     .join("\n");
   return (
-    <li className="catalog-item" title={tooltip}>
+    <li
+      className="catalog-item"
+      title={tooltip}
+      // Furniture can be dragged onto the plan
+      draggable={item.kind === "furniture" && !!item.id}
+      onDragStart={(e) => {
+        if (!item.id) return;
+        const data: CatalogDragData = {
+          catalogId: item.id,
+          doorOrWindow: item.doorOrWindow,
+          name: item.name,
+        };
+        e.dataTransfer.setData(CATALOG_DRAG_TYPE, JSON.stringify(data));
+        e.dataTransfer.effectAllowed = "copy";
+      }}
+    >
       {item.icon ? (
         <img src={libResourceUrl(item.library, item.icon)} alt="" loading="lazy" decoding="async" />
       ) : (

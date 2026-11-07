@@ -57,6 +57,16 @@ export const HOME_CHANGED_EVENT = "home-changed";
 /** Event asking the frontend to capture the 3D view (live control). */
 export const CAPTURE_EVENT = "capture-3d";
 
+/** MIME type of catalog items dragged onto the plan. */
+export const CATALOG_DRAG_TYPE = "application/x-msh-catalog";
+
+export type CatalogDragData = {
+  catalogId: string;
+  doorOrWindow: boolean;
+  /** Name as shown in the catalog (translated); used as name of the new piece */
+  name: string;
+};
+
 /** Base URL of the custom `msh` URI scheme (served as http://msh.localhost on Windows). */
 const MSH_BASE = "http://msh.localhost";
 

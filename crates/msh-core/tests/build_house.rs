@@ -104,6 +104,29 @@ fn build_house_undo_redo_and_save() {
         );
     }
 
+    // Moving the interior wall also moves the touching ends of joined walls; here the
+    // interior wall is not joined, so only it moves
+    let interior = doc.home().walls[4].attrs.id.clone();
+    run(
+        &r,
+        &mut doc,
+        "edit_move",
+        json!({ "ids": [interior], "dx": 10, "dy": 0 }),
+    );
+    assert_eq!(doc.home().walls[4].attrs.x_start, 610.0);
+    // Moving one exterior wall drags the ends of its two neighbors along
+    run(
+        &r,
+        &mut doc,
+        "edit_move",
+        json!({ "ids": [outer_ids[1]], "dx": 50, "dy": 0 }),
+    );
+    let w = &doc.home().walls;
+    assert_eq!(w[1].attrs.x_start, 1050.0);
+    assert_eq!(w[0].attrs.x_end, 1050.0, "end of the previous wall follows");
+    assert_eq!(w[2].attrs.x_start, 1050.0, "start of the next wall follows");
+    assert_eq!(w[0].attrs.x_start, 0.0, "far end stays");
+
     // Describe and plan image
     let d = run(&r, &mut doc, "home_describe", json!({}));
     assert_eq!(d["walls"].as_array().unwrap().len(), 5);

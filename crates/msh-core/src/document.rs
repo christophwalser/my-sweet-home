@@ -66,11 +66,12 @@ impl Document {
         let is_xml = path
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("xml"));
-        let file = if is_xml {
+        let mut file = if is_xml {
             Sh3dDocument::new(msh_format::read_home_xml(&std::fs::read(path)?)?)
         } else {
             Sh3dDocument::open(path)?
         };
+        ensure_ids(&mut file.home);
         Ok(Self {
             file,
             // A standalone Home.xml is saved as .sh3d next to it
@@ -193,6 +194,48 @@ impl Document {
         if self.file.contents.len() != before {
             self.contents_changed = true;
         }
+    }
+}
+
+/// Gives every element an ID. Files of older Sweet Home 3D versions have no IDs
+/// on furniture, rooms, labels, dimension lines and polylines; commands and
+/// selection need them. Sweet Home 3D 7 writes and reads such IDs itself.
+pub fn ensure_ids(home: &mut Home) {
+    use crate::commands::new_id;
+    fn walk(items: &mut [Furniture]) {
+        for item in items {
+            match item {
+                Furniture::Piece(p) => {
+                    if p.attrs.id.is_none() {
+                        let prefix = match p.kind {
+                            msh_model::PieceKind::DoorOrWindow => "doorOrWindow",
+                            msh_model::PieceKind::Light => "light",
+                            _ => "pieceOfFurniture",
+                        };
+                        p.attrs.id = Some(new_id(prefix));
+                    }
+                }
+                Furniture::Group(g) => {
+                    if g.attrs.id.is_none() {
+                        g.attrs.id = Some(new_id("furnitureGroup"));
+                    }
+                    walk(&mut g.items);
+                }
+            }
+        }
+    }
+    walk(&mut home.furniture);
+    for r in &mut home.rooms {
+        r.attrs.id.get_or_insert_with(|| new_id("room"));
+    }
+    for l in &mut home.labels {
+        l.attrs.id.get_or_insert_with(|| new_id("label"));
+    }
+    for d in &mut home.dimension_lines {
+        d.attrs.id.get_or_insert_with(|| new_id("dimensionLine"));
+    }
+    for p in &mut home.polylines {
+        p.attrs.id.get_or_insert_with(|| new_id("polyline"));
     }
 }
 

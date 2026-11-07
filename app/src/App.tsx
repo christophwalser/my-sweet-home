@@ -2,10 +2,23 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { type AppInfo, api } from "./api";
 import CatalogPanel from "./catalog/CatalogPanel";
+import PropertiesPanel from "./panels/PropertiesPanel";
 import PlanView from "./plan2d/PlanView";
-import { applyHome, subscribeToHomeChanges, useStore } from "./store";
+import { applyHome, subscribeToHomeChanges, type Tool, useStore } from "./store";
 import View3D from "./view3d/View3D";
 import "./App.css";
+
+const PLAN_TOOLS: { tool: Tool; label: string; hint: string }[] = [
+  { tool: "select", label: "Select", hint: "Select and move (Esc). Delete: Del, rotate: R" },
+  {
+    tool: "wall",
+    label: "Walls",
+    hint: "Click to add points, double-click or Enter to finish, Alt: no magnetism",
+  },
+  { tool: "room", label: "Room", hint: "Click the corners, double-click or Enter to finish" },
+  { tool: "dimension", label: "Dimension", hint: "Click start and end point" },
+  { tool: "label", label: "Text", hint: "Click to place a text label" },
+];
 
 export default function App() {
   const [info, setInfo] = useState<AppInfo | null>(null);
@@ -14,7 +27,8 @@ export default function App() {
   const error = useStore((s) => s.error);
   const selectedLevel = useStore((s) => s.selectedLevel);
   const viewMode = useStore((s) => s.viewMode);
-  const { openHome, run, undo, redo, save, selectLevel, setViewMode, clearError } =
+  const tool = useStore((s) => s.tool);
+  const { openHome, run, undo, redo, save, selectLevel, setViewMode, setTool, clearError } =
     useStore.getState();
 
   useEffect(() => {
@@ -153,19 +167,42 @@ export default function App() {
       </aside>
 
       <main className="plan">
-        {levels.length > 0 && (
-          <nav className="level-tabs" aria-label="Levels">
-            {levels.map((l) => (
+        {opened && (
+          <div className="plan-toolbar">
+            <fieldset className="segmented" aria-label="Plan tools">
+              {PLAN_TOOLS.map((t) => (
+                <button
+                  type="button"
+                  key={t.tool}
+                  className={tool === t.tool ? "active" : ""}
+                  onClick={() => setTool(t.tool)}
+                  title={t.hint}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </fieldset>
+            <nav className="level-tabs" aria-label="Levels">
+              {levels.map((l) => (
+                <button
+                  type="button"
+                  key={l.attrs.id}
+                  className={l.attrs.id === selectedLevel ? "active" : ""}
+                  onClick={() => selectLevel(l.attrs.id)}
+                >
+                  {l.attrs.name}
+                </button>
+              ))}
               <button
                 type="button"
-                key={l.attrs.id}
-                className={l.attrs.id === selectedLevel ? "active" : ""}
-                onClick={() => selectLevel(l.attrs.id)}
+                className="add-level"
+                onClick={() => void run("level_add", { name: `Level ${levels.length || 1}` })}
+                title="Add a level above the highest one"
               >
-                {l.attrs.name}
+                + Level
               </button>
-            ))}
-          </nav>
+            </nav>
+          </div>
         )}
         <PlanView />
         {!opened && !loading && (
@@ -181,6 +218,10 @@ export default function App() {
       <section className="view3d">
         <View3D />
       </section>
+
+      <aside className="inspector">
+        <PropertiesPanel />
+      </aside>
     </div>
   );
 }

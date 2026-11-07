@@ -4,13 +4,21 @@ import { listen } from "@tauri-apps/api/event";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
-import type { OpenedHome } from "./model";
+import { forEachPiece, type OpenedHome } from "./model";
 
 export type ViewMode = "aerial" | "observer";
+
+/** Tool of the 2D plan. */
+export type Tool = "select" | "wall" | "room" | "dimension" | "label";
 
 type State = {
   opened: OpenedHome | null;
   selectedLevel: string | null;
+  /** IDs of the selected elements */
+  selection: string[];
+  tool: Tool;
+  setSelection: (ids: string[]) => void;
+  setTool: (tool: Tool) => void;
   error: string | null;
   loading: boolean;
   viewMode: ViewMode;
@@ -45,6 +53,10 @@ function levelAfterChange(
 export const useStore = create<State>((set, get) => ({
   opened: null,
   selectedLevel: null,
+  selection: [],
+  tool: "select",
+  setSelection: (selection) => set({ selection }),
+  setTool: (tool) => set({ tool }),
   error: null,
   loading: false,
   viewMode: "aerial",
@@ -115,10 +127,13 @@ export const useStore = create<State>((set, get) => ({
 
 /** Applies a new state of the home (opened here or changed by the UI, CLI or MCP). */
 export function applyHome(next: OpenedHome): void {
-  const { opened: prev, selectedLevel, viewMode } = useStore.getState();
+  const { opened: prev, selectedLevel, viewMode, selection } = useStore.getState();
   const newHome = prev?.id !== next.id;
+  // Keep only selected elements that still exist (e.g. after undo or delete)
+  const ids = newHome ? new Set<string>() : allIds(next);
   useStore.setState({
     opened: next,
+    selection: selection.filter((id) => ids.has(id)),
     selectedLevel: levelAfterChange(next, newHome ? null : prev, newHome ? null : selectedLevel),
     viewMode: newHome
       ? next.home.attrs.camera === "observerCamera"
@@ -126,6 +141,21 @@ export function applyHome(next: OpenedHome): void {
         : "aerial"
       : viewMode,
   });
+}
+
+/** IDs of all elements of a home. */
+function allIds(opened: OpenedHome): Set<string> {
+  const ids = new Set<string>();
+  const h = opened.home;
+  forEachPiece(h.furniture, (p) => {
+    if (p.attrs.id) ids.add(p.attrs.id);
+  });
+  for (const w of h.walls) ids.add(w.attrs.id);
+  for (const x of [...h.rooms, ...h.labels, ...h.dimension_lines, ...h.polylines]) {
+    const id = (x.attrs as { id?: string | null }).id;
+    if (id) ids.add(id);
+  }
+  return ids;
 }
 
 /** Subscribes to home changes from the backend. Returns the unsubscribe function. */
