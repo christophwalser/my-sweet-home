@@ -16,6 +16,12 @@ pub fn run() {
                 responder.respond(resources::handle(&app, &request));
             });
         })
+        // Closing the main window ends the app, also when the 3D window is open
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                tauri::Manager::app_handle(window).exit(0);
+            }
+        })
         .setup(|app| {
             pipe::start(app.handle().clone());
             Ok(())

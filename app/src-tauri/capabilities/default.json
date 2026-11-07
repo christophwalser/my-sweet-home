@@ -2,6 +2,12 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capabilities of the main window",
-  "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "windows": ["main", "view3d"],
+  "permissions": [
+    "core:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "dialog:allow-open"
+  ]
 }

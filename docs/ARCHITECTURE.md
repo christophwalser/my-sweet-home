@@ -382,6 +382,13 @@ furniture is read by its home reader.
   value) and `reset_materials`; materials without changes are removed. The 3D view applies
   material textures (model UVs, repeating). Written as `<material>` elements with a texture
   child like Sweet Home 3D; verified with its home reader.
+- Window layout: the catalog, the properties panel and the plan / 3D split are resized by
+  dragging their borders (double-click: default size); sizes are remembered in the WebView's
+  local storage. Plan and 3D view can be maximized or minimized; a collapsed pane comes back
+  through the bar at the split (button or drag). The 3D view can open in a separate window
+  (`index.html#view3d`), which follows the open home through the `home-changed` event and
+  shares the selected level and view mode with the main window (`ui-state` event).
+- Levels are renamed by double-clicking their tab; a new level starts in rename mode.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 
