@@ -284,6 +284,17 @@ Based on user feedback; Sweet Home 3D's interaction is the baseline, with additi
   Home 3D's magnetism; Alt disables it.
 - `wall_add_path` joins an open path to a free wall end at its first or last point (mitered
   corner instead of two overlapping walls).
+- Joining and separating walls: `wall_join` (two walls; their axes are extended or shortened to
+  the intersection: mitered corner near both ends, T junction if the intersection lies inside
+  one wall, end-to-end for collinear walls), `wall_detach`, `wall_split` (at a point or the
+  middle). UI: "Join walls" (or J) for two selected walls, "Detach", "Split". Moving a free wall
+  end onto a free end of another wall (`wall_update`, handles) joins them.
+- Placing a wall against an existing one: near a wall, the wall tool shows its snap points (ends
+  and middle as circles, "flush" points as crosses) and names the point the cursor snaps to.
+  A flush point lies half the new wall's thickness inside the end, so a wall drawn across from
+  there ends flush with the end face of the existing wall.
+- Walls are drawn as one area in the plan (outlines first, fills on top), so overlapping walls
+  show no inner lines, like Sweet Home 3D.
 
 Next (P4c): multi-level editing details (elements of other levels as background, walls through
 levels), arc walls and wall splitting in the plan, furniture groups, text style and room label

@@ -22,7 +22,18 @@ export type SnapContext = {
   refs: Pt[];
   /** Preferred directions (rad) besides the 15° steps, e.g. of nearby walls */
   directions: number[];
+  /** Names of special points, shown when the cursor snaps to them (key: `pointKey`) */
+  labels?: Map<string, string>;
+  /** Shown when the point snaps onto one of `lines` */
+  lineLabel?: string;
+  /** Snap points of nearby elements, drawn as markers so the user sees where to click */
+  hints?: { pt: Pt; label: string }[];
 };
+
+/** Key of a point in `SnapContext.labels`. */
+export function pointKey(p: Pt): string {
+  return `${Math.round(p[0] * 100)},${Math.round(p[1] * 100)}`;
+}
 
 export type Snapped = {
   pt: Pt;
@@ -84,7 +95,14 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
       bestDist = d;
     }
   }
-  if (best) return { pt: [best[0], best[1]], marker: best, guides: [], note: null };
+  if (best) {
+    return {
+      pt: [best[0], best[1]],
+      marker: best,
+      guides: [],
+      note: ctx.labels?.get(pointKey(best)) ?? null,
+    };
+  }
 
   if (previous) {
     // 2. Direction from the previous point
@@ -116,7 +134,7 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
       const hit = raySegment(previous, dir, s);
       if (hit && dist(hit, q) < snappedDist && dist(hit, previous) > 1) {
         snappedDist = dist(hit, q);
-        snapped = { pt: hit, marker: hit, guides: [], note };
+        snapped = { pt: hit, marker: hit, guides: [], note: note ?? ctx.lineLabel ?? null };
       }
     }
     for (const ref of ctx.refs) {
@@ -155,7 +173,7 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
       bestDist = dist(q, p);
     }
   }
-  if (best) return { pt: best, marker: best, guides: [], note: null };
+  if (best) return { pt: best, marker: best, guides: [], note: ctx.lineLabel ?? null };
   let x = Math.round(p[0]);
   let y = Math.round(p[1]);
   const guides: Segment[] = [];
@@ -199,10 +217,23 @@ export function snapContext(
     excludePoint?: Pt;
     /** Center of the area of interest, for the directions of nearby walls */
     near?: Pt;
+    /** Thickness of the wall being drawn, for the points where it ends flush */
+    thickness?: number;
   } = {},
 ): SnapContext {
-  const { path = [], excludeId, excludePoint, near } = options;
+  const { path = [], excludeId, excludePoint, near, thickness } = options;
   const points: Pt[] = [];
+  const labels = new Map<string, string>();
+  const hints: { pt: Pt; label: string }[] = [];
+  /** Adds a named point target; nearby ones are also shown as hints */
+  /** Whether the hints of the current wall are shown (the cursor is close to it) */
+  let showHints = false;
+  const named = (pt: Pt, label: string) => {
+    if (excludePoint && dist(pt, excludePoint) < 1e-6) return;
+    points.push(pt);
+    labels.set(pointKey(pt), label);
+    if (showHints) hints.push({ pt, label });
+  };
   const lines: Segment[] = [];
   const refs: Pt[] = [];
   const directions: number[] = [];
@@ -221,8 +252,22 @@ export function snapContext(
       s.right[s.right.length - 1],
     ];
     if (purpose === "wall") {
-      points.push(...[start, end].filter(keep));
-      if (!a.arc_extent) lines.push([start, end]);
+      showHints = !!near && distanceToWall(near, start, end) < radius * 8;
+      named(start, "wall end");
+      named(end, "wall end");
+      if (!a.arc_extent) {
+        lines.push([start, end]);
+        const len = dist(start, end);
+        const ux = (end[0] - start[0]) / (len || 1);
+        const uy = (end[1] - start[1]) / (len || 1);
+        named([(start[0] + end[0]) / 2, (start[1] + end[1]) / 2], "wall middle");
+        // A wall drawn across from here is flush with the end face of this wall
+        const half = (thickness ?? 0) / 2;
+        if (half > 0 && len > 2 * half + 1) {
+          named([start[0] + ux * half, start[1] + uy * half], "flush with wall end");
+          named([end[0] - ux * half, end[1] - uy * half], "flush with wall end");
+        }
+      }
     } else if (purpose === "room" || purpose === "dimension") {
       points.push(...corners.filter(keep));
       if (purpose === "dimension") points.push(...[start, end].filter(keep));
@@ -257,10 +302,23 @@ export function snapContext(
   }
 
   // The path being drawn: its first point closes it, all its points align
-  if (path.length > 0) points.push(path[0]);
+  if (path.length > 0) {
+    points.push(path[0]);
+    if (path.length >= 2)
+      labels.set(pointKey(path[0]), purpose === "room" ? "finish room" : "close");
+  }
   refs.push(...path);
   // Avoid directions that are too many to be meaningful
-  return { radius, points, lines, refs, directions: dedupeAngles(directions).slice(0, 8) };
+  return {
+    radius,
+    points,
+    lines,
+    refs,
+    directions: dedupeAngles(directions).slice(0, 8),
+    labels,
+    lineLabel: purpose === "wall" ? "on wall axis" : purpose === "polyline" ? undefined : "on edge",
+    hints,
+  };
 }
 
 function distanceToWall(p: Pt, a: Pt, b: Pt): number {

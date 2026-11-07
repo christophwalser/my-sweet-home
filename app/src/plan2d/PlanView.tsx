@@ -144,6 +144,7 @@ export default function PlanView() {
   const draft = useRef<Pt[]>([]);
   const cursor = useRef<Pt | null>(null);
   const snapState = useRef<Snapped | null>(null);
+  const snapHints = useRef<{ pt: Pt; label: string }[] | null>(null);
   const typed = useRef<string | null>(null);
   const hoverHandle = useRef<Handle | null>(null);
 
@@ -191,6 +192,11 @@ export default function PlanView() {
 
   const pxToCm = (px: number) => (px * devicePixelRatio) / viewRef.current.scale;
 
+  const selectedWallCount = () => {
+    const sel = useStore.getState().selection;
+    return input ? input.home.walls.filter((w) => sel.includes(w.attrs.id)).length : 0;
+  };
+
   /** Explanation of what the next mouse action does, shown below the plan. */
   const hintText = (): string => {
     const g = gesture.current;
@@ -219,6 +225,8 @@ export default function PlanView() {
         return "Click to place a text";
       default:
         if (hoverHandle.current) return HANDLE_HINT[hoverHandle.current.kind];
+        if (selectedWallCount() === 2)
+          return "J or Join walls: connect both walls at the intersection of their axes · Shift+click: change the selection";
         return useStore.getState().selection.length > 0
           ? "Drag to move · drag the handles to edit · Del: delete · Ctrl+C/V: copy/paste · Ctrl+D: duplicate"
           : "Click to select, drag for a rubber band · Shift: add to the selection · double-click: fit";
@@ -258,6 +266,8 @@ export default function PlanView() {
           : null,
       guides: handleDrag?.drag.guides ?? snap?.guides ?? [],
       note: snap?.note ?? null,
+      noteAt: snap?.pt ?? null,
+      hints: drawing ? (snapHints.current ?? []) : [],
       typedLength: drawing ? typed.current : null,
       handles:
         tool === "select" && sel.length === 1 ? elementHandles(input.home, sel[0], pxToCm(1)) : [],
@@ -347,6 +357,7 @@ export default function PlanView() {
   const snapped = (p: Pt, altKey: boolean): Pt => {
     if (!input || altKey || !isPathTool(tool)) {
       snapState.current = null;
+      snapHints.current = null;
       return p;
     }
     const path = draft.current;
@@ -357,10 +368,11 @@ export default function PlanView() {
       input.wallShapes,
       effectiveLevel,
       pxToCm(SNAP_PX),
-      { path, near: p },
+      { path, near: p, thickness: wallThickness },
     );
     const s = snapDraw(p, previous, ctx);
     snapState.current = s;
+    snapHints.current = ctx.hints ?? null;
     return s.pt;
   };
 
@@ -813,6 +825,11 @@ export default function PlanView() {
             });
           }
         });
+      } else if ((e.key === "j" || e.key === "J") && state.opened) {
+        // Join the two selected walls
+        const walls = state.opened.home.walls.filter((w) => sel.includes(w.attrs.id));
+        if (walls.length !== 2) return;
+        void run("wall_join", { ids: walls.map((w) => w.attrs.id) });
       } else if (e.key.startsWith("Arrow") && sel.length > 0) {
         const d = e.shiftKey ? 10 : 1;
         const dx = e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0;

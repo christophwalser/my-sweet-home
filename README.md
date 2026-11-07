@@ -36,6 +36,9 @@ bar at the bottom of the plan explains the next step.
 - Double-click inside walls with the room tool creates the room of that area.
 - Handles of a selected wall: ends (length/angle), side square (thickness), middle diamond
   (arc), circle (rotation). Furniture: resize and rotate handles; furniture docks to walls.
+- Walls: select two and press J (or "Join walls") to connect them at the intersection of their
+  axes; "Detach" removes connections, "Split" cuts a wall in two. Near an existing wall, the
+  wall tool shows where a new wall can start (ends, middle, flush with the end face).
 - Drag to move (a single wall moves straight; corner angles are shown), R to rotate, Del to
   delete, arrow keys to nudge; Ctrl+C / X / V / D copy, cut, paste and duplicate (also into
   another home), Ctrl+A selects all; Ctrl+Z / Ctrl+Y.
@@ -75,6 +78,7 @@ msh catalog search --query "door"
 msh --file house.sh3d furniture add-in-wall --catalog-id "eTeks#frontDoor" --wall-id <id> --offset 400
 msh --file house.sh3d furniture add --catalog-id "eTeks#sofa" --x 300 --y 500 --angle-deg 180
 msh --file house.sh3d view plan-image --out plan.png
+msh --file house.sh3d wall join --ids "[\"<wall id>\",\"<wall id>\"]"
 msh --file house.sh3d edit undo
 ```
 

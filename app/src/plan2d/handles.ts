@@ -255,6 +255,7 @@ export function dragHandle(
             fixed,
             snapContext("wall", home, wallShapes, levelId, snapRadius, {
               excludeId: id,
+              thickness: a.thickness,
               excludePoint: handle.pos,
               near: p,
             }),

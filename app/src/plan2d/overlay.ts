@@ -26,6 +26,10 @@ export type PlanOverlay = {
   guides: Segment[];
   /** Explanation of a direction snap shown at the cursor (e.g. "⊥ wall") */
   note: string | null;
+  /** Where the note is shown (the snapped cursor point) */
+  noteAt: Pt | null;
+  /** Snap points of nearby walls (ends, middle, flush points) shown while drawing */
+  hints: { pt: Pt; label: string }[];
   /** Length typed on the keyboard while drawing */
   typedLength: string | null;
   /** Handles of the selected element */
@@ -174,6 +178,27 @@ export function drawOverlay(
     }
   }
 
+  // Snap points of nearby walls: where a click lands exactly
+  if (overlay.hints.length > 0) {
+    ctx.strokeStyle = overlay.guide;
+    ctx.lineWidth = 1.2 * px;
+    const r = 3.5 * px;
+    for (const { pt, label } of overlay.hints) {
+      const [x, y] = pt;
+      ctx.beginPath();
+      if (label.startsWith("flush")) {
+        // Flush points are drawn as crosses, wall ends and middles as circles
+        ctx.moveTo(x - r, y - r);
+        ctx.lineTo(x + r, y + r);
+        ctx.moveTo(x - r, y + r);
+        ctx.lineTo(x + r, y - r);
+      } else {
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+      }
+      ctx.stroke();
+    }
+  }
+
   // Alignment guides and direction note
   if (overlay.guides.length > 0) {
     ctx.strokeStyle = overlay.guide;
@@ -195,7 +220,8 @@ export function drawOverlay(
     }
     ctx.setLineDash([]);
   }
-  const cursor = draft?.points[draft.points.length - 1] ?? overlay.handleDrag?.cursor;
+  const cursor =
+    overlay.noteAt ?? draft?.points[draft.points.length - 1] ?? overlay.handleDrag?.cursor;
   if (overlay.note && cursor)
     drawTag(ctx, overlay.note, cursor[0] + 14 * px, cursor[1] - 18 * px, px);
 

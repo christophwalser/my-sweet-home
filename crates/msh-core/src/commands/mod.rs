@@ -15,6 +15,7 @@ mod level;
 mod room;
 mod view;
 mod wall;
+mod wall_ops;
 
 use crate::registry::{CommandError, Registry};
 use msh_model::{Color, Home};
@@ -23,6 +24,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     home::register(r);
     level::register(r);
     wall::register(r);
+    wall_ops::register(r);
     room::register(r);
     furniture::register(r);
     annotate::register(r);

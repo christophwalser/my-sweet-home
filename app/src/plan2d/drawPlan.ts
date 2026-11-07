@@ -183,20 +183,35 @@ export function drawPlan(
     if (p.kind !== "DoorOrWindow") drawPiece(ctx, p, input.icons, colors, px);
   }
 
-  // Walls, filled with their pattern
-  ctx.lineJoin = "miter";
+  // Walls, drawn as one area like Sweet Home 3D: first all outlines with double
+  // width, then all fills on top, so lines inside overlapping walls disappear and
+  // only the outer half of each outline stays visible
+  const wallPolys: { poly: Pt[]; pattern: string }[] = [];
   home.walls.forEach((w, i) => {
-    if (!sameLevel(w.attrs.level, levelId)) return;
-    const poly = wallPolygon(wallShapes[i]);
+    if (sameLevel(w.attrs.level, levelId)) {
+      wallPolys.push({
+        poly: wallPolygon(wallShapes[i]),
+        pattern: w.attrs.pattern ?? DEFAULT_WALL_PATTERN,
+      });
+    }
+  });
+  ctx.lineWidth = 3 * px;
+  ctx.strokeStyle = colors.wallStroke;
+  // Round joins: mitered outlines would stick out at the acute corners of joined walls
+  ctx.lineJoin = "round";
+  for (const { poly } of wallPolys) {
     ctx.beginPath();
     tracePath(ctx, poly);
     ctx.closePath();
-    ctx.fillStyle = wallPattern(ctx, w.attrs.pattern ?? DEFAULT_WALL_PATTERN, colors, view.scale);
-    ctx.fill();
-    ctx.lineWidth = 1.5 * px;
-    ctx.strokeStyle = colors.wallStroke;
     ctx.stroke();
-  });
+  }
+  for (const { poly, pattern } of wallPolys) {
+    ctx.beginPath();
+    tracePath(ctx, poly);
+    ctx.closePath();
+    ctx.fillStyle = wallPattern(ctx, pattern, colors, view.scale);
+    ctx.fill();
+  }
 
   // Baseboards: thin outlines along the wall sides
   ctx.lineWidth = px;

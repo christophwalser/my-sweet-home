@@ -242,14 +242,30 @@ pub(super) fn register(r: &mut Registry) {
             let at_start = w.attrs.wall_at_start.clone();
             let at_end = w.attrs.wall_at_end.clone();
             // Joined walls follow moved end points
-            for (joined, old, new) in [(at_start, old_start, new_start), (at_end, old_end, new_end)]
-            {
+            for (joined, old, new) in [
+                (at_start.clone(), old_start, new_start),
+                (at_end.clone(), old_end, new_end),
+            ] {
                 let Some(joined) = joined else { continue };
                 if old == new {
                     continue;
                 }
                 if let Some(j) = home.walls.iter_mut().find(|w| w.attrs.id == joined) {
                     move_joined_end(&mut j.attrs, &id, old, new);
+                }
+            }
+            // A free end moved onto a free end of another wall gets joined to it
+            let level = home
+                .walls
+                .iter()
+                .find(|w| w.attrs.id == id)
+                .and_then(|w| w.attrs.level.clone());
+            for (joined, at_start, old, new) in [
+                (&at_start, true, old_start, new_start),
+                (&at_end, false, old_end, new_end),
+            ] {
+                if joined.is_none() && old != new {
+                    join_free_end(home, &id, [new.0, new.1], at_start, &level);
                 }
             }
             Ok(json!({ "id": p.id }))

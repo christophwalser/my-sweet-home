@@ -228,6 +228,76 @@ fn copy_paste_duplicate_and_room_detection() {
     run(&r, &mut doc, "edit_undo", json!({}));
     run(&r, &mut doc, "edit_undo", json!({}));
 
+    // Two separate walls are joined at the intersection of their axes (mitered corner)
+    let h = run(
+        &r,
+        &mut doc,
+        "wall_add",
+        json!({ "x_start": 1000, "y_start": 0, "x_end": 1290, "y_end": 0, "thickness": 20 }),
+    );
+    let v = run(
+        &r,
+        &mut doc,
+        "wall_add",
+        json!({ "x_start": 1300, "y_start": -10, "x_end": 1300, "y_end": 300 }),
+    );
+    let (h, v) = (
+        h["id"].as_str().unwrap().to_owned(),
+        v["id"].as_str().unwrap().to_owned(),
+    );
+    let joined = run(&r, &mut doc, "wall_join", json!({ "ids": [h, v] }));
+    assert_eq!(joined["joined"], "corner");
+    let get = |doc: &Document, id: &str| {
+        doc.home()
+            .walls
+            .iter()
+            .find(|w| w.attrs.id == id)
+            .unwrap()
+            .attrs
+            .clone()
+    };
+    let (ha, va) = (get(&doc, &h), get(&doc, &v));
+    assert_eq!((ha.x_end, ha.y_end), (1300.0, 0.0));
+    assert_eq!((va.x_start, va.y_start), (1300.0, 0.0));
+    assert_eq!(ha.wall_at_end.as_deref(), Some(v.as_str()));
+    assert_eq!(va.wall_at_start.as_deref(), Some(h.as_str()));
+    // Split the vertical wall, then detach everything
+    let split = run(&r, &mut doc, "wall_split", json!({ "id": v }));
+    let parts: Vec<String> = serde_json::from_value(split["ids"].clone()).unwrap();
+    let (p1, p2) = (get(&doc, &parts[0]), get(&doc, &parts[1]));
+    assert_eq!((p1.y_end, p2.y_start, p2.y_end), (150.0, 150.0, 300.0));
+    assert_eq!(p1.wall_at_end.as_deref(), Some(parts[1].as_str()));
+    run(&r, &mut doc, "wall_detach", json!({ "ids": [parts[0]] }));
+    assert!(get(&doc, &h).wall_at_end.is_none());
+    assert!(get(&doc, &parts[1]).wall_at_start.is_none());
+    // T junction: a wall ending near the middle of another one is extended to its axis
+    let t = run(
+        &r,
+        &mut doc,
+        "wall_add",
+        json!({ "x_start": 1100, "y_start": 50, "x_end": 1100, "y_end": 200 }),
+    );
+    let t_id = t["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        run(&r, &mut doc, "wall_join", json!({ "ids": [t_id, h] }))["joined"],
+        "t"
+    );
+    assert_eq!(get(&doc, &t_id).y_start, 0.0);
+    // Dragging a free end onto a free end of another wall joins them
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": parts[1], "x_end": 1100, "y_end": 200 }),
+    );
+    assert_eq!(
+        get(&doc, &parts[1]).wall_at_end.as_deref(),
+        Some(t_id.as_str())
+    );
+    for _ in 0..8 {
+        run(&r, &mut doc, "edit_undo", json!({}));
+    }
+
     // Room from a point inside the walls: inner outline of the left half
     let room = run(
         &r,

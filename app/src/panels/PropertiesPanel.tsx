@@ -227,11 +227,55 @@ export default function PropertiesPanel() {
     </div>
   );
 
+  const selectedWalls = home.walls.filter((w) => selection.includes(w.attrs.id));
+  const wallActions = selectedWalls.length > 0 && (
+    <div className="prop-actions">
+      {selectedWalls.length === 2 && (
+        <button
+          type="button"
+          title="Extend or shorten both walls to the intersection of their axes and connect them (J)"
+          onClick={() => void run("wall_join", { ids: selectedWalls.map((w) => w.attrs.id) })}
+        >
+          Join walls
+        </button>
+      )}
+      {selectedWalls.length === 1 && (
+        <button
+          type="button"
+          title="Split the wall into two connected walls at its middle"
+          onClick={() =>
+            void run("wall_split", { id: selectedWalls[0].attrs.id }).then((r) => {
+              const ids = (r as { ids?: string[] } | undefined)?.ids;
+              if (ids) useStore.getState().setSelection(ids);
+            })
+          }
+        >
+          Split
+        </button>
+      )}
+      {selectedWalls.some((w) => w.attrs.wall_at_start || w.attrs.wall_at_end) && (
+        <button
+          type="button"
+          title="Remove the connections of the selected walls"
+          onClick={() => void run("wall_detach", { ids: selectedWalls.map((w) => w.attrs.id) })}
+        >
+          Detach
+        </button>
+      )}
+    </div>
+  );
+
   if (selection.length > 1) {
     return (
       <div className="props">
         <h2>{selection.length} elements selected</h2>
         <p className="muted">Drag to move, arrow keys move by 1 cm (Shift: 10 cm).</p>
+        {selectedWalls.length === 2 && (
+          <p className="muted small">
+            Join walls connects both walls at the intersection of their axes (corner or T junction).
+          </p>
+        )}
+        {wallActions}
         {actions}
       </div>
     );
@@ -410,6 +454,7 @@ export default function PropertiesPanel() {
         />
         <WallSide wall={wall} side="left" run={run} />
         <WallSide wall={wall} side="right" run={run} />
+        {wallActions}
         {actions}
       </div>
     );
