@@ -351,7 +351,7 @@ Deliberately **not** adopted: SH3D Java plugins (not compatible; replaced by CLI
 | **P4 Editing** | All drawing tools in the 2D plan, property dialogs, levels, magnetism, copy/paste | A real floor plan can be drawn entirely in the app |
 | **P5 Libraries & import** | Library import wizard, furniture and texture import (OBJ/DAE/3DS/glTF), material editor | All installed libraries usable, own models importable |
 | **P6 Rendering & export** | Photo rendering (path tracer), video, PDF/SVG/OBJ/CSV, printing | Exports match the original |
-| **P7 Polish** | Preferences, i18n, accessibility, performance benchmarks, installer (MSI via Tauri), optional auto-update | Release candidate 1.0 |
+| **P7 Polish** | Preferences (incl. colors of the left/right wall side markings, angle snap steps, default wall thickness), i18n, accessibility, performance benchmarks, installer (MSI via Tauri), optional auto-update | Release candidate 1.0 |
 
 Realistic assessment: P0–P3 quickly produce an AI-controllable foundation. Full parity (P4–P7) is a project of **several months**. The phases are cut so that each one delivers something usable.
 
