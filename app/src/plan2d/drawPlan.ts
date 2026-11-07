@@ -321,7 +321,9 @@ function drawPiece(
   colors: PlanColors,
   px: number,
 ): void {
-  const { width: w, depth: d } = p.attrs;
+  // Footprint after pitch/roll (e.g. tilted roof panels)
+  const w = p.attrs.width_in_plan ?? p.attrs.width;
+  const d = p.attrs.depth_in_plan ?? p.attrs.depth;
   ctx.save();
   pieceTransform(ctx, p);
   const iconKey = p.attrs.plan_icon ?? p.attrs.icon;

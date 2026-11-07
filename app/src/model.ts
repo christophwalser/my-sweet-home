@@ -91,6 +91,10 @@ export type Piece = {
     angle: number | null;
     pitch: number | null;
     roll: number | null;
+    /** Size of the bounding box after pitch/roll (plan footprint and height) */
+    width_in_plan: number | null;
+    depth_in_plan: number | null;
+    height_in_plan: number | null;
     width: number;
     depth: number;
     height: number;

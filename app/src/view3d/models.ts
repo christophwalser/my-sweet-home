@@ -172,6 +172,22 @@ function rotationMatrix(s: string | null): THREE.Matrix4 | null {
   );
 }
 
+/**
+ * Height of a piece's bounding box after pitch and roll. Uses `heightInPlan`
+ * when Sweet Home 3D stored it, otherwise computes it from the rotated box.
+ */
+function heightInPlan(a: Piece["attrs"], pitch: number, roll: number): number {
+  if (a.height_in_plan !== null && a.height_in_plan !== undefined) return a.height_in_plan;
+  if (pitch === 0 && roll === 0) return a.height;
+  // Euler order "ZXY" gives Rz(−roll) · Rx(−pitch), as in Sweet Home 3D
+  const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-pitch, 0, -roll, "ZXY"));
+  const box = new THREE.Box3(
+    new THREE.Vector3(-a.width / 2, -a.height / 2, -a.depth / 2),
+    new THREE.Vector3(a.width / 2, a.height / 2, a.depth / 2),
+  ).applyMatrix4(m);
+  return box.max.y - box.min.y;
+}
+
 /** Number of piece models currently loading. */
 let pendingModels = 0;
 
@@ -196,11 +212,19 @@ export function createPieceObject(
   const a = piece.attrs;
   const outer = new THREE.Group();
   outer.name = `piece:${a.id ?? a.name}`;
-  outer.position.set(a.x, baseElevation + (a.elevation ?? 0) + a.height / 2, a.y);
-  outer.rotation.order = "YXZ";
+  // Like Sweet Home 3D (ModelManager): rotY(−angle) · rotZ(−roll) · rotX(−pitch) · scale,
+  // with the center at elevation + heightInPlan / 2 (height of the box after pitch/roll)
+  const pitch = a.pitch ?? 0;
+  const roll = a.roll ?? 0;
+  outer.position.set(
+    a.x,
+    baseElevation + (a.elevation ?? 0) + heightInPlan(a, pitch, roll) / 2,
+    a.y,
+  );
+  outer.rotation.order = "YZX";
   outer.rotation.y = -(a.angle ?? 0);
-  outer.rotation.x = a.pitch ?? 0;
-  outer.rotation.z = a.roll ?? 0;
+  outer.rotation.z = -roll;
+  outer.rotation.x = -pitch;
   if (!a.model) return outer;
 
   pendingModels++;
