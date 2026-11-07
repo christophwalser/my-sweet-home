@@ -1,4 +1,5 @@
 mod commands;
+mod pipe;
 mod resources;
 mod state;
 
@@ -15,11 +16,17 @@ pub fn run() {
                 responder.respond(resources::handle(&app, &request));
             });
         })
+        .setup(|app| {
+            pipe::start(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::startup_file,
+            commands::current_home,
             commands::open_home,
-            commands::close_home,
+            commands::execute,
+            commands::capture_result,
             commands::catalog_load,
         ])
         .run(tauri::generate_context!())

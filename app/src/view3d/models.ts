@@ -172,6 +172,17 @@ function rotationMatrix(s: string | null): THREE.Matrix4 | null {
   );
 }
 
+/** Number of piece models currently loading. */
+let pendingModels = 0;
+
+/** Resolves when all piece models have loaded (or after `timeoutMs`). */
+export async function waitForModels(timeoutMs: number): Promise<void> {
+  const end = performance.now() + timeoutMs;
+  while (pendingModels > 0 && performance.now() < end) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
 /**
  * Creates the 3D object of a piece. Returns immediately with an empty group;
  * the model is added when it has been loaded.
@@ -192,7 +203,11 @@ export function createPieceObject(
   outer.rotation.z = a.roll ?? 0;
   if (!a.model) return outer;
 
+  pendingModels++;
   loadModel(docResourceUrl(docId, a.model))
+    .finally(() => {
+      pendingModels--;
+    })
     .then((model) => {
       const inner = model.clone(true);
       const rotated = new THREE.Group();

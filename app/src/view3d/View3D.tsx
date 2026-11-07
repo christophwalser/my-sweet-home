@@ -1,10 +1,12 @@
 // 3D view: WebGL renderer that only redraws when something changes.
 
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { api, CAPTURE_EVENT } from "../api";
 import { type Camera, forEachPiece } from "../model";
-import { useStore } from "../store";
+import { useStore, type ViewMode } from "../store";
 import {
   buildGround,
   buildRooms,
@@ -14,7 +16,7 @@ import {
   skyColor,
   visibleLevels,
 } from "./buildScene";
-import { clearModelCache, createPieceObject, disposeObject } from "./models";
+import { clearModelCache, createPieceObject, disposeObject, waitForModels } from "./models";
 
 /**
  * View direction of a Sweet Home 3D camera in three.js coordinates.
@@ -148,12 +150,31 @@ export default function View3D() {
     c.requestRender();
   }, [opened, levelId]);
 
-  // Place the camera from the cameras stored in the home
+  // Place the camera from the cameras stored in the home. This only happens when
+  // another home is opened or the view mode changes, so live edits keep the view.
+  // Homes without stored camera (e.g. built by an AI agent) are re-fitted after each
+  // change until the user moves the camera.
+  const userMoved = useRef(false);
+  const cameraKey = useRef<string | null>(null);
+  useEffect(() => {
+    const c = ctx.current;
+    if (!c) return;
+    const onStart = () => {
+      userMoved.current = true;
+    };
+    c.controls.addEventListener("start", onStart);
+    return () => c.controls.removeEventListener("start", onStart);
+  }, []);
   useEffect(() => {
     const c = ctx.current;
     if (!c || !opened) return;
     const role = viewMode === "observer" ? "observerCamera" : "topCamera";
     const stored = opened.home.cameras.find((cam) => cam.attrs.role === role);
+    const key = `${opened.id}:${viewMode}`;
+    const keyChanged = cameraKey.current !== key;
+    if (keyChanged) userMoved.current = false;
+    if (!keyChanged && (stored || userMoved.current)) return;
+    cameraKey.current = key;
     if (stored) {
       const a = stored.attrs;
       c.camera.position.set(a.x, a.z, a.y);
@@ -165,10 +186,15 @@ export default function View3D() {
         .addScaledVector(dir, viewMode === "observer" ? 100 : distance);
       c.hfov = a.field_of_view;
     } else {
-      const box = new THREE.Box3().setFromObject(c.content);
+      // Fit to walls and rooms (the ground plane is huge and must not count)
+      const box = new THREE.Box3();
+      for (const child of c.content.children) {
+        if (child.name === "walls" || child.name === "rooms") box.expandByObject(child);
+      }
+      if (box.isEmpty()) box.set(new THREE.Vector3(0, 0, 0), new THREE.Vector3(500, 250, 500));
       const center = box.getCenter(new THREE.Vector3());
-      const size = box.getSize(new THREE.Vector3()).length();
-      c.camera.position.set(center.x, center.y + size * 0.6, center.z + size * 0.6);
+      const size = Math.max(box.getSize(new THREE.Vector3()).length(), 500);
+      c.camera.position.set(center.x, center.y + size * 0.7, center.z + size * 0.8);
       c.controls.target.copy(center);
       c.hfov = Math.PI / 3;
     }
@@ -177,6 +203,35 @@ export default function View3D() {
     c.controls.update();
     c.requestRender();
   }, [opened, viewMode]);
+
+  // 3D screenshots requested by the CLI or MCP server (live control)
+  useEffect(() => {
+    const unlisten = listen<{ requestId: number; mode: ViewMode | null }>(
+      CAPTURE_EVENT,
+      async (e) => {
+        const { requestId, mode } = e.payload;
+        try {
+          if (mode && mode !== useStore.getState().viewMode) {
+            useStore.getState().setViewMode(mode);
+          }
+          // Let React apply the view mode and rebuild, then wait for the models
+          await new Promise((r) => setTimeout(r, 100));
+          await waitForModels(15000);
+          const c = ctx.current;
+          if (!c) throw new Error("3D view not available");
+          c.renderer.render(c.scene, c.camera);
+          // Read the canvas right after rendering (no preserveDrawingBuffer needed)
+          const data = c.renderer.domElement.toDataURL("image/png");
+          await api.captureResult(requestId, data, null);
+        } catch (err) {
+          await api.captureResult(requestId, null, String(err));
+        }
+      },
+    );
+    return () => {
+      void unlisten.then((off) => off());
+    };
+  }, []);
 
   return <div className="view3d-canvas" ref={containerRef} />;
 }

@@ -2,8 +2,13 @@
 //!
 //! Implements the JSON-RPC 2.0 methods `initialize`, `ping`, `tools/list` and
 //! `tools/call` with newline-delimited messages. Every registry command is
-//! offered as a tool; its JSON schema is the tool's input schema. The server
-//! keeps one document in memory across calls; `home_save` writes it.
+//! offered as a tool; its JSON schema is the tool's input schema.
+//!
+//! Two backends:
+//! - local (default): one document in memory; `home_save` writes it
+//! - live (`--live`): every tool call is forwarded to the running app, so the
+//!   changes appear in its window; an extra tool `view_3d_image` returns a
+//!   screenshot of the app's 3D view
 
 use anyhow::Result;
 use msh_core::{Document, Registry};
@@ -14,19 +19,58 @@ use std::path::PathBuf;
 /// Protocol version used if the client does not request one.
 const DEFAULT_PROTOCOL_VERSION: &str = "2025-06-18";
 
-pub fn serve(registry: &Registry, file: Option<PathBuf>) -> Result<()> {
-    let mut doc = match &file {
-        Some(p) if p.exists() => Document::open(p)?,
-        Some(p) => {
-            let mut d = Document::default();
-            d.path = Some(p.clone());
-            d
+/// Name of the live-only tool for 3D screenshots.
+const VIEW_3D_TOOL: &str = "view_3d_image";
+
+enum Backend {
+    Local(Box<Document>),
+    Live(msh_ipc::Client),
+}
+
+impl Backend {
+    fn execute(&mut self, registry: &Registry, name: &str, args: Value) -> Result<Value, String> {
+        match self {
+            Backend::Local(doc) => registry.execute(doc, name, args).map_err(|e| e.to_string()),
+            Backend::Live(client) => if name == VIEW_3D_TOOL {
+                client.call("capture_3d", args)
+            } else {
+                client.execute(name, args)
+            }
+            .map_err(|e| e.to_string()),
         }
-        None => Document::default(),
+    }
+
+    fn is_live(&self) -> bool {
+        matches!(self, Backend::Live(_))
+    }
+}
+
+pub fn serve(registry: &Registry, file: Option<PathBuf>, live: bool) -> Result<()> {
+    let mut backend = if live {
+        let mut client = msh_ipc::Client::connect()?;
+        if let Some(p) = &file {
+            client.execute("home_open", json!({ "path": p }))?;
+        }
+        Backend::Live(client)
+    } else {
+        Backend::Local(Box::new(match &file {
+            Some(p) if p.exists() => Document::open(p)?,
+            Some(p) => {
+                let mut d = Document::default();
+                d.path = Some(p.clone());
+                d
+            }
+            None => Document::default(),
+        }))
     };
     eprintln!(
-        "my-sweet-home MCP server ready ({} tools)",
-        registry.list().len()
+        "my-sweet-home MCP server ready ({} tools, {})",
+        registry.list().len() + usize::from(live),
+        if live {
+            "live: controlling the running app"
+        } else {
+            "local document"
+        }
     );
 
     let stdin = std::io::stdin();
@@ -39,7 +83,7 @@ pub fn serve(registry: &Registry, file: Option<PathBuf>) -> Result<()> {
             continue;
         }
         let response = match serde_json::from_str::<Value>(line) {
-            Ok(msg) => handle(registry, &mut doc, &msg),
+            Ok(msg) => handle(registry, &mut backend, &msg),
             Err(e) => Some(error_response(
                 Value::Null,
                 -32700,
@@ -55,7 +99,7 @@ pub fn serve(registry: &Registry, file: Option<PathBuf>) -> Result<()> {
 }
 
 /// Handles one message; returns `None` for notifications.
-fn handle(registry: &Registry, doc: &mut Document, msg: &Value) -> Option<Value> {
+fn handle(registry: &Registry, backend: &mut Backend, msg: &Value) -> Option<Value> {
     let id = msg.get("id").cloned();
     let method = msg["method"].as_str().unwrap_or("");
     let params = &msg["params"];
@@ -66,11 +110,11 @@ fn handle(registry: &Registry, doc: &mut Document, msg: &Value) -> Option<Value>
             "protocolVersion": params["protocolVersion"].as_str().unwrap_or(DEFAULT_PROTOCOL_VERSION),
             "capabilities": { "tools": { "listChanged": false } },
             "serverInfo": { "name": "my-sweet-home", "version": env!("CARGO_PKG_VERSION") },
-            "instructions": msh_core::CONVENTIONS,
+            "instructions": instructions(backend.is_live()),
         })),
         "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({ "tools": tool_list(registry) })),
-        "tools/call" => Ok(call_tool(registry, doc, params)),
+        "tools/list" => Ok(json!({ "tools": tool_list(registry, backend.is_live()) })),
+        "tools/call" => Ok(call_tool(registry, backend, params)),
         _ => Err((-32601, format!("method not found: {method}"))),
     };
     Some(match result {
@@ -79,12 +123,23 @@ fn handle(registry: &Registry, doc: &mut Document, msg: &Value) -> Option<Value>
     })
 }
 
+fn instructions(live: bool) -> String {
+    let mut s = msh_core::CONVENTIONS.to_owned();
+    if live {
+        s.push_str(
+            "\nLive mode: every change is applied to the home shown in the running My Sweet Home app \
+             and appears in its window immediately. Use view_3d_image to see the 3D view.",
+        );
+    }
+    s
+}
+
 fn error_response(id: Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
 }
 
-fn tool_list(registry: &Registry) -> Vec<Value> {
-    registry
+fn tool_list(registry: &Registry, live: bool) -> Vec<Value> {
+    let mut tools: Vec<Value> = registry
         .list()
         .iter()
         .map(|c| {
@@ -101,23 +156,46 @@ fn tool_list(registry: &Registry) -> Vec<Value> {
                 "annotations": { "readOnlyHint": !c.modifies && !matches!(c.name, "home_new" | "home_open" | "home_save" | "edit_undo" | "edit_redo") },
             })
         })
-        .collect()
+        .collect();
+    if live {
+        tools.push(json!({
+            "name": VIEW_3D_TOOL,
+            "description": "Returns a screenshot of the 3D view of the running app (aerial view or virtual visit).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "mode": {
+                        "type": "string",
+                        "enum": ["aerial", "observer"],
+                        "description": "\"aerial\" (default view from above) or \"observer\" (virtual visitor)",
+                    },
+                },
+            },
+            "annotations": { "readOnlyHint": true },
+        }));
+    }
+    tools
 }
 
 /// Executes a tool. Errors are reported as tool results with `isError`, as MCP specifies.
-fn call_tool(registry: &Registry, doc: &mut Document, params: &Value) -> Value {
+fn call_tool(registry: &Registry, backend: &mut Backend, params: &Value) -> Value {
     let name = params["name"].as_str().unwrap_or("");
     let args = params.get("arguments").cloned().unwrap_or(Value::Null);
-    match registry.execute(doc, name, args) {
+    match backend.execute(registry, name, args) {
         Ok(result) => {
             if let (Some(data), Some(mime)) = (
                 result.get("image_base64").and_then(Value::as_str),
                 result.get("mime_type").and_then(Value::as_str),
             ) {
+                let caption = if name == VIEW_3D_TOOL {
+                    "3D view of the current home."
+                } else {
+                    "Plan image of the current home (grid: 1 m)."
+                };
                 json!({
                     "content": [
                         { "type": "image", "data": data, "mimeType": mime },
-                        { "type": "text", "text": "Plan image of the current home (cm grid: 1 m)." },
+                        { "type": "text", "text": caption },
                     ],
                     "isError": false,
                 })
@@ -130,7 +208,7 @@ fn call_tool(registry: &Registry, doc: &mut Document, params: &Value) -> Value {
             }
         }
         Err(e) => json!({
-            "content": [{ "type": "text", "text": e.to_string() }],
+            "content": [{ "type": "text", "text": e }],
             "isError": true,
         }),
     }

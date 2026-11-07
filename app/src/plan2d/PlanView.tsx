@@ -136,13 +136,31 @@ export default function PlanView() {
   }, [draw]);
 
   // Fit when a home is opened or the level changes
+  // Explicit fit: follow live edits again
+  const refit = () => {
+    userMoved.current = false;
+    fit();
+  };
+
+  // Fit when another home is opened or the level changes. Live edits (UI, CLI, MCP)
+  // keep fitting until the user zooms or pans.
+  const userMoved = useRef(false);
+  const fitKey = useRef<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: fit only on home/level change
-  useEffect(() => fit(), [opened, levelId]);
+  useEffect(() => {
+    const key = `${opened?.id ?? ""}:${levelId ?? ""}`;
+    if (fitKey.current !== key) {
+      fitKey.current = key;
+      userMoved.current = false;
+    }
+    if (!userMoved.current) fit();
+  }, [opened, levelId]);
 
   useEffect(() => draw());
 
   // Zoom with the mouse wheel around the cursor
   const onWheel = (e: React.WheelEvent) => {
+    userMoved.current = true;
     const v = viewRef.current;
     const factor = Math.exp(-e.deltaY * 0.0015);
     const mx = e.nativeEvent.offsetX * devicePixelRatio;
@@ -159,6 +177,7 @@ export default function PlanView() {
   // Pan by dragging
   const drag = useRef<{ x: number; y: number } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
+    userMoved.current = true;
     drag.current = { x: e.clientX, y: e.clientY };
     (e.target as Element).setPointerCapture(e.pointerId);
   };
@@ -185,10 +204,10 @@ export default function PlanView() {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onDoubleClick={fit}
+        onDoubleClick={refit}
       />
       {opened && (
-        <button type="button" className="overlay-button" onClick={fit} title="Fit plan to window">
+        <button type="button" className="overlay-button" onClick={refit} title="Fit plan to window">
           Fit
         </button>
       )}

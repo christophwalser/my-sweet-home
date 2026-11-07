@@ -29,6 +29,8 @@ export type PlanColors = {
 };
 
 const DEFAULT_ROOM_FONT = 24;
+/** Default vertical offset of room names in cm (DTD default of `nameYOffset`). */
+const DEFAULT_ROOM_NAME_Y_OFFSET = -40;
 const DEFAULT_LABEL_FONT = 18;
 const DEFAULT_DIMENSION_FONT = 18;
 
@@ -187,7 +189,8 @@ export function drawPlan(
         ctx,
         room.attrs.name,
         cx + (room.attrs.name_x_offset ?? 0),
-        cy + (room.attrs.name_y_offset ?? 0),
+        // DTD default of nameYOffset is -40 (name above the area)
+        cy + (room.attrs.name_y_offset ?? DEFAULT_ROOM_NAME_Y_OFFSET),
         room.attrs.name_angle ?? 0,
         nameStyle,
         DEFAULT_ROOM_FONT,

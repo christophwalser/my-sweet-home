@@ -31,6 +31,8 @@ CLI and MCP all get it from the same registry.
 .\scripts\check.ps1          # rustfmt, clippy (-D warnings), tests, Biome, tsc
 .\scripts\compat-check.ps1   # verify written files with the original Sweet Home 3D reader
 .\scripts\mcp-smoke.ps1      # scripted MCP session, result verified with the SH3D reader
+.\scripts\live-demo.ps1      # live control of the running app (start target\debug\msh-app.exe first)
+cd app; pnpm tauri build --debug --no-bundle  # app with embedded frontend (no Vite port needed)
 cd app; pnpm tauri dev       # run the desktop app
 ```
 

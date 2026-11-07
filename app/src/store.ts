@@ -1,10 +1,12 @@
 // Global UI state (zustand).
 
+import { listen } from "@tauri-apps/api/event";
+import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
-import { api, type CatalogData } from "./api";
+import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
 import type { OpenedHome } from "./model";
 
-type ViewMode = "aerial" | "observer";
+export type ViewMode = "aerial" | "observer";
 
 type State = {
   opened: OpenedHome | null;
@@ -15,11 +17,30 @@ type State = {
   catalog: CatalogData | null;
   catalogLoading: boolean;
   openHome: (path: string) => Promise<void>;
+  /** Runs a registry command; errors are shown in the error bar. */
+  run: (command: string, params?: Record<string, unknown>) => Promise<unknown>;
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
+  save: (saveAs?: boolean) => Promise<void>;
   selectLevel: (id: string | null) => void;
   setViewMode: (mode: ViewMode) => void;
   loadCatalog: (lang: string) => Promise<void>;
   clearError: () => void;
 };
+
+/** Level to select after the home changed: keep the current one if it still exists. */
+function levelAfterChange(
+  next: OpenedHome,
+  prev: OpenedHome | null,
+  current: string | null,
+): string | null {
+  const levels = next.home.levels;
+  const homeSelected = next.home.attrs.selected_level;
+  // A command selected another level (e.g. level_add): follow it
+  if (homeSelected && homeSelected !== prev?.home.attrs.selected_level) return homeSelected;
+  if (current && levels.some((l) => l.attrs.id === current)) return current;
+  return levels.find((l) => l.attrs.id === homeSelected)?.attrs.id ?? levels[0]?.attrs.id ?? null;
+}
 
 export const useStore = create<State>((set, get) => ({
   opened: null,
@@ -33,24 +54,45 @@ export const useStore = create<State>((set, get) => ({
   openHome: async (path) => {
     set({ loading: true, error: null });
     try {
-      const previous = get().opened;
-      const opened = await api.openHome(path);
-      const levels = opened.home.levels;
-      const selected =
-        levels.find((l) => l.attrs.id === opened.home.attrs.selected_level)?.attrs.id ??
-        levels[0]?.attrs.id ??
-        null;
-      set({
-        opened,
-        selectedLevel: selected,
-        viewMode: opened.home.attrs.camera === "observerCamera" ? "observer" : "aerial",
-      });
-      if (previous) void api.closeHome(previous.id);
+      // The backend also emits HOME_CHANGED_EVENT; applying the result here avoids waiting for it
+      applyHome(await api.openHome(path));
     } catch (e) {
       set({ error: String(e) });
     } finally {
       set({ loading: false });
     }
+  },
+
+  run: async (command, params = {}) => {
+    try {
+      return await api.execute(command, params);
+    } catch (e) {
+      set({ error: String(e) });
+      return undefined;
+    }
+  },
+
+  undo: async () => {
+    if (get().opened?.canUndo) await get().run("edit_undo");
+  },
+
+  redo: async () => {
+    if (get().opened?.canRedo) await get().run("edit_redo");
+  },
+
+  save: async (saveAs = false) => {
+    const opened = get().opened;
+    if (!opened) return;
+    let path = opened.path?.toLowerCase().endsWith(".sh3d") ? opened.path : null;
+    if (saveAs || !path) {
+      const chosen = await saveDialog({
+        defaultPath: path ?? `${opened.home.attrs.name ?? "Home"}.sh3d`,
+        filters: [{ name: "Sweet Home 3D", extensions: ["sh3d"] }],
+      });
+      if (!chosen) return;
+      path = chosen;
+    }
+    await get().run("home_save", { path });
   },
 
   selectLevel: (id) => set({ selectedLevel: id }),
@@ -70,3 +112,23 @@ export const useStore = create<State>((set, get) => ({
 
   clearError: () => set({ error: null }),
 }));
+
+/** Applies a new state of the home (opened here or changed by the UI, CLI or MCP). */
+export function applyHome(next: OpenedHome): void {
+  const { opened: prev, selectedLevel, viewMode } = useStore.getState();
+  const newHome = prev?.id !== next.id;
+  useStore.setState({
+    opened: next,
+    selectedLevel: levelAfterChange(next, newHome ? null : prev, newHome ? null : selectedLevel),
+    viewMode: newHome
+      ? next.home.attrs.camera === "observerCamera"
+        ? "observer"
+        : "aerial"
+      : viewMode,
+  });
+}
+
+/** Subscribes to home changes from the backend. Returns the unsubscribe function. */
+export function subscribeToHomeChanges(): Promise<() => void> {
+  return listen<OpenedHome>(HOME_CHANGED_EVENT, (e) => applyHome(e.payload));
+}

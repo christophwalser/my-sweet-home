@@ -1,16 +1,14 @@
 //! Tauri commands called by the frontend.
 //!
-//! These are read-only viewer commands (phase P2). Editing commands come from
-//! the `msh-core` command registry in phase P3.
+//! Changes to the home go through `execute`, which runs a command of the
+//! `msh-core` registry — the same commands the CLI and the MCP server use.
 
-use crate::state::{AppState, OpenDoc};
+use crate::state::{self, AppState, HomeView};
 use msh_catalog::{CatalogKind, open_library};
-use msh_format::Sh3dDocument;
-use msh_geometry::WallShape;
-use msh_model::Home;
 use serde::Serialize;
+use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -31,48 +29,52 @@ pub fn startup_file() -> Option<String> {
         .find(|a| !a.starts_with('-') && Path::new(a).is_file())
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OpenedHome {
-    pub id: u32,
-    pub path: PathBuf,
-    pub home: Home,
-    pub wall_shapes: Vec<WallShape>,
+/// The open home, if any (used when the frontend starts or reloads).
+#[tauri::command]
+pub fn current_home(state: State<'_, AppState>) -> Option<HomeView> {
+    state.current()
 }
 
 /// Opens a `.sh3d` file or a standalone `Home.xml`.
 #[tauri::command]
-pub async fn open_home(path: String, state: State<'_, AppState>) -> CmdResult<OpenedHome> {
-    let path = PathBuf::from(path);
-    let p = path.clone();
-    let doc = tauri::async_runtime::spawn_blocking(move || -> CmdResult<Sh3dDocument> {
-        let is_xml = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("xml"));
-        if is_xml {
-            let bytes = std::fs::read(&p).map_err(err)?;
-            Ok(Sh3dDocument::new(
-                msh_format::read_home_xml(&bytes).map_err(err)?,
-            ))
-        } else {
-            Sh3dDocument::open(&p).map_err(err)
-        }
+pub async fn open_home(path: String, app: AppHandle) -> CmdResult<HomeView> {
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state::execute(&a, "home_open", json!({ "path": path }))
     })
     .await
     .map_err(err)??;
-
-    let home = doc.home.clone();
-    let wall_shapes = msh_geometry::wall_shapes(&home);
-    let id = state.add_doc(OpenDoc::new(doc));
-    Ok(OpenedHome {
-        id,
-        path,
-        home,
-        wall_shapes,
-    })
+    app_state(&app)
+        .current()
+        .ok_or_else(|| "no home open".into())
 }
 
+/// Runs a registry command (e.g. `edit_undo`, `home_save`) on the open home.
 #[tauri::command]
-pub fn close_home(id: u32, state: State<'_, AppState>) {
-    state.close_doc(id);
+pub async fn execute(command: String, params: Value, app: AppHandle) -> CmdResult<Value> {
+    tauri::async_runtime::spawn_blocking(move || state::execute(&app, &command, params))
+        .await
+        .map_err(err)?
+}
+
+/// Result of a 3D capture requested over the pipe: a PNG data URL or an error.
+#[tauri::command]
+pub fn capture_result(
+    request_id: u64,
+    data: Option<String>,
+    error: Option<String>,
+    state: State<'_, AppState>,
+) {
+    let result = match (data, error) {
+        (Some(d), _) => Ok(d),
+        (None, e) => Err(e.unwrap_or_else(|| "capture failed".into())),
+    };
+    state.finish_capture(request_id, result);
+}
+
+fn app_state(app: &AppHandle) -> tauri::State<'_, AppState> {
+    use tauri::Manager;
+    app.state::<AppState>()
 }
 
 #[derive(Serialize)]

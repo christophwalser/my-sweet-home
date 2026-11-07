@@ -74,7 +74,20 @@ fn main() -> Result<()> {
         Some(("exec", _)) => exec(&registry, &matches)?,
         Some(("mcp", _)) => {
             let file = matches.get_one::<PathBuf>("home_file").cloned();
-            mcp::serve(&registry, file)?;
+            mcp::serve(&registry, file, matches.get_flag("live"))?;
+        }
+        Some(("screenshot", m)) => {
+            let mut client = msh_ipc::Client::connect()?;
+            let mode = m.get_one::<String>("mode").cloned();
+            let result = client.call("capture_3d", json!({ "mode": mode }))?;
+            print_result(result, matches.get_one::<PathBuf>("out"))?;
+        }
+        Some(("status", _)) => {
+            let mut client = msh_ipc::Client::connect()?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&client.call("status", Value::Null)?)?
+            );
         }
         Some(("catalog", m)) if matches!(m.subcommand_name(), Some("scan" | "list")) => {
             let cmd = catalog_cmd::CatalogCommand::from_arg_matches(m)?;
@@ -133,6 +146,14 @@ fn build_cli(registry: &Registry) -> Command {
                 .action(ArgAction::SetTrue)
                 .help("Do not save the home after a modifying command"),
         )
+        .arg(
+            Arg::new("live")
+                .long("live")
+                .short('l')
+                .global(true)
+                .action(ArgAction::SetTrue)
+                .help("Send commands to the running My Sweet Home app (changes appear in its window)"),
+        )
         .subcommand(Command::new("version").about("Shows the application name and version"))
         .subcommand(
             Command::new("info")
@@ -155,8 +176,19 @@ fn build_cli(registry: &Registry) -> Command {
             "Executes commands from stdin, one JSON object per line: {\"command\": \"wall_add\", \"params\": {...}}",
         ))
         .subcommand(Command::new("mcp").about(
-            "Starts the MCP server on stdin/stdout (for Claude and other AI agents)",
-        ));
+            "Starts the MCP server on stdin/stdout (for Claude and other AI agents); with --live it controls the running app",
+        ))
+        .subcommand(
+            Command::new("screenshot")
+                .about("Saves a PNG of the 3D view of the running app (use with --out)")
+                .arg(
+                    Arg::new("mode")
+                        .long("mode")
+                        .value_parser(["aerial", "observer"])
+                        .help("aerial (default) or observer (virtual visit)"),
+                ),
+        )
+        .subcommand(Command::new("status").about("Shows whether the app is running and which home is open"));
 
     // One subcommand group per registry prefix; "catalog" also keeps scan/list
     let mut groups: BTreeMap<&str, Command> = BTreeMap::new();
@@ -284,6 +316,11 @@ fn run_registry_command(
         .get(name)
         .ok_or_else(|| anyhow!("unknown command '{name}'"))?;
     let params = params_from_matches(&spec.params_schema, m)?;
+    if global.get_flag("live") {
+        // The running app executes the command; its window shows the change
+        let result = msh_ipc::Client::connect()?.execute(name, params)?;
+        return print_result(result, global.get_one::<PathBuf>("out"));
+    }
     let file = global.get_one::<PathBuf>("home_file");
     let mut doc = load_document(file, name)?;
     if name == "home_new" {
@@ -324,6 +361,9 @@ fn print_result(mut result: Value, out: Option<&PathBuf>) -> Result<()> {
 
 /// `msh exec`: runs JSON commands from stdin on one document and saves once.
 fn exec(registry: &Registry, global: &ArgMatches) -> Result<()> {
+    if global.get_flag("live") {
+        return exec_live();
+    }
     let file = global.get_one::<PathBuf>("home_file");
     let mut doc: Option<Document> = None;
     let mut modified = false;
@@ -369,6 +409,36 @@ fn exec(registry: &Registry, global: &ArgMatches) -> Result<()> {
         && !global.get_flag("dry_run")
     {
         d.save(Some(path))?;
+    }
+    Ok(())
+}
+
+/// `msh --live exec`: forwards JSON commands from stdin to the running app.
+fn exec_live() -> Result<()> {
+    let mut client = msh_ipc::Client::connect()?;
+    for (n, line) in std::io::stdin().lock().lines().enumerate() {
+        let line = line?;
+        if line.trim().is_empty() || line.trim_start().starts_with('#') {
+            continue;
+        }
+        let req: Value =
+            serde_json::from_str(&line).with_context(|| format!("line {}: invalid JSON", n + 1))?;
+        let name = req["command"]
+            .as_str()
+            .ok_or_else(|| anyhow!("line {}: missing \"command\"", n + 1))?;
+        match client.execute(name, req["params"].clone()) {
+            Ok(v) => println!(
+                "{}",
+                json!({ "ok": true, "command": name, "result": strip_image(v) })
+            ),
+            Err(e) => {
+                println!(
+                    "{}",
+                    json!({ "ok": false, "command": name, "error": e.to_string() })
+                );
+                bail!("line {}: {e}", n + 1);
+            }
+        }
     }
     Ok(())
 }

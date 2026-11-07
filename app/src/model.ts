@@ -233,11 +233,16 @@ export type Home = {
 
 export type WallShape = { id: string; left: Pt[]; right: Pt[] };
 
+/** State of the open home as sent by the backend (`HomeView` in app/src-tauri/src/state.rs). */
 export type OpenedHome = {
+  /** Changes when another home is opened or created */
   id: number;
-  path: string;
+  path: string | null;
   home: Home;
   wallShapes: WallShape[];
+  modified: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
 };
 
 /** Calls `fn` for every visible piece, expanding groups. */

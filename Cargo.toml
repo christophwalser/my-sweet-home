@@ -16,6 +16,8 @@ msh-format = { path = "crates/msh-format" }
 msh-catalog = { path = "crates/msh-catalog" }
 msh-geometry = { path = "crates/msh-geometry" }
 msh-export = { path = "crates/msh-export" }
+msh-ipc = { path = "crates/msh-ipc" }
+tokio = { version = "1", features = ["net", "io-util", "sync", "time", "rt", "macros"] }
 schemars = "1.2"
 uuid = { version = "1.29", features = ["v4"] }
 resvg = "0.49"

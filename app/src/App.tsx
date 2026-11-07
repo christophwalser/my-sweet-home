@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { type AppInfo, api } from "./api";
 import CatalogPanel from "./catalog/CatalogPanel";
 import PlanView from "./plan2d/PlanView";
-import { useStore } from "./store";
+import { applyHome, subscribeToHomeChanges, useStore } from "./store";
 import View3D from "./view3d/View3D";
 import "./App.css";
 
@@ -14,21 +14,48 @@ export default function App() {
   const error = useStore((s) => s.error);
   const selectedLevel = useStore((s) => s.selectedLevel);
   const viewMode = useStore((s) => s.viewMode);
-  const { openHome, selectLevel, setViewMode, clearError } = useStore.getState();
+  const { openHome, run, undo, redo, save, selectLevel, setViewMode, clearError } =
+    useStore.getState();
 
   useEffect(() => {
     api
       .appInfo()
       .then(setInfo)
       .catch(() => setInfo(null));
-    // Open a file passed on the command line
+    // Changes from the UI, the CLI (--live) and the MCP server arrive as events
+    const unsubscribe = subscribeToHomeChanges();
+    // After a reload the backend may already have a home open
     api
-      .startupFile()
-      .then((path) => {
-        if (path) void openHome(path);
+      .currentHome()
+      .then(async (current) => {
+        if (current) {
+          applyHome(current);
+          return;
+        }
+        // Open a file passed on the command line
+        const path = await api.startupFile();
+        if (path) await openHome(path);
       })
       .catch(() => {});
+    return () => {
+      void unsubscribe.then((off) => off());
+    };
   }, [openHome]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || (e.target as HTMLElement).tagName === "INPUT") return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) void undo();
+      else if (key === "y" || (key === "z" && e.shiftKey)) void redo();
+      else if (key === "s") void save(e.shiftKey);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo, save]);
 
   const chooseFile = async () => {
     const path = await open({
@@ -46,16 +73,50 @@ export default function App() {
       a.attrs.elevation - b.attrs.elevation ||
       (a.attrs.elevation_index ?? 0) - (b.attrs.elevation_index ?? 0),
   );
-  const title = opened ? (opened.home.attrs.name ?? opened.path.split(/[\\/]/).pop()) : null;
+  const title = opened
+    ? (opened.home.attrs.name ?? opened.path?.split(/[\\/]/).pop() ?? "Untitled")
+    : null;
 
   return (
     <div className="shell">
       <header className="toolbar">
         <strong className="app-name">{info?.name ?? "My Sweet Home"}</strong>
+        <button type="button" onClick={() => void run("home_new")} title="New home">
+          New
+        </button>
         <button type="button" onClick={chooseFile} disabled={loading}>
           {loading ? "Opening…" : "Open…"}
         </button>
-        {title && <span className="doc-title">{title}</span>}
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={!opened}
+          title="Save (Ctrl+S), Save as (Ctrl+Shift+S)"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={() => void undo()}
+          disabled={!opened?.canUndo}
+          title="Undo (Ctrl+Z)"
+        >
+          Undo
+        </button>
+        <button
+          type="button"
+          onClick={() => void redo()}
+          disabled={!opened?.canRedo}
+          title="Redo (Ctrl+Y)"
+        >
+          Redo
+        </button>
+        {title && (
+          <span className="doc-title" title={opened?.path ?? undefined}>
+            {title}
+            {opened?.modified ? " •" : ""}
+          </span>
+        )}
         <span className="spacer" />
         {opened && (
           <fieldset className="segmented" aria-label="3D view">

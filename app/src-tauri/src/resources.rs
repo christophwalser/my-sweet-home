@@ -90,16 +90,21 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, request: &Request<Vec<u8>>) -> Res
 
     let data = match (kind, id.and_then(|i| i.parse::<usize>().ok()), entry) {
         (Some("doc"), Some(doc_id), Some(entry)) => state
-            .doc(doc_id as u32)
-            .and_then(|doc| doc.content(entry))
+            .doc_content(doc_id as u32, entry)
             .or_else(|| state.libraries().find(entry)),
         (Some("lib"), Some(lib), Some(entry)) => state.libraries().read(lib, entry),
         _ => None,
     };
 
+    // Resources of a home can change while it is edited; library files do not
+    let cache = if kind == Some("doc") {
+        "no-cache"
+    } else {
+        "max-age=3600"
+    };
     let builder = Response::builder()
         .header("Access-Control-Allow-Origin", "*")
-        .header("Cache-Control", "max-age=3600");
+        .header("Cache-Control", cache);
     match data {
         Some(bytes) => builder
             .status(StatusCode::OK)

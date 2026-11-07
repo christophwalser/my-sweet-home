@@ -41,10 +41,21 @@ export type CatalogData = {
 export const api = {
   appInfo: () => invoke<AppInfo>("app_info"),
   startupFile: () => invoke<string | null>("startup_file"),
+  currentHome: () => invoke<OpenedHome | null>("current_home"),
   openHome: (path: string) => invoke<OpenedHome>("open_home", { path }),
-  closeHome: (id: number) => invoke<void>("close_home", { id }),
+  /** Runs a command of the msh-core registry (same commands as CLI and MCP). */
+  execute: (command: string, params: Record<string, unknown> = {}) =>
+    invoke<unknown>("execute", { command, params }),
+  captureResult: (requestId: number, data: string | null, error: string | null) =>
+    invoke<void>("capture_result", { requestId, data, error }),
   catalogLoad: (lang: string) => invoke<CatalogData>("catalog_load", { lang }),
 };
+
+/** Event sent by the backend whenever the open home changed (from the UI, CLI or MCP). */
+export const HOME_CHANGED_EVENT = "home-changed";
+
+/** Event asking the frontend to capture the 3D view (live control). */
+export const CAPTURE_EVENT = "capture-3d";
 
 /** Base URL of the custom `msh` URI scheme (served as http://msh.localhost on Windows). */
 const MSH_BASE = "http://msh.localhost";

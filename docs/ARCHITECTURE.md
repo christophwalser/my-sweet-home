@@ -180,6 +180,29 @@ Findings:
   at angle θ lies at (cos θ, −sin θ) in plan coordinates. The P2 plan view drew them mirrored;
   fixed in the app and in the export.
 
+### 4.8 Status after P3b (2026-11-07)
+
+Implemented:
+- The app keeps the open home as `msh_core::Document` and changes it only through the registry
+  (Tauri command `execute`). After every change it emits `home-changed` with the new state
+  (home, wall shapes, path, modified, can undo/redo); the frontend applies it. Toolbar: New,
+  Open, Save (Save as), Undo, Redo; shortcuts Ctrl+Z, Ctrl+Y, Ctrl+S, Ctrl+Shift+S.
+- `msh-ipc`: protocol (newline-delimited JSON requests/responses) and synchronous client for the
+  named pipe `\\.\pipe\my-sweet-home`. Methods: `execute`, `capture_3d`, `status`.
+- Pipe server in the app (tokio named pipes, remote clients rejected, one instance per user
+  session; a second app instance simply runs without pipe).
+- 3D screenshots: the app asks the frontend (`capture-3d` event) to render the 3D view after all
+  models have loaded and returns a PNG.
+- CLI `--live` for all registry commands and `exec`; `msh screenshot`, `msh status`.
+- MCP `--live`: tool calls are forwarded to the app; extra tool `view_3d_image`.
+- Plan and 3D view keep the user's camera during live edits; homes without stored camera are
+  re-fitted until the user moves the view.
+- Verified with `scripts/live-demo.ps1`: house built in the running app through CLI and MCP,
+  undo from the window, saved file read by the original Sweet Home 3D reader.
+
+Findings:
+- The DTD default of a room's `nameYOffset` is -40 (name above the area); the plan view used 0.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

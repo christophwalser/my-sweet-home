@@ -15,6 +15,7 @@ msh-core.workspace = true
 msh-model.workspace = true
 msh-format.workspace = true
 msh-catalog.workspace = true
+msh-ipc.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true

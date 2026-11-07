@@ -97,6 +97,28 @@ Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`):
 `msh mcp --file house.sh3d` starts with an existing home. `.\scripts\mcp-smoke.ps1` runs a
 scripted MCP session and verifies the result with the original Sweet Home 3D reader.
 
+## Live control of the running app
+
+The app listens on the named pipe `\\.\pipe\my-sweet-home` (local clients only). With `--live`,
+the CLI and the MCP server send every command to the running app, so changes appear in its
+window immediately and are part of its undo history (Ctrl+Z / Ctrl+Y in the window).
+
+```powershell
+msh status                                        # is the app running, which home is open?
+msh --live wall add-path --points "[[0,0],[600,0],[600,400],[0,400]]" --closed
+msh --live view plan-image --out plan.png
+msh screenshot --mode aerial --out view3d.png     # 3D view rendered by the app
+msh mcp --live                                    # MCP server controlling the app (+ tool view_3d_image)
+```
+
+Claude Code with live control:
+
+```powershell
+claude mcp add my-sweet-home-live -- D:\Data\Programming\_repos\my-sweet-home\target\debug\msh.exe mcp --live
+```
+
+`.\scripts\live-demo.ps1` builds a house in the running app through the CLI and the MCP server.
+
 ## Layout
 
 | Path | Content |
@@ -114,7 +136,7 @@ scripted MCP session and verifies the result with the original Sweet Home 3D rea
 | `tests/corpus` | Test files (example projects; personal files in `private/`) |
 | `docs/` | Architecture and decisions |
 
-The crate `msh-ipc` (live connection to the running app) follows in phase P3b.
+| `crates/msh-ipc` | Live connection protocol and named pipe client |
 
 ## License
 
