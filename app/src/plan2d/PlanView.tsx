@@ -17,8 +17,8 @@ const LIGHT: PlanColors = {
   grid: "#eef0f3",
   wallFill: "#6b6f76",
   wallStroke: "#3a3d42",
-  roomFill: "rgba(205, 200, 190, 0.35)",
-  roomStroke: "#b8b2a6",
+  roomFill: "#808080",
+  roomStroke: "#4b5058",
   furnitureStroke: "#4b5058",
   text: "#1c2026",
   dimension: "#2f6fde",
@@ -29,8 +29,8 @@ const DARK: PlanColors = {
   grid: "#24272c",
   wallFill: "#9aa0a8",
   wallStroke: "#c8ccd2",
-  roomFill: "rgba(120, 115, 105, 0.25)",
-  roomStroke: "#5b5850",
+  roomFill: "#4a4d52",
+  roomStroke: "#8a8f96",
   furnitureStroke: "#aab0b8",
   text: "#e6e8eb",
   dimension: "#6c9cf2",
@@ -89,6 +89,20 @@ export default function PlanView() {
       img.src = docResourceUrl(opened.id, key);
       map.set(key, img);
     });
+    // Floor textures are drawn as patterns in the plan
+    for (const room of opened.home.rooms) {
+      const key = room.textures?.find((t) => t.role === "floorTexture")?.image;
+      if (!key || map.has(key)) continue;
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      pending++;
+      img.onload = img.onerror = () => {
+        pending--;
+        if (pending === 0) setRedraw((n) => n + 1);
+      };
+      img.src = docResourceUrl(opened.id, key);
+      map.set(key, img);
+    }
     setIcons(map);
   }, [opened]);
 

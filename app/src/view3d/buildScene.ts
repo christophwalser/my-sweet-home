@@ -14,6 +14,7 @@ import {
   type Pt,
   type Texture,
 } from "../model";
+import { baseboardOf, baseboardPolygon } from "./wallSides";
 
 export type LevelInfo = { elevation: number; height: number };
 
@@ -71,16 +72,24 @@ const EDGE_LEFT = 0;
 const EDGE_RIGHT = 1;
 const EDGE_OTHER = 2;
 
+/** Axis along which side textures run: u = distance along `dir` from `origin`. */
+type SideAxis = { origin: Pt; dir: Pt };
+
 /**
  * Builds a vertical prism from a plan polygon. `heightAt` returns the top
  * height for a plan point. Faces are grouped: 0 = left side, 1 = right side,
  * 2 = top, bottom and wall ends.
+ *
+ * UVs are in centimeters: on the sides u runs along `axis` (oriented so that
+ * textures are not mirrored when looking at the face) and v is the height above
+ * `baseY`; top and bottom faces use the plan coordinates.
  */
 function prismGeometry(
   poly: Pt[],
   edgeKinds: number[],
   baseY: number,
   heightAt: (p: Pt) => number,
+  axis: SideAxis,
 ): THREE.BufferGeometry {
   // Orient the polygon clockwise in (x, z) so that top faces point up
   let pts = poly;
@@ -92,10 +101,16 @@ function prismGeometry(
     kinds = pts.map((_, i) => edgeKinds[(2 * n - 2 - i) % n]);
   }
   const positions: number[] = [];
+  const uvs: number[] = [];
   const groups: { start: number; count: number; index: number }[] = [];
-  const pushTri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => {
-    positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  type V = [THREE.Vector3, number, number];
+  const pushTri = (a: V, b: V, c: V) => {
+    for (const [p, u, v] of [a, b, c]) {
+      positions.push(p.x, p.y, p.z);
+      uvs.push(u, v);
+    }
   };
+  const flat = (p: THREE.Vector3): V => [p, p.x, p.z];
   const addGroup = (index: number, startVertex: number) => {
     const count = positions.length / 3 - startVertex;
     if (count > 0) groups.push({ start: startVertex, count, index });
@@ -114,15 +129,23 @@ function prismGeometry(
       const t1 = new THREE.Vector3(q[0], baseY + heightAt(q), q[1]);
       // Outward normal of an edge of a clockwise polygon (in x, z) is on its left
       const outward = new THREE.Vector3(-(q[1] - p[1]), 0, q[0] - p[0]);
+      // u must grow to the right of a viewer facing the side: right = (nz, -nx)
+      const sign = outward.z * axis.dir[0] - outward.x * axis.dir[1] >= 0 ? 1 : -1;
+      const u = (r: Pt) =>
+        sign * ((r[0] - axis.origin[0]) * axis.dir[0] + (r[1] - axis.origin[1]) * axis.dir[1]);
+      const vb0: V = [b0, u(p), 0];
+      const vb1: V = [b1, u(q), 0];
+      const vt0: V = [t0, u(p), t0.y - baseY];
+      const vt1: V = [t1, u(q), t1.y - baseY];
       const n = new THREE.Vector3()
         .subVectors(b1, b0)
         .cross(new THREE.Vector3().subVectors(t1, b0));
       if (n.dot(outward) >= 0) {
-        pushTri(b0, b1, t1);
-        pushTri(b0, t1, t0);
+        pushTri(vb0, vb1, vt1);
+        pushTri(vb0, vt1, vt0);
       } else {
-        pushTri(b0, t1, b1);
-        pushTri(b0, t0, t1);
+        pushTri(vb0, vt1, vb1);
+        pushTri(vb0, vt0, vt1);
       }
     }
     if (group !== EDGE_OTHER) addGroup(group, start);
@@ -136,14 +159,14 @@ function prismGeometry(
         const cw = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) < 0;
         const [x, y, z] = cw ? [a, b, c] : [a, c, b];
         pushTri(
-          new THREE.Vector3(x[0], baseY + heightAt(x), x[1]),
-          new THREE.Vector3(y[0], baseY + heightAt(y), y[1]),
-          new THREE.Vector3(z[0], baseY + heightAt(z), z[1]),
+          flat(new THREE.Vector3(x[0], baseY + heightAt(x), x[1])),
+          flat(new THREE.Vector3(y[0], baseY + heightAt(y), y[1])),
+          flat(new THREE.Vector3(z[0], baseY + heightAt(z), z[1])),
         );
         pushTri(
-          new THREE.Vector3(x[0], baseY, x[1]),
-          new THREE.Vector3(z[0], baseY, z[1]),
-          new THREE.Vector3(y[0], baseY, y[1]),
+          flat(new THREE.Vector3(x[0], baseY, x[1])),
+          flat(new THREE.Vector3(z[0], baseY, z[1])),
+          flat(new THREE.Vector3(y[0], baseY, y[1])),
         );
       }
       addGroup(EDGE_OTHER, start);
@@ -152,10 +175,7 @@ function prismGeometry(
 
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geom.setAttribute(
-    "uv",
-    new THREE.Float32BufferAttribute(new Float32Array((positions.length / 3) * 2), 2),
-  );
+  geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geom.computeVertexNormals();
   for (const g of groups) geom.addGroup(g.start, g.count, g.index);
   return geom;
@@ -195,11 +215,12 @@ function openingBrush(p: Piece, baseY: number, depth: number, materials: THREE.M
   return brush;
 }
 
-/** Walls of the visible levels with door and window openings cut out. */
+/** Walls of the visible levels with textures, baseboards and door/window openings. */
 export function buildWalls(
   opened: OpenedHome,
   levels: Map<string | null, LevelInfo>,
   shown: Set<string | null>,
+  requestRender: () => void,
 ): THREE.Group {
   const { home, wallShapes } = opened;
   const group = new THREE.Group();
@@ -208,12 +229,36 @@ export function buildWalls(
   evaluator.useGroups = true;
   const defaultHeight = home.attrs.wall_height ?? 250;
   const wallsAlpha = home.environment?.attrs.walls_alpha ?? 0;
+  const textures = new TextureCache(opened.id, requestRender);
 
   const openings: Piece[] = [];
   forEachPiece(home.furniture, (p) => {
     if (p.kind === "DoorOrWindow") openings.push(p);
   });
   const maxThickness = Math.max(1, ...home.walls.map((w) => w.attrs.thickness));
+
+  /** Subtracts the door and window openings of `level` from a wall or baseboard. */
+  const cutOpenings = (
+    geom: THREE.BufferGeometry,
+    materials: THREE.Material[],
+    level: string | null,
+    baseY: number,
+  ): THREE.BufferGeometry => {
+    let brush = new Brush(geom, materials);
+    brush.updateMatrixWorld();
+    const box = new THREE.Box3().setFromBufferAttribute(
+      geom.getAttribute("position") as THREE.BufferAttribute,
+    );
+    for (const p of openings) {
+      if (p.attrs.level !== level) continue;
+      const cut = openingBrush(p, baseY, p.attrs.depth + 2 * maxThickness + 10, materials);
+      const cutBox = new THREE.Box3().setFromObject(cut);
+      if (!cutBox.intersectsBox(box)) continue;
+      brush = evaluator.evaluate(brush, cut, SUBTRACTION) as Brush;
+      brush.updateMatrixWorld();
+    }
+    return brush.geometry;
+  };
 
   home.walls.forEach((wall, i) => {
     const a = wall.attrs;
@@ -231,45 +276,80 @@ export function buildWalls(
     const h1 = a.height_at_end ?? h0;
     const dx = a.x_end - a.x_start;
     const dz = a.y_end - a.y_start;
-    const len2 = dx * dx + dz * dz || 1;
+    const len = Math.hypot(dx, dz) || 1;
+    const axis: SideAxis = { origin: [a.x_start, a.y_start], dir: [dx / len, dz / len] };
     const heightAt = (p: Pt) => {
       const t = Math.min(
         1,
-        Math.max(0, ((p[0] - a.x_start) * dx + (p[1] - a.y_start) * dz) / len2),
+        Math.max(0, ((p[0] - a.x_start) * dx + (p[1] - a.y_start) * dz) / (len * len)),
       );
       return h0 + (h1 - h0) * t;
     };
 
-    // Wall textures need UVs along the wall sides; they follow with editing in P4.
-    const materials = [
-      wallMaterial(a.left_side_color, wallsAlpha),
-      wallMaterial(a.right_side_color, wallsAlpha),
-      wallMaterial(a.top_color, wallsAlpha),
-    ];
-    const geom = prismGeometry(poly, kinds, baseY, heightAt);
-    let brush = new Brush(geom, materials);
-    brush.updateMatrixWorld();
-
-    const wallBox = new THREE.Box3().setFromBufferAttribute(
-      geom.getAttribute("position") as THREE.BufferAttribute,
-    );
-    for (const p of openings) {
-      if (p.attrs.level !== a.level) continue;
-      const cut = openingBrush(p, baseY, p.attrs.depth + 2 * maxThickness, materials);
-      const cutBox = new THREE.Box3().setFromObject(cut);
-      if (!cutBox.intersectsBox(wallBox)) continue;
-      brush = evaluator.evaluate(brush, cut, SUBTRACTION) as Brush;
-      brush.updateMatrixWorld();
-    }
-    const mesh = new THREE.Mesh(brush.geometry, materials);
+    const leftTexture = wall.textures?.find((t) => t.role === "leftSideTexture");
+    const rightTexture = wall.textures?.find((t) => t.role === "rightSideTexture");
+    const leftMaterial = wallMaterial(a.left_side_color, wallsAlpha, textures.get(leftTexture));
+    const rightMaterial = wallMaterial(a.right_side_color, wallsAlpha, textures.get(rightTexture));
+    const materials = [leftMaterial, rightMaterial, wallMaterial(a.top_color, wallsAlpha, null)];
+    const geom = prismGeometry(poly, kinds, baseY, heightAt, axis);
+    const mesh = new THREE.Mesh(cutOpenings(geom, materials, a.level, baseY), materials);
     mesh.name = `wall:${a.id}`;
     group.add(mesh);
+
+    // Baseboards: thin prisms along the sides, colored like the side unless set
+    for (const side of ["left", "right"] as const) {
+      const bb = baseboardOf(wall, side);
+      if (!bb || bb.attrs.thickness <= 0 || bb.attrs.height <= 0) continue;
+      const outline = baseboardPolygon(shape, side, bb.attrs.thickness);
+      if (!outline) continue;
+      const sideMaterial = side === "left" ? leftMaterial : rightMaterial;
+      let material: THREE.MeshLambertMaterial;
+      if (bb.texture) material = wallMaterial(null, wallsAlpha, textures.get(bb.texture));
+      else if (bb.attrs.color !== null) material = wallMaterial(bb.attrs.color, wallsAlpha, null);
+      else material = sideMaterial;
+      const bbMaterials = [material, material, material];
+      const n = outline.poly.length;
+      const half = n / 2;
+      // Edges of the offset polyline are the visible front of the baseboard
+      const bbKinds = outline.poly.map((_, j) => (j >= half && j < n - 1 ? EDGE_LEFT : EDGE_OTHER));
+      const height = Math.min(bb.attrs.height, Math.min(h0, h1));
+      const bbGeom = prismGeometry(outline.poly, bbKinds, baseY, () => height, axis);
+      const bbMesh = new THREE.Mesh(cutOpenings(bbGeom, bbMaterials, a.level, baseY), bbMaterials);
+      bbMesh.name = `baseboard:${a.id}:${side}`;
+      group.add(bbMesh);
+    }
   });
   return group;
 }
 
-function wallMaterial(color: number | null, wallsAlpha: number): THREE.MeshLambertMaterial {
-  const m = new THREE.MeshLambertMaterial({ color: colorOf(color, 0xffffff) });
+/** Shares texture objects between walls that use the same image and size. */
+class TextureCache {
+  private map = new Map<string, THREE.Texture>();
+  constructor(
+    private docId: number,
+    private onLoad: () => void,
+  ) {}
+
+  get(t: Texture | null | undefined): THREE.Texture | null {
+    if (!t) return null;
+    const key = `${t.image}|${t.width}|${t.height}|${t.angle ?? 0}|${t.scale ?? 1}`;
+    let tex = this.map.get(key);
+    if (!tex) {
+      tex = loadTiledTexture(docResourceUrl(this.docId, t.image), t, this.onLoad);
+      this.map.set(key, tex);
+    }
+    return tex;
+  }
+}
+
+function wallMaterial(
+  color: number | null,
+  wallsAlpha: number,
+  map: THREE.Texture | null,
+): THREE.MeshLambertMaterial {
+  // Like Sweet Home 3D, a texture replaces the color
+  const m = new THREE.MeshLambertMaterial({ color: map ? 0xffffff : colorOf(color, 0xffffff) });
+  if (map) m.map = map;
   if (wallsAlpha > 0) {
     m.transparent = true;
     m.opacity = 1 - wallsAlpha;
@@ -370,4 +450,35 @@ export function skyColor(home: Home): THREE.Color {
 
 export function lightColor(home: Home): THREE.Color {
   return colorOf(home.environment?.attrs.light_color, 0xd0d0d0);
+}
+
+/** Radius of the sky dome; it follows the camera and must stay inside the far plane. */
+const SKY_RADIUS = 90000;
+
+/**
+ * Sky texture on a half sphere around the viewer, like Sweet Home 3D: the image
+ * spans 360° horizontally, its bottom row at the horizon and its top at the zenith.
+ * Returns null when the home has no sky texture (the sky color is used then).
+ */
+export function buildSky(opened: OpenedHome, requestRender: () => void): THREE.Mesh | null {
+  const skyTexture = opened.home.environment?.textures.find((t) => t.role === "skyTexture");
+  if (!skyTexture) return null;
+  const tex = textureLoader.load(docResourceUrl(opened.id, skyTexture.image), requestRender);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  // Upper half sphere; u runs around the y axis, v from the zenith (1) to the horizon (0)
+  const geom = new THREE.SphereGeometry(SKY_RADIUS, 64, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+  // Mirror so that the inside faces are front faces and the image is not reversed
+  geom.scale(-1, 1, 1);
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    depthWrite: false,
+    depthTest: false,
+    fog: false,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.name = "sky";
+  mesh.renderOrder = -1;
+  mesh.frustumCulled = false;
+  return mesh;
 }

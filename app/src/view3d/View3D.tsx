@@ -1,31 +1,42 @@
 // 3D view: WebGL renderer that only redraws when something changes.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { type Camera, forEachPiece } from "../model";
+import { forEachPiece } from "../model";
 import { useStore } from "../store";
+import { buildAnnotations } from "./annotations";
 import {
   buildGround,
   buildRooms,
+  buildSky,
   buildWalls,
   levelInfos,
   lightColor,
   skyColor,
   visibleLevels,
 } from "./buildScene";
+import { buildLampLights, lampLights } from "./lights";
 import { clearModelCache, createPieceObject, disposeObject } from "./models";
+
+/**
+ * Highest pitch used for the aerial view. A camera looking straight down sits on
+ * the pole of OrbitControls, where the yaw is lost and tilting feels stuck.
+ */
+const MAX_AERIAL_PITCH = Math.PI / 2 - 0.05;
+/** Direction from the scene towards the sun (fixed for now; no compass-based sun yet). */
+const SUN_DIRECTION = new THREE.Vector3(-1000, 2500, 1500).normalize();
 
 /**
  * View direction of a Sweet Home 3D camera in three.js coordinates.
  * Sweet Home 3D orients the view with rotY(π − yaw) · rotX(−pitch) applied to
  * the default view direction (0, 0, −1); a positive pitch looks down.
  */
-function cameraDirection(c: Camera["attrs"]): THREE.Vector3 {
+function cameraDirection(yaw: number, pitch: number): THREE.Vector3 {
   return new THREE.Vector3(
-    -Math.sin(c.yaw) * Math.cos(c.pitch),
-    -Math.sin(c.pitch),
-    Math.cos(c.yaw) * Math.cos(c.pitch),
+    -Math.sin(yaw) * Math.cos(pitch),
+    -Math.sin(pitch),
+    Math.cos(yaw) * Math.cos(pitch),
   );
 }
 
@@ -38,6 +49,7 @@ export default function View3D() {
   const opened = useStore((s) => s.opened);
   const levelId = useStore((s) => s.selectedLevel);
   const viewMode = useStore((s) => s.viewMode);
+  const [shadows, setShadows] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const ctx = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -45,6 +57,9 @@ export default function View3D() {
     camera: THREE.PerspectiveCamera;
     controls: OrbitControls;
     content: THREE.Group;
+    lamps: THREE.Group;
+    sun: THREE.DirectionalLight;
+    sky: THREE.Object3D | null;
     hfov: number;
     requestRender: () => void;
   } | null>(null);
@@ -56,6 +71,7 @@ export default function View3D() {
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -63,11 +79,19 @@ export default function View3D() {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = false;
     const content = new THREE.Group();
-    scene.add(content);
+    const lamps = new THREE.Group();
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+    sun.position.copy(SUN_DIRECTION).multiplyScalar(3000);
+    sun.shadow.mapSize.set(4096, 4096);
+    sun.shadow.bias = -0.0005;
+    sun.shadow.normalBias = 1;
+    scene.add(content, lamps, sun, sun.target);
 
     let frame = 0;
     const render = () => {
       frame = 0;
+      // The sky dome stays centered on the viewer
+      state.sky?.position.copy(camera.position);
       renderer.render(scene, camera);
     };
     const requestRender = () => {
@@ -75,8 +99,21 @@ export default function View3D() {
     };
     controls.addEventListener("change", requestRender);
 
-    const state = { renderer, scene, camera, controls, content, hfov: Math.PI / 3, requestRender };
+    const state: NonNullable<typeof ctx.current> = {
+      renderer,
+      scene,
+      camera,
+      controls,
+      content,
+      lamps,
+      sun,
+      sky: null,
+      hfov: Math.PI / 3,
+      requestRender,
+    };
     ctx.current = state;
+    // Debug handle for inspecting the scene from the WebView devtools
+    if (import.meta.env.DEV) (window as unknown as { __msh3d: typeof state }).__msh3d = state;
 
     const resize = () => {
       const w = Math.max(1, container.clientWidth);
@@ -96,6 +133,7 @@ export default function View3D() {
       cancelAnimationFrame(frame);
       controls.dispose();
       disposeObject(content);
+      disposeObject(lamps);
       clearModelCache();
       renderer.dispose();
       renderer.domElement.remove();
@@ -117,6 +155,7 @@ export default function View3D() {
       c.content.remove(child);
       disposeObject(child);
     }
+    c.sky = null;
     if (!opened) {
       c.scene.background = new THREE.Color(0x202326);
       c.requestRender();
@@ -129,13 +168,23 @@ export default function View3D() {
     const shown = visibleLevels(home, levelId);
 
     const ambient = new THREE.HemisphereLight(0xffffff, lightColor(home), 1.6);
-    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
-    sun.position.set(-1000, 2500, 1500);
-    c.content.add(ambient, sun);
+    c.content.add(ambient);
 
-    c.content.add(buildGround(opened, c.requestRender));
-    c.content.add(buildWalls(opened, levels, shown));
-    c.content.add(buildRooms(opened, levels, shown, c.requestRender));
+    c.sky = buildSky(opened, c.requestRender);
+    if (c.sky) c.content.add(c.sky);
+    const ground = buildGround(opened, c.requestRender);
+    ground.receiveShadow = true;
+    c.content.add(ground);
+    const walls = buildWalls(opened, levels, shown, c.requestRender);
+    const rooms = buildRooms(opened, levels, shown, c.requestRender);
+    for (const g of [walls, rooms]) {
+      g.traverse((o) => {
+        // Ceilings would darken the whole interior in the aerial view
+        o.castShadow = !o.name.startsWith("ceiling:");
+        o.receiveShadow = true;
+      });
+    }
+    c.content.add(walls, rooms, buildAnnotations(home, levels, shown));
 
     const furniture = new THREE.Group();
     furniture.name = "furniture";
@@ -148,6 +197,58 @@ export default function View3D() {
     c.requestRender();
   }, [opened, levelId]);
 
+  // Sun shadows (optional, they cost a second render pass)
+  useEffect(() => {
+    const c = ctx.current;
+    if (!c || !opened || levelId === undefined) return;
+    c.renderer.shadowMap.enabled = shadows;
+    c.sun.castShadow = shadows;
+    // Fit the shadow camera around the walls of the shown levels
+    const walls = c.content.getObjectByName("walls");
+    const box = walls ? new THREE.Box3().setFromObject(walls) : new THREE.Box3();
+    if (box.isEmpty()) {
+      box.set(new THREE.Vector3(-1000, 0, -1000), new THREE.Vector3(1000, 300, 1000));
+    }
+    const center = box.getCenter(new THREE.Vector3());
+    const radius = Math.max(500, box.getSize(new THREE.Vector3()).length() / 2 + 200);
+    c.sun.target.position.copy(center);
+    c.sun.position.copy(center).addScaledVector(SUN_DIRECTION, radius * 2);
+    const cam = c.sun.shadow.camera;
+    cam.left = -radius;
+    cam.right = radius;
+    cam.top = radius;
+    cam.bottom = -radius;
+    cam.near = radius * 0.5;
+    cam.far = radius * 3.5;
+    cam.updateProjectionMatrix();
+    // Materials compiled without shadow support must be rebuilt
+    c.scene.traverse((o) => {
+      const mats = (o as THREE.Mesh).material;
+      for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) m.needsUpdate = true;
+    });
+    c.requestRender();
+  }, [shadows, opened, levelId]);
+
+  // Lamps light the virtual visit; only the ones nearest to the visitor are used
+  useEffect(() => {
+    const c = ctx.current;
+    if (!c) return;
+    for (const child of [...c.lamps.children]) {
+      c.lamps.remove(child);
+      disposeObject(child);
+    }
+    if (opened && viewMode === "observer") {
+      const home = opened.home;
+      const observer = home.cameras.find((cam) => cam.attrs.role === "observerCamera");
+      const viewer = observer
+        ? new THREE.Vector3(observer.attrs.x, observer.attrs.z, observer.attrs.y)
+        : c.camera.position.clone();
+      const lights = lampLights(home, levelInfos(home), visibleLevels(home, levelId));
+      c.lamps.add(buildLampLights(lights, viewer));
+    }
+    c.requestRender();
+  }, [opened, levelId, viewMode]);
+
   // Place the camera from the cameras stored in the home
   useEffect(() => {
     const c = ctx.current;
@@ -157,7 +258,8 @@ export default function View3D() {
     if (stored) {
       const a = stored.attrs;
       c.camera.position.set(a.x, a.z, a.y);
-      const dir = cameraDirection(a);
+      const pitch = viewMode === "observer" ? a.pitch : Math.min(a.pitch, MAX_AERIAL_PITCH);
+      const dir = cameraDirection(a.yaw, pitch);
       // Orbit around the point where the view hits the ground (or a point in front)
       const distance = dir.y < -0.05 ? Math.min(a.z / -dir.y, 5000) : 300;
       c.controls.target
@@ -178,5 +280,19 @@ export default function View3D() {
     c.requestRender();
   }, [opened, viewMode]);
 
-  return <div className="view3d-canvas" ref={containerRef} />;
+  return (
+    <>
+      <div className="view3d-canvas" ref={containerRef} />
+      {opened && (
+        <label className="view3d-option">
+          <input
+            type="checkbox"
+            checked={shadows}
+            onChange={(e) => setShadows(e.currentTarget.checked)}
+          />
+          Shadows
+        </label>
+      )}
+    </>
+  );
 }

@@ -253,6 +253,20 @@ input[type="search"]:focus {
   height: 100%;
 }
 
+.view3d-option {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  font-size: 12px;
+  user-select: none;
+}
+
 /* ---- Catalog ---- */
 
 .catalog-panel {

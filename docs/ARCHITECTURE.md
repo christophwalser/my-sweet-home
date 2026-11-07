@@ -132,6 +132,7 @@ Implemented:
 - Tauri backend: `open_home` (`.sh3d` and standalone `Home.xml`), `catalog_load`, file passed on the command line, custom URI scheme `msh` (`http://msh.localhost/doc/{id}/{entry}` and `/lib/{index}/{entry}`) that serves resources directly from the ZIP files. Resources missing in a home (e.g. example projects referencing the SH3D catalog by class path) are resolved from the installed libraries.
 - 2D plan (Canvas 2D): rooms with names and areas, walls, furniture with icons, doors/windows with sash arcs, dimension lines, labels, polylines, compass, level tabs, zoom/pan/fit, light/dark theme.
 - 3D view (three.js, WebGL2): walls with heights at both ends, side and top colors, door/window openings cut with CSG (`three-bvh-csg`), floors/ceilings with textures, ground texture, sky color, furniture models (OBJ/MTL, 3DS, Collada) normalized like SH3D, Sweet Home 3D's default OBJ material table, transparent window panes (`sweethome3d_window_pane*` groups at 50 % opacity, as in SH3D's ModelManager), stored aerial and observer cameras, render on demand.
+- Viewer polish (P2): wall side textures with UVs along the wall (u along the axis, v = height, in cm), baseboards as mitered prisms along the wall sides (cut by door openings), sky texture on a half sphere that follows the viewer (sky color as fallback), point lights for the light sources of lamps in the virtual visit, optional sun shadows (toggle in the 3D view; ceilings cast none so the aerial view stays lit), labels with a pitch, dimension lines marked "visible in 3D" and polylines with an elevation in 3D, aerial camera started slightly below the pole (pitch ≤ π/2 − 0.05) so that OrbitControls keep the yaw. 2D plan: wall patterns as canvas patterns of constant screen size (default `hatchUp`), baseboard outlines, room floors with color or texture at 75 % opacity like SH3D, dimension text on the outer side of the line.
 - Catalog panel: all installed libraries, categories, search, icons, license and creator in the tooltip.
 
 Deliberate deviations:
@@ -140,9 +141,10 @@ Deliberate deviations:
 - The `visible` attribute of levels is ignored for 3D: SH3D saves it as derived state (levels above the selected one). Only `viewable` is respected.
 
 Known gaps (planned for later phases):
-- Wall textures (need UVs along wall sides), wall patterns in the plan, baseboards
-- Sky texture, light sources of lamps, shadows
-- Labels, dimension lines and polylines in 3D; staircase cut-outs; room floor thickness on upper levels
+- Sun position from the compass (latitude, longitude, time); the sun direction is fixed
+- Lamp lights only in the virtual visit and capped to the 12 nearest; no spot cones, light source materials do not glow
+- Arc walls: side textures run along the chord, not the arc length
+- Polyline arrows and dash styles in 3D; staircase cut-outs; room floor thickness on upper levels (dark gap between levels)
 - Selection, tooltips and editing (P3/P4)
 - Memory and CPU measurement of the release build (P7 benchmark; only dev builds were run so far)
 

@@ -10,17 +10,21 @@ import {
   type Piece,
   type Pt,
   type TextStyle,
+  type Texture,
   type WallShape,
   wallPolygon,
 } from "../model";
+import { baseboardOf, baseboardPolygon } from "../view3d/wallSides";
 
 export type ViewTransform = { scale: number; offsetX: number; offsetY: number };
 
 export type PlanColors = {
   background: string;
   grid: string;
+  /** Fill of walls with the "foreground" pattern; hatch lines use `wallStroke`. */
   wallFill: string;
   wallStroke: string;
+  /** Room floor without color or texture (drawn with ROOM_ALPHA like Sweet Home 3D). */
   roomFill: string;
   roomStroke: string;
   furnitureStroke: string;
@@ -29,6 +33,10 @@ export type PlanColors = {
 };
 
 const DEFAULT_ROOM_FONT = 24;
+/** Opacity of room floors in the plan, as in Sweet Home 3D. */
+const ROOM_ALPHA = 0.75;
+/** Wall pattern used when a wall has none (Sweet Home 3D's default preference). */
+const DEFAULT_WALL_PATTERN = "hatchUp";
 const DEFAULT_LABEL_FONT = 18;
 const DEFAULT_DIMENSION_FONT = 18;
 
@@ -108,7 +116,8 @@ export function drawPlan(
 
   const { home, wallShapes, levelId } = input;
 
-  // Rooms
+  // Rooms: floor color or texture like Sweet Home 3D's default preference
+  // "room rendering: floor color or texture", 75 % opaque
   for (const room of home.rooms) {
     if (!sameLevel(room.attrs.level, levelId) || room.points.length < 3) continue;
     ctx.beginPath();
@@ -117,13 +126,19 @@ export function drawPlan(
       room.points.map((p) => [p.x, p.y]),
     );
     ctx.closePath();
-    ctx.fillStyle =
-      room.attrs.floor_visible === false
-        ? "transparent"
-        : room.attrs.floor_color !== null
-          ? withAlpha(cssColor(room.attrs.floor_color, colors.roomFill), 0.35)
-          : colors.roomFill;
-    ctx.fill();
+    if (room.attrs.floor_visible !== false) {
+      const texture = room.textures?.find((t) => t.role === "floorTexture");
+      const img = texture ? input.icons.get(texture.image) : undefined;
+      const pattern = texture && img ? texturePattern(ctx, img, texture) : null;
+      ctx.fillStyle =
+        pattern ??
+        (room.attrs.floor_color !== null
+          ? cssColor(room.attrs.floor_color, colors.roomFill)
+          : colors.roomFill);
+      ctx.globalAlpha = ROOM_ALPHA;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
     ctx.lineWidth = px;
     ctx.strokeStyle = colors.roomStroke;
     ctx.stroke();
@@ -156,7 +171,7 @@ export function drawPlan(
     if (p.kind !== "DoorOrWindow") drawPiece(ctx, p, input.icons, colors, px);
   }
 
-  // Walls
+  // Walls, filled with their pattern
   ctx.lineJoin = "miter";
   home.walls.forEach((w, i) => {
     if (!sameLevel(w.attrs.level, levelId)) return;
@@ -164,11 +179,28 @@ export function drawPlan(
     ctx.beginPath();
     tracePath(ctx, poly);
     ctx.closePath();
-    ctx.fillStyle = colors.wallFill;
+    ctx.fillStyle = wallPattern(ctx, w.attrs.pattern ?? DEFAULT_WALL_PATTERN, colors, view.scale);
     ctx.fill();
     ctx.lineWidth = 1.5 * px;
     ctx.strokeStyle = colors.wallStroke;
     ctx.stroke();
+  });
+
+  // Baseboards: thin outlines along the wall sides
+  ctx.lineWidth = px;
+  ctx.strokeStyle = colors.wallStroke;
+  home.walls.forEach((w, i) => {
+    if (!sameLevel(w.attrs.level, levelId)) return;
+    for (const side of ["left", "right"] as const) {
+      const bb = baseboardOf(w, side);
+      if (!bb || bb.attrs.thickness <= 0) continue;
+      const outline = baseboardPolygon(wallShapes[i], side, bb.attrs.thickness);
+      if (!outline) continue;
+      ctx.beginPath();
+      tracePath(ctx, outline.poly);
+      ctx.closePath();
+      ctx.stroke();
+    }
   });
 
   // Doors and windows on top of walls
@@ -382,8 +414,9 @@ function drawDimension(
   ctx.fillStyle = color;
   ctx.font = fontOf(dl.text_style, DEFAULT_DIMENSION_FONT);
   ctx.textAlign = "center";
-  ctx.textBaseline = "bottom";
-  ctx.fillText(formatLength(length), length / 2, offset - size * 0.15);
+  // Like Sweet Home 3D, the text sits on the outer side of the dimension line
+  ctx.textBaseline = offset > 0 ? "top" : "bottom";
+  ctx.fillText(formatLength(length), length / 2, offset + Math.sign(offset || -1) * size * 0.15);
   ctx.restore();
 }
 
@@ -489,7 +522,90 @@ function polygonArea(points: { x: number; y: number }[]): number {
   return Math.abs(sum) / 2;
 }
 
-function withAlpha(hex: string, alpha: number): string {
-  const n = Number.parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+// ------------------------------------------------------------------ Patterns
+
+/** Size of a wall pattern tile in CSS pixels (Sweet Home 3D's pattern images are 10 px). */
+const PATTERN_TILE = 10;
+const patternCache = new Map<string, CanvasPattern | null>();
+
+/**
+ * Canvas pattern of a Sweet Home 3D wall pattern. Tiles keep their size in
+ * screen pixels whatever the zoom, like in Sweet Home 3D.
+ */
+function wallPattern(
+  ctx: CanvasRenderingContext2D,
+  name: string,
+  colors: PlanColors,
+  scale: number,
+): CanvasPattern | string {
+  const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+  const key = `${name}|${colors.wallStroke}|${colors.background}|${colors.wallFill}|${dpr}`;
+  let pattern = patternCache.get(key);
+  if (pattern === undefined) {
+    pattern = createWallPattern(ctx, name, colors, dpr);
+    patternCache.set(key, pattern);
+  }
+  if (!pattern) return colors.wallFill;
+  // Undo the view scale so that one tile stays PATTERN_TILE × dpr device pixels
+  pattern.setTransform(new DOMMatrix().scale(1 / scale));
+  return pattern;
+}
+
+function createWallPattern(
+  ctx: CanvasRenderingContext2D,
+  name: string,
+  colors: PlanColors,
+  dpr: number,
+): CanvasPattern | null {
+  const size = Math.max(4, Math.round(PATTERN_TILE * dpr));
+  const tile = document.createElement("canvas");
+  tile.width = size;
+  tile.height = size;
+  const t = tile.getContext("2d");
+  if (!t) return null;
+  const reversed = name.startsWith("reversed");
+  const fg = colors.wallStroke;
+  const bg = colors.background;
+  t.fillStyle = name === "foreground" ? colors.wallFill : reversed ? fg : bg;
+  t.fillRect(0, 0, size, size);
+  t.strokeStyle = reversed ? bg : fg;
+  t.lineWidth = Math.max(1, dpr);
+  t.lineCap = "square";
+  const up = name === "hatchUp" || name === "reversedHatchUp" || name === "crossHatch";
+  const down = name === "hatchDown" || name === "reversedHatchDown" || name === "crossHatch";
+  t.beginPath();
+  // Diagonals drawn across neighbouring tiles too, so that lines join seamlessly
+  for (const o of [-size, 0, size]) {
+    if (up) {
+      t.moveTo(o, size);
+      t.lineTo(o + size, 0);
+    }
+    if (down) {
+      t.moveTo(o, 0);
+      t.lineTo(o + size, size);
+    }
+  }
+  t.stroke();
+  return ctx.createPattern(tile, "repeat");
+}
+
+/** Pattern of a floor texture image covering texture.width × texture.height cm. */
+function texturePattern(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  texture: Texture,
+): CanvasPattern | null {
+  if (!img.complete || img.naturalWidth === 0) return null;
+  const pattern = ctx.createPattern(img, "repeat");
+  if (!pattern) return null;
+  const scale = texture.scale ?? 1;
+  pattern.setTransform(
+    new DOMMatrix()
+      .rotate(((texture.angle ?? 0) * 180) / Math.PI)
+      .scale(
+        (texture.width * scale) / img.naturalWidth,
+        (texture.height * scale) / img.naturalHeight,
+      ),
+  );
+  return pattern;
 }
