@@ -15,6 +15,7 @@ import {
   wallPolygon,
 } from "../model";
 import { baseboardOf, baseboardPolygon } from "../view3d/wallSides";
+import { distanceToSegment, pointInPolygon } from "./interaction";
 
 export type ViewTransform = { scale: number; offsetX: number; offsetY: number };
 
@@ -238,7 +239,7 @@ export function drawPlan(
   // Room names and areas
   for (const room of home.rooms) {
     if (!sameLevel(room.attrs.level, levelId) || room.points.length < 3) continue;
-    const [cx, cy] = boundsCenter(room.points.map((p) => [p.x, p.y] as Pt));
+    const [cx, cy] = labelCenter(room.points.map((p) => [p.x, p.y] as Pt));
     const nameStyle = room.text_styles?.find((t) => t.role === "nameStyle") ?? null;
     const areaStyle = room.text_styles?.find((t) => t.role === "areaStyle") ?? null;
     if (room.attrs.name) {
@@ -566,18 +567,62 @@ function dashPattern(style: string | null, width: number): number[] {
   }
 }
 
-function boundsCenter(points: Pt[]): Pt {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const [x, y] of points) {
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x);
-    maxY = Math.max(maxY, y);
+/**
+ * Point where the name and area of a room are shown: the area centroid, or for
+ * strongly concave rooms (centroid outside) the inner point farthest from the edges.
+ * Same as `msh_geometry::label_center`, so the plan and its export agree.
+ */
+export function labelCenter(points: Pt[]): Pt {
+  const n = points.length;
+  if (n === 0) return [0, 0];
+  let area = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < n; i++) {
+    const [x0, y0] = points[i];
+    const [x1, y1] = points[(i + 1) % n];
+    const cross = x0 * y1 - x1 * y0;
+    area += cross;
+    cx += (x0 + x1) * cross;
+    cy += (y0 + y1) * cross;
   }
-  return [(minX + maxX) / 2, (minY + maxY) / 2];
+  const centroid: Pt =
+    Math.abs(area) < 1e-9
+      ? [points.reduce((s, p) => s + p[0], 0) / n, points.reduce((s, p) => s + p[1], 0) / n]
+      : [cx / (3 * area), cy / (3 * area)];
+  if (pointInPolygon(centroid, points)) return centroid;
+  return innerPoint(points) ?? centroid;
+}
+
+/** Approximate inner point farthest from the edges (grid search with refinement). */
+function innerPoint(points: Pt[]): Pt | null {
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  let x0 = Math.min(...xs);
+  let y0 = Math.min(...ys);
+  let w = Math.max(...xs) - x0;
+  let h = Math.max(...ys) - y0;
+  const steps = 24;
+  let best: { d: number; p: Pt } | null = null;
+  for (let round = 0; round < 3; round++) {
+    for (let i = 0; i <= steps; i++) {
+      for (let j = 0; j <= steps; j++) {
+        const p: Pt = [x0 + (w * i) / steps, y0 + (h * j) / steps];
+        if (!pointInPolygon(p, points)) continue;
+        let d = Number.POSITIVE_INFINITY;
+        for (let k = 0; k < points.length; k++) {
+          d = Math.min(d, distanceToSegment(p, points[k], points[(k + 1) % points.length]));
+        }
+        if (!best || d > best.d) best = { d, p };
+      }
+    }
+    if (!best) return null;
+    w /= 4;
+    h /= 4;
+    x0 = best.p[0] - w / 2;
+    y0 = best.p[1] - h / 2;
+  }
+  return best?.p ?? null;
 }
 
 function polygonArea(points: { x: number; y: number }[]): number {

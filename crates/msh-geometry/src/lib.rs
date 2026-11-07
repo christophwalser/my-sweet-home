@@ -257,6 +257,91 @@ pub fn enclosed_area(home: &Home, level: Option<&str>, p: Pt) -> Option<Vec<Pt>>
     (pts.len() >= 3).then_some(pts)
 }
 
+/// Point where the name and area of a room are shown: the area centroid of the
+/// polygon, or (for strongly concave rooms whose centroid lies outside) the inner
+/// point farthest from the edges. Unlike the center of the bounding box, this keeps
+/// the labels of rooms that share a bounding box (e.g. two triangles) apart.
+pub fn label_center(polygon: &[Pt]) -> Pt {
+    let n = polygon.len();
+    if n == 0 {
+        return [0.0, 0.0];
+    }
+    let (mut area, mut cx, mut cy) = (0.0f64, 0.0f64, 0.0f64);
+    for i in 0..n {
+        let [x0, y0] = polygon[i].map(f64::from);
+        let [x1, y1] = polygon[(i + 1) % n].map(f64::from);
+        let cross = x0 * y1 - x1 * y0;
+        area += cross;
+        cx += (x0 + x1) * cross;
+        cy += (y0 + y1) * cross;
+    }
+    let centroid = if area.abs() < 1e-9 {
+        let sx: f32 = polygon.iter().map(|p| p[0]).sum();
+        let sy: f32 = polygon.iter().map(|p| p[1]).sum();
+        [sx / n as f32, sy / n as f32]
+    } else {
+        [(cx / (3.0 * area)) as f32, (cy / (3.0 * area)) as f32]
+    };
+    if point_in_polygon(centroid, polygon) {
+        return centroid;
+    }
+    inner_point(polygon).unwrap_or(centroid)
+}
+
+/// Approximate inner point farthest from the edges (grid search with refinement).
+fn inner_point(polygon: &[Pt]) -> Option<Pt> {
+    let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for p in polygon {
+        min_x = min_x.min(p[0]);
+        min_y = min_y.min(p[1]);
+        max_x = max_x.max(p[0]);
+        max_y = max_y.max(p[1]);
+    }
+    let edge_distance = |p: Pt| {
+        (0..polygon.len())
+            .map(|i| segment_distance(p, polygon[i], polygon[(i + 1) % polygon.len()]))
+            .fold(f32::MAX, f32::min)
+    };
+    const STEPS: usize = 24;
+    let mut best: Option<(f32, Pt)> = None;
+    let (mut x0, mut y0, mut w, mut h) = (min_x, min_y, max_x - min_x, max_y - min_y);
+    for _ in 0..3 {
+        for i in 0..=STEPS {
+            for j in 0..=STEPS {
+                let p = [
+                    x0 + w * i as f32 / STEPS as f32,
+                    y0 + h * j as f32 / STEPS as f32,
+                ];
+                if !point_in_polygon(p, polygon) {
+                    continue;
+                }
+                let d = edge_distance(p);
+                if best.is_none_or(|(b, _)| d > b) {
+                    best = Some((d, p));
+                }
+            }
+        }
+        // Refine around the best point
+        let (_, c) = best?;
+        w /= 4.0;
+        h /= 4.0;
+        x0 = c[0] - w / 2.0;
+        y0 = c[1] - h / 2.0;
+    }
+    best.map(|(_, p)| p)
+}
+
+fn segment_distance(p: Pt, a: Pt, b: Pt) -> f32 {
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let len2 = dx * dx + dy * dy;
+    let t = if len2 == 0.0 {
+        0.0
+    } else {
+        (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2).clamp(0.0, 1.0)
+    };
+    dist(p, [a[0] + t * dx, a[1] + t * dy])
+}
+
 /// Whether `p` lies inside the polygon (ray casting; the boundary may count either way).
 pub fn point_in_polygon(p: Pt, polygon: &[Pt]) -> bool {
     let mut inside = false;
@@ -416,6 +501,28 @@ mod tests {
         // An open outline encloses nothing
         home.walls.retain(|w| w.attrs.id != "c");
         assert!(enclosed_area(&home, None, [300.0, 150.0]).is_none());
+    }
+
+    #[test]
+    fn label_center_separates_triangles_and_stays_inside() {
+        // Two triangles that share the bounding box of a square
+        let lower = label_center(&[[0.0, 0.0], [300.0, 300.0], [0.0, 300.0]]);
+        let upper = label_center(&[[0.0, 0.0], [300.0, 0.0], [300.0, 300.0]]);
+        assert!(approx(lower, [100.0, 200.0]), "{lower:?}");
+        assert!(approx(upper, [200.0, 100.0]), "{upper:?}");
+        // U shape: the centroid lies in the gap, the label point inside the room
+        let u = [
+            [0.0, 0.0],
+            [300.0, 0.0],
+            [300.0, 300.0],
+            [200.0, 300.0],
+            [200.0, 50.0],
+            [100.0, 50.0],
+            [100.0, 300.0],
+            [0.0, 300.0],
+        ];
+        let c = label_center(&u);
+        assert!(point_in_polygon(c, &u), "{c:?}");
     }
 
     fn midpoint(a: Pt, b: Pt) -> Pt {

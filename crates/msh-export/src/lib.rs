@@ -134,9 +134,8 @@ pub fn plan_svg(home: &Home, opts: &PlanOptions) -> String {
         .iter()
         .filter(|r| on_level(&r.attrs.level) && r.points.len() >= 3)
     {
-        let mut rb = Bounds::default();
-        r.points.iter().for_each(|p| rb.add(p.x, p.y));
-        let (cx, cy) = ((rb.min_x + rb.max_x) / 2.0, (rb.min_y + rb.max_y) / 2.0);
+        let polygon: Vec<[f32; 2]> = r.points.iter().map(|p| [p.x, p.y]).collect();
+        let [cx, cy] = msh_geometry::label_center(&polygon);
         let mut lines = Vec::new();
         if let Some(n) = &r.attrs.name {
             lines.push((escape(n), true));
