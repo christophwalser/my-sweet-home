@@ -111,6 +111,8 @@ const HANDLE_CURSOR: Record<Handle["kind"], string> = {
   "dimension-end": "move",
   "piece-resize": "nwse-resize",
   "piece-rotate": "grab",
+  "room-name": "move",
+  "room-area": "move",
 };
 
 const cursorStyle: Record<Tool, string> = {

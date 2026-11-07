@@ -9,6 +9,7 @@ import {
   type Home,
   type Piece,
   type Pt,
+  type Room,
   type TextStyle,
   type Texture,
   type WallShape,
@@ -33,7 +34,7 @@ export type PlanColors = {
   dimension: string;
 };
 
-const DEFAULT_ROOM_FONT = 24;
+export const DEFAULT_ROOM_FONT = 24;
 /** Default vertical offset of room names in cm (DTD default of `nameYOffset`). */
 const DEFAULT_ROOM_NAME_Y_OFFSET = -40;
 /** Opacity of room floors in the plan, as in Sweet Home 3D. */
@@ -239,16 +240,15 @@ export function drawPlan(
   // Room names and areas
   for (const room of home.rooms) {
     if (!sameLevel(room.attrs.level, levelId) || room.points.length < 3) continue;
-    const [cx, cy] = labelCenter(room.points.map((p) => [p.x, p.y] as Pt));
+    const labels = roomLabelPositions(room);
     const nameStyle = room.text_styles?.find((t) => t.role === "nameStyle") ?? null;
     const areaStyle = room.text_styles?.find((t) => t.role === "areaStyle") ?? null;
     if (room.attrs.name) {
       drawText(
         ctx,
         room.attrs.name,
-        cx + (room.attrs.name_x_offset ?? 0),
-        // DTD default of nameYOffset is -40 (name above the area)
-        cy + (room.attrs.name_y_offset ?? DEFAULT_ROOM_NAME_Y_OFFSET),
+        labels.name[0],
+        labels.name[1],
         room.attrs.name_angle ?? 0,
         nameStyle,
         DEFAULT_ROOM_FONT,
@@ -260,8 +260,8 @@ export function drawPlan(
       drawText(
         ctx,
         `${area.toFixed(2)} m²`,
-        cx + (room.attrs.area_x_offset ?? 0),
-        cy + (room.attrs.area_y_offset ?? 0),
+        labels.area[0],
+        labels.area[1],
         room.attrs.area_angle ?? 0,
         areaStyle,
         DEFAULT_ROOM_FONT,
@@ -565,6 +565,34 @@ function dashPattern(style: string | null, width: number): number[] {
     default:
       return [];
   }
+}
+
+/**
+ * Positions of the name and area labels of a room. A label with a stored offset is
+ * placed like Sweet Home 3D (bounding box center + offset); without one at
+ * `labelCenter` (the name above the area). Same as `msh_geometry::room_label_positions`.
+ */
+export function roomLabelPositions(room: Room): { name: Pt; area: Pt } {
+  const pts: Pt[] = room.points.map((p) => [p.x, p.y]);
+  const bbox = boundsCenter(pts);
+  const auto = labelCenter(pts);
+  const a = room.attrs;
+  const name: Pt =
+    a.name_x_offset != null || a.name_y_offset != null
+      ? [bbox[0] + (a.name_x_offset ?? 0), bbox[1] + (a.name_y_offset ?? 0)]
+      : [auto[0], auto[1] + DEFAULT_ROOM_NAME_Y_OFFSET];
+  const area: Pt =
+    a.area_x_offset != null || a.area_y_offset != null
+      ? [bbox[0] + (a.area_x_offset ?? 0), bbox[1] + (a.area_y_offset ?? 0)]
+      : auto;
+  return { name, area };
+}
+
+/** Center of the bounding box of the points. */
+export function boundsCenter(points: Pt[]): Pt {
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
 }
 
 /**

@@ -6,7 +6,7 @@
 //! line; at a joined end, each side line is intersected with the matching side
 //! line of the neighbor.
 
-use msh_model::{Home, Wall};
+use msh_model::{Home, Room, Wall};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -286,6 +286,46 @@ pub fn label_center(polygon: &[Pt]) -> Pt {
         return centroid;
     }
     inner_point(polygon).unwrap_or(centroid)
+}
+
+/// Default vertical offset of a room name from the area label (name above the area).
+pub const DEFAULT_ROOM_NAME_Y_OFFSET: f32 = -40.0;
+
+/// Positions of the name and area labels of a room in the plan.
+///
+/// A label with a stored offset is placed like Sweet Home 3D does: center of the
+/// bounding box plus the offset, so files show the same in both applications. A
+/// label without an offset is placed at [`label_center`] (the default name offset
+/// keeps the name above the area).
+pub fn room_label_positions(room: &Room) -> (Pt, Pt) {
+    let polygon: Vec<Pt> = room.points.iter().map(|p| [p.x, p.y]).collect();
+    let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for p in &polygon {
+        min_x = min_x.min(p[0]);
+        min_y = min_y.min(p[1]);
+        max_x = max_x.max(p[0]);
+        max_y = max_y.max(p[1]);
+    }
+    let bbox = [(min_x + max_x) / 2.0, (min_y + max_y) / 2.0];
+    let auto = label_center(&polygon);
+    let a = &room.attrs;
+    let name = if a.name_x_offset.is_some() || a.name_y_offset.is_some() {
+        [
+            bbox[0] + a.name_x_offset.unwrap_or(0.0),
+            bbox[1] + a.name_y_offset.unwrap_or(0.0),
+        ]
+    } else {
+        [auto[0], auto[1] + DEFAULT_ROOM_NAME_Y_OFFSET]
+    };
+    let area = if a.area_x_offset.is_some() || a.area_y_offset.is_some() {
+        [
+            bbox[0] + a.area_x_offset.unwrap_or(0.0),
+            bbox[1] + a.area_y_offset.unwrap_or(0.0),
+        ]
+    } else {
+        auto
+    };
+    (name, area)
 }
 
 /// Approximate inner point farthest from the edges (grid search with refinement).

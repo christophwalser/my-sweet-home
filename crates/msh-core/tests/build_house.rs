@@ -359,6 +359,37 @@ fn copy_paste_duplicate_and_room_detection() {
         pts,
         vec![[10.0, 10.0], [10.0, 390.0], [295.0, 10.0], [295.0, 390.0]]
     );
+    // Label offsets: set (Sweet Home 3D convention: from the bounding box center), reset one
+    let room_id = room["id"].as_str().unwrap().to_owned();
+    run(
+        &r,
+        &mut doc,
+        "room_update",
+        json!({ "id": room_id, "name_x_offset": 30, "name_y_offset": -60, "area_y_offset": 20 }),
+    );
+    let ra = doc.home().rooms[0].attrs.clone();
+    assert_eq!(
+        (ra.name_x_offset, ra.name_y_offset, ra.area_y_offset),
+        (Some(30.0), Some(-60.0), Some(20.0))
+    );
+    let (name_at, _) = msh_geometry::room_label_positions(&doc.home().rooms[0]);
+    assert_eq!(name_at, [152.5 + 30.0, 200.0 - 60.0]);
+    run(
+        &r,
+        &mut doc,
+        "room_update",
+        json!({ "id": room_id, "reset_name_position": true }),
+    );
+    let ra = doc.home().rooms[0].attrs.clone();
+    assert_eq!((ra.name_x_offset, ra.area_y_offset), (None, Some(20.0)));
+    run(
+        &r,
+        &mut doc,
+        "room_update",
+        json!({ "id": room_id, "reset_label_positions": true }),
+    );
+    assert_eq!(doc.home().rooms[0].attrs.area_y_offset, None);
+
     assert!(
         r.execute(&mut doc, "room_add", json!({ "inside_point": [900, 200] }))
             .is_err(),

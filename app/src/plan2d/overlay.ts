@@ -125,6 +125,9 @@ export function drawOverlay(
       const shape = HANDLE_SHAPE[h.kind];
       if (shape === "circle") {
         ctx.arc(x, y, r * 1.15, 0, Math.PI * 2);
+      } else if (shape === "label") {
+        // Room labels: a small frame around the anchor of the text
+        ctx.rect(x - r * 2.2, y - r * 1.3, r * 4.4, r * 2.6);
       } else if (shape === "diamond") {
         ctx.moveTo(x, y - r * 1.4);
         ctx.lineTo(x + r * 1.4, y);
@@ -134,8 +137,11 @@ export function drawOverlay(
       } else {
         ctx.rect(x - r, y - r, 2 * r, 2 * r);
       }
-      ctx.fillStyle = h.kind === "wall-thickness" ? overlay.accent : "#ffffff";
-      ctx.fill();
+      // Label frames stay unfilled so the text remains readable
+      if (shape !== "label") {
+        ctx.fillStyle = h.kind === "wall-thickness" ? overlay.accent : "#ffffff";
+        ctx.fill();
+      }
       ctx.strokeStyle = overlay.accent;
       ctx.stroke();
     }
@@ -150,6 +156,14 @@ export function drawOverlay(
     for (const o of drag.preview) strokePath(ctx, o.pts, o.closed);
     ctx.setLineDash([]);
     for (const j of drag.joints ?? []) drawJoint(ctx, j, overlay.accent, px);
+    if (drag.text) {
+      const { text, at, size } = drag.text;
+      ctx.font = `${size}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = overlay.accent;
+      ctx.fillText(text, at[0], at[1]);
+    }
     if (drag.info) drawTag(ctx, drag.info, cursor[0] + 14 * px, cursor[1] + 22 * px, px);
   }
 

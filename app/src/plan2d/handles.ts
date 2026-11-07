@@ -6,6 +6,7 @@
 // position into a preview outline and the registry command that applies it.
 
 import { forEachPiece, type Home, type Piece, type Pt, type WallShape } from "../model";
+import { boundsCenter, DEFAULT_ROOM_FONT, labelCenter, roomLabelPositions } from "./drawPlan";
 import { editedWallJoints, type Joint } from "./moving";
 import {
   offsetOutline,
@@ -27,10 +28,12 @@ export type HandleKind =
   | "dimension-start"
   | "dimension-end"
   | "piece-resize"
-  | "piece-rotate";
+  | "piece-rotate"
+  | "room-name"
+  | "room-area";
 
 /** How a handle is drawn. */
-export type HandleShape = "square" | "circle" | "diamond";
+export type HandleShape = "square" | "circle" | "diamond" | "label";
 
 export const HANDLE_SHAPE: Record<HandleKind, HandleShape> = {
   "wall-start": "square",
@@ -44,6 +47,8 @@ export const HANDLE_SHAPE: Record<HandleKind, HandleShape> = {
   "dimension-end": "square",
   "piece-resize": "square",
   "piece-rotate": "circle",
+  "room-name": "label",
+  "room-area": "label",
 };
 
 /** Tooltip-like explanation shown while hovering a handle. */
@@ -59,6 +64,8 @@ export const HANDLE_HINT: Record<HandleKind, string> = {
   "dimension-end": "Drag to move the end of the dimension",
   "piece-resize": "Drag to resize",
   "piece-rotate": "Drag to rotate · Shift: 1° steps",
+  "room-name": "Drag to move the room name · it snaps back to the automatic position",
+  "room-area": "Drag to move the area label · it snaps back to the automatic position",
 };
 
 export type Handle = {
@@ -81,6 +88,8 @@ export type HandleDrag = {
   info: string;
   /** Angles at the corners of an edited wall */
   joints?: Joint[];
+  /** Text shown at its new position (room labels) */
+  text?: { text: string; at: Pt; size: number };
   command: string;
   params: Record<string, unknown>;
 };
@@ -175,7 +184,20 @@ export function elementHandles(home: Home, id: string, cmPerPx: number): Handle[
   }
   const room = home.rooms.find((r) => r.attrs.id === id);
   if (room) {
-    return room.points.map((p, index) => ({ id, kind: "room-point", index, pos: [p.x, p.y] }));
+    const handles: Handle[] = room.points.map((p, index) => ({
+      id,
+      kind: "room-point",
+      index,
+      pos: [p.x, p.y],
+    }));
+    if (room.points.length >= 3) {
+      const labels = roomLabelPositions(room);
+      if (room.attrs.name) handles.push({ id, kind: "room-name", index: 0, pos: labels.name });
+      if (room.attrs.area_visible) {
+        handles.push({ id, kind: "room-area", index: 0, pos: labels.area });
+      }
+    }
+    return handles;
   }
   const polyline = home.polylines.find((p) => p.attrs.id === id);
   if (polyline) {
@@ -359,6 +381,45 @@ export function dragHandle(
           x_end: round(end[0]),
           y_end: round(end[1]),
         },
+      };
+    }
+    case "room-name":
+    case "room-area": {
+      const room = home.rooms.find((r) => r.attrs.id === id);
+      if (!room) return null;
+      const pts: Pt[] = room.points.map((q) => [q.x, q.y]);
+      const bbox = boundsCenter(pts);
+      const isName = handle.kind === "room-name";
+      // The automatic position attracts the label again
+      const auto = labelCenter(pts);
+      const autoPos: Pt = isName ? [auto[0], auto[1] - 40] : auto;
+      const near = Math.hypot(p[0] - autoPos[0], p[1] - autoPos[1]) < snapRadius;
+      const at: Pt =
+        magnetism && near ? autoPos : magnetism ? [Math.round(p[0]), Math.round(p[1])] : p;
+      let area = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const [x0, y0] = pts[i];
+        const [x1, y1] = pts[(i + 1) % pts.length];
+        area += x0 * y1 - x1 * y0;
+      }
+      const text = isName ? (room.attrs.name ?? "") : `${(Math.abs(area) / 20000).toFixed(2)} m²`;
+      const round = (v: number) => Math.round(v * 10) / 10;
+      const dx = round(at[0] - bbox[0]);
+      const dy = round(at[1] - bbox[1]);
+      return {
+        preview: [],
+        snap: magnetism && near ? autoPos : null,
+        guides: [],
+        info: magnetism && near ? "automatic position" : isName ? "Name" : "Area",
+        text: { text, at, size: DEFAULT_ROOM_FONT },
+        command: "room_update",
+        // Back at the automatic position: no stored offset, so it keeps following the room
+        params:
+          magnetism && near
+            ? { id, [isName ? "reset_name_position" : "reset_area_position"]: true }
+            : isName
+              ? { id, name_x_offset: dx, name_y_offset: dy }
+              : { id, area_x_offset: dx, area_y_offset: dy },
       };
     }
     case "room-point": {

@@ -485,6 +485,20 @@ export default function PropertiesPanel() {
           value={a.ceiling_visible !== false}
           onCommit={set("ceiling_visible")}
         />
+        {(a.name_x_offset != null ||
+          a.name_y_offset != null ||
+          a.area_x_offset != null ||
+          a.area_y_offset != null) && (
+          <button
+            type="button"
+            className="link-button"
+            title="Place name and area automatically in the middle of the room again"
+            onClick={() => void run("room_update", { id, reset_label_positions: true })}
+          >
+            Reset label positions
+          </button>
+        )}
+        <p className="muted small">Drag the name or area in the plan to move it.</p>
         <h3>Floor</h3>
         <Field
           label="Color"

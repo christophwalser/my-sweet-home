@@ -134,21 +134,18 @@ pub fn plan_svg(home: &Home, opts: &PlanOptions) -> String {
         .iter()
         .filter(|r| on_level(&r.attrs.level) && r.points.len() >= 3)
     {
-        let polygon: Vec<[f32; 2]> = r.points.iter().map(|p| [p.x, p.y]).collect();
-        let [cx, cy] = msh_geometry::label_center(&polygon);
-        let mut lines = Vec::new();
+        let (name_at, area_at) = msh_geometry::room_label_positions(r);
+        let mut labels = Vec::new();
         if let Some(n) = &r.attrs.name {
-            lines.push((escape(n), true));
+            labels.push((escape(n), "600", name_at));
         }
         if r.attrs.area_visible != Some(false) {
-            lines.push((format!("{:.2} m²", r.area() / 10_000.0), false));
+            labels.push((format!("{:.2} m²", r.area() / 10_000.0), "400", area_at));
         }
-        for (i, (text, bold)) in lines.iter().enumerate() {
-            let y = cy + (i as f32 - (lines.len() as f32 - 1.0) / 2.0) * font * 1.3;
-            let weight = if *bold { "600" } else { "400" };
+        for (text, weight, [x, y]) in labels {
             let _ = write!(
                 s,
-                r##"<text x="{cx}" y="{y}" font-size="{font}" font-weight="{weight}" text-anchor="middle" dominant-baseline="middle" fill="#2b2f36">{text}</text>"##
+                r##"<text x="{x}" y="{y}" font-size="{font}" font-weight="{weight}" text-anchor="middle" dominant-baseline="middle" fill="#2b2f36">{text}</text>"##
             );
         }
     }

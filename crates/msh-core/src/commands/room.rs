@@ -45,6 +45,19 @@ struct UpdateParams {
     floor_texture: Option<String>,
     ceiling_color: Option<String>,
     ceiling_texture: Option<String>,
+    /// Offset of the name label in cm from the center of the room's bounding box
+    /// (Sweet Home 3D convention)
+    name_x_offset: Option<f32>,
+    name_y_offset: Option<f32>,
+    /// Offset of the area label in cm from the center of the room's bounding box
+    area_x_offset: Option<f32>,
+    area_y_offset: Option<f32>,
+    /// Remove the label offsets: name and area are placed automatically again
+    reset_label_positions: Option<bool>,
+    /// Remove only the offset of the name label
+    reset_name_position: Option<bool>,
+    /// Remove only the offset of the area label
+    reset_area_position: Option<bool>,
 }
 
 pub(super) fn register(r: &mut Registry) {
@@ -93,7 +106,7 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "room_update",
-        "Changes name, outline, visibility, colors or textures of a room (or of several rooms \
+        "Changes name, outline, label positions, visibility, colors or textures of a room (or of several rooms \
          with ids; the outline only for one room).",
         true,
         |doc, p: UpdateParams| {
@@ -116,6 +129,19 @@ pub(super) fn register(r: &mut Registry) {
                 if let Some(v) = &p.name {
                     a.name = Some(v.clone());
                 }
+                let reset_all = p.reset_label_positions == Some(true);
+                if reset_all || p.reset_name_position == Some(true) {
+                    a.name_x_offset = None;
+                    a.name_y_offset = None;
+                }
+                if reset_all || p.reset_area_position == Some(true) {
+                    a.area_x_offset = None;
+                    a.area_y_offset = None;
+                }
+                macro_rules! offset {
+                    ($($f:ident),*) => { $( if let Some(v) = p.$f { a.$f = Some(v); } )* };
+                }
+                offset!(name_x_offset, name_y_offset, area_x_offset, area_y_offset);
                 if let Some(v) = p.area_visible {
                     a.area_visible = Some(v);
                 }
