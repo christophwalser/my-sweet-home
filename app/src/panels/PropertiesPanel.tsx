@@ -236,6 +236,24 @@ export default function PropertiesPanel() {
     </div>
   );
 
+  const topFurniture = home.furniture.filter((f) => f.attrs.id && selection.includes(f.attrs.id));
+  const groupButton = topFurniture.length > 1 && (
+    <div className="prop-actions">
+      <button
+        type="button"
+        title="Group the selected furniture (Ctrl+G)"
+        onClick={() =>
+          void run("furniture_group", { ids: topFurniture.map((f) => f.attrs.id) }).then((r) => {
+            const gid = (r as { id?: string } | undefined)?.id;
+            if (gid) useStore.getState().setSelection([gid]);
+          })
+        }
+      >
+        Group
+      </button>
+    </div>
+  );
+
   if (selection.length > 1) {
     return (
       <div className="props">
@@ -264,6 +282,7 @@ export default function PropertiesPanel() {
           </p>
         )}
         {wallActions}
+        {groupButton}
         <MultiPanel home={home} selection={selection} run={run} />
         {actions}
       </div>
@@ -351,6 +370,40 @@ export default function PropertiesPanel() {
           </>
         )}
         <p className="muted">Click an element in the plan to edit it.</p>
+      </div>
+    );
+  }
+
+  const group = home.furniture.find((f) => f.type === "group" && f.attrs.id === id);
+  if (group && group.type === "group") {
+    let count = 0;
+    forEachPiece(group.items, () => {
+      count++;
+    });
+    return (
+      <div className="props">
+        <h2>Group</h2>
+        <p className="muted small">
+          {group.attrs.name} · {count} pieces
+        </p>
+        <p className="muted small">
+          Drag to move the group. Ungroup to edit its pieces one by one.
+        </p>
+        <div className="prop-actions">
+          <button
+            type="button"
+            title="Dissolve the group (Ctrl+Shift+G)"
+            onClick={() =>
+              void run("furniture_ungroup", { ids: [id] }).then((r) => {
+                const ids = (r as { ids?: string[] } | undefined)?.ids;
+                if (ids) useStore.getState().setSelection(ids);
+              })
+            }
+          >
+            Ungroup
+          </button>
+        </div>
+        {actions}
       </div>
     );
   }

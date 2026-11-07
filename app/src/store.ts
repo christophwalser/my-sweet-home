@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
-import { forEachPiece, type OpenedHome } from "./model";
+import { forEachGroup, forEachPiece, type OpenedHome } from "./model";
 
 export type ViewMode = "aerial" | "observer";
 
@@ -159,6 +159,9 @@ function allIds(opened: OpenedHome): Set<string> {
   const h = opened.home;
   forEachPiece(h.furniture, (p) => {
     if (p.attrs.id) ids.add(p.attrs.id);
+  });
+  forEachGroup(h.furniture, (g) => {
+    if (g.attrs.id) ids.add(g.attrs.id);
   });
   for (const w of h.walls) ids.add(w.attrs.id);
   for (const x of [...h.rooms, ...h.labels, ...h.dimension_lines, ...h.polylines]) {

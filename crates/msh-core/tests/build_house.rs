@@ -511,6 +511,61 @@ fn copy_paste_duplicate_and_room_detection() {
 }
 
 #[test]
+fn group_and_ungroup_furniture() {
+    let catalog = msh_core::catalog::CatalogIndex::get();
+    if catalog.furniture_by_id("eTeks#bed140x190").is_none() {
+        return; // Sweet Home 3D is not installed
+    }
+    let r = Registry::standard();
+    let mut doc = Document::default();
+    run(&r, &mut doc, "home_new", json!({}));
+    let a = run(
+        &r,
+        &mut doc,
+        "furniture_add",
+        json!({ "catalog_id": "eTeks#bed140x190", "x": 100, "y": 100 }),
+    );
+    let b = run(
+        &r,
+        &mut doc,
+        "furniture_add",
+        json!({ "catalog_id": "eTeks#bed140x190", "x": 400, "y": 100 }),
+    );
+    let g = run(
+        &r,
+        &mut doc,
+        "furniture_group",
+        json!({ "ids": [a["id"], b["id"]], "name": "Beds" }),
+    );
+    assert_eq!(doc.home().furniture.len(), 1);
+    assert_eq!(doc.home().piece_count(), 2);
+    let msh_model::Furniture::Group(group) = &doc.home().furniture[0] else {
+        panic!("group expected");
+    };
+    assert_eq!(group.attrs.name, "Beds");
+    assert_eq!(group.attrs.x, Some(250.0));
+    // Moving the group moves its pieces
+    run(
+        &r,
+        &mut doc,
+        "edit_move",
+        json!({ "ids": [g["id"]], "dx": 10, "dy": 0 }),
+    );
+    let ungrouped = run(
+        &r,
+        &mut doc,
+        "furniture_ungroup",
+        json!({ "ids": [g["id"]] }),
+    );
+    assert_eq!(ungrouped["ids"].as_array().unwrap().len(), 2);
+    assert_eq!(doc.home().furniture.len(), 2);
+    let msh_model::Furniture::Piece(p) = &doc.home().furniture[0] else {
+        panic!("piece expected");
+    };
+    assert_eq!(p.attrs.x, 110.0);
+}
+
+#[test]
 fn pasting_furniture_into_another_home_copies_its_resources() {
     let catalog = msh_core::catalog::CatalogIndex::get();
     if catalog.furniture_by_id("eTeks#bed140x190").is_none() {

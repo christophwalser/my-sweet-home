@@ -10,6 +10,7 @@
 mod annotate;
 mod edit;
 mod furniture;
+mod group;
 mod home;
 mod level;
 mod room;
@@ -27,6 +28,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     wall_ops::register(r);
     room::register(r);
     furniture::register(r);
+    group::register(r);
     annotate::register(r);
     edit::register(r);
     view::register(r);

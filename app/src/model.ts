@@ -128,7 +128,19 @@ export type Piece = {
 
 export type FurnitureGroup = {
   type: "group";
-  attrs: { id: string | null; level: string | null; name: string; visible: boolean | null };
+  attrs: {
+    id: string | null;
+    level: string | null;
+    name: string;
+    visible: boolean | null;
+    x: number | null;
+    y: number | null;
+    elevation: number | null;
+    angle: number | null;
+    width: number | null;
+    depth: number | null;
+    height: number | null;
+  };
   items: Furniture[];
 };
 
@@ -299,6 +311,37 @@ export function forEachPiece(items: Furniture[], fn: (p: Piece) => void): void {
       if (item.attrs.visible !== false) forEachPiece(item.items, fn);
     } else if (item.attrs.visible !== false) {
       fn(item);
+    }
+  }
+}
+
+/**
+ * Visible pieces with the ID and level of their top-level element: the piece
+ * itself, or the group it belongs to (a group is selected and moved as a whole).
+ */
+export function piecesWithTop(
+  items: Furniture[],
+): { piece: Piece; topId: string | null; level: string | null }[] {
+  const out: { piece: Piece; topId: string | null; level: string | null }[] = [];
+  for (const item of items) {
+    if (item.attrs.visible === false) continue;
+    if (item.type === "group") {
+      forEachPiece(item.items, (piece) =>
+        out.push({ piece, topId: item.attrs.id, level: item.attrs.level ?? piece.attrs.level }),
+      );
+    } else {
+      out.push({ piece: item, topId: item.attrs.id, level: item.attrs.level });
+    }
+  }
+  return out;
+}
+
+/** Calls `fn` for every group (recursively). */
+export function forEachGroup(items: Furniture[], fn: (g: FurnitureGroup) => void): void {
+  for (const item of items) {
+    if (item.type === "group") {
+      fn(item);
+      forEachGroup(item.items, fn);
     }
   }
 }

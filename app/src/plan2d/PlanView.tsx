@@ -760,8 +760,12 @@ export default function PlanView() {
   // ---------------------------------------------------------------- keyboard
 
   /** Ctrl shortcuts of the plan; returns false for keys it does not handle. */
-  const onShortcut = (key: string, sel: string[]): boolean => {
+  const onShortcut = (key: string, sel: string[], shift = false): boolean => {
     if (!input) return false;
+    const topLevelFurniture = (ids: string[]) =>
+      input.home.furniture
+        .map((f) => f.attrs.id)
+        .filter((id): id is string => !!id && ids.includes(id));
     const selectNew = (r: unknown) => {
       const ids = (r as { ids?: string[] } | undefined)?.ids;
       if (ids) setSelection(ids);
@@ -778,6 +782,13 @@ export default function PlanView() {
       void run("edit_paste", levelParam()).then(selectNew);
     } else if (key === "d" && sel.length > 0) {
       void run("edit_duplicate", { ids: sel }).then(selectNew);
+    } else if (key === "g" && !shift && sel.length > 1) {
+      void run("furniture_group", { ids: topLevelFurniture(sel) }).then((r) => {
+        const id = (r as { id?: string } | undefined)?.id;
+        if (id) setSelection([id]);
+      });
+    } else if (key === "g" && shift && sel.length > 0) {
+      void run("furniture_ungroup", { ids: sel }).then(selectNew);
     } else {
       return false;
     }
@@ -828,8 +839,9 @@ export default function PlanView() {
       const state = useStore.getState();
       const sel = state.selection;
       if (e.ctrlKey || e.metaKey) {
-        if (!onShortcut(e.key.toLowerCase(), sel)) return;
-        e.preventDefault();
+        const key = e.key.toLowerCase();
+        // Keys of the plan never trigger WebView functions (Ctrl+G is "find next" there)
+        if (onShortcut(key, sel, e.shiftKey) || "acdgvx".includes(key)) e.preventDefault();
         return;
       }
       if (isPathTool(state.tool) && onDrawingKey(e)) {

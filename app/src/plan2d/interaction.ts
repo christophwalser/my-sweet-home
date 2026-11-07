@@ -2,10 +2,12 @@
 // All coordinates are plan coordinates in cm (y down).
 
 import {
+  forEachGroup,
   forEachPiece,
   type Home,
   type Piece,
   type Pt,
+  piecesWithTop,
   type WallShape,
   wallPolygon,
 } from "../model";
@@ -67,15 +69,15 @@ export function hitTest(
   p: Pt,
   tolerance: number,
 ): Hit | null {
-  // Doors and windows are drawn on top of the walls, other furniture below
-  const pieces: Piece[] = [];
-  forEachPiece(home.furniture, (piece) => {
-    if (sameLevel(piece.attrs.level, levelId) && piece.attrs.id) pieces.push(piece);
-  });
-  pieces.sort((a, b) => (b.attrs.elevation ?? 0) - (a.attrs.elevation ?? 0));
-  for (const piece of pieces) {
+  // Doors and windows are drawn on top of the walls, other furniture below; a piece
+  // inside a group selects the whole group
+  const pieces = piecesWithTop(home.furniture).filter(
+    (e) => sameLevel(e.level, levelId) && e.topId,
+  );
+  pieces.sort((a, b) => (b.piece.attrs.elevation ?? 0) - (a.piece.attrs.elevation ?? 0));
+  for (const { piece, topId } of pieces) {
     if (piece.kind === "DoorOrWindow" && pieceContains(piece, p)) {
-      return { id: piece.attrs.id as string, kind: "piece" };
+      return { id: topId as string, kind: "piece" };
     }
   }
   for (const label of home.labels) {
@@ -101,9 +103,9 @@ export function hitTest(
       return { id: d.attrs.id, kind: "dimension" };
     }
   }
-  for (const piece of pieces) {
+  for (const { piece, topId } of pieces) {
     if (piece.kind !== "DoorOrWindow" && pieceContains(piece, p)) {
-      return { id: piece.attrs.id as string, kind: "piece" };
+      return { id: topId as string, kind: "piece" };
     }
   }
   for (let i = home.walls.length - 1; i >= 0; i--) {
@@ -167,6 +169,33 @@ export function elementOutlines(
       closed: true,
     });
   });
+  // A group: its rectangle, or the outlines of its pieces if it has none
+  forEachGroup(home.furniture, (g) => {
+    if (g.attrs.id !== id) return;
+    const a = g.attrs;
+    if (a.x != null && a.y != null && a.width != null && a.depth != null) {
+      const cx = a.x;
+      const cy = a.y;
+      const w = a.width / 2;
+      const d = a.depth / 2;
+      const c = Math.cos(a.angle ?? 0);
+      const s = Math.sin(a.angle ?? 0);
+      const corners: Pt[] = [
+        [-w, -d],
+        [w, -d],
+        [w, d],
+        [-w, d],
+      ];
+      out.push({
+        pts: corners.map(([x, y]) => [cx + x * c - y * s, cy + x * s + y * c]),
+        closed: true,
+      });
+    } else {
+      forEachPiece(g.items, (p) => {
+        if (p.attrs.id) out.push(...elementOutlines(home, wallShapes, p.attrs.id));
+      });
+    }
+  });
   home.walls.forEach((w, i) => {
     if (w.attrs.id === id) out.push({ pts: wallPolygon(wallShapes[i]), closed: true });
   });
@@ -218,10 +247,18 @@ export function elementsInRect(home: Home, levelId: string | null, a: Pt, b: Pt)
   const [y0, y1] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
   const inside = (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
   const ids: string[] = [];
-  forEachPiece(home.furniture, (p) => {
-    if (sameLevel(p.attrs.level, levelId) && p.attrs.id && inside(p.attrs.x, p.attrs.y))
-      ids.push(p.attrs.id);
-  });
+  // Pieces and groups (a group when all its pieces are inside)
+  const groups = new Map<string, boolean>();
+  for (const { piece, topId, level } of piecesWithTop(home.furniture)) {
+    if (!sameLevel(level, levelId) || !topId) continue;
+    const isInside = inside(piece.attrs.x, piece.attrs.y);
+    if (topId === piece.attrs.id) {
+      if (isInside) ids.push(topId);
+    } else {
+      groups.set(topId, (groups.get(topId) ?? true) && isInside);
+    }
+  }
+  for (const [id, all] of groups) if (all) ids.push(id);
   for (const w of home.walls) {
     const a2 = w.attrs;
     if (
