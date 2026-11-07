@@ -1,6 +1,6 @@
 [package]
 name = "msh-export"
-description = "Exports of My Sweet Home: plan as SVG and PNG"
+description = "Exports of My Sweet Home: plan as SVG, PNG and PDF, furniture list as CSV"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,10 @@ publish.workspace = true
 msh-model.workspace = true
 msh-geometry.workspace = true
 resvg.workspace = true
+base64.workspace = true
+krilla = "0.8.2"
+krilla-svg = "0.8.1"
 
 [lints]
 workspace = true
+

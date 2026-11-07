@@ -35,6 +35,8 @@ pub fn run() {
             commands::capture_result,
             commands::catalog_load,
             commands::model_stage,
+            commands::write_obj_files,
+            commands::export_obj,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Tauri application");

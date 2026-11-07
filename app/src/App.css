@@ -967,3 +967,56 @@ body.resizing-horizontal {
 .view3d-window .view3d {
   flex: 1;
 }
+
+/* ---- Export dialog ---- */
+
+.export-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.export-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.export-section h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.export-section p {
+  margin: 0;
+}
+
+.export-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px 12px;
+}
+
+.export-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.export-unit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.export-unit input {
+  width: 90px;
+}
+
+.export-message {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

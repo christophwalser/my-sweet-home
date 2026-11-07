@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { api, CAPTURE_EVENT } from "../api";
+import { api, CAPTURE_EVENT, EXPORT_OBJ_EVENT } from "../api";
 import { forEachPiece } from "../model";
 import { useStore, type ViewMode } from "../store";
 import { buildAnnotations } from "./annotations";
@@ -20,6 +20,7 @@ import {
 } from "./buildScene";
 import { buildLampLights, lampLights } from "./lights";
 import { clearModelCache, createPieceObject, disposeObject, waitForModels } from "./models";
+import { buildObj } from "./objExport";
 
 /**
  * Highest pitch used for the aerial view. A camera looking straight down sits on
@@ -337,6 +338,27 @@ export default function View3D() {
         }
       },
     );
+    return () => {
+      void unlisten.then((off) => off());
+    };
+  }, []);
+
+  // OBJ export requested by the export dialog, the CLI or the MCP server
+  useEffect(() => {
+    const unlisten = listen<{ requestId: number; path: string }>(EXPORT_OBJ_EVENT, async (e) => {
+      const { requestId, path } = e.payload;
+      try {
+        await waitForModels(60000);
+        const c = ctx.current;
+        if (!c) throw new Error("3D view not available");
+        const mtlName = `${(path.split(/[\\/]/).pop() ?? "home").replace(/\.[^.]*$/, "")}.mtl`;
+        const files = buildObj(c.content, mtlName);
+        const paths = await api.writeObjFiles(path, files.obj, files.mtl, files.textures);
+        await api.captureResult(requestId, JSON.stringify({ paths }), null);
+      } catch (err) {
+        await api.captureResult(requestId, null, String(err));
+      }
+    });
     return () => {
       void unlisten.then((off) => off());
     };

@@ -46,6 +46,11 @@ export const api = {
   /** Runs a command of the msh-core registry (same commands as CLI and MCP). */
   execute: (command: string, params: Record<string, unknown> = {}) =>
     invoke<unknown>("execute", { command, params }),
+  /** Exports the 3D view as OBJ through the window that shows it. */
+  exportObj: (path: string) => invoke<{ paths: string[] }>("export_obj", { path }),
+  /** Writes an OBJ export (OBJ at `path`, MTL and textures next to it). */
+  writeObjFiles: (path: string, obj: string, mtl: string, textures: Record<string, string>) =>
+    invoke<string[]>("write_obj_files", { path, obj, mtl, textures }),
   captureResult: (requestId: number, data: string | null, error: string | null) =>
     invoke<void>("capture_result", { requestId, data, error }),
   catalogLoad: (lang: string) => invoke<CatalogData>("catalog_load", { lang }),
@@ -62,6 +67,8 @@ export const HOME_CHANGED_EVENT = "home-changed";
 
 /** Event asking the frontend to capture the 3D view (live control). */
 export const CAPTURE_EVENT = "capture-3d";
+/** Event of the live control asking for an OBJ export ({ requestId, path }). */
+export const EXPORT_OBJ_EVENT = "export-obj";
 
 /** MIME type of catalog items dragged onto the plan. */
 export const CATALOG_DRAG_TYPE = "application/x-msh-catalog";

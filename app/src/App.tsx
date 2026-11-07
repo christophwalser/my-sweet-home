@@ -2,6 +2,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import { type AppInfo, api } from "./api";
 import CatalogPanel from "./catalog/CatalogPanel";
+import ExportDialog from "./export/ExportDialog";
 import { clampSide, DEFAULT_LAYOUT, type Maximized, useLayout } from "./layout/layout";
 import Splitter from "./layout/Splitter";
 import {
@@ -120,6 +121,7 @@ export default function App() {
   const [layout, setLayout] = useLayout();
   const [detached, setDetached] = useState(false);
   const [editingLevel, setEditingLevel] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const centerRef = useRef<HTMLDivElement>(null);
   const opened = useStore((s) => s.opened);
   const loading = useStore((s) => s.loading);
@@ -250,6 +252,14 @@ export default function App() {
         </button>
         <button
           type="button"
+          onClick={() => setExporting(true)}
+          disabled={!opened}
+          title="Export the plan (PDF, SVG, PNG), the furniture list (CSV) or the 3D view (OBJ)"
+        >
+          Export…
+        </button>
+        <button
+          type="button"
           onClick={() => void undo()}
           disabled={!opened?.canUndo}
           title="Undo (Ctrl+Z)"
@@ -291,6 +301,14 @@ export default function App() {
         )}
         <span className="muted version">{info ? `v${info.version}` : ""}</span>
       </header>
+
+      {exporting && opened && (
+        <ExportDialog
+          baseName={(title ?? "Home").replace(/\.sh3d$/i, "")}
+          hasLevels={levels.length > 0}
+          onClose={() => setExporting(false)}
+        />
+      )}
 
       {error && (
         <div className="error-bar" role="alert">

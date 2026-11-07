@@ -57,6 +57,52 @@ pub async fn execute(command: String, params: Value, app: AppHandle) -> CmdResul
         .map_err(err)?
 }
 
+/// Writes the files of an OBJ export: the OBJ at `path`, the MTL and the texture
+/// images (base64 PNG) next to it. Returns the written paths.
+#[tauri::command]
+pub fn write_obj_files(
+    path: String,
+    obj: String,
+    mtl: String,
+    textures: std::collections::HashMap<String, String>,
+) -> Result<Vec<String>, String> {
+    use base64::Engine;
+    let obj_path = std::path::PathBuf::from(&path);
+    let dir = obj_path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
+    let write = |p: &std::path::Path, data: &[u8]| {
+        std::fs::write(p, data).map_err(|e| format!("cannot write {}: {e}", p.display()))
+    };
+    let mut written = Vec::new();
+    write(&obj_path, obj.as_bytes())?;
+    written.push(obj_path.display().to_string());
+    let mtl_path = obj_path.with_extension("mtl");
+    write(&mtl_path, mtl.as_bytes())?;
+    written.push(mtl_path.display().to_string());
+    for (name, data) in textures {
+        // Texture names come from the exporter ("texture_N.png"); never leave the folder
+        let file = std::path::Path::new(&name)
+            .file_name()
+            .ok_or_else(|| format!("invalid texture name '{name}'"))?;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .map_err(|e| e.to_string())?;
+        let p = dir.join(file);
+        write(&p, &bytes)?;
+        written.push(p.display().to_string());
+    }
+    Ok(written)
+}
+
+/// Exports the 3D view as OBJ (from the export dialog); the window showing the 3D
+/// view builds and writes the files.
+#[tauri::command]
+pub async fn export_obj(path: String, app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    crate::pipe::export_obj(&app, Some(&path)).await
+}
+
 /// Result of a 3D capture requested over the pipe: a PNG data URL or an error.
 #[tauri::command]
 pub fn capture_result(

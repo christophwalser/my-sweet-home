@@ -82,6 +82,12 @@ fn main() -> Result<()> {
             let result = client.call("capture_3d", json!({ "mode": mode }))?;
             print_result(result, matches.get_one::<PathBuf>("out"))?;
         }
+        Some(("export-obj", m)) => {
+            let mut client = msh_ipc::Client::connect()?;
+            let path = m.get_one::<PathBuf>("path").cloned().unwrap_or_default();
+            let result = client.call("export_obj", json!({ "path": path }))?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
         Some(("status", _)) => {
             let mut client = msh_ipc::Client::connect()?;
             println!(
@@ -188,6 +194,16 @@ fn build_cli(registry: &Registry) -> Command {
                         .help("aerial (default) or observer (virtual visit)"),
                 ),
         )
+        .subcommand(
+            Command::new("export-obj")
+                .about("Exports the 3D view of the running app as OBJ file with MTL and textures")
+                .arg(
+                    Arg::new("path")
+                        .required(true)
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .help("OBJ file to write"),
+                ),
+        )
         .subcommand(Command::new("status").about("Shows whether the app is running and which home is open"));
 
     // One subcommand group per registry prefix; "catalog" also keeps scan/list
@@ -246,6 +262,11 @@ fn group_about(group: &str) -> &'static str {
         "dimension" => "Dimension lines",
         "edit" => "Delete, undo, redo",
         "view" => "Images of the home",
+        "export" => "Export the plan (SVG, PNG, PDF) and the furniture list (CSV)",
+        "compass" => "Compass",
+        "polyline" => "Polylines",
+        "library" => "Furniture and texture libraries",
+        "texture" => "Textures",
         _ => "Commands",
     }
 }

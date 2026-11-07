@@ -9,6 +9,7 @@
 
 mod annotate;
 mod edit;
+mod export;
 mod flip;
 mod furniture;
 mod group;
@@ -38,6 +39,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     edit::register(r);
     flip::register(r);
     view::register(r);
+    export::register(r);
 }
 
 /// New element ID in the style of Sweet Home 3D 7 (`wall-<uuid>`).

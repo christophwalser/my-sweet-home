@@ -14,8 +14,20 @@ use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 /// Event asking the frontend to capture the 3D view.
 pub const CAPTURE_EVENT: &str = "capture-3d";
 
+/// Event asking the frontend to export the 3D view as OBJ.
+pub const EXPORT_OBJ_EVENT: &str = "export-obj";
+
 /// How long a client waits for the frontend to deliver a 3D capture.
 const CAPTURE_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a client waits for an OBJ export (models may still be loading).
+const EXPORT_TIMEOUT: Duration = Duration::from_secs(120);
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ExportRequest {
+    request_id: u64,
+    path: String,
+}
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -97,6 +109,10 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
             Ok(v) => Response::ok(id, v),
             Err(e) => Response::err(id, e),
         },
+        "export_obj" => match export_obj(app, req.params["path"].as_str()).await {
+            Ok(v) => Response::ok(id, v),
+            Err(e) => Response::err(id, e),
+        },
         "status" => {
             let state = app.state::<AppState>();
             let current = state.current();
@@ -114,6 +130,30 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
         }
         other => Response::err(id, format!("unknown method '{other}'")),
     }
+}
+
+/// Asks the frontend to export the 3D view as OBJ and waits for the written files.
+pub async fn export_obj(app: &AppHandle, path: Option<&str>) -> Result<Value, String> {
+    let path = path.ok_or("missing \"path\"")?;
+    let path = std::path::absolute(path).map_err(|e| e.to_string())?;
+    let state = app.state::<AppState>();
+    if state.current().is_none() {
+        return Err("no home is open in the app".into());
+    }
+    let (request_id, rx) = state.new_capture();
+    app.emit(
+        EXPORT_OBJ_EVENT,
+        ExportRequest {
+            request_id,
+            path: path.display().to_string(),
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    let result = tokio::time::timeout(EXPORT_TIMEOUT, rx)
+        .await
+        .map_err(|_| "the app did not finish the OBJ export in time".to_string())?
+        .map_err(|_| "the export was cancelled".to_string())??;
+    serde_json::from_str(&result).map_err(|e| e.to_string())
 }
 
 /// Asks the frontend to render the 3D view and waits for the PNG.

@@ -235,6 +235,8 @@ export function createPieceObject(
   const a = piece.attrs;
   const outer = new THREE.Group();
   outer.name = `piece:${a.id ?? a.name}`;
+  // Readable name for exports (OBJ object names)
+  outer.userData.label = a.name;
   // Like Sweet Home 3D (ModelManager): rotY(−angle) · rotZ(−roll) · rotX(−pitch) · scale,
   // with the center at elevation + heightInPlan / 2 (height of the box after pitch/roll)
   const pitch = a.pitch ?? 0;

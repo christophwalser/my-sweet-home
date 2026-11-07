@@ -57,6 +57,10 @@ bar at the bottom of the plan explains the next step.
   furniture…" imports OBJ, DAE, 3DS, glTF or GLB models, "Import…" in the texture chooser
   imports images. Imported items go to "My furniture" / "My textures" in Sweet Home 3D's user
   library folders, so both applications show them.
+- "Export…" saves the plan as PDF (paper size, orientation, scale such as 1:100, all levels
+  as pages), SVG or PNG, the furniture list as CSV and the 3D view as OBJ with MTL and textures.
+- Window layout: drag the borders of the side panels and between plan and 3D view; plan and 3D
+  view can be maximized or minimized, the 3D view can open in its own window.
 - Drag furniture from the catalog onto the plan (doors and windows snap into walls); properties
   of the selection on the right (incl. textures and baseboards).
 
@@ -95,6 +99,8 @@ msh texture import --path oak.jpg --width 60                    # into "My textu
 msh --file house.sh3d furniture add-in-wall --catalog-id "eTeks#frontDoor" --wall-id <id> --offset 400
 msh --file house.sh3d furniture add --catalog-id "eTeks#sofa" --x 300 --y 500 --angle-deg 180
 msh --file house.sh3d view plan-image --out plan.png
+msh --file house.sh3d export plan --path plan.pdf --level all --scale 100 --paper a3
+msh --file house.sh3d export furniture-csv --path furniture.csv
 msh --file house.sh3d wall join --ids "[\"<wall id>\",\"<wall id>\"]"
 msh --file house.sh3d edit undo
 ```
@@ -144,7 +150,8 @@ msh status                                        # is the app running, which ho
 msh --live wall add-path --points "[[0,0],[600,0],[600,400],[0,400]]" --closed
 msh --live view plan-image --out plan.png
 msh screenshot --mode aerial --out view3d.png     # 3D view rendered by the app
-msh mcp --live                                    # MCP server controlling the app (+ tool view_3d_image)
+msh export-obj house.obj                          # 3D view as OBJ + MTL + textures
+msh mcp --live                                    # MCP server controlling the app (+ tools view_3d_image, export_obj)
 ```
 
 Claude Code with live control:

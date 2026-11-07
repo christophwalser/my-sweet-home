@@ -21,6 +21,8 @@ const DEFAULT_PROTOCOL_VERSION: &str = "2025-06-18";
 
 /// Name of the live-only tool for 3D screenshots.
 const VIEW_3D_TOOL: &str = "view_3d_image";
+/// Name of the live-only tool for the OBJ export of the 3D view.
+const EXPORT_OBJ_TOOL: &str = "export_obj";
 
 enum Backend {
     Local(Box<Document>),
@@ -33,6 +35,8 @@ impl Backend {
             Backend::Local(doc) => registry.execute(doc, name, args).map_err(|e| e.to_string()),
             Backend::Live(client) => if name == VIEW_3D_TOOL {
                 client.call("capture_3d", args)
+            } else if name == EXPORT_OBJ_TOOL {
+                client.call("export_obj", args)
             } else {
                 client.execute(name, args)
             }
@@ -65,7 +69,7 @@ pub fn serve(registry: &Registry, file: Option<PathBuf>, live: bool) -> Result<(
     };
     eprintln!(
         "my-sweet-home MCP server ready ({} tools, {})",
-        registry.list().len() + usize::from(live),
+        registry.list().len() + if live { 2 } else { 0 },
         if live {
             "live: controlling the running app"
         } else {
@@ -172,6 +176,18 @@ fn tool_list(registry: &Registry, live: bool) -> Vec<Value> {
                 },
             },
             "annotations": { "readOnlyHint": true },
+        }));
+        tools.push(json!({
+            "name": EXPORT_OBJ_TOOL,
+            "description": "Exports the walls, rooms and furniture shown in the 3D view of the running app as Wavefront OBJ file with MTL file and textures next to it (cm, y axis up).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "OBJ file to write" },
+                },
+                "required": ["path"],
+            },
+            "annotations": { "readOnlyHint": false },
         }));
     }
     tools
