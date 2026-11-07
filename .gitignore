@@ -1,0 +1,22 @@
+# Rust
+/target/
+
+# Node / Frontend
+node_modules/
+app/dist/
+*.log
+
+# Tauri
+app/src-tauri/gen/schemas
+
+# Lokale Bibliotheken und Testdaten mit fremder Lizenz – nie einchecken
+/libraries/
+/tests/corpus/private/
+
+# Editor / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+Thumbs.db
+.DS_Store
