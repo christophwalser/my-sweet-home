@@ -1,4 +1,4 @@
-// Hit testing and snapping ("magnetism") for editing in the 2D plan.
+// Hit testing for editing in the 2D plan (magnetism is in snapping.ts).
 // All coordinates are plan coordinates in cm (y down).
 
 import {
@@ -257,52 +257,6 @@ export function elementsInRect(home: Home, levelId: string | null, a: Pt, b: Pt)
     }
   }
   return ids;
-}
-
-/** Wall end points on a level, used as snap targets. */
-export function wallEndPoints(home: Home, levelId: string | null): Pt[] {
-  const pts: Pt[] = [];
-  for (const w of home.walls) {
-    if (!sameLevel(w.attrs.level, levelId)) continue;
-    pts.push([w.attrs.x_start, w.attrs.y_start], [w.attrs.x_end, w.attrs.y_end]);
-  }
-  return pts;
-}
-
-/** Corners of the wall sides (inner and outer outline), used as snap targets for rooms. */
-export function wallSideCorners(home: Home, wallShapes: WallShape[], levelId: string | null): Pt[] {
-  const pts: Pt[] = [];
-  home.walls.forEach((w, i) => {
-    if (!sameLevel(w.attrs.level, levelId)) return;
-    const s = wallShapes[i];
-    pts.push(s.left[0], s.left[s.left.length - 1], s.right[0], s.right[s.right.length - 1]);
-  });
-  return pts;
-}
-
-/**
- * Magnetism like Sweet Home 3D: snap to nearby points (wall ends, first point
- * of the path), otherwise keep the angle to the previous point in 15° steps and
- * round the length to whole centimeters.
- */
-export function snapPoint(p: Pt, previous: Pt | null, targets: Pt[], radius: number): Pt {
-  let best: Pt | null = null;
-  let bestDist = radius;
-  for (const t of targets) {
-    const d = Math.hypot(t[0] - p[0], t[1] - p[1]);
-    if (d <= bestDist) {
-      best = t;
-      bestDist = d;
-    }
-  }
-  if (best) return [best[0], best[1]];
-  if (!previous) return [Math.round(p[0]), Math.round(p[1])];
-  const dx = p[0] - previous[0];
-  const dy = p[1] - previous[1];
-  const step = Math.PI / 12;
-  const angle = Math.round(Math.atan2(dy, dx) / step) * step;
-  const length = Math.round(Math.hypot(dx, dy));
-  return [previous[0] + Math.cos(angle) * length, previous[1] + Math.sin(angle) * length];
 }
 
 /** Nearest wall to `p` within `maxDistance` cm, with the offset of the projection from the wall start. */

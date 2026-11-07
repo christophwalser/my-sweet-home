@@ -230,7 +230,48 @@ fn element_level(home: &Home, ids: &[String]) -> Option<String> {
 fn move_elements(home: &mut Home, ids: &[String], dx: f32, dy: f32) -> usize {
     let ids: HashSet<&str> = ids.iter().map(String::as_str).collect();
     let mut moved = 0;
-    let has = |id: &Option<String>| id.as_deref().is_some_and(|i| ids.contains(i));
+
+    // Doors and windows standing in a moved wall move with it (unless selected themselves)
+    let carried: HashSet<String> = {
+        let shapes = msh_geometry::wall_shapes(home);
+        let outlines: Vec<(Option<String>, Vec<[f32; 2]>)> = home
+            .walls
+            .iter()
+            .zip(&shapes)
+            .filter(|(w, _)| ids.contains(w.attrs.id.as_str()))
+            .map(|(w, s)| (w.attrs.level.clone(), s.polygon()))
+            .collect();
+        let mut carried = HashSet::new();
+        fn collect(
+            items: &[Furniture],
+            outlines: &[(Option<String>, Vec<[f32; 2]>)],
+            out: &mut HashSet<String>,
+        ) {
+            for item in items {
+                match item {
+                    Furniture::Piece(p) if p.kind == msh_model::PieceKind::DoorOrWindow => {
+                        let center = [p.attrs.x, p.attrs.y];
+                        if outlines.iter().any(|(level, poly)| {
+                            *level == p.attrs.level && msh_geometry::point_in_polygon(center, poly)
+                        }) {
+                            out.extend(p.attrs.id.clone());
+                        }
+                    }
+                    Furniture::Group(g) => collect(&g.items, outlines, out),
+                    Furniture::Piece(_) => {}
+                }
+            }
+        }
+        if !outlines.is_empty() {
+            collect(&home.furniture, &outlines, &mut carried);
+        }
+        carried.retain(|id| !ids.contains(id.as_str()));
+        carried
+    };
+    let has = |id: &Option<String>| {
+        id.as_deref()
+            .is_some_and(|i| ids.contains(i) || carried.contains(i))
+    };
 
     // Walls: selected walls move completely; the touching end of joined walls follows
     let moved_walls: HashSet<String> = home

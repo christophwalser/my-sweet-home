@@ -257,6 +257,22 @@ pub fn enclosed_area(home: &Home, level: Option<&str>, p: Pt) -> Option<Vec<Pt>>
     (pts.len() >= 3).then_some(pts)
 }
 
+/// Whether `p` lies inside the polygon (ray casting; the boundary may count either way).
+pub fn point_in_polygon(p: Pt, polygon: &[Pt]) -> bool {
+    let mut inside = false;
+    let n = polygon.len();
+    for i in 0..n {
+        let a = polygon[i];
+        let b = polygon[(i + n - 1) % n];
+        if (a[1] > p[1]) != (b[1] > p[1])
+            && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]
+        {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
 /// Rounds to 1/100 cm to hide floating point noise of the polygon union.
 fn round_cm(v: f64) -> f32 {
     ((v * 100.0).round() / 100.0) as f32

@@ -138,6 +138,10 @@ export type Wall = {
   attrs: {
     id: string;
     level: string | null;
+    /** Wall whose end or start touches the start of this wall */
+    wall_at_start: string | null;
+    /** Wall whose start or end touches the end of this wall */
+    wall_at_end: string | null;
     x_start: number;
     y_start: number;
     x_end: number;

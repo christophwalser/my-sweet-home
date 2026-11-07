@@ -158,6 +158,12 @@ pub(super) fn register(r: &mut Registry) {
                 }
                 home.walls.push(w);
             }
+            if !closed {
+                let first = p.points[0];
+                let last = p.points[p.points.len() - 1];
+                join_free_end(home, &ids[0], first, true, &level);
+                join_free_end(home, &ids[n - 1], last, false, &level);
+            }
             Ok(json!({ "ids": ids }))
         },
     );
@@ -249,6 +255,45 @@ pub(super) fn register(r: &mut Registry) {
             Ok(json!({ "id": p.id }))
         },
     );
+}
+
+/// Joins the start (or end) of the new wall `id` at `point` to an existing wall on
+/// `level` that has a free end at the same point, like Sweet Home 3D does when a
+/// wall is drawn from the end of another one.
+fn join_free_end(
+    home: &mut msh_model::Home,
+    id: &str,
+    point: [f32; 2],
+    at_start: bool,
+    level: &Option<String>,
+) {
+    const TOLERANCE: f32 = 0.01;
+    let near =
+        |x: f32, y: f32| (x - point[0]).abs() < TOLERANCE && (y - point[1]).abs() < TOLERANCE;
+    let Some(other) = home.walls.iter_mut().find(|w| {
+        let a = &w.attrs;
+        a.id != id
+            && &a.level == level
+            && a.arc_extent.is_none_or(|e| e.abs() < 1e-4)
+            && ((a.wall_at_end.is_none() && near(a.x_end, a.y_end))
+                || (a.wall_at_start.is_none() && near(a.x_start, a.y_start)))
+    }) else {
+        return;
+    };
+    let a = &mut other.attrs;
+    if a.wall_at_end.is_none() && near(a.x_end, a.y_end) {
+        a.wall_at_end = Some(id.to_owned());
+    } else {
+        a.wall_at_start = Some(id.to_owned());
+    }
+    let other_id = a.id.clone();
+    if let Some(w) = home.walls.iter_mut().find(|w| w.attrs.id == id) {
+        if at_start {
+            w.attrs.wall_at_start = Some(other_id);
+        } else {
+            w.attrs.wall_at_end = Some(other_id);
+        }
+    }
 }
 
 /// Moves the end of `joined` that is connected to the wall `id` from `old` to `new`.

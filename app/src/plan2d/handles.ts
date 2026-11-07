@@ -1,21 +1,57 @@
-// Drag handles ("indicators") of a single selected element in the 2D plan:
-// wall ends, room and polyline points, dimension line ends, and resize and
-// rotation handles of furniture. Each handle turns a pointer position into a
-// preview outline and the registry command that applies the change.
+// Drag handles ("indicators") of a single selected element in the 2D plan.
+// Walls: both ends (length and direction), the middle of a side (thickness),
+// the middle of the axis (bend into an arc) and a rotation handle beyond the end.
+// Rooms and polylines: their points. Dimension lines: both ends. Furniture:
+// resize (bottom-right) and rotate (top-left). Each handle turns a pointer
+// position into a preview outline and the registry command that applies it.
 
 import { forEachPiece, type Home, type Piece, type Pt, type WallShape } from "../model";
-import { sameLevel } from "./drawPlan";
-import { snapPoint, wallSideCorners } from "./interaction";
+import { offsetOutline, type Segment, snapContext, snapDraw, wallAxis } from "./snapping";
 
 export type HandleKind =
   | "wall-start"
   | "wall-end"
+  | "wall-thickness"
+  | "wall-arc"
+  | "wall-rotate"
   | "room-point"
   | "polyline-point"
   | "dimension-start"
   | "dimension-end"
   | "piece-resize"
   | "piece-rotate";
+
+/** How a handle is drawn. */
+export type HandleShape = "square" | "circle" | "diamond";
+
+export const HANDLE_SHAPE: Record<HandleKind, HandleShape> = {
+  "wall-start": "square",
+  "wall-end": "square",
+  "wall-thickness": "square",
+  "wall-arc": "diamond",
+  "wall-rotate": "circle",
+  "room-point": "square",
+  "polyline-point": "square",
+  "dimension-start": "square",
+  "dimension-end": "square",
+  "piece-resize": "square",
+  "piece-rotate": "circle",
+};
+
+/** Tooltip-like explanation shown while hovering a handle. */
+export const HANDLE_HINT: Record<HandleKind, string> = {
+  "wall-start": "Drag to move the wall start (length and angle)",
+  "wall-end": "Drag to move the wall end (length and angle)",
+  "wall-thickness": "Drag to change the thickness",
+  "wall-arc": "Drag sideways to bend the wall into an arc",
+  "wall-rotate": "Drag to rotate the wall around its center",
+  "room-point": "Drag to move this corner",
+  "polyline-point": "Drag to move this point",
+  "dimension-start": "Drag to move the start of the dimension",
+  "dimension-end": "Drag to move the end of the dimension",
+  "piece-resize": "Drag to resize",
+  "piece-rotate": "Drag to rotate",
+};
 
 export type Handle = {
   id: string;
@@ -31,14 +67,20 @@ export type HandleDrag = {
   preview: { pts: Pt[]; closed: boolean }[];
   /** Point the cursor snapped to, if any */
   snap: Pt | null;
+  /** Alignment guides */
+  guides: Segment[];
   /** Short text shown next to the cursor (length, size or angle) */
   info: string;
   command: string;
   params: Record<string, unknown>;
 };
 
-/** Rotation step of furniture with magnetism (degrees). */
+/** Rotation step with magnetism (degrees). */
 const ROTATION_STEP_DEG = 15;
+/** Arc extent step with magnetism (degrees). */
+const ARC_STEP_DEG = 5;
+/** Distance of offset handles from the element, in screen pixels. */
+const HANDLE_OFFSET_PX = 22;
 
 function findPiece(home: Home, id: string): Piece | null {
   let found: Piece | null = null;
@@ -59,7 +101,7 @@ function rotate([x, y]: Pt, angle: number): Pt {
   return [x * c - y * s, x * s + y * c];
 }
 
-function pieceCorners(cx: number, cy: number, w: number, d: number, angle: number): Pt[] {
+export function pieceCorners(cx: number, cy: number, w: number, d: number, angle: number): Pt[] {
   const local: Pt[] = [
     [-w / 2, -d / 2],
     [w / 2, -d / 2],
@@ -72,15 +114,58 @@ function pieceCorners(cx: number, cy: number, w: number, d: number, angle: numbe
   });
 }
 
-/** Handles of the element with the given ID. */
-export function elementHandles(home: Home, id: string): Handle[] {
-  const wall = home.walls.find((w) => w.attrs.id === id);
-  if (wall) {
-    const a = wall.attrs;
-    return [
-      { id, kind: "wall-start", index: 0, pos: [a.x_start, a.y_start] },
-      { id, kind: "wall-end", index: 0, pos: [a.x_end, a.y_end] },
+/** Outline of a wall with the given geometry (unjoined ends), for previews. */
+export function wallOutline(start: Pt, end: Pt, thickness: number, arcExtent: number | null): Pt[] {
+  return offsetOutline(wallAxis(start, end, arcExtent), thickness / 2);
+}
+
+/** Middle of the wall axis (on the arc for arc walls). */
+function axisMiddle(start: Pt, end: Pt, arcExtent: number | null): Pt {
+  const axis = wallAxis(start, end, arcExtent);
+  if (axis.length === 2) return [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+  const chord = Math.hypot(end[0] - start[0], end[1] - start[1]);
+  const [lx, ly] = leftDir(start, end);
+  const h = (chord / 2) * Math.tan((arcExtent ?? 0) / 4);
+  return [(start[0] + end[0]) / 2 + lx * h, (start[1] + end[1]) / 2 + ly * h];
+}
+
+/** Unit vector to the left side of a wall going from `start` to `end`. */
+function leftDir(start: Pt, end: Pt): Pt {
+  const len = Math.hypot(end[0] - start[0], end[1] - start[1]) || 1;
+  return [(end[1] - start[1]) / len, -(end[0] - start[0]) / len];
+}
+
+/**
+ * Handles of the element with the given ID. `cmPerPx` places handles that sit at
+ * a fixed screen distance from the element.
+ */
+export function elementHandles(home: Home, id: string, cmPerPx: number): Handle[] {
+  const wallIndex = home.walls.findIndex((w) => w.attrs.id === id);
+  if (wallIndex >= 0) {
+    const a = home.walls[wallIndex].attrs;
+    const start: Pt = [a.x_start, a.y_start];
+    const end: Pt = [a.x_end, a.y_end];
+    const len = Math.hypot(end[0] - start[0], end[1] - start[1]) || 1;
+    const dir: Pt = [(end[0] - start[0]) / len, (end[1] - start[1]) / len];
+    const [lx, ly] = leftDir(start, end);
+    const mid = axisMiddle(start, end, a.arc_extent);
+    const offset = Math.max(a.thickness / 2, 0) + HANDLE_OFFSET_PX * cmPerPx * 0.6;
+    const handles: Handle[] = [
+      { id, kind: "wall-start", index: 0, pos: start },
+      { id, kind: "wall-end", index: 0, pos: end },
+      { id, kind: "wall-arc", index: 0, pos: mid },
+      { id, kind: "wall-thickness", index: 0, pos: [mid[0] + lx * offset, mid[1] + ly * offset] },
+      {
+        id,
+        kind: "wall-rotate",
+        index: 0,
+        pos: [
+          end[0] + dir[0] * HANDLE_OFFSET_PX * cmPerPx,
+          end[1] + dir[1] * HANDLE_OFFSET_PX * cmPerPx,
+        ],
+      },
     ];
+    return handles;
   }
   const room = home.rooms.find((r) => r.attrs.id === id);
   if (room) {
@@ -130,11 +215,15 @@ export function handleAt(handles: Handle[], p: Pt, radius: number): Handle | nul
   return best;
 }
 
-function lengthText(cm: number): string {
+export function lengthText(cm: number): string {
   return cm >= 100 ? `${(cm / 100).toFixed(2)} m` : `${cm.toFixed(0)} cm`;
 }
 
-const samePoint = (a: Pt, b: Pt) => Math.abs(a[0] - b[0]) < 1e-3 && Math.abs(a[1] - b[1]) < 1e-3;
+/** Direction of a segment in degrees, clockwise from the x axis (0..360). */
+export function directionDeg(a: Pt, b: Pt): number {
+  const deg = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+  return Math.round((((deg % 360) + 360) % 360) * 10) / 10;
+}
 
 /**
  * Computes the change for dragging `handle` to `p`. `snapRadius` is the magnetism
@@ -150,11 +239,7 @@ export function dragHandle(
   magnetism: boolean,
 ): HandleDrag | null {
   const { id } = handle;
-  const snapTo = (point: Pt, previous: Pt | null, targets: Pt[]): { pt: Pt; snap: Pt | null } => {
-    if (!magnetism) return { pt: point, snap: null };
-    const pt = snapPoint(point, previous, targets, snapRadius);
-    return { pt, snap: targets.some((t) => samePoint(t, pt)) ? pt : null };
-  };
+  const none = { snap: null, guides: [] as Segment[] };
 
   switch (handle.kind) {
     case "wall-start":
@@ -164,57 +249,128 @@ export function dragHandle(
       const a = wall.attrs;
       const isStart = handle.kind === "wall-start";
       const fixed: Pt = isStart ? [a.x_end, a.y_end] : [a.x_start, a.y_start];
-      // Snap to the ends of other walls (not to the end being moved, nor to its own other end)
-      const targets: Pt[] = [];
-      for (const w of home.walls) {
-        if (w.attrs.id === id || !sameLevel(w.attrs.level, levelId)) continue;
-        for (const q of [
-          [w.attrs.x_start, w.attrs.y_start],
-          [w.attrs.x_end, w.attrs.y_end],
-        ] as Pt[]) {
-          if (!samePoint(q, handle.pos)) targets.push(q);
-        }
-      }
-      const { pt, snap } = snapTo(p, fixed, targets);
+      const s = magnetism
+        ? snapDraw(
+            p,
+            fixed,
+            snapContext("wall", home, wallShapes, levelId, snapRadius, {
+              excludeId: id,
+              excludePoint: handle.pos,
+              near: p,
+            }),
+          )
+        : { pt: p, marker: null, guides: [], note: null };
+      const pt = s.pt;
       const start = isStart ? pt : fixed;
       const end = isStart ? fixed : pt;
       const len = Math.hypot(end[0] - start[0], end[1] - start[1]);
       if (len < 1) return null;
-      const nx = (-(end[1] - start[1]) / len) * (a.thickness / 2);
-      const ny = ((end[0] - start[0]) / len) * (a.thickness / 2);
       return {
-        preview: [
-          {
-            pts: [
-              [start[0] + nx, start[1] + ny],
-              [end[0] + nx, end[1] + ny],
-              [end[0] - nx, end[1] - ny],
-              [start[0] - nx, start[1] - ny],
-            ],
-            closed: true,
-          },
-        ],
-        snap,
-        info: lengthText(len),
+        preview: [{ pts: wallOutline(start, end, a.thickness, a.arc_extent), closed: true }],
+        snap: s.marker,
+        guides: s.guides,
+        info: `${lengthText(len)} · ${directionDeg(start, end)}°${s.note ? ` · ${s.note}` : ""}`,
         command: "wall_update",
         params: isStart
           ? { id, x_start: pt[0], y_start: pt[1] }
           : { id, x_end: pt[0], y_end: pt[1] },
       };
     }
+    case "wall-thickness": {
+      const wall = home.walls.find((w) => w.attrs.id === id);
+      if (!wall) return null;
+      const a = wall.attrs;
+      const start: Pt = [a.x_start, a.y_start];
+      const end: Pt = [a.x_end, a.y_end];
+      // Distance from the axis middle across the wall, minus the screen offset of the handle
+      const mid = axisMiddle(start, end, a.arc_extent);
+      const [lx, ly] = leftDir(start, end);
+      const across = (q: Pt) => Math.abs((q[0] - mid[0]) * lx + (q[1] - mid[1]) * ly);
+      const handleOffset = across(handle.pos) - a.thickness / 2;
+      let thickness = Math.max(2 * (across(p) - handleOffset), 0.5);
+      thickness = magnetism ? Math.max(Math.round(thickness), 1) : Math.round(thickness * 10) / 10;
+      return {
+        preview: [{ pts: wallOutline(start, end, thickness, a.arc_extent), closed: true }],
+        ...none,
+        info: `Thickness ${thickness} cm`,
+        command: "wall_update",
+        params: { id, thickness },
+      };
+    }
+    case "wall-arc": {
+      const wall = home.walls.find((w) => w.attrs.id === id);
+      if (!wall) return null;
+      const a = wall.attrs;
+      const start: Pt = [a.x_start, a.y_start];
+      const end: Pt = [a.x_end, a.y_end];
+      const chord = Math.hypot(end[0] - start[0], end[1] - start[1]);
+      if (chord < 1) return null;
+      const [lx, ly] = leftDir(start, end);
+      const mx = (start[0] + end[0]) / 2;
+      const my = (start[1] + end[1]) / 2;
+      // Signed sagitta towards the left side → arc extent = 4·atan(2h / chord)
+      const h = (p[0] - mx) * lx + (p[1] - my) * ly;
+      let deg = (4 * Math.atan((2 * h) / chord) * 180) / Math.PI;
+      deg = magnetism ? Math.round(deg / ARC_STEP_DEG) * ARC_STEP_DEG : Math.round(deg);
+      if (Math.abs(deg) < 1) deg = 0;
+      const extent = (deg * Math.PI) / 180;
+      return {
+        preview: [{ pts: wallOutline(start, end, a.thickness, extent || null), closed: true }],
+        ...none,
+        info: deg === 0 ? "Straight" : `Arc ${deg}°`,
+        command: "wall_update",
+        params: { id, arc_extent_deg: deg },
+      };
+    }
+    case "wall-rotate": {
+      const wall = home.walls.find((w) => w.attrs.id === id);
+      if (!wall) return null;
+      const a = wall.attrs;
+      const half = Math.hypot(a.x_end - a.x_start, a.y_end - a.y_start) / 2;
+      const c: Pt = [(a.x_start + a.x_end) / 2, (a.y_start + a.y_end) / 2];
+      let deg = (Math.atan2(p[1] - c[1], p[0] - c[0]) * 180) / Math.PI;
+      deg = magnetism
+        ? Math.round(deg / ROTATION_STEP_DEG) * ROTATION_STEP_DEG
+        : Math.round(deg * 10) / 10;
+      const r = (deg * Math.PI) / 180;
+      const start: Pt = [c[0] - Math.cos(r) * half, c[1] - Math.sin(r) * half];
+      const end: Pt = [c[0] + Math.cos(r) * half, c[1] + Math.sin(r) * half];
+      const round = (v: number) => Math.round(v * 100) / 100;
+      return {
+        preview: [{ pts: wallOutline(start, end, a.thickness, a.arc_extent), closed: true }],
+        ...none,
+        info: `${directionDeg(start, end)}°`,
+        command: "wall_update",
+        params: {
+          id,
+          x_start: round(start[0]),
+          y_start: round(start[1]),
+          x_end: round(end[0]),
+          y_end: round(end[1]),
+        },
+      };
+    }
     case "room-point": {
       const room = home.rooms.find((r) => r.attrs.id === id);
       if (!room) return null;
-      const others: Pt[] = room.points
-        .filter((_, i) => i !== handle.index)
-        .map((q) => [q.x, q.y] as Pt);
-      const targets = [...wallSideCorners(home, wallShapes, levelId), ...others];
-      const { pt, snap } = snapTo(p, null, targets);
-      const points: Pt[] = room.points.map((q, i) => (i === handle.index ? pt : [q.x, q.y]));
+      const n = room.points.length;
+      const prev = room.points[(handle.index + n - 1) % n];
+      const s = magnetism
+        ? snapDraw(
+            p,
+            null,
+            snapContext("room", home, wallShapes, levelId, snapRadius, {
+              excludePoint: handle.pos,
+              path: room.points.filter((_, i) => i !== handle.index).map((q) => [q.x, q.y]),
+            }),
+          )
+        : { pt: p, marker: null, guides: [], note: null };
+      const points: Pt[] = room.points.map((q, i) => (i === handle.index ? s.pt : [q.x, q.y]));
       return {
         preview: [{ pts: points, closed: true }],
-        snap,
-        info: `${pt[0].toFixed(0)}, ${pt[1].toFixed(0)}`,
+        snap: s.marker,
+        guides: s.guides,
+        info: lengthText(Math.hypot(s.pt[0] - prev.x, s.pt[1] - prev.y)),
         command: "room_update",
         params: { id, points },
       };
@@ -228,12 +384,22 @@ export function dragHandle(
         prevIndex >= 0 && prevIndex !== handle.index
           ? [pl.points[prevIndex].x, pl.points[prevIndex].y]
           : null;
-      const { pt, snap } = snapTo(p, previous, []);
-      const points: Pt[] = pl.points.map((q, i) => (i === handle.index ? pt : [q.x, q.y]));
+      const others: Pt[] = pl.points.filter((_, i) => i !== handle.index).map((q) => [q.x, q.y]);
+      const s = magnetism
+        ? snapDraw(p, previous, {
+            radius: snapRadius,
+            points: [],
+            lines: [],
+            refs: others,
+            directions: [],
+          })
+        : { pt: p, marker: null, guides: [], note: null };
+      const points: Pt[] = pl.points.map((q, i) => (i === handle.index ? s.pt : [q.x, q.y]));
       return {
         preview: [{ pts: points, closed: !!pl.attrs.closed_path }],
-        snap,
-        info: previous ? lengthText(Math.hypot(pt[0] - previous[0], pt[1] - previous[1])) : "",
+        snap: s.marker,
+        guides: s.guides,
+        info: previous ? lengthText(Math.hypot(s.pt[0] - previous[0], s.pt[1] - previous[1])) : "",
         command: "polyline_update",
         params: { id, points },
       };
@@ -245,21 +411,22 @@ export function dragHandle(
       const a = dim.attrs;
       const isStart = handle.kind === "dimension-start";
       const fixed: Pt = isStart ? [a.x_end, a.y_end] : [a.x_start, a.y_start];
-      const targets: Pt[] = [];
-      for (const w of home.walls) {
-        if (!sameLevel(w.attrs.level, levelId)) continue;
-        targets.push([w.attrs.x_start, w.attrs.y_start], [w.attrs.x_end, w.attrs.y_end]);
-      }
-      targets.push(...wallSideCorners(home, wallShapes, levelId));
-      const { pt, snap } = snapTo(p, fixed, targets);
+      const s = magnetism
+        ? snapDraw(
+            p,
+            fixed,
+            snapContext("dimension", home, wallShapes, levelId, snapRadius, { near: p }),
+          )
+        : { pt: p, marker: null, guides: [], note: null };
       return {
-        preview: [{ pts: [fixed, pt], closed: false }],
-        snap,
-        info: lengthText(Math.hypot(pt[0] - fixed[0], pt[1] - fixed[1])),
+        preview: [{ pts: [fixed, s.pt], closed: false }],
+        snap: s.marker,
+        guides: s.guides,
+        info: lengthText(Math.hypot(s.pt[0] - fixed[0], s.pt[1] - fixed[1])),
         command: "dimension_update",
         params: isStart
-          ? { id, x_start: pt[0], y_start: pt[1] }
-          : { id, x_end: pt[0], y_end: pt[1] },
+          ? { id, x_start: s.pt[0], y_start: s.pt[1] }
+          : { id, x_end: s.pt[0], y_end: s.pt[1] },
       };
     }
     case "piece-rotate": {
@@ -276,7 +443,7 @@ export function dragHandle(
       angle = (deg * Math.PI) / 180;
       return {
         preview: [{ pts: pieceCorners(a.x, a.y, w, d, angle), closed: true }],
-        snap: null,
+        ...none,
         info: `${deg}°`,
         command: "furniture_update",
         params: { id, angle_deg: deg },
@@ -313,7 +480,7 @@ export function dragHandle(
       if (a.deformable === false) params.height = h;
       return {
         preview: [{ pts: pieceCorners(cx, cy, w, d, angle), closed: true }],
-        snap: null,
+        ...none,
         info: `${w.toFixed(0)} × ${d.toFixed(0)} cm`,
         command: "furniture_update",
         params,

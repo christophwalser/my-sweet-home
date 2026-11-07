@@ -391,6 +391,37 @@ input[type="search"]:focus {
   font-weight: 600;
 }
 
+.tool-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tool-option input {
+  width: 56px;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+.plan-hint {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 80px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  font-size: 12px;
+  pointer-events: none;
+}
+
 .plan-view {
   position: relative;
   flex: 1;

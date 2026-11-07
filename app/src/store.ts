@@ -17,8 +17,11 @@ type State = {
   /** IDs of the selected elements */
   selection: string[];
   tool: Tool;
+  /** Thickness of new walls drawn in the plan (cm) */
+  wallThickness: number;
   setSelection: (ids: string[]) => void;
   setTool: (tool: Tool) => void;
+  setWallThickness: (cm: number) => void;
   error: string | null;
   loading: boolean;
   viewMode: ViewMode;
@@ -55,8 +58,10 @@ export const useStore = create<State>((set, get) => ({
   selectedLevel: null,
   selection: [],
   tool: "select",
+  wallThickness: 10,
   setSelection: (selection) => set({ selection }),
   setTool: (tool) => set({ tool }),
+  setWallThickness: (wallThickness) => set({ wallThickness }),
   error: null,
   loading: false,
   viewMode: "aerial",

@@ -127,6 +127,34 @@ fn build_house_undo_redo_and_save() {
     assert_eq!(w[2].attrs.x_start, 1050.0, "start of the next wall follows");
     assert_eq!(w[0].attrs.x_start, 0.0, "far end stays");
 
+    // A door in a moved wall moves with it
+    if let Some(door) = doc.home().furniture.iter().find_map(|f| match f {
+        msh_model::Furniture::Piece(p) if p.kind == msh_model::PieceKind::DoorOrWindow => {
+            Some((p.attrs.id.clone().unwrap(), p.attrs.y))
+        }
+        _ => None,
+    }) {
+        run(
+            &r,
+            &mut doc,
+            "edit_move",
+            json!({ "ids": [outer_ids[0]], "dx": 0, "dy": 5 }),
+        );
+        let y = doc
+            .home()
+            .furniture
+            .iter()
+            .find_map(|f| match f {
+                msh_model::Furniture::Piece(p) if p.attrs.id.as_deref() == Some(&door.0) => {
+                    Some(p.attrs.y)
+                }
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(y, door.1 + 5.0);
+        run(&r, &mut doc, "edit_undo", json!({}));
+    }
+
     // Describe and plan image
     let d = run(&r, &mut doc, "home_describe", json!({}));
     assert_eq!(d["walls"].as_array().unwrap().len(), 5);
@@ -171,6 +199,34 @@ fn copy_paste_duplicate_and_room_detection() {
         "wall_add",
         json!({ "x_start": 300, "y_start": 0, "x_end": 300, "y_end": 400, "thickness": 10 }),
     );
+
+    // A path drawn from the free end of a wall is joined to it
+    let a = run(
+        &r,
+        &mut doc,
+        "wall_add_path",
+        json!({ "points": [[0, 600], [300, 600]] }),
+    );
+    let b = run(
+        &r,
+        &mut doc,
+        "wall_add_path",
+        json!({ "points": [[300, 600], [300, 800]] }),
+    );
+    let (a, b) = (a["ids"][0].as_str().unwrap(), b["ids"][0].as_str().unwrap());
+    let find = |id: &str| {
+        doc.home()
+            .walls
+            .iter()
+            .find(|w| w.attrs.id == id)
+            .unwrap()
+            .attrs
+            .clone()
+    };
+    assert_eq!(find(a).wall_at_end.as_deref(), Some(b));
+    assert_eq!(find(b).wall_at_start.as_deref(), Some(a));
+    run(&r, &mut doc, "edit_undo", json!({}));
+    run(&r, &mut doc, "edit_undo", json!({}));
 
     // Room from a point inside the walls: inner outline of the left half
     let room = run(

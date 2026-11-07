@@ -258,6 +258,33 @@ Verified: tests for all new commands; a file built with them (baseboards, textur
 rooms, duplicated furniture, polylines) and the same file edited and saved in the app are read
 by the original Sweet Home 3D reader.
 
+### 4.11 Usability pass of the plan editor (2026-11-07)
+
+Based on user feedback; Sweet Home 3D's interaction is the baseline, with additions:
+- Finishing a drawing: clicking the first point (closes walls and lines, finishes rooms),
+  Enter, Escape (keeps what was drawn), a right click without dragging, or a double-click.
+  Backspace removes the last point. A right click without a drawing leaves the tool.
+- Single walls: press, drag and release with the wall tool. New walls are drawn with their
+  real thickness (thickness field in the plan toolbar while the wall tool is active).
+- Typed lengths: digits while drawing set the length of the current segment, Enter confirms.
+- Magnetism (`plan2d/snapping.ts`): points (wall ends, wall side corners, room corners, the
+  first point), then directions from the previous point (15° steps, parallel/perpendicular to
+  nearby walls, shown as "∥ wall" / "⊥ wall"), along which the point snaps to alignment guides
+  (same x or y as a reference point, drawn as dashed lines) and to wall axes (walls) or wall
+  sides and room edges (rooms, dimensions). The angle to the previous segment is drawn at
+  each corner; right angles get a green square mark.
+- Wall handles: both ends (length and direction, with the same magnetism), a filled square
+  beside the middle (thickness), a diamond in the middle (bend into an arc, 5° steps) and a
+  circle beyond the end (rotate around the center, 15° steps). A hint bar at the bottom of
+  the plan explains the current tool, state and the handle under the cursor.
+- Moving walls: the preview shows the stretched joined walls and the angles at their corners;
+  with magnetism a single wall moves straight (perpendicular to or along itself), so the
+  corners keep their angles. Doors and windows inside a moved wall move with it (`edit_move`).
+- Furniture docks to wall sides while dragged (back against the wall, parallel), like Sweet
+  Home 3D's magnetism; Alt disables it.
+- `wall_add_path` joins an open path to a free wall end at its first or last point (mitered
+  corner instead of two overlapping walls).
+
 Next (P4c): multi-level editing details (elements of other levels as background, walls through
 levels), arc walls and wall splitting in the plan, furniture groups, text style and room label
 positions, mirrored copy, keyboard input of lengths while drawing.

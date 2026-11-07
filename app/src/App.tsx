@@ -33,6 +33,28 @@ const PLAN_TOOLS: { tool: Tool; label: string; hint: string }[] = [
   { tool: "label", label: "Text", hint: "Click to place a text label" },
 ];
 
+/** Thickness of the walls drawn next, shown while the wall tool is active. */
+function WallThicknessInput() {
+  const thickness = useStore((s) => s.wallThickness);
+  const setThickness = useStore((s) => s.setWallThickness);
+  return (
+    <label className="tool-option" title="Thickness of new walls">
+      Thickness
+      <input
+        type="number"
+        min={1}
+        step={1}
+        value={thickness}
+        onChange={(e) => {
+          const v = Number.parseFloat(e.currentTarget.value);
+          if (Number.isFinite(v) && v > 0) setThickness(v);
+        }}
+      />
+      cm
+    </label>
+  );
+}
+
 export default function App() {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const opened = useStore((s) => s.opened);
@@ -195,6 +217,7 @@ export default function App() {
                 </button>
               ))}
             </fieldset>
+            {tool === "wall" && <WallThicknessInput />}
             <nav className="level-tabs" aria-label="Levels">
               {levels.map((l) => (
                 <button

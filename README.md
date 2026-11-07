@@ -27,12 +27,20 @@ The app opens `.sh3d` files and standalone `Home.xml` files (e.g. `tests/corpus/
 It shows the 2D plan, the 3D view (aerial view and virtual visit) and the catalog of all
 installed Sweet Home 3D libraries.
 
-Editing in the plan: tools Select, Walls, Room, Line, Dimension, Text above the plan; drag
-furniture from the catalog onto the plan (doors and windows snap into walls); drag to move, R to
-rotate, Del to delete, arrow keys to nudge; handles of the selected element move wall ends and
-points, resize and rotate furniture; double-click inside walls with the room tool creates the
-room; Ctrl+C / X / V / D copy, cut, paste and duplicate (also into another home), Ctrl+A selects
-all; properties of the selection on the right (incl. textures and baseboards); Ctrl+Z / Ctrl+Y.
+Editing in the plan: tools Select, Walls, Room, Line, Dimension, Text above the plan; a hint
+bar at the bottom of the plan explains the next step.
+- Drawing: click the points; finish by clicking the first point (closes the outline), Enter,
+  Esc, a right click or a double-click; Backspace removes the last point; type a number + Enter
+  for an exact length; drag with the wall tool for a single wall. Magnetism snaps to wall ends
+  and corners, alignment guides, 15° steps and the directions of nearby walls (Alt disables it).
+- Double-click inside walls with the room tool creates the room of that area.
+- Handles of a selected wall: ends (length/angle), side square (thickness), middle diamond
+  (arc), circle (rotation). Furniture: resize and rotate handles; furniture docks to walls.
+- Drag to move (a single wall moves straight; corner angles are shown), R to rotate, Del to
+  delete, arrow keys to nudge; Ctrl+C / X / V / D copy, cut, paste and duplicate (also into
+  another home), Ctrl+A selects all; Ctrl+Z / Ctrl+Y.
+- Drag furniture from the catalog onto the plan (doors and windows snap into walls); properties
+  of the selection on the right (incl. textures and baseboards).
 
 ```powershell
 .\scripts\check.ps1                   # formatting, lints, tests
