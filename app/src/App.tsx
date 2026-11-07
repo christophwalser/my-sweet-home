@@ -223,8 +223,13 @@ export default function App() {
                 <button
                   type="button"
                   key={l.attrs.id}
-                  className={l.attrs.id === selectedLevel ? "active" : ""}
+                  className={`${l.attrs.id === selectedLevel ? "active" : ""} ${
+                    l.attrs.viewable === false ? "hidden-level" : ""
+                  }`}
                   onClick={() => selectLevel(l.attrs.id)}
+                  title={`Elevation ${l.attrs.elevation} cm${
+                    l.attrs.viewable === false ? " · hidden in 3D" : ""
+                  } · the level below is shown faded in the plan`}
                 >
                   {l.attrs.name}
                 </button>

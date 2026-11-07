@@ -319,6 +319,35 @@ export default function PropertiesPanel() {
               value={level.attrs.floor_thickness}
               onCommit={(v) => void run("level_update", { id: level.attrs.id, floor_thickness: v })}
             />
+            <Field
+              label="Visible in 3D"
+              type="checkbox"
+              value={level.attrs.viewable !== false}
+              onCommit={(v) => void run("level_update", { id: level.attrs.id, viewable: v })}
+            />
+            <div className="prop-actions">
+              <button
+                type="button"
+                title="Add a level with the same elevation (e.g. a mezzanine or split level)"
+                onClick={() =>
+                  void run("level_add", {
+                    name: `${level.attrs.name} (2)`,
+                    elevation: level.attrs.elevation,
+                    height: level.attrs.height,
+                    floor_thickness: level.attrs.floor_thickness,
+                  })
+                }
+              >
+                Add level at same elevation
+              </button>
+              <button
+                type="button"
+                title="Delete this level and everything on it (Ctrl+Z restores it)"
+                onClick={() => void run("edit_delete", { ids: [level.attrs.id] })}
+              >
+                Delete level
+              </button>
+            </div>
           </>
         )}
         <p className="muted">Click an element in the plan to edit it.</p>

@@ -100,6 +100,20 @@ export function planBounds(input: PlanInput): [number, number, number, number] |
   return Number.isFinite(minX) ? [minX, minY, maxX, maxY] : null;
 }
 
+/** The level directly below `levelId` (lower elevation, or same elevation and lower index). */
+export function levelBelow(home: Home, levelId: string | null): string | null {
+  const current = home.levels.find((l) => l.attrs.id === levelId);
+  if (!current) return null;
+  const key = (l: { attrs: { elevation: number; elevation_index: number | null } }) =>
+    l.attrs.elevation * 1000 + (l.attrs.elevation_index ?? 0);
+  let best: { id: string; k: number } | null = null;
+  for (const l of home.levels) {
+    const k = key(l);
+    if (k < key(current) && (!best || k > best.k)) best = { id: l.attrs.id, k };
+  }
+  return best?.id ?? null;
+}
+
 export function sameLevel(itemLevel: string | null, levelId: string | null): boolean {
   return levelId === null || itemLevel === levelId;
 }
@@ -123,6 +137,37 @@ export function drawPlan(
   drawGrid(ctx, width, height, view, colors);
 
   const { home, wallShapes, levelId } = input;
+
+  // The level below as a faded background (like Sweet Home 3D), to align walls and rooms
+  const below = levelBelow(home, levelId);
+  if (below) {
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = colors.wallStroke;
+    ctx.lineWidth = px;
+    ctx.setLineDash([4 * px, 3 * px]);
+    for (const room of home.rooms) {
+      if (room.attrs.level !== below || room.points.length < 3) continue;
+      ctx.beginPath();
+      tracePath(
+        ctx,
+        room.points.map((p) => [p.x, p.y]),
+      );
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.fillStyle = colors.grid;
+    home.walls.forEach((w, i) => {
+      if (w.attrs.level !== below) return;
+      ctx.beginPath();
+      tracePath(ctx, wallPolygon(wallShapes[i]));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
 
   // Rooms: floor color or texture like Sweet Home 3D's default preference
   // "room rendering: floor color or texture", 75 % opaque
