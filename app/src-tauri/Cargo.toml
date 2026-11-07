@@ -17,9 +17,15 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 msh-core.workspace = true
+msh-model.workspace = true
+msh-format.workspace = true
+msh-geometry.workspace = true
+msh-catalog.workspace = true
 tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
 serde.workspace = true
 serde_json.workspace = true
+zip.workspace = true
 
 [lints]
 workspace = true

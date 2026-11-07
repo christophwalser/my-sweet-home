@@ -1,15 +1,27 @@
-use msh_core::AppInfo;
+mod commands;
+mod resources;
+mod state;
 
-/// Returns the application name and version to the frontend.
-#[tauri::command]
-fn app_info() -> AppInfo {
-    msh_core::app_info()
-}
+use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![app_info])
+        .plugin(tauri_plugin_dialog::init())
+        .manage(AppState::default())
+        .register_asynchronous_uri_scheme_protocol("msh", |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            std::thread::spawn(move || {
+                responder.respond(resources::handle(&app, &request));
+            });
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::app_info,
+            commands::startup_file,
+            commands::open_home,
+            commands::close_home,
+            commands::catalog_load,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running the Tauri application");
 }

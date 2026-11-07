@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use clap::{Subcommand, ValueEnum};
-use msh_catalog::{Catalog, CatalogKind, find_libraries, open_library};
+use msh_catalog::{Catalog, CatalogKind, find_all_libraries, open_library};
 use serde::Serialize;
 use std::path::PathBuf;
 
@@ -90,35 +90,6 @@ pub fn run(cmd: CatalogCommand, json: bool) -> Result<()> {
     }
 }
 
-/// Library folders including the Store version.
-fn library_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
-    let mut dirs = extra.to_vec();
-    if let Some(store) = store_resources_dir() {
-        dirs.push(store.join("furniture"));
-        dirs.push(store.join("textures"));
-    }
-    dirs
-}
-
-/// Resources folder of the Microsoft Store version, if installed.
-fn store_resources_dir() -> Option<PathBuf> {
-    let out = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "(Get-AppxPackage -Name eTeks.SweetHome3D | Select-Object -First 1).InstallLocation",
-        ])
-        .output()
-        .ok()?;
-    let loc = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-    if loc.is_empty() {
-        return None;
-    }
-    let dir = PathBuf::from(loc).join("Sweet Home 3D").join("resources");
-    dir.is_dir().then_some(dir)
-}
-
 #[derive(Serialize)]
 struct LibrarySummary {
     path: PathBuf,
@@ -133,7 +104,7 @@ struct LibrarySummary {
 fn scan(extra: &[PathBuf], json: bool) -> Result<()> {
     let mut list = Vec::new();
     let mut errors = Vec::new();
-    for path in find_libraries(&library_dirs(extra)) {
+    for path in find_all_libraries(extra) {
         match open_library(&path, Some(DEFAULT_CATALOG_LANG)) {
             // Skip empty placeholder catalogs (e.g. ContributedFurnitureCatalog)
             Ok(cats) => list.extend(
@@ -225,7 +196,7 @@ fn search(
     };
 
     let mut hits = Vec::new();
-    for path in find_libraries(&library_dirs(extra)) {
+    for path in find_all_libraries(extra) {
         let Ok(cats) = open_library(&path, Some(lang)) else {
             continue;
         };

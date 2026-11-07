@@ -332,6 +332,39 @@ fn texture_item(index: u32, m: &mut BTreeMap<String, String>) -> Result<TextureI
     })
 }
 
+/// Resources folder of the Microsoft Store version of Sweet Home 3D, if installed.
+///
+/// The install location of Store apps can only be determined through package
+/// management, so this asks PowerShell (`Get-AppxPackage`).
+pub fn store_resources_dir() -> Option<PathBuf> {
+    let out = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "(Get-AppxPackage -Name eTeks.SweetHome3D | Select-Object -First 1).InstallLocation",
+        ])
+        .output()
+        .ok()?;
+    let loc = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+    if loc.is_empty() {
+        return None;
+    }
+    let dir = PathBuf::from(loc).join("Sweet Home 3D").join("resources");
+    dir.is_dir().then_some(dir)
+}
+
+/// All library files on this machine: Sweet Home 3D installation, user
+/// libraries, Store version and `extra_dirs`.
+pub fn find_all_libraries(extra_dirs: &[PathBuf]) -> Vec<PathBuf> {
+    let mut dirs = extra_dirs.to_vec();
+    if let Some(store) = store_resources_dir() {
+        dirs.push(store.join("furniture"));
+        dirs.push(store.join("textures"));
+    }
+    find_libraries(&dirs)
+}
+
 /// Known library locations on this machine (Windows only).
 ///
 /// `extra_dirs` adds further folders, e.g. the resources folder of the Store

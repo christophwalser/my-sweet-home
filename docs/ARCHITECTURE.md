@@ -125,6 +125,27 @@ MCP tools (excerpt): `home_open`, `home_save`, `home_describe` (structured summa
 - Catalog: virtual list, thumbnails cached on disk instead of in RAM.
 - Measurement: a benchmark script compares RAM, CPU and startup time with the original using the same example files.
 
+### 4.6 Viewer status after P2 (2026-11-07)
+
+Implemented:
+- `msh-geometry`: wall outlines with mitered joins (end–start and start–start joins), arc walls; unit-tested.
+- Tauri backend: `open_home` (`.sh3d` and standalone `Home.xml`), `catalog_load`, file passed on the command line, custom URI scheme `msh` (`http://msh.localhost/doc/{id}/{entry}` and `/lib/{index}/{entry}`) that serves resources directly from the ZIP files. Resources missing in a home (e.g. example projects referencing the SH3D catalog by class path) are resolved from the installed libraries.
+- 2D plan (Canvas 2D): rooms with names and areas, walls, furniture with icons, doors/windows with sash arcs, dimension lines, labels, polylines, compass, level tabs, zoom/pan/fit, light/dark theme.
+- 3D view (three.js, WebGL2): walls with heights at both ends, side and top colors, door/window openings cut with CSG (`three-bvh-csg`), floors/ceilings with textures, ground texture, sky color, furniture models (OBJ/MTL, 3DS, Collada) normalized like SH3D, Sweet Home 3D's default OBJ material table, transparent window panes (`sweethome3d_window_pane*` groups at 50 % opacity, as in SH3D's ModelManager), stored aerial and observer cameras, render on demand.
+- Catalog panel: all installed libraries, categories, search, icons, license and creator in the tooltip.
+
+Deliberate deviations:
+- The renderer is WebGL2 for now (stable with all three.js loaders and CSG). WebGPU will be evaluated in P7.
+- Missing texture images referenced by MTL files are dropped, so the material falls back to its diffuse color (SH3D behaves the same; three.js would render black).
+- The `visible` attribute of levels is ignored for 3D: SH3D saves it as derived state (levels above the selected one). Only `viewable` is respected.
+
+Known gaps (planned for later phases):
+- Wall textures (need UVs along wall sides), wall patterns in the plan, baseboards
+- Sky texture, light sources of lamps, shadows
+- Labels, dimension lines and polylines in 3D; staircase cut-outs; room floor thickness on upper levels
+- Selection, tooltips and editing (P3/P4)
+- Memory and CPU measurement of the release build (P7 benchmark; only dev builds were run so far)
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

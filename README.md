@@ -19,8 +19,13 @@ Rules for AI agents (incl. language policy): [CLAUDE.md](CLAUDE.md)
 ```powershell
 cd app
 pnpm install
-pnpm tauri dev          # run the app with hot reload
+pnpm tauri dev                          # run the app with hot reload
+pnpm tauri dev -- -- C:\path\house.sh3d # open a file on startup
 ```
+
+The app opens `.sh3d` files and standalone `Home.xml` files (e.g. `tests/corpus/examples`).
+It shows the 2D plan, the 3D view (aerial view and virtual visit) and the catalog of all
+installed Sweet Home 3D libraries.
 
 ```powershell
 .\scripts\check.ps1                   # formatting, lints, tests
@@ -53,15 +58,16 @@ All commands accept `--json` for machine-readable output.
 | `crates/msh-model` | Data model, 1:1 with the Sweet Home 3D 7.x format |
 | `crates/msh-format` | Read and write `.sh3d` / `Home.xml` |
 | `crates/msh-catalog` | Furniture and texture libraries (`.sh3f`, `.sh3t`, `.jar`) |
+| `crates/msh-geometry` | Geometry: wall outlines with joins, arc walls |
 | `crates/msh-core` | Core: document, commands, undo/redo (from P3) |
 | `crates/msh-cli` | Binary `msh` (CLI, later MCP server) |
 | `app/src-tauri` | Tauri backend of the desktop app |
-| `app/src` | React/TypeScript frontend |
+| `app/src` | React/TypeScript frontend (`plan2d/`, `view3d/`, `catalog/`) |
 | `tools/compat` | Java test program using the original Sweet Home 3D reader |
 | `tests/corpus` | Test files (example projects; personal files in `private/`) |
 | `docs/` | Architecture and decisions |
 
-More crates (`msh-geometry`, `msh-export`, `msh-ipc`) are added in the phases that need them.
+More crates (`msh-export`, `msh-ipc`) are added in the phases that need them.
 
 ## License
 
