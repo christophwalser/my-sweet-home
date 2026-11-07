@@ -9,13 +9,26 @@ import View3D from "./view3d/View3D";
 import "./App.css";
 
 const PLAN_TOOLS: { tool: Tool; label: string; hint: string }[] = [
-  { tool: "select", label: "Select", hint: "Select and move (Esc). Delete: Del, rotate: R" },
+  {
+    tool: "select",
+    label: "Select",
+    hint: "Select and move (Esc); drag the handles to resize or rotate. Del: delete, R: rotate, Ctrl+C/X/V: copy/cut/paste, Ctrl+D: duplicate, Ctrl+A: select all",
+  },
   {
     tool: "wall",
     label: "Walls",
     hint: "Click to add points, double-click or Enter to finish, Alt: no magnetism",
   },
-  { tool: "room", label: "Room", hint: "Click the corners, double-click or Enter to finish" },
+  {
+    tool: "room",
+    label: "Room",
+    hint: "Double-click inside walls to create the room of that area, or click the corners and double-click / Enter to finish",
+  },
+  {
+    tool: "polyline",
+    label: "Line",
+    hint: "Click to add points, click the first point to close, double-click or Enter to finish",
+  },
   { tool: "dimension", label: "Dimension", hint: "Click start and end point" },
   { tool: "label", label: "Text", hint: "Click to place a text label" },
 ];

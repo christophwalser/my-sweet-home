@@ -73,6 +73,20 @@ pub(crate) fn parse_color(s: &str) -> Result<Color, CommandError> {
     }))
 }
 
+/// Like [`parse_color`], but "" means "no color" (use the default).
+pub(crate) fn optional_color(s: &str) -> Result<Option<Color>, CommandError> {
+    if s.is_empty() {
+        Ok(None)
+    } else {
+        parse_color(s).map(Some)
+    }
+}
+
+/// The string unless it is empty ("" is used to remove a texture).
+pub(crate) fn non_empty(s: &Option<String>) -> Option<&str> {
+    s.as_deref().filter(|s| !s.is_empty())
+}
+
 pub(crate) fn color_hex(c: Option<Color>) -> Option<String> {
     c.map(|c| format!("#{:06X}", c.0 & 0x00FF_FFFF))
 }

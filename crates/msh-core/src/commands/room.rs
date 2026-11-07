@@ -1,7 +1,7 @@
 //! Room commands.
 
 use super::wall::texture_for;
-use super::{new_id, parse_color, resolve_level};
+use super::{new_id, non_empty, optional_color, parse_color, resolve_level};
 use crate::registry::{CommandError, Registry};
 use msh_model::{Point, Room, RoomAttrs};
 use schemars::JsonSchema;
@@ -11,8 +11,11 @@ use serde_json::json;
 #[derive(Deserialize, JsonSchema)]
 struct AddParams {
     /// Corner points of the floor as [[x, y], ...] in cm (at least 3). Usually the inner
-    /// outline of the surrounding walls.
-    points: Vec<[f32; 2]>,
+    /// outline of the surrounding walls. Give either `points` or `inside_point`.
+    points: Option<Vec<[f32; 2]>>,
+    /// A point [x, y] inside closed walls: the room gets the outline of the area enclosed
+    /// by the walls around it (like a double-click with the room tool)
+    inside_point: Option<[f32; 2]>,
     /// Name shown in the plan, e.g. "Kitchen"
     name: Option<String>,
     level: Option<String>,
@@ -33,7 +36,9 @@ struct UpdateParams {
     area_visible: Option<bool>,
     floor_visible: Option<bool>,
     ceiling_visible: Option<bool>,
+    /// Floor color as #RRGGBB, "" for the default
     floor_color: Option<String>,
+    /// Catalog ID of a floor texture, "" to remove it
     floor_texture: Option<String>,
     ceiling_color: Option<String>,
     ceiling_texture: Option<String>,
@@ -46,10 +51,23 @@ pub(super) fn register(r: &mut Registry) {
          floor texture.",
         true,
         |doc, p: AddParams| {
-            if p.points.len() < 3 {
+            let level = resolve_level(doc.home(), p.level)?;
+            let points = match (p.points, p.inside_point) {
+                (Some(points), None) => points,
+                (None, Some(at)) => msh_geometry::enclosed_area(doc.home(), level.as_deref(), at)
+                    .ok_or_else(|| {
+                    CommandError::failed(format!(
+                        "the point ({}, {}) is not enclosed by walls",
+                        at[0], at[1]
+                    ))
+                })?,
+                _ => {
+                    return Err(CommandError::failed("give either points or inside_point"));
+                }
+            };
+            if points.len() < 3 {
                 return Err(CommandError::failed("a room needs at least 3 points"));
             }
-            let level = resolve_level(doc.home(), p.level)?;
             let floor_tex = texture_for(doc, p.floor_texture.as_deref(), "floorTexture")?;
             let id = new_id("room");
             let room = Room {
@@ -63,11 +81,11 @@ pub(super) fn register(r: &mut Registry) {
                     ..Default::default()
                 },
                 textures: floor_tex.into_iter().collect(),
-                points: to_points(&p.points),
+                points: to_points(&points),
                 ..Default::default()
             };
             doc.home_mut().rooms.push(room);
-            Ok(json!({ "id": id }))
+            Ok(json!({ "id": id, "points": points }))
         },
     );
     r.add(
@@ -75,8 +93,8 @@ pub(super) fn register(r: &mut Registry) {
         "Changes name, outline, visibility, colors or textures of a room.",
         true,
         |doc, p: UpdateParams| {
-            let floor_tex = texture_for(doc, p.floor_texture.as_deref(), "floorTexture")?;
-            let ceiling_tex = texture_for(doc, p.ceiling_texture.as_deref(), "ceilingTexture")?;
+            let floor_tex = texture_for(doc, non_empty(&p.floor_texture), "floorTexture")?;
+            let ceiling_tex = texture_for(doc, non_empty(&p.ceiling_texture), "ceilingTexture")?;
             let room = doc
                 .home_mut()
                 .rooms
@@ -97,10 +115,10 @@ pub(super) fn register(r: &mut Registry) {
                 a.ceiling_visible = Some(v);
             }
             if let Some(c) = &p.floor_color {
-                a.floor_color = Some(parse_color(c)?);
+                a.floor_color = optional_color(c)?;
             }
             if let Some(c) = &p.ceiling_color {
-                a.ceiling_color = Some(parse_color(c)?);
+                a.ceiling_color = optional_color(c)?;
             }
             if let Some(points) = &p.points {
                 if points.len() < 3 {
@@ -108,9 +126,14 @@ pub(super) fn register(r: &mut Registry) {
                 }
                 room.points = to_points(points);
             }
-            for tex in [floor_tex, ceiling_tex].into_iter().flatten() {
-                room.textures.retain(|t| t.role != tex.role);
-                room.textures.push(tex);
+            for (role, tex, param) in [
+                ("floorTexture", floor_tex, &p.floor_texture),
+                ("ceilingTexture", ceiling_tex, &p.ceiling_texture),
+            ] {
+                if param.is_some() {
+                    room.textures.retain(|t| t.role.as_deref() != Some(role));
+                }
+                room.textures.extend(tex);
             }
             Ok(json!({ "id": p.id }))
         },

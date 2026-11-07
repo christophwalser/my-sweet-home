@@ -48,7 +48,9 @@ pub(super) fn register(r: &mut Registry) {
         "Creates a new, empty home and discards the current one (unsaved changes are lost).",
         false,
         |doc, p: NewParams| {
+            let clipboard = doc.clipboard.take();
             *doc = Document::new_home(p.name, p.wall_height.unwrap_or(DEFAULT_WALL_HEIGHT));
+            doc.clipboard = clipboard;
             Ok(json!({ "created": true }))
         },
     );
@@ -57,7 +59,11 @@ pub(super) fn register(r: &mut Registry) {
         "Opens a Sweet Home 3D file (.sh3d) and replaces the current home.",
         false,
         |doc, p: OpenParams| {
-            *doc = Document::open(&p.path).map_err(|e| CommandError::failed(e.to_string()))?;
+            let opened =
+                Document::open(&p.path).map_err(|e| CommandError::failed(e.to_string()))?;
+            let clipboard = doc.clipboard.take();
+            *doc = opened;
+            doc.clipboard = clipboard;
             describe(doc, None)
         },
     );

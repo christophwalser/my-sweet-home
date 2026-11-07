@@ -1,5 +1,7 @@
 //! Move, delete, undo and redo.
 
+use super::resolve_level;
+use crate::clipboard::Clipboard;
 use crate::registry::{CommandError, Registry};
 use msh_model::{Furniture, Home};
 use schemars::JsonSchema;
@@ -26,7 +28,93 @@ struct MoveParams {
 #[derive(Deserialize, JsonSchema)]
 struct NoParams {}
 
+#[derive(Deserialize, JsonSchema)]
+struct CopyParams {
+    /// IDs of walls, rooms, furniture, labels, dimension lines or polylines
+    ids: Vec<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct PasteParams {
+    /// Offset in cm. Default: 20 cm right and down if the copied elements are still in
+    /// the home, otherwise the original position.
+    dx: Option<f32>,
+    dy: Option<f32>,
+    /// Target level (default: selected level)
+    level: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct DuplicateParams {
+    /// IDs of walls, rooms, furniture, labels, dimension lines or polylines
+    ids: Vec<String>,
+    /// Offset of the copies in cm (default 20, 20)
+    dx: Option<f32>,
+    dy: Option<f32>,
+}
+
+fn offset(dx: Option<f32>, dy: Option<f32>) -> Option<(f32, f32)> {
+    (dx.is_some() || dy.is_some()).then(|| (dx.unwrap_or(0.0), dy.unwrap_or(0.0)))
+}
+
 pub(super) fn register(r: &mut Registry) {
+    r.add(
+        "edit_copy",
+        "Copies elements (with their models and textures) to the clipboard of this session.          The clipboard survives home_open/home_new, so elements can be pasted into another home.",
+        false,
+        |doc, p: CopyParams| {
+            let clip = Clipboard::copy(doc, &p.ids);
+            if clip.is_empty() {
+                return Err(CommandError::failed(format!(
+                    "no element found for {:?}",
+                    p.ids
+                )));
+            }
+            let count = clip.walls.len()
+                + clip.rooms.len()
+                + clip.furniture.len()
+                + clip.polylines.len()
+                + clip.dimension_lines.len()
+                + clip.labels.len();
+            doc.clipboard = Some(clip);
+            Ok(json!({ "copied": count }))
+        },
+    );
+    r.add(
+        "edit_paste",
+        "Pastes the elements of the clipboard (see edit_copy) with new IDs. Returns the new IDs.",
+        true,
+        |doc, p: PasteParams| {
+            let level = resolve_level(doc.home(), p.level)?;
+            let clip = doc
+                .clipboard
+                .clone()
+                .ok_or_else(|| CommandError::failed("the clipboard is empty"))?;
+            let ids = clip.paste(doc, level, offset(p.dx, p.dy));
+            Ok(json!({ "ids": ids }))
+        },
+    );
+    r.add(
+        "edit_duplicate",
+        "Duplicates elements on their level, moved by (dx, dy) (default 20 cm). Does not change          the clipboard. Returns the new IDs.",
+        true,
+        |doc, p: DuplicateParams| {
+            let clip = Clipboard::copy(doc, &p.ids);
+            if clip.is_empty() {
+                return Err(CommandError::failed(format!(
+                    "no element found for {:?}",
+                    p.ids
+                )));
+            }
+            let level = element_level(doc.home(), &p.ids);
+            let ids = clip.paste(
+                doc,
+                level,
+                Some((p.dx.unwrap_or(20.0), p.dy.unwrap_or(20.0))),
+            );
+            Ok(json!({ "ids": ids }))
+        },
+    );
     r.add(
         "edit_move",
         "Moves elements by (dx, dy) cm. Walls joined to a moved wall keep their connection: \
@@ -82,6 +170,60 @@ pub(super) fn register(r: &mut Registry) {
             None => Err(CommandError::failed("nothing to redo")),
         },
     );
+}
+
+/// Level of the first element with one of the given IDs (for duplicates on the same level).
+fn element_level(home: &Home, ids: &[String]) -> Option<String> {
+    let has = |id: &str| ids.iter().any(|i| i == id);
+    if let Some(w) = home.walls.iter().find(|w| has(&w.attrs.id)) {
+        return w.attrs.level.clone();
+    }
+    let mut level = None;
+    fn find(items: &[Furniture], has: &dyn Fn(&str) -> bool, out: &mut Option<Option<String>>) {
+        for item in items {
+            if out.is_some() {
+                return;
+            }
+            match item {
+                Furniture::Piece(p) if p.attrs.id.as_deref().is_some_and(has) => {
+                    *out = Some(p.attrs.level.clone());
+                }
+                Furniture::Group(g) if g.attrs.id.as_deref().is_some_and(has) => {
+                    *out = Some(g.attrs.level.clone());
+                }
+                Furniture::Group(g) => find(&g.items, has, out),
+                Furniture::Piece(_) => {}
+            }
+        }
+    }
+    find(&home.furniture, &has, &mut level);
+    if let Some(l) = level {
+        return l;
+    }
+    let pick = |id: &Option<String>| id.as_deref().is_some_and(has);
+    home.rooms
+        .iter()
+        .find(|r| pick(&r.attrs.id))
+        .map(|r| r.attrs.level.clone())
+        .or_else(|| {
+            home.polylines
+                .iter()
+                .find(|p| pick(&p.attrs.id))
+                .map(|p| p.attrs.level.clone())
+        })
+        .or_else(|| {
+            home.dimension_lines
+                .iter()
+                .find(|d| pick(&d.attrs.id))
+                .map(|d| d.attrs.level.clone())
+        })
+        .or_else(|| {
+            home.labels
+                .iter()
+                .find(|l| pick(&l.attrs.id))
+                .map(|l| l.attrs.level.clone())
+        })
+        .flatten()
 }
 
 /// Moves the elements with the given IDs; returns how many were moved.

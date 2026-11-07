@@ -206,6 +206,85 @@ fn dist(a: Pt, b: Pt) -> f32 {
     (a[0] - b[0]).hypot(a[1] - b[1])
 }
 
+/// Outline of the area enclosed by walls around `p`, like a double-click with the
+/// room tool in Sweet Home 3D. Only walls on `level` are considered (all walls if
+/// `level` is `None`). Returns `None` if `p` is not surrounded by walls.
+pub fn enclosed_area(home: &Home, level: Option<&str>, p: Pt) -> Option<Vec<Pt>> {
+    use geo::{Area, Contains, LineString, MultiPolygon, Point, Polygon};
+    let shapes = wall_shapes(home);
+    let polygons: Vec<Polygon<f64>> = home
+        .walls
+        .iter()
+        .zip(&shapes)
+        .filter(|(w, _)| level.is_none() || w.attrs.level.as_deref() == level)
+        .map(|(_, s)| {
+            let ring: Vec<(f64, f64)> = s
+                .polygon()
+                .iter()
+                .map(|q| (f64::from(q[0]), f64::from(q[1])))
+                .collect();
+            Polygon::new(LineString::from(ring), vec![])
+        })
+        .filter(|poly| poly.unsigned_area() > 1e-6)
+        .collect();
+    if polygons.is_empty() {
+        return None;
+    }
+    let union: MultiPolygon<f64> = geo::unary_union(&polygons);
+    let point = Point::new(f64::from(p[0]), f64::from(p[1]));
+    // The smallest hole of the wall union that contains the point is the room
+    let mut best: Option<(f64, &LineString<f64>)> = None;
+    for poly in &union {
+        for hole in poly.interiors() {
+            let area = Polygon::new(hole.clone(), vec![]);
+            if area.contains(&point) {
+                let a = area.unsigned_area();
+                if best.is_none_or(|(b, _)| a < b) {
+                    best = Some((a, hole));
+                }
+            }
+        }
+    }
+    let (_, ring) = best?;
+    let mut pts: Vec<Pt> = ring
+        .coords()
+        .map(|c| [round_cm(c.x), round_cm(c.y)])
+        .collect();
+    if pts.len() > 1 && pts.first() == pts.last() {
+        pts.pop();
+    }
+    let pts = without_collinear_points(pts);
+    (pts.len() >= 3).then_some(pts)
+}
+
+/// Rounds to 1/100 cm to hide floating point noise of the polygon union.
+fn round_cm(v: f64) -> f32 {
+    ((v * 100.0).round() / 100.0) as f32
+}
+
+/// Removes duplicate points and points on a straight line between their neighbors.
+fn without_collinear_points(mut pts: Vec<Pt>) -> Vec<Pt> {
+    loop {
+        let n = pts.len();
+        if n < 3 {
+            return pts;
+        }
+        let redundant = (0..n).find(|&i| {
+            let a = pts[(i + n - 1) % n];
+            let b = pts[i];
+            let c = pts[(i + 1) % n];
+            let cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+            dist(a, b) < 1e-3 || cross.abs() < 1e-2 * dist(a, c).max(1.0)
+        });
+        match redundant {
+            Some(i) => {
+                pts.remove(i);
+            }
+            None => return pts,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,6 +369,37 @@ mod tests {
         assert!(approx(midpoint(s.left[0], s.right[0]), [0.0, 0.0]));
         let n = s.left.len() - 1;
         assert!(approx(midpoint(s.left[n], s.right[n]), [100.0, 0.0]));
+    }
+
+    #[test]
+    fn enclosed_area_of_a_closed_outline() {
+        // Four joined walls around (0,0)-(400,300), 10 cm thick, and a partition at x=200
+        let mut home = Home::default();
+        let ids = ["a", "b", "c", "d"];
+        let pts = [[0.0, 0.0], [400.0, 0.0], [400.0, 300.0], [0.0, 300.0]];
+        for i in 0..4 {
+            home.walls.push(wall(
+                ids[i],
+                pts[i],
+                pts[(i + 1) % 4],
+                Some(ids[(i + 3) % 4]),
+                Some(ids[(i + 1) % 4]),
+            ));
+        }
+        home.walls
+            .push(wall("e", [200.0, 0.0], [200.0, 300.0], None, None));
+        let left = enclosed_area(&home, None, [100.0, 150.0]).expect("room");
+        let mut xs: Vec<f32> = left.iter().map(|p| p[0]).collect();
+        xs.sort_by(f32::total_cmp);
+        assert_eq!(left.len(), 4, "{left:?}");
+        assert_eq!((xs[0], xs[3]), (5.0, 195.0));
+        let right = enclosed_area(&home, None, [300.0, 150.0]).expect("room");
+        assert_eq!(right.len(), 4, "{right:?}");
+        // Outside of the walls there is no room
+        assert!(enclosed_area(&home, None, [500.0, 150.0]).is_none());
+        // An open outline encloses nothing
+        home.walls.retain(|w| w.attrs.id != "c");
+        assert!(enclosed_area(&home, None, [300.0, 150.0]).is_none());
     }
 
     fn midpoint(a: Pt, b: Pt) -> Pt {

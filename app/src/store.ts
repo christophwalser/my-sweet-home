@@ -9,7 +9,7 @@ import { forEachPiece, type OpenedHome } from "./model";
 export type ViewMode = "aerial" | "observer";
 
 /** Tool of the 2D plan. */
-export type Tool = "select" | "wall" | "room" | "dimension" | "label";
+export type Tool = "select" | "wall" | "room" | "polyline" | "dimension" | "label";
 
 type State = {
   opened: OpenedHome | null;

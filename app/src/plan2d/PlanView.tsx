@@ -1,9 +1,12 @@
 // 2D plan view: drawing, zoom/pan, selection and editing tools.
 //
-// Mouse: left button selects (Shift adds), drags selected elements or a rubber
-// band; right or middle button pans; wheel zooms. Drawing tools add points with
-// clicks; double-click or Enter finishes, Escape cancels. Every change is a
-// registry command (one undo step), like changes from the CLI or MCP.
+// Mouse: left button selects (Shift adds), drags selected elements, the handles
+// of a single selected element or a rubber band; right or middle button pans;
+// wheel zooms. Drawing tools add points with clicks; double-click or Enter
+// finishes, Escape cancels; a double-click inside walls with the room tool creates
+// the room of the enclosed area. Ctrl+C / X / V / D copy, cut, paste and
+// duplicate, Ctrl+A selects everything on the level. Every change is a registry
+// command (one undo step), like changes from the CLI or MCP.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api";
@@ -16,6 +19,7 @@ import {
   planBounds,
   type ViewTransform,
 } from "./drawPlan";
+import { dragHandle, elementHandles, type Handle, type HandleDrag, handleAt } from "./handles";
 import {
   elementsInRect,
   hitTest,
@@ -72,7 +76,33 @@ type Gesture =
   | { kind: "pan"; last: [number, number] }
   | { kind: "press"; start: Pt; screen: [number, number]; hitId: string | null; shift: boolean }
   | { kind: "move"; start: Pt; offset: Pt }
-  | { kind: "band"; start: Pt; end: Pt };
+  | { kind: "band"; start: Pt; end: Pt }
+  | { kind: "handle"; handle: Handle; drag: HandleDrag | null; cursor: Pt };
+
+/** Tools that draw a path of points. */
+const PATH_TOOLS: Tool[] = ["wall", "room", "dimension", "polyline"];
+const isPathTool = (t: Tool) => PATH_TOOLS.includes(t);
+
+/** Cursor over a handle. */
+const HANDLE_CURSOR: Record<Handle["kind"], string> = {
+  "wall-start": "move",
+  "wall-end": "move",
+  "room-point": "move",
+  "polyline-point": "move",
+  "dimension-start": "move",
+  "dimension-end": "move",
+  "piece-resize": "nwse-resize",
+  "piece-rotate": "grab",
+};
+
+const cursorStyle: Record<Tool, string> = {
+  select: "default",
+  wall: "crosshair",
+  room: "crosshair",
+  polyline: "crosshair",
+  dimension: "crosshair",
+  label: "text",
+};
 
 export default function PlanView() {
   const opened = useStore((s) => s.opened);
@@ -146,14 +176,21 @@ export default function PlanView() {
     }
     drawPlan(ctx, canvas.width, canvas.height, viewRef.current, input, colors);
     const g = gesture.current;
-    const drawing = tool === "wall" || tool === "room" || tool === "dimension";
+    const drawing = isPathTool(tool);
     const points = cursor.current && drawing ? [...draft.current, cursor.current] : draft.current;
+    const selection = useStore.getState().selection;
     const overlay: PlanOverlay = {
-      selection: useStore.getState().selection,
+      selection,
       dragOffset: g?.kind === "move" ? g.offset : null,
-      draft: drawing && points.length > 0 ? { points, kind: tool } : null,
+      draft:
+        drawing && points.length > 0
+          ? { points, kind: tool as "wall" | "room" | "dimension" | "polyline" }
+          : null,
       rubberBand: g?.kind === "band" ? [g.start, g.end] : null,
       snap: drawing ? snapMarker.current : null,
+      handles:
+        tool === "select" && selection.length === 1 ? elementHandles(input.home, selection[0]) : [],
+      handleDrag: g?.kind === "handle" && g.drag ? { drag: g.drag, cursor: g.cursor } : null,
       accent,
     };
     drawOverlay(ctx, viewRef.current, input.home, input.wallShapes, overlay);
@@ -239,11 +276,14 @@ export default function PlanView() {
       return p;
     }
     const previous = draft.current.length > 0 ? draft.current[draft.current.length - 1] : null;
-    // Walls snap to wall ends (axis), rooms to the corners of the wall sides
+    // Walls snap to wall ends (axis), rooms to the corners of the wall sides,
+    // polylines only to their own first point
     const walls =
       tool === "room"
         ? wallSideCorners(input.home, input.wallShapes, effectiveLevel)
-        : wallEndPoints(input.home, effectiveLevel);
+        : tool === "polyline"
+          ? []
+          : wallEndPoints(input.home, effectiveLevel);
     const targets = [...walls, ...draft.current.slice(0, 1)];
     const s = snapPoint(p, previous, targets, pxToCm(SNAP_PX));
     const onTarget = targets.some((t) => t[0] === s[0] && t[1] === s[1]);
@@ -275,7 +315,29 @@ export default function PlanView() {
         | { id?: string }
         | undefined;
       if (result?.id) setSelection([result.id]);
+    } else if (tool === "polyline" && pts.length >= 2) {
+      const first = pts[0];
+      const last = pts[pts.length - 1];
+      const closed = pts.length >= 4 && Math.hypot(first[0] - last[0], first[1] - last[1]) < 1;
+      const points = closed ? pts.slice(0, -1) : pts;
+      const result = (await run("polyline_add", { points, closed, ...levelParam() })) as
+        | { id?: string }
+        | undefined;
+      if (result?.id) setSelection([result.id]);
     }
+  };
+
+  /** Room of the area enclosed by walls around `p` (double-click with the room tool). */
+  const addRoomAt = async (p: Pt) => {
+    draft.current = [];
+    cursor.current = null;
+    snapMarker.current = null;
+    draw();
+    const result = (await run("room_add", {
+      inside_point: [Math.round(p[0]), Math.round(p[1])],
+      ...levelParam(),
+    })) as { id?: string } | undefined;
+    if (result?.id) setSelection([result.id]);
   };
 
   const addDraftPoint = async (p: Pt) => {
@@ -297,8 +359,8 @@ export default function PlanView() {
       if (result?.id) setSelection([result.id]);
       return;
     }
-    // Clicking the first point of a wall path again closes it
-    if (tool === "wall" && pts.length >= 3) {
+    // Clicking the first point of a wall path or polyline again closes it
+    if ((tool === "wall" || tool === "polyline") && pts.length >= 3) {
       const first = pts[0];
       if (Math.hypot(first[0] - p[0], first[1] - p[1]) < 0.5) {
         await finishDraft();
@@ -335,6 +397,15 @@ export default function PlanView() {
     if (e.button !== 0 || !input) return;
     const p = toWorld(e.clientX, e.clientY);
     if (tool === "select") {
+      const sel = useStore.getState().selection;
+      const handle =
+        sel.length === 1
+          ? handleAt(elementHandles(input.home, sel[0]), p, pxToCm(PICK_PX + 2))
+          : null;
+      if (handle) {
+        gesture.current = { kind: "handle", handle, drag: null, cursor: p };
+        return;
+      }
       const hit = hitTest(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
       gesture.current = {
         kind: "press",
@@ -375,6 +446,29 @@ export default function PlanView() {
       return;
     }
     const p = toWorld(e.clientX, e.clientY);
+    if (g?.kind === "handle" && input) {
+      g.cursor = p;
+      g.drag = dragHandle(
+        input.home,
+        input.wallShapes,
+        effectiveLevel,
+        g.handle,
+        p,
+        pxToCm(SNAP_PX),
+        !e.altKey,
+      );
+      draw();
+      return;
+    }
+    if (!g && tool === "select" && input && canvasRef.current) {
+      // Cursor feedback over the handles of the selected element
+      const sel = useStore.getState().selection;
+      const handle =
+        sel.length === 1
+          ? handleAt(elementHandles(input.home, sel[0]), p, pxToCm(PICK_PX + 2))
+          : null;
+      canvasRef.current.style.cursor = handle ? HANDLE_CURSOR[handle.kind] : cursorStyle.select;
+    }
     if (g?.kind === "press") {
       if (Math.hypot(e.clientX - g.screen[0], e.clientY - g.screen[1]) < DRAG_THRESHOLD_PX) return;
       if (g.hitId) {
@@ -404,6 +498,11 @@ export default function PlanView() {
     gesture.current = null;
     if (!g || !input) return;
     const sel = useStore.getState().selection;
+    if (g.kind === "handle") {
+      if (g.drag) void run(g.drag.command, g.drag.params);
+      draw();
+      return;
+    }
     if (g.kind === "press") {
       // Plain click: select the element under the cursor (Shift toggles)
       if (g.hitId) {
@@ -428,8 +527,11 @@ export default function PlanView() {
     }
   };
 
-  const onDoubleClick = () => {
-    if (tool === "wall" || tool === "room") {
+  const onDoubleClick = (e: React.MouseEvent) => {
+    if (tool === "room" && draft.current.length <= 1) {
+      // Double-click without a drawn outline: room of the area enclosed by walls
+      void addRoomAt(toWorld(e.clientX, e.clientY));
+    } else if (tool === "wall" || tool === "room" || tool === "polyline") {
       // The second click of the double-click added a duplicate point: it is ignored
       void finishDraft();
     } else if (tool === "select" && useStore.getState().selection.length === 0) {
@@ -439,14 +541,48 @@ export default function PlanView() {
 
   // ---------------------------------------------------------------- keyboard
 
+  /** Ctrl shortcuts of the plan; returns false for keys it does not handle. */
+  const onShortcut = (key: string, sel: string[]): boolean => {
+    if (!input) return false;
+    const selectNew = (r: unknown) => {
+      const ids = (r as { ids?: string[] } | undefined)?.ids;
+      if (ids) setSelection(ids);
+    };
+    if (key === "a") {
+      setSelection(elementsInRect(input.home, effectiveLevel, [-1e9, -1e9], [1e9, 1e9]));
+    } else if (key === "c" && sel.length > 0) {
+      void run("edit_copy", { ids: sel });
+    } else if (key === "x" && sel.length > 0) {
+      void run("edit_copy", { ids: sel }).then((r) => {
+        if (r) void run("edit_delete", { ids: sel });
+      });
+    } else if (key === "v") {
+      void run("edit_paste", levelParam()).then(selectNew);
+    } else if (key === "d" && sel.length > 0) {
+      void run("edit_duplicate", { ids: sel }).then(selectNew);
+    } else {
+      return false;
+    }
+    return true;
+  };
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: handlers read current state on each key
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || e.ctrlKey || e.metaKey)
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT"
+      )
         return;
       const state = useStore.getState();
       const sel = state.selection;
+      if (e.ctrlKey || e.metaKey) {
+        if (!onShortcut(e.key.toLowerCase(), sel)) return;
+        e.preventDefault();
+        return;
+      }
       if (e.key === "Escape") {
         if (draft.current.length > 0) {
           draft.current = [];
@@ -456,7 +592,10 @@ export default function PlanView() {
         } else {
           setSelection([]);
         }
-      } else if (e.key === "Enter" && (state.tool === "wall" || state.tool === "room")) {
+      } else if (
+        e.key === "Enter" &&
+        (state.tool === "wall" || state.tool === "room" || state.tool === "polyline")
+      ) {
         void finishDraft();
       } else if ((e.key === "Delete" || e.key === "Backspace") && sel.length > 0) {
         void run("edit_delete", { ids: sel });
@@ -521,14 +660,6 @@ export default function PlanView() {
     }
     const id = (result as { id?: string } | undefined)?.id;
     if (id) setSelection([id]);
-  };
-
-  const cursorStyle: Record<Tool, string> = {
-    select: "default",
-    wall: "crosshair",
-    room: "crosshair",
-    dimension: "crosshair",
-    label: "text",
   };
 
   return (

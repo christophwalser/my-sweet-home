@@ -1,8 +1,9 @@
 // Properties of the selected element (or of the home and level if nothing is
 // selected). Every change runs an *_update command: one undo step per field.
 
-import { forEachPiece, type Piece } from "../model";
+import { forEachPiece, type Piece, type Texture, type Wall } from "../model";
 import { useStore } from "../store";
+import TextureField from "./TextureField";
 
 type FieldType = "number" | "text" | "color" | "checkbox" | "angle";
 
@@ -67,6 +68,130 @@ function Field({ label, type, value, unit, onCommit }: FieldProps) {
   );
 }
 
+/** Drop-down field that commits on change. */
+function SelectField({
+  label,
+  value,
+  options,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  options: [string, string][];
+  onCommit: (value: string) => void;
+}) {
+  return (
+    <label className="prop-row">
+      <span className="prop-label">{label}</span>
+      <select value={value} onChange={(e) => onCommit(e.currentTarget.value)}>
+        {options.map(([v, text]) => (
+          <option key={v} value={v}>
+            {text}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+const WALL_PATTERNS: [string, string][] = [
+  ["hatchUp", "Hatch up"],
+  ["hatchDown", "Hatch down"],
+  ["reversedHatchUp", "Reversed hatch up"],
+  ["reversedHatchDown", "Reversed hatch down"],
+  ["crossHatch", "Cross hatch"],
+  ["background", "Background"],
+  ["foreground", "Foreground"],
+];
+
+const DASH_STYLES: [string, string][] = [
+  ["SOLID", "Solid"],
+  ["DOT", "Dot"],
+  ["DASH", "Dash"],
+  ["DASH_DOT", "Dash dot"],
+  ["DASH_DOT_DOT", "Dash dot dot"],
+];
+
+const ARROW_STYLES: [string, string][] = [
+  ["NONE", "None"],
+  ["DELTA", "Triangle"],
+  ["OPEN", "Open"],
+  ["DISC", "Disc"],
+];
+
+const byRole = (textures: Texture[] | undefined, role: string) =>
+  textures?.find((t) => t.role === role) ?? null;
+
+/** Color, texture and baseboard of one wall side. */
+function WallSide({
+  wall,
+  side,
+  run,
+}: {
+  wall: Wall;
+  side: "left" | "right";
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const id = wall.attrs.id;
+  const title = side === "left" ? "Left side" : "Right side";
+  const color = side === "left" ? wall.attrs.left_side_color : wall.attrs.right_side_color;
+  const baseboard = wall.baseboards?.find((b) => b.attrs.role === `${side}SideBaseboard`);
+  const update = (field: string, value: unknown) =>
+    void run("wall_update", { id, [`${side}_side_${field}`]: value });
+  const updateBaseboard = (values: Record<string, unknown>) => update("baseboard", values);
+  return (
+    <>
+      <h3>{title}</h3>
+      <Field label="Color" type="color" value={toHex(color)} onCommit={(v) => update("color", v)} />
+      {color !== null && (
+        <button type="button" className="link-button" onClick={() => update("color", "")}>
+          Default color
+        </button>
+      )}
+      <TextureField
+        label="Texture"
+        current={byRole(wall.textures, `${side}SideTexture`)}
+        onCommit={(v) => update("texture", v)}
+      />
+      <Field
+        label="Baseboard"
+        type="checkbox"
+        value={!!baseboard}
+        onCommit={(v) => updateBaseboard({ height: v ? 7 : 0 })}
+      />
+      {baseboard && (
+        <>
+          <Field
+            label="Height"
+            type="number"
+            unit="cm"
+            value={baseboard.attrs.height}
+            onCommit={(v) => updateBaseboard({ height: v })}
+          />
+          <Field
+            label="Thickness"
+            type="number"
+            unit="cm"
+            value={baseboard.attrs.thickness}
+            onCommit={(v) => updateBaseboard({ thickness: v })}
+          />
+          <Field
+            label="Color"
+            type="color"
+            value={toHex(baseboard.attrs.color ?? color)}
+            onCommit={(v) => updateBaseboard({ color: v })}
+          />
+          <TextureField
+            label="Texture"
+            current={baseboard.texture}
+            onCommit={(v) => updateBaseboard({ texture: v })}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
 export default function PropertiesPanel() {
   const opened = useStore((s) => s.opened);
   const selection = useStore((s) => s.selection);
@@ -75,14 +200,39 @@ export default function PropertiesPanel() {
   if (!opened) return <div className="props muted">No home open</div>;
   const home = opened.home;
 
+  const actions = (
+    <div className="prop-actions">
+      <button
+        type="button"
+        onClick={() => void run("edit_copy", { ids: selection })}
+        title="Ctrl+C"
+      >
+        Copy
+      </button>
+      <button
+        type="button"
+        title="Ctrl+D"
+        onClick={() =>
+          void run("edit_duplicate", { ids: selection }).then((r) => {
+            const ids = (r as { ids?: string[] } | undefined)?.ids;
+            if (ids) useStore.getState().setSelection(ids);
+          })
+        }
+      >
+        Duplicate
+      </button>
+      <button type="button" onClick={() => void run("edit_delete", { ids: selection })} title="Del">
+        Delete
+      </button>
+    </div>
+  );
+
   if (selection.length > 1) {
     return (
       <div className="props">
         <h2>{selection.length} elements selected</h2>
         <p className="muted">Drag to move, arrow keys move by 1 cm (Shift: 10 cm).</p>
-        <button type="button" onClick={() => void run("edit_delete", { ids: selection })}>
-          Delete
-        </button>
+        {actions}
       </div>
     );
   }
@@ -200,6 +350,7 @@ export default function PropertiesPanel() {
           onCommit={set("visible")}
         />
         {a.catalog_id && <p className="muted small">Catalog ID: {a.catalog_id}</p>}
+        {actions}
       </div>
     );
   }
@@ -251,18 +402,15 @@ export default function PropertiesPanel() {
           value={a.height_at_end ?? a.height ?? home.attrs.wall_height ?? 250}
           onCommit={set("height_at_end")}
         />
-        <Field
-          label="Left side"
-          type="color"
-          value={toHex(a.left_side_color)}
-          onCommit={set("left_side_color")}
+        <SelectField
+          label="Pattern"
+          value={a.pattern ?? "hatchUp"}
+          options={WALL_PATTERNS}
+          onCommit={set("pattern")}
         />
-        <Field
-          label="Right side"
-          type="color"
-          value={toHex(a.right_side_color)}
-          onCommit={set("right_side_color")}
-        />
+        <WallSide wall={wall} side="left" run={run} />
+        <WallSide wall={wall} side="right" run={run} />
+        {actions}
       </div>
     );
   }
@@ -301,18 +449,41 @@ export default function PropertiesPanel() {
           value={a.ceiling_visible !== false}
           onCommit={set("ceiling_visible")}
         />
+        <h3>Floor</h3>
         <Field
-          label="Floor color"
+          label="Color"
           type="color"
           value={toHex(a.floor_color)}
           onCommit={set("floor_color")}
         />
+        {a.floor_color !== null && (
+          <button type="button" className="link-button" onClick={() => set("floor_color")("")}>
+            Default color
+          </button>
+        )}
+        <TextureField
+          label="Texture"
+          current={byRole(room.textures, "floorTexture")}
+          onCommit={set("floor_texture")}
+        />
+        <h3>Ceiling</h3>
         <Field
-          label="Ceiling color"
+          label="Color"
           type="color"
           value={toHex(a.ceiling_color)}
           onCommit={set("ceiling_color")}
         />
+        {a.ceiling_color !== null && (
+          <button type="button" className="link-button" onClick={() => set("ceiling_color")("")}>
+            Default color
+          </button>
+        )}
+        <TextureField
+          label="Texture"
+          current={byRole(room.textures, "ceilingTexture")}
+          onCommit={set("ceiling_texture")}
+        />
+        {actions}
       </div>
     );
   }
@@ -334,6 +505,84 @@ export default function PropertiesPanel() {
           value={label.text_style?.font_size ?? 18}
           onCommit={set("font_size")}
         />
+        {actions}
+      </div>
+    );
+  }
+
+  const polyline = home.polylines.find((l) => l.attrs.id === id);
+  if (polyline) {
+    const a = polyline.attrs;
+    const set = (field: string) => (v: string | number | boolean) =>
+      void run("polyline_update", { id, [field]: v });
+    return (
+      <div className="props">
+        <h2>Line</h2>
+        <Field
+          label="Thickness"
+          type="number"
+          unit="cm"
+          value={a.thickness ?? 1}
+          onCommit={set("thickness")}
+        />
+        <Field label="Color" type="color" value={toHex(a.color ?? 0)} onCommit={set("color")} />
+        <SelectField
+          label="Dashes"
+          value={a.dash_style ?? "SOLID"}
+          options={DASH_STYLES}
+          onCommit={set("dash_style")}
+        />
+        <Field label="Closed" type="checkbox" value={a.closed_path} onCommit={set("closed")} />
+        {!a.closed_path && (
+          <>
+            <SelectField
+              label="Start arrow"
+              value={a.start_arrow_style ?? "NONE"}
+              options={ARROW_STYLES}
+              onCommit={set("start_arrow")}
+            />
+            <SelectField
+              label="End arrow"
+              value={a.end_arrow_style ?? "NONE"}
+              options={ARROW_STYLES}
+              onCommit={set("end_arrow")}
+            />
+          </>
+        )}
+        {actions}
+      </div>
+    );
+  }
+
+  const dim = home.dimension_lines.find((d) => d.attrs.id === id);
+  if (dim) {
+    const a = dim.attrs;
+    const set = (field: string) => (v: string | number | boolean) =>
+      void run("dimension_update", { id, [field]: v });
+    return (
+      <div className="props">
+        <h2>Dimension</h2>
+        <p className="muted small">
+          Length: {(Math.hypot(a.x_end - a.x_start, a.y_end - a.y_start) / 100).toFixed(2)} m
+        </p>
+        <Field
+          label="X start"
+          type="number"
+          unit="cm"
+          value={a.x_start}
+          onCommit={set("x_start")}
+        />
+        <Field
+          label="Y start"
+          type="number"
+          unit="cm"
+          value={a.y_start}
+          onCommit={set("y_start")}
+        />
+        <Field label="X end" type="number" unit="cm" value={a.x_end} onCommit={set("x_end")} />
+        <Field label="Y end" type="number" unit="cm" value={a.y_end} onCommit={set("y_end")} />
+        <Field label="Offset" type="number" unit="cm" value={a.offset} onCommit={set("offset")} />
+        {actions}
       </div>
     );
   }

@@ -230,6 +230,38 @@ Findings:
 Next (P4b): wall end and furniture resize handles, copy/paste, room detection by double-click
 inside walls, polylines, multi-level editing details, more properties (textures, baseboards).
 
+### 4.10 Status after P4b (2026-11-07)
+
+Implemented:
+- Handles of a single selected element: wall ends (magnetism to other wall ends and 15° angles;
+  the joined wall follows), room and polyline points, dimension line ends, furniture resize
+  (bottom-right corner, top-left corner stays; proportional for non-deformable pieces; not for
+  tilted pieces) and rotation (top-left corner, 15° steps, Alt for free angles).
+- Copy/paste: `edit_copy`, `edit_paste`, `edit_duplicate` (Ctrl+C / X / V / D, Ctrl+A selects
+  all on the level). The clipboard (`msh_core::clipboard`) holds the elements and their
+  resources and survives `home_open`/`home_new`, so pasting into another home works; resources
+  with the same name but other data get a new numeric prefix. Joins are kept between copied
+  walls; copies get new IDs and the target level.
+- Room detection: `room_add` with `inside_point` (double-click with the room tool) takes the
+  smallest hole of the union of the wall outlines (`msh_geometry::enclosed_area`, boolean ops
+  of the `geo` crate) that contains the point.
+- Polylines: tool "Line", `polyline_add` / `polyline_update` (thickness, color, dash style,
+  arrows, closed); arrows are drawn in the plan.
+- `wall_update`: baseboards per side (height 0 removes), pattern, "" removes colors/textures,
+  joined walls follow moved end points. `room_update`: "" removes colors/textures.
+  `dimension_update`.
+- Properties panel: texture chooser (searchable grid of all installed texture libraries) for
+  wall sides, baseboards, floors and ceilings; wall pattern; baseboards; polyline and dimension
+  line properties; Copy / Duplicate / Delete buttons.
+
+Verified: tests for all new commands; a file built with them (baseboards, textures, detected
+rooms, duplicated furniture, polylines) and the same file edited and saved in the app are read
+by the original Sweet Home 3D reader.
+
+Next (P4c): multi-level editing details (elements of other levels as background, walls through
+levels), arc walls and wall splitting in the plan, furniture groups, text style and room label
+positions, mirrored copy, keyboard input of lengths while drawing.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

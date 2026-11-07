@@ -27,9 +27,12 @@ The app opens `.sh3d` files and standalone `Home.xml` files (e.g. `tests/corpus/
 It shows the 2D plan, the 3D view (aerial view and virtual visit) and the catalog of all
 installed Sweet Home 3D libraries.
 
-Editing in the plan: tools Select, Walls, Room, Dimension, Text above the plan; drag furniture
-from the catalog onto the plan (doors and windows snap into walls); drag to move, R to rotate,
-Del to delete, arrow keys to nudge; properties of the selection on the right; Ctrl+Z / Ctrl+Y.
+Editing in the plan: tools Select, Walls, Room, Line, Dimension, Text above the plan; drag
+furniture from the catalog onto the plan (doors and windows snap into walls); drag to move, R to
+rotate, Del to delete, arrow keys to nudge; handles of the selected element move wall ends and
+points, resize and rotate furniture; double-click inside walls with the room tool creates the
+room; Ctrl+C / X / V / D copy, cut, paste and duplicate (also into another home), Ctrl+A selects
+all; properties of the selection on the right (incl. textures and baseboards); Ctrl+Z / Ctrl+Y.
 
 ```powershell
 .\scripts\check.ps1                   # formatting, lints, tests
@@ -59,7 +62,7 @@ Editing commands are generated from the command registry of `msh-core` (`group_a
 ```powershell
 msh --file house.sh3d home new --name "My house"
 msh --file house.sh3d wall add-path --points "[[0,0],[900,0],[900,700],[0,700]]" --closed --thickness 30
-msh --file house.sh3d room add --name "Living room" --points "[[15,15],[885,15],[885,685],[15,685]]"
+msh --file house.sh3d room add --name "Living room" --inside-point "[300,300]"
 msh catalog search --query "door"
 msh --file house.sh3d furniture add-in-wall --catalog-id "eTeks#frontDoor" --wall-id <id> --offset 400
 msh --file house.sh3d furniture add --catalog-id "eTeks#sofa" --x 300 --y 500 --angle-deg 180
@@ -139,7 +142,6 @@ claude mcp add my-sweet-home-live -- D:\Data\Programming\_repos\my-sweet-home\ta
 | `tools/compat` | Java test program using the original Sweet Home 3D reader |
 | `tests/corpus` | Test files (example projects; personal files in `private/`) |
 | `docs/` | Architecture and decisions |
-
 | `crates/msh-ipc` | Live connection protocol and named pipe client |
 
 ## License

@@ -1,8 +1,9 @@
-// Editing overlay of the 2D plan: selection highlight, drag preview, the path
-// being drawn, rubber band selection and snap marker.
+// Editing overlay of the 2D plan: selection highlight, drag handles, drag
+// preview, the path being drawn, rubber band selection and snap marker.
 
 import type { Home, Pt, WallShape } from "../model";
 import type { ViewTransform } from "./drawPlan";
+import type { Handle, HandleDrag } from "./handles";
 import { elementOutlines } from "./interaction";
 
 export type PlanOverlay = {
@@ -10,7 +11,11 @@ export type PlanOverlay = {
   /** Offset of the selection while it is dragged (cm) */
   dragOffset: Pt | null;
   /** Points of a wall path, room or dimension being drawn, including the cursor point */
-  draft: { points: Pt[]; kind: "wall" | "room" | "dimension" } | null;
+  draft: { points: Pt[]; kind: "wall" | "room" | "dimension" | "polyline" } | null;
+  /** Handles of the selected element */
+  handles: Handle[];
+  /** Handle being dragged: preview of the change and the cursor position */
+  handleDrag: { drag: HandleDrag; cursor: Pt } | null;
   /** Rubber band rectangle (two corners in cm) */
   rubberBand: [Pt, Pt] | null;
   /** Point the cursor snapped to */
@@ -51,6 +56,32 @@ export function drawOverlay(
       }
     }
     ctx.setLineDash([]);
+  }
+
+  // Handles of a single selected element (circles rotate, squares move or resize)
+  if (!overlay.dragOffset && !overlay.handleDrag) {
+    const r = 4 * px;
+    ctx.lineWidth = 1.5 * px;
+    for (const h of overlay.handles) {
+      ctx.beginPath();
+      if (h.kind === "piece-rotate") ctx.arc(h.pos[0], h.pos[1], r * 1.2, 0, Math.PI * 2);
+      else ctx.rect(h.pos[0] - r, h.pos[1] - r, 2 * r, 2 * r);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = overlay.accent;
+      ctx.stroke();
+    }
+  }
+
+  // Preview while a handle is dragged
+  if (overlay.handleDrag) {
+    const { drag, cursor } = overlay.handleDrag;
+    ctx.strokeStyle = overlay.accent;
+    ctx.setLineDash([6 * px, 4 * px]);
+    ctx.lineWidth = 1.5 * px;
+    for (const o of drag.preview) strokePath(ctx, o.pts, o.closed);
+    ctx.setLineDash([]);
+    if (drag.info) drawTag(ctx, drag.info, cursor[0] + 14 * px, cursor[1] + 22 * px, px);
   }
 
   // Path being drawn, with the length of the last segment
@@ -104,14 +135,27 @@ export function drawOverlay(
   }
 
   // Snap marker
-  if (overlay.snap) {
-    const [x, y] = overlay.snap;
+  const snap = overlay.snap ?? overlay.handleDrag?.drag.snap ?? null;
+  if (snap) {
+    const [x, y] = snap;
     ctx.strokeStyle = overlay.accent;
     ctx.lineWidth = 1.5 * px;
     ctx.beginPath();
     ctx.arc(x, y, 6 * px, 0, Math.PI * 2);
     ctx.stroke();
   }
+}
+
+/** Text on a dark rounded tag, left-aligned at (x, y). */
+function drawTag(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, px: number) {
+  ctx.font = `${12 * px}px sans-serif`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  const w = ctx.measureText(text).width + 8 * px;
+  ctx.fillStyle = "rgba(0,0,0,0.65)";
+  ctx.fillRect(x, y - 8 * px, w, 16 * px);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, x + 4 * px, y);
 }
 
 function strokePath(ctx: CanvasRenderingContext2D, pts: Pt[], closed: boolean): void {

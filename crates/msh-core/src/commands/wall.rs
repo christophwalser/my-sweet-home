@@ -1,10 +1,10 @@
 //! Wall commands.
 
-use super::{new_id, parse_color, rad, resolve_level};
+use super::{new_id, non_empty, optional_color, rad, resolve_level};
 use crate::catalog::{CatalogIndex, embed_texture};
 use crate::document::Document;
 use crate::registry::{CommandError, Registry};
-use msh_model::{Texture, Wall, WallAttrs};
+use msh_model::{Baseboard, BaseboardAttrs, Texture, Wall, WallAttrs};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
@@ -57,13 +57,37 @@ struct UpdateParams {
     height: Option<f32>,
     height_at_end: Option<f32>,
     arc_extent_deg: Option<f32>,
-    /// Color of the left side as #RRGGBB (left = left when walking from start to end)
+    /// Color of the left side as #RRGGBB (left = left when walking from start to end),
+    /// "" for the default color
     left_side_color: Option<String>,
     right_side_color: Option<String>,
-    /// Catalog ID of a texture for the left side (see catalog_search with kind "textures")
+    /// Catalog ID of a texture for the left side (see catalog_search with kind "textures"),
+    /// "" to remove the texture
     left_side_texture: Option<String>,
     right_side_texture: Option<String>,
+    /// Baseboard on the left side
+    left_side_baseboard: Option<BaseboardParams>,
+    right_side_baseboard: Option<BaseboardParams>,
+    /// Plan pattern: hatchUp, hatchDown, crossHatch, background, foreground, reversedHatchUp,
+    /// reversedHatchDown
+    pattern: Option<String>,
 }
+
+#[derive(Deserialize, JsonSchema)]
+struct BaseboardParams {
+    /// Height in cm (default 7); 0 removes the baseboard
+    height: Option<f32>,
+    /// Thickness in cm (default 1)
+    thickness: Option<f32>,
+    /// Color as #RRGGBB, "" for the wall side color
+    color: Option<String>,
+    /// Catalog ID of a texture, "" to remove it
+    texture: Option<String>,
+}
+
+/// Default size of new baseboards in cm (like the Sweet Home 3D preferences).
+const DEFAULT_BASEBOARD_HEIGHT: f32 = 7.0;
+const DEFAULT_BASEBOARD_THICKNESS: f32 = 1.0;
 
 pub(super) fn register(r: &mut Registry) {
     r.add(
@@ -139,22 +163,37 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "wall_update",
-        "Changes coordinates, thickness, height, colors or textures of a wall.",
+        "Changes coordinates, thickness, height, colors, textures, baseboards or pattern of a \
+         wall. Joined walls keep their connection: when an end point moves, the touching end \
+         of the joined wall moves along.",
         true,
         |doc, p: UpdateParams| {
-            let left_tex = texture_for(doc, p.left_side_texture.as_deref(), "leftSideTexture")?;
-            let right_tex = texture_for(doc, p.right_side_texture.as_deref(), "rightSideTexture")?;
-            let w = doc
-                .home_mut()
+            let left_tex = texture_for(doc, non_empty(&p.left_side_texture), "leftSideTexture")?;
+            let right_tex = texture_for(doc, non_empty(&p.right_side_texture), "rightSideTexture")?;
+            let mut baseboard_tex = Vec::new();
+            for b in [&p.left_side_baseboard, &p.right_side_baseboard] {
+                let tex = match b {
+                    Some(b) => texture_for(doc, non_empty(&b.texture), "baseboardTexture")?,
+                    None => None,
+                };
+                baseboard_tex.push(tex);
+            }
+            let home = doc.home_mut();
+            let w = home
                 .walls
                 .iter_mut()
                 .find(|w| w.attrs.id == p.id)
                 .ok_or_else(|| CommandError::failed(format!("unknown wall '{}'", p.id)))?;
             let a = &mut w.attrs;
+            let old_start = (a.x_start, a.y_start);
+            let old_end = (a.x_end, a.y_end);
             macro_rules! set {
                 ($($f:ident),*) => { $( if let Some(v) = p.$f { a.$f = v; } )* };
             }
             set!(x_start, y_start, x_end, y_end, thickness);
+            if a.thickness <= 0.0 {
+                return Err(CommandError::failed("thickness must be positive"));
+            }
             if let Some(v) = p.height {
                 a.height = Some(v);
             }
@@ -165,18 +204,110 @@ pub(super) fn register(r: &mut Registry) {
                 a.arc_extent = (v != 0.0).then(|| rad(v));
             }
             if let Some(c) = &p.left_side_color {
-                a.left_side_color = Some(parse_color(c)?);
+                a.left_side_color = optional_color(c)?;
             }
             if let Some(c) = &p.right_side_color {
-                a.right_side_color = Some(parse_color(c)?);
+                a.right_side_color = optional_color(c)?;
             }
-            for tex in [left_tex, right_tex].into_iter().flatten() {
-                w.textures.retain(|t| t.role != tex.role);
-                w.textures.push(tex);
+            if let Some(v) = &p.pattern {
+                a.pattern = Some(v.clone());
+            }
+            for (role, tex, param) in [
+                ("leftSideTexture", left_tex, &p.left_side_texture),
+                ("rightSideTexture", right_tex, &p.right_side_texture),
+            ] {
+                if param.is_some() {
+                    w.textures.retain(|t| t.role.as_deref() != Some(role));
+                }
+                w.textures.extend(tex);
+            }
+            for ((role, tex), params) in ["leftSideBaseboard", "rightSideBaseboard"]
+                .into_iter()
+                .zip(baseboard_tex)
+                .zip([&p.left_side_baseboard, &p.right_side_baseboard])
+            {
+                if let Some(b) = params {
+                    update_baseboard(w, role, b, tex)?;
+                }
+            }
+            let id = w.attrs.id.clone();
+            let new_start = (w.attrs.x_start, w.attrs.y_start);
+            let new_end = (w.attrs.x_end, w.attrs.y_end);
+            let at_start = w.attrs.wall_at_start.clone();
+            let at_end = w.attrs.wall_at_end.clone();
+            // Joined walls follow moved end points
+            for (joined, old, new) in [(at_start, old_start, new_start), (at_end, old_end, new_end)]
+            {
+                let Some(joined) = joined else { continue };
+                if old == new {
+                    continue;
+                }
+                if let Some(j) = home.walls.iter_mut().find(|w| w.attrs.id == joined) {
+                    move_joined_end(&mut j.attrs, &id, old, new);
+                }
             }
             Ok(json!({ "id": p.id }))
         },
     );
+}
+
+/// Moves the end of `joined` that is connected to the wall `id` from `old` to `new`.
+fn move_joined_end(joined: &mut WallAttrs, id: &str, old: (f32, f32), new: (f32, f32)) {
+    let end_joined = joined.wall_at_end.as_deref() == Some(id);
+    let start_joined = joined.wall_at_start.as_deref() == Some(id);
+    let start_touches = (joined.x_start, joined.y_start) == old;
+    let end_touches = (joined.x_end, joined.y_end) == old;
+    // Both ends can be joined to the same wall (two walls forming a closed shape)
+    if end_joined && (end_touches || !start_touches || !start_joined) {
+        (joined.x_end, joined.y_end) = new;
+    } else if start_joined {
+        (joined.x_start, joined.y_start) = new;
+    }
+}
+
+fn update_baseboard(
+    w: &mut Wall,
+    role: &str,
+    p: &BaseboardParams,
+    texture: Option<Texture>,
+) -> Result<(), CommandError> {
+    if p.height == Some(0.0) {
+        w.baseboards.retain(|b| b.attrs.role != role);
+        return Ok(());
+    }
+    let index = match w.baseboards.iter().position(|b| b.attrs.role == role) {
+        Some(i) => i,
+        None => {
+            w.baseboards.push(Baseboard {
+                attrs: BaseboardAttrs {
+                    role: role.to_owned(),
+                    thickness: DEFAULT_BASEBOARD_THICKNESS,
+                    height: DEFAULT_BASEBOARD_HEIGHT,
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+            w.baseboards.len() - 1
+        }
+    };
+    let b = &mut w.baseboards[index];
+    if let Some(v) = p.height {
+        b.attrs.height = v;
+    }
+    if let Some(v) = p.thickness {
+        if v <= 0.0 {
+            return Err(CommandError::failed("baseboard thickness must be positive"));
+        }
+        b.attrs.thickness = v;
+    }
+    if let Some(c) = &p.color {
+        b.attrs.color = optional_color(c)?;
+    }
+    if p.texture.is_some() {
+        // Sweet Home 3D writes baseboard textures without a role attribute
+        b.texture = texture.map(|t| Texture { role: None, ..t });
+    }
+    Ok(())
 }
 
 pub(super) fn new_wall(

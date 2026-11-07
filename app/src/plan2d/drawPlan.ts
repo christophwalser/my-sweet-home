@@ -70,6 +70,10 @@ export function planBounds(input: PlanInput): [number, number, number, number] |
     if (!sameLevel(r.attrs.level, levelId)) continue;
     for (const p of r.points) add(p.x, p.y);
   }
+  for (const pl of home.polylines) {
+    if (!sameLevel(pl.attrs.level, levelId)) continue;
+    for (const p of pl.points) add(p.x, p.y);
+  }
   forEachPiece(home.furniture, (p) => {
     if (sameLevel(p.attrs.level, levelId)) add(p.attrs.x, p.attrs.y);
   });
@@ -160,6 +164,12 @@ export function drawPlan(
     ctx.setLineDash(dashPattern(pl.attrs.dash_style, ctx.lineWidth));
     ctx.stroke();
     ctx.setLineDash([]);
+    if (!pl.attrs.closed_path) {
+      const pts: Pt[] = pl.points.map((p) => [p.x, p.y]);
+      const n = pts.length;
+      drawArrow(ctx, pl.attrs.start_arrow_style, pts[1], pts[0], ctx.lineWidth);
+      drawArrow(ctx, pl.attrs.end_arrow_style, pts[n - 2], pts[n - 1], ctx.lineWidth);
+    }
   }
 
   // Furniture (below walls so that doors in walls stay readable on top)
@@ -489,6 +499,41 @@ function fontOf(style: TextStyle | null, defaultSize: number): string {
 /** Formats a length in centimeters like Sweet Home 3D's default unit. */
 export function formatLength(cm: number): string {
   return cm >= 100 ? `${(cm / 100).toFixed(2)} m` : `${cm.toFixed(1)} cm`;
+}
+
+/** Arrow head of a polyline at `tip`, pointing from `from` to `tip` (shapes like Sweet Home 3D). */
+function drawArrow(
+  ctx: CanvasRenderingContext2D,
+  style: string | null,
+  from: Pt,
+  tip: Pt,
+  lineWidth: number,
+): void {
+  if (!style || style === "NONE") return;
+  const scale = lineWidth ** 0.66 * 2;
+  const angle = Math.atan2(tip[1] - from[1], tip[0] - from[0]);
+  ctx.save();
+  ctx.translate(tip[0], tip[1]);
+  ctx.rotate(angle);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.lineWidth = lineWidth / scale;
+  ctx.beginPath();
+  if (style === "DISC") {
+    ctx.arc(-1.5, 0, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.moveTo(-5, -2);
+    ctx.lineTo(0, 0);
+    ctx.lineTo(-5, 2);
+    if (style === "DELTA") {
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 function dashPattern(style: string | null, width: number): number[] {

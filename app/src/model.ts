@@ -97,6 +97,9 @@ export type Piece = {
     height_in_plan: number | null;
     width: number;
     depth: number;
+    resizable: boolean | null;
+    /** `false`: width, depth and height only change proportionally */
+    deformable: boolean | null;
     height: number;
     visible: boolean | null;
     model_mirrored: boolean | null;
@@ -191,6 +194,8 @@ export type Polyline = {
     level: string | null;
     thickness: number | null;
     dash_style: string | null;
+    start_arrow_style: string | null;
+    end_arrow_style: string | null;
     elevation: number | null;
     color: number | null;
     closed_path: boolean | null;

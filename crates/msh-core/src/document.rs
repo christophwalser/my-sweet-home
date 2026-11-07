@@ -27,6 +27,8 @@ pub struct Document {
     contents_changed: bool,
     undo: Vec<Snapshot>,
     redo: Vec<Snapshot>,
+    /// Copied elements (`edit_copy`); kept when another home is opened
+    pub clipboard: Option<crate::clipboard::Clipboard>,
 }
 
 impl Default for Document {
@@ -58,6 +60,7 @@ impl Document {
             contents_changed: false,
             undo: Vec::new(),
             redo: Vec::new(),
+            clipboard: None,
         }
     }
 
@@ -84,6 +87,7 @@ impl Document {
             contents_changed: false,
             undo: Vec::new(),
             redo: Vec::new(),
+            clipboard: None,
         })
     }
 
@@ -237,6 +241,33 @@ pub fn ensure_ids(home: &mut Home) {
     for p in &mut home.polylines {
         p.attrs.id.get_or_insert_with(|| new_id("polyline"));
     }
+}
+
+/// IDs of all elements of a home.
+pub fn all_ids(home: &Home) -> HashSet<String> {
+    let mut ids: HashSet<String> = home.walls.iter().map(|w| w.attrs.id.clone()).collect();
+    fn walk(items: &[Furniture], ids: &mut HashSet<String>) {
+        for item in items {
+            match item {
+                Furniture::Piece(p) => ids.extend(p.attrs.id.clone()),
+                Furniture::Group(g) => {
+                    ids.extend(g.attrs.id.clone());
+                    walk(&g.items, ids);
+                }
+            }
+        }
+    }
+    walk(&home.furniture, &mut ids);
+    ids.extend(home.levels.iter().map(|l| l.attrs.id.clone()));
+    ids.extend(home.rooms.iter().filter_map(|r| r.attrs.id.clone()));
+    ids.extend(home.polylines.iter().filter_map(|p| p.attrs.id.clone()));
+    ids.extend(
+        home.dimension_lines
+            .iter()
+            .filter_map(|d| d.attrs.id.clone()),
+    );
+    ids.extend(home.labels.iter().filter_map(|l| l.attrs.id.clone()));
+    ids
 }
 
 /// All resource names referenced by the home (models, icons, textures, images).
