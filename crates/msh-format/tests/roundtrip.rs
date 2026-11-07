@@ -1,4 +1,4 @@
-//! Round-Trip-Tests: lesen → schreiben → lesen, Element für Element vergleichen.
+//! Round-trip tests: read → write → read, then compare element by element.
 
 use msh_format::{Sh3dDocument, read_home_xml, write_home_xml, xml};
 use msh_model::{RawElement, RawNode};
@@ -22,12 +22,12 @@ fn files(sub: &str, ext: &str) -> Vec<PathBuf> {
     v
 }
 
-/// Vergleicht zwei XML-Bäume semantisch: gleiche Elemente in gleicher
-/// Reihenfolge, gleiche Attributmengen (Reihenfolge egal, Zahlen numerisch),
-/// gleicher Text. Leerraum zwischen Elementen wird ignoriert.
+/// Compares two XML trees semantically: same elements in the same order, same
+/// attribute sets (order ignored, numbers compared numerically), same text.
+/// Whitespace between elements is ignored.
 fn assert_same_tree(a: &RawElement, b: &RawElement, path: &str) {
     let here = format!("{path}/{}", a.name);
-    assert_eq!(a.name, b.name, "Elementname bei {here}");
+    assert_eq!(a.name, b.name, "element name at {here}");
 
     let mut aa: Vec<_> = a.attrs.iter().collect();
     let mut ba: Vec<_> = b.attrs.iter().collect();
@@ -35,20 +35,23 @@ fn assert_same_tree(a: &RawElement, b: &RawElement, path: &str) {
     ba.sort();
     let a_names: Vec<&str> = aa.iter().map(|(n, _)| *n).collect();
     let b_names: Vec<&str> = ba.iter().map(|(n, _)| *n).collect();
-    assert_eq!(a_names, b_names, "Attributnamen bei {here}");
+    assert_eq!(a_names, b_names, "attribute names at {here}");
     for ((n, va), (_, vb)) in aa.iter().zip(&ba) {
-        assert!(same_value(va, vb), "Attribut {here}@{n}: '{va}' vs. '{vb}'");
+        assert!(
+            same_value(va, vb),
+            "attribute {here}@{n}: '{va}' vs. '{vb}'"
+        );
     }
 
     let ae: Vec<&RawElement> = child_elements(a);
     let be: Vec<&RawElement> = child_elements(b);
     let an: Vec<&str> = ae.iter().map(|e| e.name.as_str()).collect();
     let bn: Vec<&str> = be.iter().map(|e| e.name.as_str()).collect();
-    assert_eq!(an, bn, "Kindelemente bei {here}");
+    assert_eq!(an, bn, "child elements at {here}");
     for (x, y) in ae.iter().zip(&be) {
         assert_same_tree(x, y, &here);
     }
-    assert_eq!(text(a), text(b), "Text bei {here}");
+    assert_eq!(text(a), text(b), "text at {here}");
 }
 
 fn child_elements(e: &RawElement) -> Vec<&RawElement> {
@@ -85,13 +88,13 @@ fn same_value(a: &str, b: &str) -> bool {
 }
 
 fn check_xml_roundtrip(bytes: &[u8], label: &str) {
-    let original = xml::parse(bytes).unwrap_or_else(|e| panic!("{label}: XML ungültig: {e}"));
-    let home = read_home_xml(bytes).unwrap_or_else(|e| panic!("{label}: nicht lesbar: {e}"));
+    let original = xml::parse(bytes).unwrap_or_else(|e| panic!("{label}: invalid XML: {e}"));
+    let home = read_home_xml(bytes).unwrap_or_else(|e| panic!("{label}: not readable: {e}"));
     let written = write_home_xml(&home);
-    let reparsed_tree = xml::parse(written.as_bytes()).expect("geschriebenes XML ungültig");
+    let reparsed_tree = xml::parse(written.as_bytes()).expect("written XML is invalid");
     assert_same_tree(&original, &reparsed_tree, label);
-    let home2 = read_home_xml(written.as_bytes()).expect("geschriebenes XML nicht lesbar");
-    assert_eq!(home, home2, "{label}: Modell nach Round-Trip verschieden");
+    let home2 = read_home_xml(written.as_bytes()).expect("written XML is not readable");
+    assert_eq!(home, home2, "{label}: model differs after round trip");
 }
 
 #[test]
@@ -99,7 +102,7 @@ fn example_projects_roundtrip() {
     let files = files("examples", "xml");
     assert!(
         files.len() >= 9,
-        "Beispielprojekte fehlen in tests/corpus/examples"
+        "example projects missing in tests/corpus/examples"
     );
     for f in files {
         let bytes = std::fs::read(&f).unwrap();
@@ -117,8 +120,8 @@ fn example_projects_have_content() {
     assert!(home.rooms.iter().any(|r| r.area() > 0.0));
 }
 
-/// Alle Attribute und Elemente des Korpus müssen in typisierten Feldern landen.
-/// Ein Tippfehler im Modell würde sonst unbemerkt in `extra_*` verschwinden.
+/// Every attribute and element of the corpus must end up in a typed field.
+/// Otherwise a typo in the model would silently disappear into `extra_*`.
 #[test]
 fn corpus_has_no_unknown_attributes_or_elements() {
     let mut homes = Vec::new();
@@ -138,7 +141,7 @@ fn corpus_has_no_unknown_attributes_or_elements() {
         let json = serde_json::to_value(&home).unwrap();
         let mut found = Vec::new();
         find_extras(&json, "home", &mut found);
-        assert!(found.is_empty(), "{label}: unbekannte Daten: {found:#?}");
+        assert!(found.is_empty(), "{label}: unknown data: {found:#?}");
     }
 }
 
@@ -163,14 +166,14 @@ fn find_extras(v: &serde_json::Value, path: &str, found: &mut Vec<String>) {
     }
 }
 
-/// Eigene `.sh3d`-Dateien aus `tests/corpus/private` (nicht im Repo).
+/// Personal `.sh3d` files from `tests/corpus/private` (not in the repository).
 #[test]
 fn private_sh3d_roundtrip() {
     for f in files("private", "sh3d") {
         let label = f.display().to_string();
         let doc = Sh3dDocument::open(&f).unwrap_or_else(|e| panic!("{label}: {e}"));
 
-        // XML-Ebene
+        // XML level
         let raw_xml = {
             let file = std::fs::File::open(&f).unwrap();
             let mut zip = zip_reader(file);
@@ -178,14 +181,14 @@ fn private_sh3d_roundtrip() {
         };
         check_xml_roundtrip(&raw_xml, &label);
 
-        // ZIP-Ebene: schreiben, wieder lesen, alles gleich
+        // ZIP level: write, read again, everything must be equal
         let buf = doc
             .write(std::io::Cursor::new(Vec::new()))
             .unwrap()
             .into_inner();
         let doc2 = Sh3dDocument::read(std::io::Cursor::new(buf)).unwrap();
-        assert_eq!(doc.home, doc2.home, "{label}: Modell");
-        assert_eq!(doc.contents, doc2.contents, "{label}: Ressourcen");
+        assert_eq!(doc.home, doc2.home, "{label}: model");
+        assert_eq!(doc.contents, doc2.contents, "{label}: resources");
         assert_eq!(
             doc.content_digests, doc2.content_digests,
             "{label}: ContentDigests"

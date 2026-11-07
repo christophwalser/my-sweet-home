@@ -1,13 +1,13 @@
-//! Lesen und Schreiben von `.sh3d`-Dateien (ZIP).
+//! Reading and writing `.sh3d` files (ZIP).
 //!
-//! Aufbau einer von Sweet Home 3D 7.x gespeicherten Datei:
-//! - `Home`: Java-serialisiertes Projekt (wird von uns nicht gelesen/geschrieben)
-//! - `Home.xml`: dasselbe Projekt als XML (seit Version 5.3)
-//! - `ContentDigests`: SHA-1 der Ressourcen (Manifest-Format)
-//! - `0`, `1/modell.obj`, …: Modelle, Icons und Texturen, in `Home.xml`
-//!   über diese Namen referenziert
+//! Layout of a file saved by Sweet Home 3D 7.x:
+//! - `Home`: Java-serialized project (neither read nor written by us)
+//! - `Home.xml`: the same project as XML (since version 5.3)
+//! - `ContentDigests`: SHA-1 digests of the resources (manifest format)
+//! - `0`, `1/model.obj`, …: models, icons and textures, referenced by these
+//!   names in `Home.xml`
 //!
-//! Wir schreiben `Home.xml` + Ressourcen, ohne den `Home`-Eintrag.
+//! We write `Home.xml` + resources, without the `Home` entry.
 
 use crate::{FormatError, home_xml, xml};
 use msh_model::Home;
@@ -20,28 +20,28 @@ const HOME_ENTRY: &str = "Home";
 const HOME_XML_ENTRY: &str = "Home.xml";
 const DIGESTS_ENTRY: &str = "ContentDigests";
 
-/// Eine Ressource (Modell, Icon, Textur) innerhalb einer `.sh3d`-Datei.
+/// A resource (model, icon, texture) inside a `.sh3d` file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContentEntry {
-    /// Name des ZIP-Eintrags, z. B. `3` oder `1/puerta.obj`
+    /// Name of the ZIP entry, e.g. `3` or `1/puerta.obj`
     pub name: String,
     pub data: Vec<u8>,
 }
 
-/// Ein geöffnetes Projekt samt Ressourcen.
+/// An opened project including its resources.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sh3dDocument {
     pub home: Home,
-    /// Ressourcen in der Reihenfolge der Originaldatei
+    /// Resources in the order of the original file
     pub contents: Vec<ContentEntry>,
-    /// Inhalt von `ContentDigests`, unverändert übernommen
+    /// Content of `ContentDigests`, kept unchanged
     pub content_digests: Option<Vec<u8>>,
-    /// `true`, wenn die Quelldatei einen Java-serialisierten `Home`-Eintrag hatte
+    /// `true` if the source file had a Java-serialized `Home` entry
     pub source_had_serialized_home: bool,
 }
 
 impl Sh3dDocument {
-    /// Neues, leeres Dokument für ein Projekt ohne Ressourcen.
+    /// New document for a project without resources.
     pub fn new(home: Home) -> Self {
         Self {
             home,
@@ -55,13 +55,13 @@ impl Sh3dDocument {
         self.contents.iter().find(|c| c.name == name)
     }
 
-    /// Öffnet eine `.sh3d`-Datei.
+    /// Opens a `.sh3d` file.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, FormatError> {
         let file = std::fs::File::open(path.as_ref())?;
         Self::read(std::io::BufReader::new(file))
     }
 
-    /// Liest eine `.sh3d`-Datei aus einem beliebigen Reader.
+    /// Reads a `.sh3d` file from any reader.
     pub fn read<R: Read + Seek>(reader: R) -> Result<Self, FormatError> {
         let mut zip = ZipArchive::new(reader).map_err(zip_err)?;
         let mut home_xml: Option<Vec<u8>> = None;
@@ -91,7 +91,7 @@ impl Sh3dDocument {
         let home_xml = home_xml.ok_or(if had_serialized {
             FormatError::OnlySerializedHome
         } else {
-            FormatError::Structure("keine Home.xml in der Datei".into())
+            FormatError::Structure("no Home.xml entry in the file".into())
         })?;
 
         Ok(Self {
@@ -102,9 +102,8 @@ impl Sh3dDocument {
         })
     }
 
-    /// Speichert das Dokument. Es wird zuerst in eine temporäre Datei
-    /// geschrieben und dann umbenannt, damit bei einem Fehler die alte Datei
-    /// erhalten bleibt.
+    /// Saves the document. It is written to a temporary file first and then
+    /// renamed, so the old file survives if writing fails.
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), FormatError> {
         let path = path.as_ref();
         let tmp = path.with_extension("sh3d.tmp");
@@ -118,7 +117,7 @@ impl Sh3dDocument {
         Ok(())
     }
 
-    /// Schreibt das Dokument als `.sh3d` in einen Writer.
+    /// Writes the document as `.sh3d` to a writer.
     pub fn write<W: Write + Seek>(&self, writer: W) -> Result<W, FormatError> {
         let mut zip = ZipWriter::new(writer);
         let deflate = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
@@ -140,7 +139,7 @@ impl Sh3dDocument {
                 zip.add_directory(format!("{dir}/"), stored)
                     .map_err(zip_err)?;
             }
-            // Bereits komprimierte Formate nicht nochmals komprimieren
+            // Do not compress formats that are already compressed
             let opts = if is_compressed_format(&c.name, &c.data) {
                 stored
             } else {
@@ -160,7 +159,7 @@ fn is_compressed_format(name: &str, data: &[u8]) -> bool {
     ]
     .iter()
     .any(|e| lower.ends_with(e));
-    // Ressourcen ohne Endung (z. B. "0") am Dateikopf erkennen: PNG, JPEG, GIF
+    // Detect resources without extension (e.g. "0") by their header: PNG, JPEG, GIF
     by_ext
         || data.starts_with(&[0x89, b'P', b'N', b'G'])
         || data.starts_with(&[0xFF, 0xD8, 0xFF])
@@ -171,12 +170,12 @@ fn zip_err(e: zip::result::ZipError) -> FormatError {
     FormatError::Zip(e.to_string())
 }
 
-/// Liest ein `Home.xml`-Dokument.
+/// Reads a `Home.xml` document.
 pub fn read_home_xml(bytes: &[u8]) -> Result<Home, FormatError> {
     home_xml::read_home(xml::parse(bytes)?)
 }
 
-/// Erzeugt ein `Home.xml`-Dokument.
+/// Creates a `Home.xml` document.
 pub fn write_home_xml(home: &Home) -> String {
     xml::write_document(&home_xml::write_home(home))
 }

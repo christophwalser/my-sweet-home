@@ -1,12 +1,12 @@
-//! Minimaler XML-Baum: Parsen in [`RawElement`] und Zurückschreiben im Stil
-//! von Sweet Home 3D (einfache Anführungszeichen, 2 Leerzeichen Einrückung).
+//! Minimal XML tree: parsing into [`RawElement`] and writing back in the style
+//! of Sweet Home 3D (single quotes, 2-space indentation).
 
 use crate::FormatError;
 use msh_model::{Attrs, RawElement, RawNode};
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::reader::Reader;
 
-/// Parst ein XML-Dokument und liefert das Wurzelelement.
+/// Parses an XML document and returns its root element.
 pub fn parse(bytes: &[u8]) -> Result<RawElement, FormatError> {
     let mut reader = Reader::from_reader(bytes);
     reader.config_mut().trim_text(false);
@@ -25,7 +25,7 @@ pub fn parse(bytes: &[u8]) -> Result<RawElement, FormatError> {
             Event::End(_) => {
                 let el = stack
                     .pop()
-                    .ok_or_else(|| FormatError::Xml("unerwartetes End-Tag".into()))?;
+                    .ok_or_else(|| FormatError::Xml("unexpected end tag".into()))?;
                 attach(&mut stack, &mut root, el);
             }
             Event::Text(t) => {
@@ -48,25 +48,23 @@ pub fn parse(bytes: &[u8]) -> Result<RawElement, FormatError> {
                         "quot" => "\"".into(),
                         "apos" => "'".into(),
                         other => {
-                            return Err(FormatError::Xml(format!("unbekannte Entity &{other};")));
+                            return Err(FormatError::Xml(format!("unknown entity &{other};")));
                         }
                     }
                 };
                 push_text(&mut stack, &resolved);
             }
             Event::Eof => break,
-            // Deklaration, Kommentare, DOCTYPE, Processing Instructions: ignorieren
+            // Declaration, comments, DOCTYPE, processing instructions: ignored
             _ => {}
         }
         buf.clear();
     }
 
     if !stack.is_empty() {
-        return Err(FormatError::Xml(
-            "Dokument endet mitten in einem Element".into(),
-        ));
+        return Err(FormatError::Xml("document ends inside an element".into()));
     }
-    root.ok_or_else(|| FormatError::Xml("kein Wurzelelement".into()))
+    root.ok_or_else(|| FormatError::Xml("no root element".into()))
 }
 
 fn xml_err(e: impl std::fmt::Display) -> FormatError {
@@ -106,7 +104,7 @@ fn push_text(stack: &mut [RawElement], s: &str) {
     }
 }
 
-/// Schreibt ein Element als vollständiges XML-Dokument.
+/// Writes an element as a complete XML document.
 pub fn write_document(root: &RawElement) -> String {
     let mut out = String::with_capacity(64 * 1024);
     out.push_str("<?xml version='1.0'?>\n");
@@ -139,7 +137,7 @@ fn write_element(out: &mut String, el: &RawElement, depth: usize) {
     if !has_elements && text.is_empty() {
         out.push_str("/>\n");
     } else if !has_elements {
-        // Reines Textelement (z. B. <text>): Text exakt übernehmen
+        // Text-only element (e.g. <text>): keep the text exactly as is
         out.push('>');
         escape_text(out, &text);
         out.push_str("</");
@@ -150,7 +148,7 @@ fn write_element(out: &mut String, el: &RawElement, depth: usize) {
         for child in &el.children {
             match child {
                 RawNode::Element(c) => write_element(out, c, depth + 1),
-                // Leerraum zwischen Elementen wird durch eigene Einrückung ersetzt
+                // Whitespace between elements is replaced by our own indentation
                 RawNode::Text(t) if t.trim().is_empty() => {}
                 RawNode::Text(t) => {
                     indent(out, depth + 1);
@@ -206,7 +204,7 @@ mod tests {
 
     #[test]
     fn parse_and_write_roundtrip() {
-        let src = "<?xml version='1.0'?>\n<home a='1 &amp; 2' b=\"x'y\">\n  <label x='1'>\n    <text>Zeile 1&#10;Zeile &lt;2&gt;</text>\n  </label>\n  <wall/>\n</home>\n";
+        let src = "<?xml version='1.0'?>\n<home a='1 &amp; 2' b=\"x'y\">\n  <label x='1'>\n    <text>Line 1&#10;Line &lt;2&gt;</text>\n  </label>\n  <wall/>\n</home>\n";
         let root = parse(src.as_bytes()).unwrap();
         assert_eq!(root.name, "home");
         assert_eq!(root.attrs.0[0].1, "1 & 2");
@@ -214,7 +212,7 @@ mod tests {
         let out = write_document(&root);
         let again = parse(out.as_bytes()).unwrap();
         assert_eq!(root_without_ws(root), root_without_ws(again));
-        assert!(out.contains("<text>Zeile 1\nZeile &lt;2&gt;</text>"));
+        assert!(out.contains("<text>Line 1\nLine &lt;2&gt;</text>"));
     }
 
     fn root_without_ws(mut el: RawElement) -> RawElement {

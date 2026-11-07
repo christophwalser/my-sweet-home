@@ -1,23 +1,23 @@
-//! Typisierter Zugriff auf XML-Attribute.
+//! Typed access to XML attributes.
 //!
-//! Das Modell kennt kein XML. Es arbeitet nur mit einer geordneten Liste von
-//! Attributnamen und -werten ([`Attrs`]). `msh-format` macht daraus XML und
-//! umgekehrt. Attribute, die das Modell nicht kennt, bleiben in der Liste und
-//! werden beim Speichern unverändert zurückgeschrieben.
+//! The model knows nothing about XML. It only works with an ordered list of
+//! attribute names and values ([`Attrs`]). `msh-format` converts that list to
+//! and from XML. Attributes the model does not know stay in the list and are
+//! written back unchanged on save.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Fehler beim Interpretieren von Attributen.
+/// Error while interpreting attributes.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum AttrError {
-    #[error("Pflichtattribut '{0}' fehlt")]
+    #[error("required attribute '{0}' is missing")]
     Missing(&'static str),
-    #[error("Attribut '{name}' hat einen ungültigen Wert '{value}'")]
+    #[error("attribute '{name}' has an invalid value '{value}'")]
     Invalid { name: &'static str, value: String },
 }
 
-/// Geordnete Attributliste eines Elements.
+/// Ordered attribute list of an element.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attrs(pub Vec<(String, String)>);
 
@@ -26,7 +26,7 @@ impl Attrs {
         Self(Vec::new())
     }
 
-    /// Entfernt ein Attribut und gibt seinen Wert zurück.
+    /// Removes an attribute and returns its value.
     pub fn take(&mut self, name: &str) -> Option<String> {
         let pos = self.0.iter().position(|(n, _)| n == name)?;
         Some(self.0.remove(pos).1)
@@ -45,13 +45,13 @@ impl Attrs {
     }
 }
 
-/// Ein einzelner Wert, der als Attribut gelesen und geschrieben werden kann.
+/// A single value that can be read from and written to an attribute.
 pub trait AttrScalar: Sized {
     fn parse_attr(name: &'static str, value: &str) -> Result<Self, AttrError>;
     fn format_attr(&self) -> String;
 }
 
-/// Ein Feld eines Modellstructs: Pflichtwert (`T`) oder optional (`Option<T>`).
+/// A field of a model struct: required (`T`) or optional (`Option<T>`).
 pub trait AttrField: Sized {
     fn take_from(attrs: &mut Attrs, name: &'static str) -> Result<Self, AttrError>;
     fn put_into(&self, attrs: &mut Attrs, name: &'static str);
@@ -135,7 +135,7 @@ impl AttrScalar for bool {
     }
 }
 
-/// Farbe als ARGB, im Format `AARRGGBB` (hexadezimal) gespeichert.
+/// ARGB color, stored as hexadecimal `AARRGGBB`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Color(pub u32);
@@ -160,9 +160,9 @@ impl AttrScalar for Color {
     }
 }
 
-/// Formatiert eine Gleitkommazahl so, wie Java `Float.toString` es für
-/// typische Werte tut: ganze Zahlen mit `.0`, sonst die kürzeste exakte
-/// Darstellung. Sweet Home 3D liest beides mit `Float.parseFloat`.
+/// Formats a float the way Java's `Float.toString` does for typical values:
+/// whole numbers with `.0`, otherwise the shortest exact representation.
+/// Sweet Home 3D reads both with `Float.parseFloat`.
 pub fn format_java_float(v: f32) -> String {
     if v.is_finite() && v.fract() == 0.0 && v.abs() < 1e7 {
         format!("{v:.1}")
@@ -171,12 +171,12 @@ pub fn format_java_float(v: f32) -> String {
     }
 }
 
-/// Definiert ein Struct, dessen Felder 1:1 XML-Attributen entsprechen.
+/// Defines a struct whose fields map 1:1 to XML attributes.
 ///
-/// Zusätzlich zu den angegebenen Feldern bekommt das Struct `extra_attrs`:
-/// unbekannte Attribute, die beim Speichern unverändert zurückgeschrieben werden.
-/// Erzeugt `from_attrs` (liest alle Attribute) und `to_attrs` (schreibt sie in
-/// Definitionsreihenfolge, unbekannte am Ende).
+/// In addition to the given fields, the struct gets `extra_attrs`: unknown
+/// attributes that are written back unchanged on save. Generates `from_attrs`
+/// (reads all attributes) and `to_attrs` (writes them in definition order,
+/// unknown ones last).
 macro_rules! attr_struct {
     (
         $(#[$meta:meta])*
@@ -192,13 +192,13 @@ macro_rules! attr_struct {
                 #[serde(default)]
                 pub $field: $ty,
             )*
-            /// Unbekannte Attribute (z. B. aus neueren Sweet-Home-3D-Versionen).
+            /// Unknown attributes (e.g. from newer Sweet Home 3D versions).
             #[serde(default, skip_serializing_if = "crate::attrs::Attrs::is_empty")]
             pub extra_attrs: $crate::attrs::Attrs,
         }
 
         impl $name {
-            /// Liest die bekannten Attribute; der Rest landet in `extra_attrs`.
+            /// Reads the known attributes; the rest goes into `extra_attrs`.
             pub fn from_attrs(
                 mut attrs: $crate::attrs::Attrs,
             ) -> Result<Self, $crate::attrs::AttrError> {
@@ -208,7 +208,7 @@ macro_rules! attr_struct {
                 })
             }
 
-            /// Schreibt alle Attribute in Definitionsreihenfolge, unbekannte am Ende.
+            /// Writes all attributes in definition order, unknown ones last.
             pub fn to_attrs(&self) -> $crate::attrs::Attrs {
                 let mut attrs = $crate::attrs::Attrs::new();
                 $( $crate::attrs::AttrField::put_into(&self.$field, &mut attrs, $xml); )*

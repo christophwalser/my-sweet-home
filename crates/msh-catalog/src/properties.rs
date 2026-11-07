@@ -1,11 +1,11 @@
-//! Parser für Java-`.properties`-Dateien (ISO-8859-1 mit `\uXXXX`-Escapes).
+//! Parser for Java `.properties` files (ISO-8859-1 with `\uXXXX` escapes).
 
 use std::collections::BTreeMap;
 
-/// Parst den Inhalt einer `.properties`-Datei. Bei doppelten Schlüsseln gewinnt
-/// der letzte Wert (wie in Java).
+/// Parses the content of a `.properties` file. For duplicate keys the last
+/// value wins (as in Java).
 pub fn parse(bytes: &[u8]) -> BTreeMap<String, String> {
-    // ISO-8859-1: jedes Byte ist genau ein Unicode-Zeichen
+    // ISO-8859-1: every byte is exactly one Unicode character
     let text: String = bytes.iter().map(|&b| b as char).collect();
     let mut map = BTreeMap::new();
     let mut lines = text.lines();
@@ -15,7 +15,7 @@ pub fn parse(bytes: &[u8]) -> BTreeMap<String, String> {
         if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
             continue;
         }
-        // Fortsetzungszeilen: ungerade Anzahl Backslashes am Zeilenende
+        // Continuation lines: odd number of backslashes at the end of the line
         let mut logical = trimmed.to_owned();
         while ends_with_continuation(&logical) {
             logical.pop();
@@ -79,7 +79,7 @@ fn unescape(s: &str) -> String {
                 match u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32) {
                     Some(ch) => out.push(ch),
                     None => {
-                        // Surrogatpaare (z. B. Emojis) zusammensetzen
+                        // Combine surrogate pairs (e.g. emojis)
                         if let Ok(hi) = u16::from_str_radix(&hex, 16) {
                             let rest: String = chars.clone().take(6).collect();
                             if let Some(lo_hex) = rest.strip_prefix("\\u")
@@ -110,12 +110,12 @@ mod tests {
 
     #[test]
     fn parses_java_properties() {
-        let src = b"# Kommentar\n! auch Kommentar\nid#1=eTeks#bed\nname#1 = Bett 140\\u00D7190\nkey\\ with\\ spaces:wert\nlong=eins, \\\n    zwei\nempty=\nk2 v2\nlatin=\xe4\n";
+        let src = b"# comment\n! another comment\nid#1=eTeks#bed\nname#1 = Bed 140\\u00D7190\nkey\\ with\\ spaces:value\nlong=one, \\\n    two\nempty=\nk2 v2\nlatin=\xe4\n";
         let m = parse(src);
         assert_eq!(m["id#1"], "eTeks#bed");
-        assert_eq!(m["name#1"], "Bett 140×190");
-        assert_eq!(m["key with spaces"], "wert");
-        assert_eq!(m["long"], "eins, zwei");
+        assert_eq!(m["name#1"], "Bed 140×190");
+        assert_eq!(m["key with spaces"], "value");
+        assert_eq!(m["long"], "one, two");
         assert_eq!(m["empty"], "");
         assert_eq!(m["k2"], "v2");
         assert_eq!(m["latin"], "ä");

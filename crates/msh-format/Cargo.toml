@@ -1,6 +1,6 @@
 [package]
 name = "msh-format"
-description = "Lesen und Schreiben von Sweet-Home-3D-Dateien (.sh3d, Home.xml)"
+description = "Reading and writing Sweet Home 3D files (.sh3d, Home.xml)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

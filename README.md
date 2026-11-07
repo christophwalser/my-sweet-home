@@ -1,68 +1,69 @@
 # My Sweet Home
 
-Moderne, ressourcenschonende Raumplanung für Windows, kompatibel mit den Dateiformaten von
-Sweet Home 3D (`.sh3d`, `.sh3f`, `.sh3t`). Steuerbar über Oberfläche, CLI (`msh`) und MCP.
+Modern, resource-friendly home design for Windows, compatible with the file formats of
+Sweet Home 3D (`.sh3d`, `.sh3f`, `.sh3t`). Controllable through the UI, a CLI (`msh`) and MCP.
 
-Architektur und Phasenplan: [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md)
+Architecture and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
+Rules for AI agents (incl. language policy): [CLAUDE.md](CLAUDE.md)
 
-## Voraussetzungen
+## Requirements
 
-- Windows 11 (WebView2 ist vorinstalliert)
-- Rust (stable, via rustup) mit `clippy` und `rustfmt`
-- Visual Studio Build Tools 2022 mit Workload „Desktopentwicklung mit C++“ (inkl. Windows SDK)
-- Node.js ≥ 22 und pnpm
+- Windows 11 (WebView2 is preinstalled)
+- Rust (stable, via rustup) with `clippy` and `rustfmt`
+- Visual Studio Build Tools 2022 with the "Desktop development with C++" workload (incl. Windows SDK)
+- Node.js ≥ 22 and pnpm
+- Optional for the compatibility test: Sweet Home 3D and a JDK
 
-## Entwickeln
+## Development
 
 ```powershell
 cd app
 pnpm install
-pnpm tauri dev          # App mit Hot Reload starten
+pnpm tauri dev          # run the app with hot reload
 ```
 
 ```powershell
-.\scripts\check.ps1                   # Formatierung, Lints, Tests
-.\scripts\compat-check.ps1            # Gegen den Original-Leser von Sweet Home 3D testen
+.\scripts\check.ps1                   # formatting, lints, tests
+.\scripts\compat-check.ps1            # verify against the original Sweet Home 3D reader
+```
+
+```powershell
+cd app
+pnpm tauri build        # installer (MSI/NSIS) in target\release\bundle
 ```
 
 ## CLI (`msh`)
 
 ```powershell
-cargo build -p msh-cli                # Binary: target\debug\msh.exe
-msh info haus.sh3d                    # Übersicht: Ebenen, Wände, Räume mit Fläche, Möbel
-msh dump haus.sh3d                    # Vollständiges Modell als JSON
-msh resave haus.sh3d kopie.sh3d       # Lesen und neu speichern
-msh catalog scan                      # Installierte Möbel-/Texturbibliotheken finden
-msh catalog search "sofa"             # In allen Bibliotheken suchen (deutsche Namen)
-msh catalog list Trees.sh3f           # Inhalt einer Bibliothek
+cargo build -p msh-cli                # binary: target\debug\msh.exe
+msh info house.sh3d                   # summary: levels, walls, rooms with area, furniture
+msh dump house.sh3d                   # complete model as JSON
+msh resave house.sh3d copy.sh3d       # read and save again
+msh catalog scan                      # find installed furniture/texture libraries
+msh catalog search "sofa"             # search all libraries
+msh catalog list Trees.sh3f           # content of one library
 ```
 
-Alle Befehle können mit `--json` maschinenlesbar ausgeben.
+All commands accept `--json` for machine-readable output.
 
-```powershell
-cd app
-pnpm tauri build        # Installer (MSI/NSIS) unter target\release\bundle
-```
+## Layout
 
-## Struktur
-
-| Pfad | Inhalt |
+| Path | Content |
 |---|---|
-| `crates/msh-model` | Datenmodell, 1:1 zum Format von Sweet Home 3D 7.x |
-| `crates/msh-format` | `.sh3d` / `Home.xml` lesen und schreiben |
-| `crates/msh-catalog` | Möbel- und Texturbibliotheken (`.sh3f`, `.sh3t`, `.jar`) |
-| `crates/msh-core` | Kern: Dokument, Commands, Undo/Redo (ab P3) |
-| `crates/msh-cli` | Binary `msh` (CLI, später MCP-Server) |
-| `app/src-tauri` | Tauri-Backend der Desktop-App |
-| `app/src` | React/TypeScript-Frontend |
-| `tools/compat` | Java-Testprogramm mit dem Original-Leser von Sweet Home 3D |
-| `tests/corpus` | Testdateien (Beispielprojekte; eigene Dateien in `private/`) |
-| `docs/` | Architektur und Entscheidungen |
+| `crates/msh-model` | Data model, 1:1 with the Sweet Home 3D 7.x format |
+| `crates/msh-format` | Read and write `.sh3d` / `Home.xml` |
+| `crates/msh-catalog` | Furniture and texture libraries (`.sh3f`, `.sh3t`, `.jar`) |
+| `crates/msh-core` | Core: document, commands, undo/redo (from P3) |
+| `crates/msh-cli` | Binary `msh` (CLI, later MCP server) |
+| `app/src-tauri` | Tauri backend of the desktop app |
+| `app/src` | React/TypeScript frontend |
+| `tools/compat` | Java test program using the original Sweet Home 3D reader |
+| `tests/corpus` | Test files (example projects; personal files in `private/`) |
+| `docs/` | Architecture and decisions |
 
-Weitere Crates (`msh-geometry`, `msh-export`, `msh-ipc`) kommen in den Phasen dazu, in denen
-sie gebraucht werden.
+More crates (`msh-geometry`, `msh-export`, `msh-ipc`) are added in the phases that need them.
 
-## Lizenz
+## License
 
-GPL-2.0-or-later (abgeleitet von Sweet Home 3D, © eTeks). Möbel- und Texturbibliotheken
-werden nicht mitgeliefert und haben eigene Lizenzen.
+GPL-2.0-or-later (derived from Sweet Home 3D, © eTeks / Space Mushrooms). Furniture and texture
+libraries are not included and have their own licenses.

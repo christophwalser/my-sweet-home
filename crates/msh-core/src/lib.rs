@@ -1,18 +1,18 @@
-//! Kern von My Sweet Home.
+//! Core of My Sweet Home.
 //!
-//! Hier entstehen in Phase P3 das Dokumentmodell, die Command-Registry und
-//! Undo/Redo. UI, CLI und MCP rufen ausschliesslich diese Commands auf.
+//! Phase P3 adds the document model, the command registry and undo/redo here.
+//! UI, CLI and MCP call these commands exclusively.
 
 use serde::Serialize;
 
-/// Basisinformationen über die Anwendung, die alle Oberflächen anzeigen können.
+/// Basic application information that every frontend can display.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AppInfo {
     pub name: &'static str,
     pub version: &'static str,
 }
 
-/// Liefert Name und Version des Kerns.
+/// Returns the name and version of the core.
 pub fn app_info() -> AppInfo {
     AppInfo {
         name: "My Sweet Home",

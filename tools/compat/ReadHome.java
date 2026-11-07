@@ -8,21 +8,21 @@ import com.eteks.sweethome3d.model.Wall;
 import java.io.InputStream;
 
 /**
- * Kompatibilitaetstest: liest .sh3d-Dateien mit dem Original-Leser von
- * Sweet Home 3D und gibt eine Zusammenfassung aus. Jede Ressource (Modell,
- * Icon, Textur) wird geoeffnet und vollstaendig gelesen.
+ * Compatibility test: reads .sh3d files with the original Sweet Home 3D reader
+ * and prints a summary. Every resource (model, icon, texture) is opened and
+ * read completely.
  *
- * Aufruf: java -cp "SweetHome3D.jar;." ReadHome datei1.sh3d [datei2.sh3d ...]
- * Exit-Code 0 = alle Dateien lesbar, 1 = mindestens ein Fehler.
+ * Usage: java -cp "SweetHome3D.jar;." ReadHome file1.sh3d [file2.sh3d ...]
+ * Exit code 0 = all files readable, 1 = at least one error.
  */
 public class ReadHome {
   public static void main(String[] args) {
     boolean ok = true;
     for (String file : args) {
-      // Gleiche Konfiguration wie die App selbst (com.eteks.sweethome3d.SweetHome3D):
+      // Same configuration as the application itself (com.eteks.sweethome3d.SweetHome3D):
       // HomeFileRecorder(0, false, preferences, false, preferXmlEntry=true, true).
-      // Mit preferXmlEntry=false liest SH3D nur den Java-serialisierten "Home"-Eintrag,
-      // den My Sweet Home nicht schreibt.
+      // With preferXmlEntry=false, SH3D only reads the Java-serialized "Home" entry,
+      // which My Sweet Home does not write.
       for (boolean preferXml : new boolean[] {true}) {
         try {
           Home home = new HomeFileRecorder(0, false, null, false, preferXml, true).readHome(file);
@@ -54,8 +54,8 @@ public class ReadHome {
               + " polylines=" + home.getPolylines().size()
               + " contentBytes=" + bytes);
         } catch (com.eteks.sweethome3d.model.DamagedHomeRecorderException e) {
-          // XML gelesen, aber Ressourcen fehlen (z. B. Beispielprojekte, deren Modelle
-          // im Katalog von SH3D liegen). Struktur trotzdem ausgeben.
+          // XML was read, but resources are missing (e.g. example projects whose models
+          // live in the SH3D catalog). Print the structure anyway.
           ok = false;
           Home home = e.getDamagedHome();
           System.out.println("MISSING " + file

@@ -1,15 +1,14 @@
-﻿//! Das Projekt (`Home`) und alle seine Elemente.
+//! The project (`Home`) and all of its elements.
 //!
-//! Die Structs bilden das XML-Format von Sweet Home 3D 7.x (`Home.xml`, DTD
-//! in der Javadoc von `HomeXMLHandler`) 1:1 ab. Masse sind in Zentimetern,
-//! Winkel im Bogenmass, Farben als ARGB. Optionale Attribute sind `Option`,
-//! damit beim Speichern nur geschrieben wird, was auch gelesen wurde.
+//! The structs mirror the XML format of Sweet Home 3D 7.x (`Home.xml`, DTD in
+//! the Javadoc of `HomeXMLHandler`) 1:1. Lengths are in centimeters, angles in
+//! radians, colors in ARGB. Optional attributes are `Option`, so that saving
+//! writes exactly what was read.
 
 use crate::attrs::{Color, attr_struct};
 use serde::{Deserialize, Serialize};
 
-/// Ein Element, das das Modell nicht kennt. Wird beim Speichern unverändert
-/// zurückgeschrieben.
+/// An element the model does not know. It is written back unchanged on save.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct RawElement {
     pub name: String,
@@ -30,7 +29,7 @@ attr_struct! {
     pub struct HomeAttrs {
         version: Option<i64> => "version",
         name: Option<String> => "name",
-        /// `topCamera` oder `observerCamera`
+        /// `topCamera` or `observerCamera`
         camera: Option<String> => "camera",
         selected_level: Option<String> => "selectedLevel",
         wall_height: Option<f32> => "wallHeight",
@@ -40,7 +39,7 @@ attr_struct! {
     }
 }
 
-/// Ein komplettes Projekt.
+/// A complete project.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Home {
     pub attrs: HomeAttrs,
@@ -63,7 +62,7 @@ pub struct Home {
 }
 
 impl Home {
-    /// Ruft `f` für jedes Möbelstück auf, auch für die in Gruppen.
+    /// Calls `f` for every piece of furniture, including pieces inside groups.
     pub fn for_each_piece<'a>(&'a self, mut f: impl FnMut(&'a Piece)) {
         fn walk<'a>(items: &'a [Furniture], f: &mut impl FnMut(&'a Piece)) {
             for item in items {
@@ -76,7 +75,7 @@ impl Home {
         walk(&self.furniture, &mut f);
     }
 
-    /// Anzahl aller Möbelstücke (Gruppen werden aufgelöst).
+    /// Number of pieces of furniture (groups are expanded).
     pub fn piece_count(&self) -> usize {
         let mut n = 0;
         self.for_each_piece(|_| n += 1);
@@ -88,7 +87,7 @@ attr_struct! {
     pub struct Property {
         name: String => "name",
         value: String => "value",
-        /// `STRING` (Standard) oder `CONTENT`
+        /// `STRING` (default) or `CONTENT`
         kind: Option<String> => "type",
     }
 }
@@ -102,7 +101,7 @@ attr_struct! {
         walls_alpha: Option<f32> => "wallsAlpha",
         all_levels_visible: Option<bool> => "allLevelsVisible",
         observer_camera_elevation_adjusted: Option<bool> => "observerCameraElevationAdjusted",
-        /// Schreibweise mit Doppel-l wie im Original
+        /// Spelled with a double "l", as in the original format
         ceiling_light_color: Option<Color> => "ceillingLightColor",
         drawing_mode: Option<String> => "drawingMode",
         subpart_size_under_light: Option<f32> => "subpartSizeUnderLight",
@@ -118,14 +117,14 @@ attr_struct! {
     }
 }
 
-/// Umgebung (Boden, Himmel, Licht, Foto-/Videoeinstellungen).
+/// Environment (ground, sky, light, photo and video settings).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Environment {
     pub attrs: EnvironmentAttrs,
     pub properties: Vec<Property>,
-    /// Kamerapfad für Videos
+    /// Camera path for videos
     pub cameras: Vec<Camera>,
-    /// `groundTexture` und/oder `skyTexture`
+    /// `groundTexture` and/or `skyTexture`
     pub textures: Vec<Texture>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra_children: Vec<RawElement>,
@@ -163,11 +162,11 @@ attr_struct! {
     }
 }
 
-/// Druckeinstellungen.
+/// Print settings.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Print {
     pub attrs: PrintAttrs,
-    /// IDs der gedruckten Ebenen
+    /// IDs of the printed levels
     pub printed_levels: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra_children: Vec<RawElement>,
@@ -194,12 +193,12 @@ pub struct Compass {
     pub extra_children: Vec<RawElement>,
 }
 
-// ---------------------------------------------------------------- Kameras
+// ---------------------------------------------------------------- Cameras
 
 attr_struct! {
     pub struct CameraAttrs {
         id: Option<String> => "id",
-        /// `topCamera`, `observerCamera`, `storedCamera` oder `cameraPath`
+        /// `topCamera`, `observerCamera`, `storedCamera` or `cameraPath`
         role: String => "attribute",
         name: Option<String> => "name",
         lens: Option<String> => "lens",
@@ -211,15 +210,15 @@ attr_struct! {
         time: Option<i64> => "time",
         field_of_view: f32 => "fieldOfView",
         renderer: Option<String> => "renderer",
-        /// nur bei `observerCamera`
+        /// only for `observerCamera`
         fixed_size: Option<bool> => "fixedSize",
     }
 }
 
-/// Kamera (Draufsicht) oder Beobachter (virtueller Besucher).
+/// Camera (top view) or observer (virtual visitor).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Camera {
-    /// `true` für das Element `observerCamera`, sonst `camera`
+    /// `true` for the `observerCamera` element, otherwise `camera`
     pub observer: bool,
     pub attrs: CameraAttrs,
     pub properties: Vec<Property>,
@@ -227,7 +226,7 @@ pub struct Camera {
     pub extra_children: Vec<RawElement>,
 }
 
-// ---------------------------------------------------------------- Ebenen
+// ---------------------------------------------------------------- Levels
 
 attr_struct! {
     pub struct LevelAttrs {
@@ -251,9 +250,9 @@ pub struct Level {
     pub extra_children: Vec<RawElement>,
 }
 
-// ---------------------------------------------------------------- Möbel
+// ---------------------------------------------------------------- Furniture
 
-/// Art eines Möbelstücks (= XML-Elementname).
+/// Kind of piece of furniture (= XML element name).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum PieceKind {
     #[default]
@@ -285,7 +284,7 @@ impl PieceKind {
 }
 
 attr_struct! {
-    /// Attribute aller Möbelarten. Welche davon vorkommen, hängt von [`PieceKind`] ab.
+    /// Attributes of all furniture kinds. Which ones occur depends on [`PieceKind`].
     pub struct PieceAttrs {
         // furnitureCommonAttributes
         id: Option<String> => "id",
@@ -323,7 +322,7 @@ attr_struct! {
         price: Option<String> => "price",
         // pieceOfFurnitureCommonAttributes
         drop_on_top_elevation: Option<f32> => "dropOnTopElevation",
-        /// 3x3-Matrix, 9 Zahlen durch Leerzeichen getrennt
+        /// 3x3 matrix, 9 space-separated numbers
         model_rotation: Option<String> => "modelRotation",
         model_centered_at_origin: Option<bool> => "modelCenteredAtOrigin",
         back_face_shown: Option<bool> => "backFaceShown",
@@ -344,7 +343,7 @@ attr_struct! {
         wall_left: Option<f32> => "wallLeft",
         wall_height: Option<f32> => "wallHeight",
         wall_top: Option<f32> => "wallTop",
-        /// SVG-Pfad der Wandaussparung
+        /// SVG path of the wall cut-out
         cut_out_shape: Option<String> => "cutOutShape",
         wall_cut_out_on_both_sides: Option<bool> => "wallCutOutOnBothSides",
         width_depth_deformable: Option<bool> => "widthDepthDeformable",
@@ -366,7 +365,7 @@ impl PieceAttrs {
     }
 }
 
-/// Ein Möbelstück, eine Tür/ein Fenster, eine Lampe oder ein Regal.
+/// A piece of furniture, a door or window, a light or a shelf unit.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Piece {
     pub kind: PieceKind,
@@ -419,7 +418,7 @@ attr_struct! {
     }
 }
 
-/// Eine Möbelgruppe.
+/// A furniture group.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct FurnitureGroup {
     pub attrs: GroupAttrs,
@@ -478,7 +477,7 @@ attr_struct! {
 
 attr_struct! {
     pub struct TextStyle {
-        /// `nameStyle`, `areaStyle` oder `lengthStyle`
+        /// `nameStyle`, `areaStyle` or `lengthStyle`
         role: Option<String> => "attribute",
         font_name: Option<String> => "fontName",
         font_size: f32 => "fontSize",
@@ -490,7 +489,7 @@ attr_struct! {
 
 attr_struct! {
     pub struct Texture {
-        /// z. B. `floorTexture`, `leftSideTexture`, `groundTexture`
+        /// e.g. `floorTexture`, `leftSideTexture`, `groundTexture`
         role: Option<String> => "attribute",
         catalog_id: Option<String> => "catalogId",
         name: String => "name",
@@ -516,7 +515,7 @@ attr_struct! {
     }
 }
 
-/// Geänderte Material-Eigenschaft eines 3D-Modells.
+/// Modified material of a 3D model.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Material {
     pub attrs: MaterialAttrs,
@@ -528,12 +527,12 @@ pub struct Material {
 attr_struct! {
     pub struct Transformation {
         name: String => "name",
-        /// 3x4-Matrix, 12 Zahlen durch Leerzeichen getrennt
+        /// 3x4 matrix, 12 space-separated numbers
         matrix: String => "matrix",
     }
 }
 
-// ---------------------------------------------------------------- Wände
+// ---------------------------------------------------------------- Walls
 
 attr_struct! {
     pub struct WallAttrs {
@@ -563,7 +562,7 @@ pub struct Wall {
     pub attrs: WallAttrs,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub properties: Vec<Property>,
-    /// `leftSideTexture` und/oder `rightSideTexture`
+    /// `leftSideTexture` and/or `rightSideTexture`
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub textures: Vec<Texture>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -573,7 +572,7 @@ pub struct Wall {
 }
 
 impl Wall {
-    /// Länge der Wand (bei Bogenwänden die Sehne).
+    /// Length of the wall (the chord for arc walls).
     pub fn chord_length(&self) -> f32 {
         let a = &self.attrs;
         (a.x_end - a.x_start).hypot(a.y_end - a.y_start)
@@ -582,7 +581,7 @@ impl Wall {
 
 attr_struct! {
     pub struct BaseboardAttrs {
-        /// `leftSideBaseboard` oder `rightSideBaseboard`
+        /// `leftSideBaseboard` or `rightSideBaseboard`
         role: String => "attribute",
         thickness: f32 => "thickness",
         height: f32 => "height",
@@ -598,7 +597,7 @@ pub struct Baseboard {
     pub extra_children: Vec<RawElement>,
 }
 
-// ---------------------------------------------------------------- Räume
+// ---------------------------------------------------------------- Rooms
 
 attr_struct! {
     pub struct RoomAttrs {
@@ -634,10 +633,10 @@ pub struct Room {
     pub attrs: RoomAttrs,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub properties: Vec<Property>,
-    /// `nameStyle` und/oder `areaStyle`
+    /// `nameStyle` and/or `areaStyle`
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub text_styles: Vec<TextStyle>,
-    /// `floorTexture` und/oder `ceilingTexture`
+    /// `floorTexture` and/or `ceilingTexture`
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub textures: Vec<Texture>,
     pub points: Vec<Point>,
@@ -646,7 +645,7 @@ pub struct Room {
 }
 
 impl Room {
-    /// Fläche des Polygons in cm² (Shoelace-Formel, ohne Selbstüberschneidungen).
+    /// Polygon area in cm² (shoelace formula, assumes no self-intersections).
     pub fn area(&self) -> f32 {
         let p = &self.points;
         if p.len() < 3 {
@@ -662,7 +661,7 @@ impl Room {
     }
 }
 
-// ---------------------------------------------------------------- Linien, Masse, Texte
+// ---------------------------------------------------------------- Polylines, dimensions, labels
 
 attr_struct! {
     pub struct PolylineAttrs {

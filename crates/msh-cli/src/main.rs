@@ -1,7 +1,7 @@
-//! `msh` – Kommandozeile von My Sweet Home.
+//! `msh` – command line interface of My Sweet Home.
 //!
-//! In Phase P3 werden die bearbeitenden Unterbefehle automatisch aus der
-//! Command-Registry von `msh-core` erzeugt, und `msh mcp` startet den MCP-Server.
+//! In phase P3 the editing subcommands are generated from the command registry
+//! of `msh-core`, and `msh mcp` starts the MCP server.
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -12,9 +12,13 @@ use std::path::{Path, PathBuf};
 mod catalog_cmd;
 
 #[derive(Parser)]
-#[command(name = "msh", version, about = "My Sweet Home – Kommandozeile")]
+#[command(
+    name = "msh",
+    version,
+    about = "My Sweet Home – command line interface"
+)]
 struct Cli {
-    /// Ausgabe als JSON (für Skripte und KI)
+    /// Output as JSON (for scripts and AI agents)
     #[arg(long, global = true)]
     json: bool,
 
@@ -24,15 +28,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Zeigt Name und Version der Anwendung an
+    /// Shows the application name and version
     Version,
-    /// Zeigt eine Übersicht eines Projekts (.sh3d oder Home.xml)
+    /// Shows a summary of a project (.sh3d or Home.xml)
     Info { file: PathBuf },
-    /// Gibt das vollständige Projektmodell als JSON aus
+    /// Prints the complete project model as JSON
     Dump { file: PathBuf },
-    /// Liest ein Projekt und speichert es neu (Formattest)
+    /// Reads a project and saves it again (format test)
     Resave { input: PathBuf, output: PathBuf },
-    /// Möbel- und Texturbibliotheken
+    /// Furniture and texture libraries
     #[command(subcommand)]
     Catalog(catalog_cmd::CatalogCommand),
 }
@@ -64,11 +68,11 @@ fn main() -> Result<()> {
         Command::Resave { input, output } => {
             let doc = open(&input)?;
             doc.save(&output)
-                .with_context(|| format!("Speichern nach {} fehlgeschlagen", output.display()))?;
+                .with_context(|| format!("failed to save {}", output.display()))?;
             if cli.json {
                 println!("{}", serde_json::json!({ "saved": output }));
             } else {
-                println!("Gespeichert: {}", output.display());
+                println!("Saved: {}", output.display());
             }
         }
         Command::Catalog(cmd) => catalog_cmd::run(cmd, cli.json)?,
@@ -76,7 +80,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Öffnet eine `.sh3d`-Datei oder ein einzelnes `Home.xml`.
+/// Opens a `.sh3d` file or a standalone `Home.xml`.
 fn open(path: &Path) -> Result<Sh3dDocument> {
     let is_xml = path
         .extension()
@@ -157,36 +161,36 @@ impl Summary {
 
     fn print(&self) {
         println!(
-            "Projekt:       {}",
-            self.name.as_deref().unwrap_or("(ohne Namen)")
+            "Project:         {}",
+            self.name.as_deref().unwrap_or("(unnamed)")
         );
         if let Some(v) = self.format_version {
-            println!("Formatversion: {v}");
+            println!("Format version:  {v}");
         }
         if !self.levels.is_empty() {
-            println!("Ebenen:        {}", self.levels.join(", "));
+            println!("Levels:          {}", self.levels.join(", "));
         }
         println!(
-            "Wände:         {} ({:.2} m)",
+            "Walls:           {} ({:.2} m)",
             self.walls, self.total_wall_length_m
         );
-        println!("Räume:         {}", self.rooms.len());
+        println!("Rooms:           {}", self.rooms.len());
         for r in &self.rooms {
             println!(
                 "  - {:<24} {:>8.2} m²",
-                r.name.as_deref().unwrap_or("(ohne Namen)"),
+                r.name.as_deref().unwrap_or("(unnamed)"),
                 r.area_m2
             );
         }
         println!(
-            "Möbel:         {} (davon {} Türen/Fenster, {} Lampen)",
+            "Furniture:       {} ({} doors/windows, {} lights)",
             self.furniture, self.doors_and_windows, self.lights
         );
-        println!("Masslinien:    {}", self.dimension_lines);
-        println!("Beschriftungen:{:>2}", self.labels);
-        println!("Polylinien:    {}", self.polylines);
+        println!("Dimension lines: {}", self.dimension_lines);
+        println!("Labels:          {}", self.labels);
+        println!("Polylines:       {}", self.polylines);
         println!(
-            "Ressourcen:    {} ({:.1} MB)",
+            "Resources:       {} ({:.1} MB)",
             self.resources,
             self.resource_bytes as f64 / 1_048_576.0
         );

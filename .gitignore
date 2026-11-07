@@ -9,7 +9,7 @@ app/dist/
 # Tauri
 app/src-tauri/gen/schemas
 
-# Lokale Bibliotheken und Testdaten mit fremder Lizenz – nie einchecken
+# Local libraries and test data under third-party licenses – never commit
 /libraries/
 /tests/corpus/private/
 

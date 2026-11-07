@@ -1,21 +1,21 @@
-﻿//! Abbildung zwischen dem XML-Baum von `Home.xml` und dem Modell.
+//! Mapping between the XML tree of `Home.xml` and the model.
 //!
-//! Lesen: bekannte Kindelemente landen in den typisierten Feldern, alles
-//! andere in `extra_children`. Schreiben: Kindelemente in der Reihenfolge der
-//! DTD von Sweet Home 3D 7.x, unbekannte am Ende.
+//! Reading: known child elements go into the typed fields, everything else
+//! into `extra_children`. Writing: child elements in the order of the
+//! Sweet Home 3D 7.x DTD, unknown ones last.
 
 use crate::FormatError;
 use msh_model::*;
 
 type R<T> = Result<T, FormatError>;
 
-// ================================================================ Lesen
+// ================================================================ Reading
 
-/// Liest das Wurzelelement `<home>`.
+/// Reads the root element `<home>`.
 pub fn read_home(root: RawElement) -> R<Home> {
     if root.name != "home" {
         return Err(FormatError::Structure(format!(
-            "Wurzelelement ist <{}> statt <home>",
+            "root element is <{}> instead of <home>",
             root.name
         )));
     }
@@ -82,8 +82,8 @@ fn attrs<T>(element: &str, a: Attrs, f: fn(Attrs) -> Result<T, AttrError>) -> R<
     })
 }
 
-/// Liest ein Element ohne Kindelemente. Hat es doch welche, wird es
-/// unverändert in `extra` aufbewahrt, damit nichts verloren geht.
+/// Reads an element without child elements. If it has some anyway, it is kept
+/// unchanged in `extra`, so that nothing gets lost.
 fn leaf<T>(
     el: RawElement,
     extra: &mut Vec<RawElement>,
@@ -245,8 +245,9 @@ fn read_furniture(el: RawElement) -> R<Furniture> {
         return Ok(Furniture::Group(Box::new(g)));
     }
 
-    let kind = PieceKind::from_element_name(&el.name)
-        .ok_or_else(|| FormatError::Structure(format!("unbekannte Möbelart <{}>", el.name)))?;
+    let kind = PieceKind::from_element_name(&el.name).ok_or_else(|| {
+        FormatError::Structure(format!("unknown furniture element <{}>", el.name))
+    })?;
     let mut p = Piece {
         kind,
         attrs: attrs(&el.name, el.attrs, PieceAttrs::from_attrs)?,
@@ -445,9 +446,9 @@ fn read_label(el: RawElement) -> R<Label> {
     Ok(l)
 }
 
-// ================================================================ Schreiben
+// ================================================================ Writing
 
-/// Erzeugt das Wurzelelement `<home>`.
+/// Creates the root element `<home>`.
 pub fn write_home(h: &Home) -> RawElement {
     let mut ch = Vec::new();
     ch.extend(

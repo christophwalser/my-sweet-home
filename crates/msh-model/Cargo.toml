@@ -1,6 +1,6 @@
 [package]
 name = "msh-model"
-description = "Datenmodell von My Sweet Home (1:1 zum Sweet-Home-3D-Format)"
+description = "Data model of My Sweet Home (1:1 with the Sweet Home 3D format)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

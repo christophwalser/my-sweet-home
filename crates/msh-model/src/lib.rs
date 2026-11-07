@@ -1,8 +1,8 @@
-//! Datenmodell von My Sweet Home.
+//! Data model of My Sweet Home.
 //!
-//! Bildet das Projektformat von Sweet Home 3D 7.x 1:1 ab, damit Dateien
-//! verlustfrei gelesen und geschrieben werden können. Fachlogik (Geometrie,
-//! Commands) baut auf diesen Typen auf, steckt aber in eigenen Crates.
+//! Mirrors the project format of Sweet Home 3D 7.x 1:1, so that files can be
+//! read and written without loss. Domain logic (geometry, commands) builds on
+//! these types but lives in separate crates.
 
 pub mod attrs;
 pub mod home;

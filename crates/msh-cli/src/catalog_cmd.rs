@@ -1,4 +1,4 @@
-//! `msh catalog …` – Bibliotheken finden, auflisten, durchsuchen.
+//! `msh catalog …` – find, list and search libraries.
 
 use anyhow::Result;
 use clap::{Subcommand, ValueEnum};
@@ -6,27 +6,31 @@ use msh_catalog::{Catalog, CatalogKind, find_libraries, open_library};
 use serde::Serialize;
 use std::path::PathBuf;
 
+/// Default language for catalog names and categories. Catalog content is user
+/// data and comes in the language of the catalog translations.
+const DEFAULT_CATALOG_LANG: &str = "de";
+
 #[derive(Subcommand)]
 pub enum CatalogCommand {
-    /// Sucht installierte Bibliotheken (Sweet Home 3D, Store-Version, eigene)
+    /// Finds installed libraries (Sweet Home 3D, Store version, user libraries)
     Scan {
-        /// Zusätzlicher Ordner mit .sh3f/.sh3t-Dateien (mehrfach möglich)
+        /// Additional folder with .sh3f/.sh3t files (can be repeated)
         #[arg(long = "dir")]
         dirs: Vec<PathBuf>,
     },
-    /// Listet den Inhalt einer Bibliotheksdatei
+    /// Lists the content of a library file
     List {
         file: PathBuf,
-        /// Sprache für Namen und Kategorien, z. B. de
-        #[arg(long, default_value = "de")]
+        /// Language for names and categories, e.g. de or en
+        #[arg(long, default_value = DEFAULT_CATALOG_LANG)]
         lang: String,
     },
-    /// Durchsucht alle gefundenen Bibliotheken nach Name, Kategorie, Tags, Hersteller
+    /// Searches all found libraries by name, category, tags and creator
     Search {
         query: String,
         #[arg(long, value_enum)]
         kind: Option<Kind>,
-        #[arg(long, default_value = "de")]
+        #[arg(long, default_value = DEFAULT_CATALOG_LANG)]
         lang: String,
         #[arg(long, default_value_t = 25)]
         limit: usize,
@@ -86,7 +90,7 @@ pub fn run(cmd: CatalogCommand, json: bool) -> Result<()> {
     }
 }
 
-/// Bibliotheksordner inkl. Store-Version.
+/// Library folders including the Store version.
 fn library_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
     let mut dirs = extra.to_vec();
     if let Some(store) = store_resources_dir() {
@@ -96,7 +100,7 @@ fn library_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
     dirs
 }
 
-/// Ressourcenordner der Microsoft-Store-Version, falls installiert.
+/// Resources folder of the Microsoft Store version, if installed.
 fn store_resources_dir() -> Option<PathBuf> {
     let out = std::process::Command::new("powershell")
         .args([
@@ -130,8 +134,8 @@ fn scan(extra: &[PathBuf], json: bool) -> Result<()> {
     let mut list = Vec::new();
     let mut errors = Vec::new();
     for path in find_libraries(&library_dirs(extra)) {
-        match open_library(&path, Some("de")) {
-            // Leere Platzhalter-Kataloge (z. B. ContributedFurnitureCatalog) weglassen
+        match open_library(&path, Some(DEFAULT_CATALOG_LANG)) {
+            // Skip empty placeholder catalogs (e.g. ContributedFurnitureCatalog)
             Ok(cats) => list.extend(
                 cats.into_iter()
                     .filter(|c| c.furniture.len() + c.textures.len() > 0)
@@ -162,11 +166,11 @@ fn scan(extra: &[PathBuf], json: bool) -> Result<()> {
         let kind = match l.kind {
             CatalogKind::Furniture => {
                 furniture += l.items;
-                "Möbel"
+                "Furniture"
             }
             CatalogKind::Textures => {
                 textures += l.items;
-                "Texturen"
+                "Textures"
             }
         };
         println!(
@@ -177,15 +181,15 @@ fn scan(extra: &[PathBuf], json: bool) -> Result<()> {
             l.path.display()
         );
         if let Some(lic) = &l.license {
-            println!("{:17}Lizenz: {lic}", "");
+            println!("{:17}License: {lic}", "");
         }
     }
     println!(
-        "\nGesamt: {furniture} Möbel, {textures} Texturen in {} Katalogen",
+        "\nTotal: {furniture} pieces of furniture, {textures} textures in {} catalogs",
         list.len()
     );
     for e in errors {
-        eprintln!("Fehler: {e}");
+        eprintln!("Error: {e}");
     }
     Ok(())
 }
@@ -250,7 +254,7 @@ fn search(
                 h.library.as_deref().unwrap_or("")
             );
         }
-        println!("\n{} von {total} Treffern", hits.len());
+        println!("\n{} of {total} hits", hits.len());
     }
     Ok(())
 }
@@ -311,16 +315,16 @@ fn collect_hits(
 
 fn print_header(c: &Catalog) {
     println!(
-        "{} ({}, {} Einträge){}",
-        c.name.as_deref().unwrap_or("Katalog"),
+        "{} ({}, {} entries){}",
+        c.name.as_deref().unwrap_or("Catalog"),
         c.version.as_deref().unwrap_or("?"),
         c.furniture.len() + c.textures.len(),
         c.license
             .as_deref()
-            .map(|l| format!(" – Lizenz: {l}"))
+            .map(|l| format!(" – License: {l}"))
             .unwrap_or_default()
     );
     for (i, reason) in &c.skipped {
-        println!("  übersprungen #{i}: {reason}");
+        println!("  skipped #{i}: {reason}");
     }
 }

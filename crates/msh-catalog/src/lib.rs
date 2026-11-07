@@ -1,10 +1,10 @@
-//! Möbel- und Texturbibliotheken von Sweet Home 3D.
+//! Furniture and texture libraries of Sweet Home 3D.
 //!
-//! Eine Bibliothek ist ein ZIP (`.sh3f`, `.sh3t` oder `.jar`) mit einer
-//! Properties-Datei (`PluginFurnitureCatalog.properties`,
-//! `DefaultTexturesCatalog.properties`, …) und den Ressourcen. Einträge sind
-//! durchnummeriert: `name#1`, `model#1`, `width#1`, …. Übersetzungen liegen in
-//! `…_de.properties` usw. und überschreiben einzelne Schlüssel.
+//! A library is a ZIP (`.sh3f`, `.sh3t` or `.jar`) containing a properties
+//! file (`PluginFurnitureCatalog.properties`,
+//! `DefaultTexturesCatalog.properties`, …) and the resources. Entries are
+//! numbered: `name#1`, `model#1`, `width#1`, …. Translations live in
+//! `…_de.properties` etc. and override individual keys.
 
 pub mod properties;
 
@@ -15,16 +15,16 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CatalogError {
-    #[error("E/A-Fehler bei {path}: {source}")]
+    #[error("I/O error in {path}: {source}")]
     Io {
         path: PathBuf,
         source: std::io::Error,
     },
-    #[error("ZIP-Fehler bei {path}: {message}")]
+    #[error("ZIP error in {path}: {message}")]
     Zip { path: PathBuf, message: String },
-    #[error("{path} enthält keinen Möbel- oder Texturkatalog")]
+    #[error("{path} contains no furniture or texture catalog")]
     NoCatalog { path: PathBuf },
-    #[error("Ressource '{resource}' nicht gefunden in {path}")]
+    #[error("resource '{resource}' not found in {path}")]
     ResourceNotFound { path: PathBuf, resource: String },
 }
 
@@ -35,12 +35,12 @@ pub enum CatalogKind {
     Textures,
 }
 
-/// Ein Katalog aus einer Bibliotheksdatei.
+/// A catalog from a library file.
 #[derive(Debug, Clone, Serialize)]
 pub struct Catalog {
-    /// Bibliotheksdatei
+    /// Library file
     pub source: PathBuf,
-    /// Pfad der Properties-Datei im ZIP
+    /// Path of the properties file inside the ZIP
     pub properties_entry: String,
     pub kind: CatalogKind,
     pub id: Option<String>,
@@ -51,11 +51,11 @@ pub struct Catalog {
     pub provider: Option<String>,
     pub furniture: Vec<FurnitureItem>,
     pub textures: Vec<TextureItem>,
-    /// Einträge, die nicht gelesen werden konnten (Index, Grund)
+    /// Entries that could not be read (index, reason)
     pub skipped: Vec<(u32, String)>,
 }
 
-/// Ein Möbelstück im Katalog.
+/// A piece of furniture in a catalog.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FurnitureItem {
@@ -67,11 +67,11 @@ pub struct FurnitureItem {
     pub creator: Option<String>,
     pub license: Option<String>,
     pub creation_date: Option<String>,
-    /// Pfad im ZIP (ohne führenden `/`)
+    /// Path inside the ZIP (without leading `/`)
     pub icon: Option<String>,
     pub plan_icon: Option<String>,
     pub model: Option<String>,
-    /// Modell besteht aus mehreren Dateien im selben Ordner
+    /// The model consists of several files in the same folder
     pub multi_part_model: bool,
     pub width: f32,
     pub depth: f32,
@@ -79,11 +79,11 @@ pub struct FurnitureItem {
     pub elevation: f32,
     pub movable: bool,
     pub door_or_window: bool,
-    /// Weitere Schlüssel ohne `#N` (z. B. `doorOrWindowCutOutShape`, `lightSourceX`)
+    /// Further keys without `#N` (e.g. `doorOrWindowCutOutShape`, `lightSourceX`)
     pub extra: BTreeMap<String, String>,
 }
 
-/// Eine Textur im Katalog.
+/// A texture in a catalog.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextureItem {
@@ -92,17 +92,17 @@ pub struct TextureItem {
     pub name: String,
     pub category: String,
     pub creator: Option<String>,
-    /// Pfad im ZIP (ohne führenden `/`)
+    /// Path inside the ZIP (without leading `/`)
     pub image: String,
     pub width: f32,
     pub height: f32,
     pub extra: BTreeMap<String, String>,
 }
 
-/// Liest alle Kataloge einer Bibliotheksdatei.
+/// Reads all catalogs of a library file.
 ///
-/// `locale` ist z. B. `"de"` oder `"de_CH"`; übersetzte Namen und Kategorien
-/// werden dann bevorzugt.
+/// `locale` is e.g. `"de"` or `"de_CH"`; translated names and categories are
+/// then preferred.
 pub fn open_library(path: &Path, locale: Option<&str>) -> Result<Vec<Catalog>, CatalogError> {
     let file = std::fs::File::open(path).map_err(|source| CatalogError::Io {
         path: path.to_owned(),
@@ -127,7 +127,7 @@ pub fn open_library(path: &Path, locale: Option<&str>) -> Result<Vec<Catalog>, C
 
     let mut catalogs = Vec::new();
     for main in mains {
-        let kind = main_catalog_kind(main).expect("gefiltert");
+        let kind = main_catalog_kind(main).expect("filtered above");
         let mut props = read_properties(&mut zip, main, path)?;
         for loc in locale_variants(locale) {
             let localized = main.replace(".properties", &format!("_{loc}.properties"));
@@ -140,7 +140,7 @@ pub fn open_library(path: &Path, locale: Option<&str>) -> Result<Vec<Catalog>, C
     Ok(catalogs)
 }
 
-/// Liest eine Ressource (Modell, Icon, Bild) aus einer Bibliotheksdatei.
+/// Reads a resource (model, icon, image) from a library file.
 pub fn read_resource(library: &Path, resource: &str) -> Result<Vec<u8>, CatalogError> {
     let file = std::fs::File::open(library).map_err(|source| CatalogError::Io {
         path: library.to_owned(),
@@ -217,7 +217,7 @@ fn build_catalog(
     kind: CatalogKind,
     props: &BTreeMap<String, String>,
 ) -> Catalog {
-    // Schlüssel nach Index gruppieren: "width#12" -> (12, "width")
+    // Group keys by index: "width#12" -> (12, "width")
     let mut items: BTreeMap<u32, BTreeMap<String, String>> = BTreeMap::new();
     for (k, v) in props {
         if let Some((key, idx)) = k.rsplit_once('#')
@@ -264,14 +264,14 @@ fn build_catalog(
 }
 
 fn take_req(m: &mut BTreeMap<String, String>, k: &str) -> Result<String, String> {
-    m.remove(k).ok_or_else(|| format!("'{k}' fehlt"))
+    m.remove(k).ok_or_else(|| format!("'{k}' is missing"))
 }
 
 fn take_f32(m: &mut BTreeMap<String, String>, k: &str) -> Result<f32, String> {
     let v = take_req(m, k)?;
     v.trim()
         .parse()
-        .map_err(|_| format!("'{k}' ist keine Zahl: {v}"))
+        .map_err(|_| format!("'{k}' is not a number: {v}"))
 }
 
 fn take_bool(m: &mut BTreeMap<String, String>, k: &str, default: bool) -> bool {
@@ -332,10 +332,10 @@ fn texture_item(index: u32, m: &mut BTreeMap<String, String>) -> Result<TextureI
     })
 }
 
-/// Bekannte Speicherorte von Bibliotheken auf diesem Rechner (nur Windows).
+/// Known library locations on this machine (Windows only).
 ///
-/// `extra_dirs` erlaubt zusätzliche Ordner, z. B. den Ressourcenordner der
-/// Store-Version, dessen Pfad nur über die Paketverwaltung ermittelbar ist.
+/// `extra_dirs` adds further folders, e.g. the resources folder of the Store
+/// version, whose path can only be determined through package management.
 pub fn find_libraries(extra_dirs: &[PathBuf]) -> Vec<PathBuf> {
     let mut found = Vec::new();
     let mut dirs: Vec<PathBuf> = Vec::new();

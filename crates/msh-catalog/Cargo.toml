@@ -1,6 +1,6 @@
 [package]
 name = "msh-catalog"
-description = "Möbel- und Texturbibliotheken von Sweet Home 3D lesen (.sh3f, .sh3t, .jar)"
+description = "Reading Sweet Home 3D furniture and texture libraries (.sh3f, .sh3t, .jar)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

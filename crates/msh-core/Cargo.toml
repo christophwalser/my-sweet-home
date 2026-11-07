@@ -1,6 +1,6 @@
 [package]
 name = "msh-core"
-description = "Kern von My Sweet Home: Dokument, Commands, Undo/Redo"
+description = "Core of My Sweet Home: document, commands, undo/redo"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
