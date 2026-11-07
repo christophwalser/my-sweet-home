@@ -620,3 +620,72 @@ input[type="search"]:focus {
 .catalog-more {
   padding: 8px 18px;
 }
+
+/* Furniture list ("In home" tab) */
+.furniture-list table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+.furniture-list th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.furniture-list th button {
+  width: 100%;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.furniture-list th.num,
+.furniture-list td.num {
+  text-align: right;
+  width: 38px;
+}
+
+.furniture-list th.check,
+.furniture-list td.check {
+  width: 22px;
+  text-align: center;
+}
+
+.furniture-list td {
+  padding: 3px 2px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.furniture-list tr {
+  cursor: pointer;
+}
+
+.furniture-list tbody tr:hover {
+  background: var(--panel-2);
+}
+
+.furniture-list tr.selected {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.furniture-list tr.hidden-row td.name {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.catalog-empty {
+  padding: 8px;
+}

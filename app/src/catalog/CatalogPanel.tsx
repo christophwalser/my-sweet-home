@@ -10,6 +10,7 @@ import {
   libResourceUrl,
 } from "../api";
 import { useStore } from "../store";
+import FurnitureList from "./FurnitureList";
 
 const MAX_RESULTS = 300;
 
@@ -64,6 +65,8 @@ export default function CatalogPanel() {
   const loading = useStore((s) => s.catalogLoading);
   const loadCatalog = useStore((s) => s.loadCatalog);
   const [kind, setKind] = useState<CatalogKind>("furniture");
+  /** "home": the furniture of the open home instead of the catalog */
+  const [showHome, setShowHome] = useState(false);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
 
@@ -120,27 +123,41 @@ export default function CatalogPanel() {
         <div className="segmented">
           <button
             type="button"
-            className={kind === "furniture" ? "active" : ""}
-            onClick={() => setKind("furniture")}
+            className={!showHome && kind === "furniture" ? "active" : ""}
+            onClick={() => {
+              setShowHome(false);
+              setKind("furniture");
+            }}
           >
             Furniture
           </button>
           <button
             type="button"
-            className={kind === "textures" ? "active" : ""}
-            onClick={() => setKind("textures")}
+            className={!showHome && kind === "textures" ? "active" : ""}
+            onClick={() => {
+              setShowHome(false);
+              setKind("textures");
+            }}
           >
             Textures
+          </button>
+          <button
+            type="button"
+            className={showHome ? "active" : ""}
+            onClick={() => setShowHome(true)}
+            title="Furniture of the open home"
+          >
+            In home
           </button>
         </div>
         <input
           type="search"
-          placeholder="Search catalog…"
+          placeholder={showHome ? "Search furniture in the home…" : "Search catalog…"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search catalog"
         />
-        <div className="catalog-count muted">
+        <div className="catalog-count muted" hidden={showHome}>
           {loading
             ? "Loading libraries…"
             : results
@@ -149,7 +166,9 @@ export default function CatalogPanel() {
         </div>
       </div>
       <div className="catalog-list">
-        {results ? (
+        {showHome ? (
+          <FurnitureList query={query} />
+        ) : results ? (
           <ul>
             {results.slice(0, MAX_RESULTS).map((i) => (
               <ItemRow

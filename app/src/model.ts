@@ -98,6 +98,7 @@ export type Piece = {
     width: number;
     depth: number;
     resizable: boolean | null;
+    price: string | null;
     /** `false`: width, depth and height only change proportionally */
     deformable: boolean | null;
     height: number;
