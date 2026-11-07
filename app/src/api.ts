@@ -46,6 +46,8 @@ export const api = {
   /** Runs a command of the msh-core registry (same commands as CLI and MCP). */
   execute: (command: string, params: Record<string, unknown> = {}) =>
     invoke<unknown>("execute", { command, params }),
+  /** PNG (base64) of the 3D view, rendered by the window that shows it. */
+  capture3d: () => invoke<string>("capture_3d_image"),
   /** Exports the 3D view as OBJ through the window that shows it. */
   exportObj: (path: string) => invoke<{ paths: string[] }>("export_obj", { path }),
   /** Writes an OBJ export (OBJ at `path`, MTL and textures next to it). */

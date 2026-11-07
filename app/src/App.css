@@ -972,6 +972,7 @@ body.resizing-horizontal {
 
 .export-dialog {
   width: min(560px, calc(100vw - 32px));
+  overflow-y: auto;
 }
 
 .export-section {
@@ -1019,4 +1020,17 @@ body.resizing-horizontal {
 .export-message {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.export-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 13px;
+}
+
+.export-checks label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }

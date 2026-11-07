@@ -94,7 +94,16 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
             let Some(command) = req.params["command"].as_str().map(str::to_owned) else {
                 return Response::err(id, "missing \"command\"");
             };
-            let params = req.params.get("params").cloned().unwrap_or(Value::Null);
+            let mut params = req.params.get("params").cloned().unwrap_or(Value::Null);
+            // A printed home includes the 3D view, which only the frontend can render
+            if command == "export_document"
+                && params["view_3d"] != Value::Bool(false)
+                && params["view_3d_image"].is_null()
+                && let Ok(image) = capture_3d(app, None).await
+                && let Some(obj) = params.as_object_mut()
+            {
+                obj.insert("view_3d_image".into(), image["image_base64"].clone());
+            }
             let a = app.clone();
             match tauri::async_runtime::spawn_blocking(move || state::execute(&a, &command, params))
                 .await
@@ -157,7 +166,7 @@ pub async fn export_obj(app: &AppHandle, path: Option<&str>) -> Result<Value, St
 }
 
 /// Asks the frontend to render the 3D view and waits for the PNG.
-async fn capture_3d(app: &AppHandle, mode: Option<String>) -> Result<Value, String> {
+pub async fn capture_3d(app: &AppHandle, mode: Option<String>) -> Result<Value, String> {
     let state = app.state::<AppState>();
     if state.current().is_none() {
         return Err("no home is open in the app".into());

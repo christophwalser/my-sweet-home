@@ -1,6 +1,6 @@
-# My Sweet Home â€“ Architecture and Roadmap
+# My Sweet Home – Architecture and Roadmap
 
-Last updated: 2026-11-07 Â· Status: draft for approval
+Last updated: 2026-11-07 · Status: draft for approval
 
 ## 1. Goal
 
@@ -8,7 +8,7 @@ A newly built home design application for Windows that
 
 - reads and writes the **file formats of Sweet Home 3D** (`.sh3d` projects, `.sh3f` furniture libraries, `.sh3t` texture libraries),
 - reaches feature parity with **Sweet Home 3D 7.x** (Store version 7.9.27),
-- needs significantly **less RAM and CPU** (target: < 150 MB RAM for a medium-sized project, startup < 2 s; original: 300â€“800 MB plus JVM startup),
+- needs significantly **less RAM and CPU** (target: < 150 MB RAM for a medium-sized project, startup < 2 s; original: 300–800 MB plus JVM startup),
 - has a **modern, clean UI** (light/dark theme, ribbon/toolbar, catalog search field, drag & drop),
 - can be fully controlled by **AI agents through MCP** and by **scripts through a CLI**.
 
@@ -27,7 +27,7 @@ A newly built home design application for Windows that
 
 Paywall, analytics and remote config are **not** adopted.
 
-Store libraries (`â€¦\WindowsApps\eTeks.SweetHome3D_7.9.27.0_x86__â€¦\Sweet Home 3D\resources\`):
+Store libraries (`…\WindowsApps\eTeks.SweetHome3D_7.9.27.0_x86__…\Sweet Home 3D\resources\`):
 `BlendSwap-CC-0`, `BlendSwap-CC-BY`, `Contributions`, `KatorLegaz`, `LucaPresidente`, `Reallusion`, `Scopia`, `Trees` (furniture), `Contributions`, `eTeksScopia` (textures). All of them are also available on sweethome3d.com. Each has its own license.
 
 ## 3. Decisions
@@ -38,37 +38,37 @@ Store libraries (`â€¦\WindowsApps\eTeks.SweetHome3D_7.9.27.0_x86__â€¦\Sw
 | D2 | AI control | **MCP server** (no built-in chat) + **CLI** |
 | D3 | Distribution | Undecided. Therefore libraries are **never embedded in the repository or the application**; they are loaded from configurable folders or imported. |
 | D4 | Platform | **Windows 11** only (WebView2 is preinstalled) |
-| D5 | Code license | Porting algorithms from the Java code (wall geometry, format details) creates a derivative work â†’ **GPL v2 or later**. This is unproblematic while the app stays private. If published, the source code must be GPL. |
+| D5 | Code license | Porting algorithms from the Java code (wall geometry, format details) creates a derivative work → **GPL v2 or later**. This is unproblematic while the app stays private. If published, the source code must be GPL. |
 | D6 | Language | Chat with the user in German; code, comments, docs, commits and UI strings in English (see `CLAUDE.md`). |
 
 ## 4. Architecture
 
 ```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Tauri app (Windows) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  Frontend (WebView2): React + TypeScript                            â”‚
-â”‚   â”œâ”€ 2D plan (Canvas 2D, own scene graph, HiDPI)                    â”‚
-â”‚   â”œâ”€ 3D view (three.js WebGPURenderer, lazy model loading)          â”‚
-â”‚   â”œâ”€ Catalog (virtual list, full-text search), property panels      â”‚
-â”‚   â””â”€ Photo rendering (GPU path tracer, replaces SunFlow/YafaRay)    â”‚
-â”‚                   â–² Tauri IPC (invoke/events)                        â”‚
-â”‚  Rust backend â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€  â”‚
-â”‚   â”œâ”€ msh-core      document, selection, undo/redo, command registry  â”‚
-â”‚   â”œâ”€ msh-model     Home, Level, Wall, Room, Piece, Polyline, â€¦       â”‚
-â”‚   â”œâ”€ msh-geometry  wall joins, arcs, room areas, snapping            â”‚
-â”‚   â”œâ”€ msh-format    read + write .sh3d / .sh3f / .sh3t                â”‚
-â”‚   â”œâ”€ msh-catalog   library index (SQLite FTS5), thumbnails           â”‚
-â”‚   â”œâ”€ msh-export    PDF, SVG, OBJ, CSV                                 â”‚
-â”‚   â””â”€ msh-ipc       named pipe \\.\pipe\my-sweet-home (JSON-RPC)      â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-        â–² named pipe (running app)             â–² direct (headless)
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”                  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚ msh mcp (stdio)  â”‚â—„â”€â”€ Claude etc.   â”‚ msh <command> CLI â”‚â—„â”€â”€ scripts
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜                  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+┌──────────────────────── Tauri app (Windows) ────────────────────────┐
+│  Frontend (WebView2): React + TypeScript                            │
+│   ├─ 2D plan (Canvas 2D, own scene graph, HiDPI)                    │
+│   ├─ 3D view (three.js WebGPURenderer, lazy model loading)          │
+│   ├─ Catalog (virtual list, full-text search), property panels      │
+│   └─ Photo rendering (GPU path tracer, replaces SunFlow/YafaRay)    │
+│                   ▲ Tauri IPC (invoke/events)                        │
+│  Rust backend ────┴────────────────────────────────────────────────  │
+│   ├─ msh-core      document, selection, undo/redo, command registry  │
+│   ├─ msh-model     Home, Level, Wall, Room, Piece, Polyline, …       │
+│   ├─ msh-geometry  wall joins, arcs, room areas, snapping            │
+│   ├─ msh-format    read + write .sh3d / .sh3f / .sh3t                │
+│   ├─ msh-catalog   library index (SQLite FTS5), thumbnails           │
+│   ├─ msh-export    PDF, SVG, OBJ, CSV                                 │
+│   └─ msh-ipc       named pipe \\.\pipe\my-sweet-home (JSON-RPC)      │
+└──────────────────────────────────────────────────────────────────────┘
+        ▲ named pipe (running app)             ▲ direct (headless)
+┌───────┴──────────┐                  ┌────────┴──────────┐
+│ msh mcp (stdio)  │◄── Claude etc.   │ msh <command> CLI │◄── scripts
+└──────────────────┘                  └───────────────────┘
 ```
 
 ### 4.1 Core design rule: one command registry for everything
 
-Every action (draw a wall, place furniture, add a level â€¦) is **a command** in `msh-core`. Every command has a name, parameters as JSON Schema (via `schemars`), undo logic and a result.
+Every action (draw a wall, place furniture, add a level …) is **a command** in `msh-core`. Every command has a name, parameters as JSON Schema (via `schemars`), undo logic and a result.
 
 - The **UI** calls commands through Tauri IPC.
 - The **CLI** generates its subcommands from the registry.
@@ -106,7 +106,7 @@ MCP tools (excerpt): `home_open`, `home_save`, `home_describe` (structured summa
   - The example projects reference models in the SH3D catalog (`com/eteks/.../armchair.obj`). A standalone `.sh3d` must embed these resources. This belongs to P5 (placing furniture from libraries).
 - `.sh3f` / `.sh3t`: ZIP with `PluginFurnitureCatalog.properties` / `PluginTexturesCatalog.properties` (localized keys), models (OBJ/MTL, 3DS, DAE), icons and images. Read and write (library editor later).
 - 3D model formats: OBJ, 3DS, DAE (Collada) as in the original, plus glTF/GLB. Loaded in the frontend with the three.js loaders; Rust only delivers the bytes.
-- **Test corpus:** `Examples.jar` (example projects) + personal files. Automatic round-trip test (read â†’ write â†’ read â†’ semantic comparison).
+- **Test corpus:** `Examples.jar` (example projects) + personal files. Automatic round-trip test (read → write → read → semantic comparison).
 
 ### 4.4 Libraries
 
@@ -117,7 +117,7 @@ MCP tools (excerpt): `home_open`, `home_save`, `home_describe` (structured summa
 - Libraries are copied into our own library folder and indexed in SQLite (FTS5): name, category, tags, dimensions, license/creator. They are not bundled with the application (see D3).
 - License and creator of every item are shown. This matters for CC-BY.
 
-### 4.5 Saving resources â€“ concretely
+### 4.5 Saving resources – concretely
 
 - No JVM. Native Rust backend; WebView2 shares its runtime with Windows.
 - Models are loaded **lazily** and shared as GPU instances (same furniture = one mesh, `InstancedMesh`), with texture compression (KTX2/Basis).
@@ -128,11 +128,11 @@ MCP tools (excerpt): `home_open`, `home_save`, `home_describe` (structured summa
 ### 4.6 Viewer status after P2 (2026-11-07)
 
 Implemented:
-- `msh-geometry`: wall outlines with mitered joins (endâ€“start and startâ€“start joins), arc walls; unit-tested.
+- `msh-geometry`: wall outlines with mitered joins (end–start and start–start joins), arc walls; unit-tested.
 - Tauri backend: `open_home` (`.sh3d` and standalone `Home.xml`), `catalog_load`, file passed on the command line, custom URI scheme `msh` (`http://msh.localhost/doc/{id}/{entry}` and `/lib/{index}/{entry}`) that serves resources directly from the ZIP files. Resources missing in a home (e.g. example projects referencing the SH3D catalog by class path) are resolved from the installed libraries.
 - 2D plan (Canvas 2D): rooms with names and areas, walls, furniture with icons, doors/windows with sash arcs, dimension lines, labels, polylines, compass, level tabs, zoom/pan/fit, light/dark theme.
 - 3D view (three.js, WebGL2): walls with heights at both ends, side and top colors, door/window openings cut with CSG (`three-bvh-csg`), floors/ceilings with textures, ground texture, sky color, furniture models (OBJ/MTL, 3DS, Collada) normalized like SH3D, Sweet Home 3D's default OBJ material table, transparent window panes (`sweethome3d_window_pane*` groups at 50 % opacity, as in SH3D's ModelManager), stored aerial and observer cameras, render on demand.
-- Viewer polish (P2): wall side textures with UVs along the wall (u along the axis, v = height, in cm), baseboards as mitered prisms along the wall sides (cut by door openings), sky texture on a half sphere that follows the viewer (sky color as fallback), point lights for the light sources of lamps in the virtual visit, optional sun shadows (toggle in the 3D view; ceilings cast none so the aerial view stays lit), labels with a pitch, dimension lines marked "visible in 3D" and polylines with an elevation in 3D, aerial camera started slightly below the pole (pitch â‰¤ Ï€/2 âˆ’ 0.05) so that OrbitControls keep the yaw. 2D plan: wall patterns as canvas patterns of constant screen size (default `hatchUp`), baseboard outlines, room floors with color or texture at 75 % opacity like SH3D, dimension text on the outer side of the line.
+- Viewer polish (P2): wall side textures with UVs along the wall (u along the axis, v = height, in cm), baseboards as mitered prisms along the wall sides (cut by door openings), sky texture on a half sphere that follows the viewer (sky color as fallback), point lights for the light sources of lamps in the virtual visit, optional sun shadows (toggle in the 3D view; ceilings cast none so the aerial view stays lit), labels with a pitch, dimension lines marked "visible in 3D" and polylines with an elevation in 3D, aerial camera started slightly below the pole (pitch ≤ π/2 − 0.05) so that OrbitControls keep the yaw. 2D plan: wall patterns as canvas patterns of constant screen size (default `hatchUp`), baseboard outlines, room floors with color or texture at 75 % opacity like SH3D, dimension text on the outer side of the line.
 - Catalog panel: all installed libraries, categories, search, icons, license and creator in the tooltip.
 
 Deliberate deviations:
@@ -161,10 +161,10 @@ Implemented in P3a:
   `furniture_add/add_in_wall/update`, `label_add`, `dimension_add`, `edit_delete/undo/redo`,
   `view_plan_image`.
 - Catalog furniture and textures are **embedded** into the home (single-file models as `N`,
-  multi-part models as folder `N/â€¦`, icons, texture images). Catalog values in cm/degrees are
+  multi-part models as folder `N/…`, icons, texture images). Catalog values in cm/degrees are
   converted to the relative values of `Home.xml` (sash axes, wall thickness/distance, light
   sources, drop-on-top elevation). Unreferenced resources are pruned on save; `ContentDigests` is
-  dropped when resources changed (Sweet Home 3D accepts files without it â€” verified).
+  dropped when resources changed (Sweet Home 3D accepts files without it — verified).
 - `msh-export`: plan as SVG and PNG (`resvg`) with rooms, areas, furniture names, doors/windows,
   dimensions, labels and scale bar (since P6a also as the app draws it, PDF pages via `krilla`,
   furniture list as CSV).
@@ -180,7 +180,7 @@ Implemented in P3a:
 
 Findings:
 - Door/window sash angles follow Java's `Arc2D` convention (counter-clockwise on screen): a point
-  at angle Î¸ lies at (cos Î¸, âˆ’sin Î¸) in plan coordinates. The P2 plan view drew them mirrored;
+  at angle θ lies at (cos θ, −sin θ) in plan coordinates. The P2 plan view drew them mirrored;
   fixed in the app and in the export.
 
 ### 4.8 Status after P3b (2026-11-07)
@@ -212,20 +212,20 @@ Implemented (editing in the 2D plan; every action is a registry command and one 
 - Selection: click, Shift+click, rubber band; highlight in the plan; properties panel on the
   right for furniture, walls, rooms, labels, home and level.
 - Moving by dragging (`edit_move`, joined walls keep their connection), arrow keys (1 cm,
-  Shift 10 cm), rotating furniture with R / Shift+R (15Â°), Delete.
-- Tools: walls (click chain with magnetism to wall ends, 15Â° angles and whole centimeters,
+  Shift 10 cm), rotating furniture with R / Shift+R (15°), Delete.
+- Tools: walls (click chain with magnetism to wall ends, 15° angles and whole centimeters,
   click the first point to close, double-click/Enter to finish), rooms (snap to the corners of
   the wall sides), dimension lines, text labels; Alt disables magnetism.
 - Catalog drag & drop: furniture at the drop point, doors/windows into the nearest wall
   (`furniture_add_in_wall`); the translated catalog name becomes the piece name.
 - "+ Level" in the level tabs.
 - Core: `edit_move`, `label_update`; homes of older versions get IDs on open (needed for
-  selection and commands; Sweet Home 3D reads them â€” verified).
+  selection and commands; Sweet Home 3D reads them — verified).
 
 Findings:
 - Tauri intercepts drag & drop on Windows for file drops; HTML5 drag & drop in the WebView only
   works with `dragDropEnabled: false` on the window.
-- Tilted furniture (roofs): Sweet Home 3D uses rotY(âˆ’angle) Â· rotZ(âˆ’roll) Â· rotX(âˆ’pitch) and
+- Tilted furniture (roofs): Sweet Home 3D uses rotY(−angle) · rotZ(−roll) · rotX(−pitch) and
   centers at elevation + heightInPlan / 2; the 3D view used +pitch (roofs were upside down).
 
 Next (P4b): wall end and furniture resize handles, copy/paste, room detection by double-click
@@ -234,10 +234,10 @@ inside walls, polylines, multi-level editing details, more properties (textures,
 ### 4.10 Status after P4b (2026-11-07)
 
 Implemented:
-- Handles of a single selected element: wall ends (magnetism to other wall ends and 15Â° angles;
+- Handles of a single selected element: wall ends (magnetism to other wall ends and 15° angles;
   the joined wall follows), room and polyline points, dimension line ends, furniture resize
   (bottom-right corner, top-left corner stays; proportional for non-deformable pieces; not for
-  tilted pieces) and rotation (top-left corner, 15Â° steps, Alt for free angles).
+  tilted pieces) and rotation (top-left corner, 15° steps, Alt for free angles).
 - Copy/paste: `edit_copy`, `edit_paste`, `edit_duplicate` (Ctrl+C / X / V / D, Ctrl+A selects
   all on the level). The clipboard (`msh_core::clipboard`) holds the elements and their
   resources and survives `home_open`/`home_new`, so pasting into another home works; resources
@@ -269,14 +269,14 @@ Based on user feedback; Sweet Home 3D's interaction is the baseline, with additi
   real thickness (thickness field in the plan toolbar while the wall tool is active).
 - Typed lengths: digits while drawing set the length of the current segment, Enter confirms.
 - Magnetism (`plan2d/snapping.ts`): points (wall ends, wall side corners, room corners, the
-  first point), then directions from the previous point (15Â° steps, parallel/perpendicular to
-  nearby walls, shown as "âˆ¥ wall" / "âŠ¥ wall"), along which the point snaps to alignment guides
+  first point), then directions from the previous point (15° steps, parallel/perpendicular to
+  nearby walls, shown as "∥ wall" / "⊥ wall"), along which the point snaps to alignment guides
   (same x or y as a reference point, drawn as dashed lines) and to wall axes (walls) or wall
   sides and room edges (rooms, dimensions). The angle to the previous segment is drawn at
   each corner; right angles get a green square mark.
 - Wall handles: both ends (length and direction, with the same magnetism), a filled square
-  beside the middle (thickness), a diamond in the middle (bend into an arc, 5Â° steps) and a
-  circle beyond the end (rotate around the center, 15Â° steps). A hint bar at the bottom of
+  beside the middle (thickness), a diamond in the middle (bend into an arc, 5° steps) and a
+  circle beyond the end (rotate around the center, 15° steps). A hint bar at the bottom of
   the plan explains the current tool, state and the handle under the cursor.
 - Moving walls: the preview shows the stretched joined walls and the angles at their corners;
   with magnetism a single wall moves straight (perpendicular to or along itself), so the
@@ -297,23 +297,23 @@ Based on user feedback; Sweet Home 3D's interaction is the baseline, with additi
 - Walls are drawn as one area in the plan (outlines first, fills on top), so overlapping walls
   show no inner lines, like Sweet Home 3D.
 - Corner angles: selected walls show the angle at each of their joined corners (green square
-  for exactly 90Â°); handle drags of wall ends and rotations show them live. The properties panel
-  has "Angle at start/end" (one wall) or "Angle between" (two joined walls) and "Make 90Â°";
+  for exactly 90°); handle drags of wall ends and rotations show them live. The properties panel
+  has "Angle at start/end" (one wall) or "Angle between" (two joined walls) and "Make 90°";
   they run `wall_set_angle`, which rotates the wall around the corner, keeps its length and
   lets the wall joined at its other end follow.
 - Corner magnetism: when drawing or dragging a wall end, right angles and straight
   continuations relative to the wall joined at the previous point (or the previous segment)
-  win over all other directions within 10Â° ("90Â° to wall"); Alt disables magnetism.
-- Staged angle magnetism (replaces Sweet Home 3D's fixed 15Â° steps, `snapAngleDeg`):
-  1. right angles / straight continuation to the wall at the corner (Â±10Â°),
-  2. multiples of 45Â° (Â±5Â°),
-  3. parallel/perpendicular to nearby walls (Â±4Â°, only if closer than a 45Â° multiple),
-  4. otherwise 5Â° steps; Alt disables magnetism.
-  With Shift only 1Â° steps apply (no other stage), counted from the wall at the corner if
-  there is one, so corner angles like 89Â° or 91Â° can be set precisely.
+  win over all other directions within 10° ("90° to wall"); Alt disables magnetism.
+- Staged angle magnetism (replaces Sweet Home 3D's fixed 15° steps, `snapAngleDeg`):
+  1. right angles / straight continuation to the wall at the corner (±10°),
+  2. multiples of 45° (±5°),
+  3. parallel/perpendicular to nearby walls (±4°, only if closer than a 45° multiple),
+  4. otherwise 5° steps; Alt disables magnetism.
+  With Shift only 1° steps apply (no other stage), counted from the wall at the corner if
+  there is one, so corner angles like 89° or 91° can be set precisely.
   The same staging applies to wall end, wall rotation, arc and furniture rotation handles.
-  Finer steps alone would make the important angles harder to hit (Â±2.5Â° capture instead of
-  Â±7.5Â°); the stages keep them easy while allowing 5Â° and 1Â° angles.
+  Finer steps alone would make the important angles harder to hit (±2.5° capture instead of
+  ±7.5°); the stages keep them easy while allowing 5° and 1° angles.
 - Editing several elements at once: with a multi-selection the properties panel shows
   sections for the selected walls (thickness, heights, pattern, side colors, textures and
   baseboards), rooms (visibility, floor and ceiling colors and textures) and furniture
@@ -334,7 +334,7 @@ Implemented:
   whole; the group gets the bounding box of its pieces.
 - Furniture list: "In home" tab next to the catalog with sortable columns (name, size,
   elevation, level, price), search, visibility checkbox and selection (also of the level).
-- `edit_flip` (Flip â†” / Flip â†•): mirrors the selection around its center; walls reverse their
+- `edit_flip` (Flip ↔ / Flip ↕): mirrors the selection around its center; walls reverse their
   direction so their left/right sides keep their physical sides, furniture gets a mirrored
   model (doors open to the other side), dimension offsets are mirrored.
 - `compass_update` and a compass section in the home panel (position, diameter, north
@@ -355,16 +355,16 @@ Implemented:
   user library folders `%APPDATA%\eTeks\Sweet Home 3D\furniture|textures`), `library_remove`
   (moves a user library to a `removed` folder next to them). `CatalogIndex` and the app's
   library store reload afterwards; the backend emits `catalog-changed` and the frontend
-  reloads the catalog. "Librariesâ€¦" dialog in the catalog panel.
+  reloads the catalog. "Libraries…" dialog in the catalog panel.
 - Own libraries (`msh_catalog::user_library`): imported items are appended to "My
   furniture.sh3f" / "My textures.sh3t" in the user folders (Plugin*Catalog.properties +
   files, written atomically), so they stay in the catalog of both applications.
-- Texture import: `texture_import` (JPEG/PNG/BMP/GIF, tile size in cm); "Importâ€¦" in the
+- Texture import: `texture_import` (JPEG/PNG/BMP/GIF, tile size in cm); "Import…" in the
   texture chooser imports and applies the texture.
 - Furniture import: `furniture_import` (OBJ with MTL and textures, DAE, 3DS, glTF/GLB) via
   `msh_core::model_package` (collects referenced files; converts glTF to OBJ + MTL +
   textures, since Sweet Home 3D cannot read glTF; computes the size of OBJ/glTF models).
-  "Import furnitureâ€¦" wizard: preview, 90Â° rotations (stored as `modelRotation`), name,
+  "Import furniture…" wizard: preview, 90° rotations (stored as `modelRotation`), name,
   category, size with proportions, elevation, door/window, icon rendered from the preview,
   optional placement in the home. Models are staged for the preview under `msh://stage/`.
 - 3D view: missing normals are computed (OBJ without `vn`), and the view redraws when
@@ -402,14 +402,29 @@ furniture is read by its home reader.
   title and scale on the page. SVG pages are converted with `krilla` + `krilla-svg` (vector,
   fonts embedded); `resvg` is pinned to 0.47 so both share one `usvg`.
 - `export_furniture_csv`: columns of the furniture table (`furnitureVisibleProperties`, else
-  Sweet Home 3D's defaults) or given ones (CATALOG_ID â€¦ PRICE_VALUE_ADDED_TAX_INCLUDED), all
+  Sweet Home 3D's defaults) or given ones (CATALOG_ID … PRICE_VALUE_ADDED_TAX_INCLUDED), all
   levels, pieces of groups one by one, UTF-8 with BOM.
 - OBJ export of the 3D view (walls, rooms, furniture as shown, cm, y up) with MTL (sRGB colors,
   shininess, opacity) and PNG textures. Built by the frontend from the three.js scene
   (`view3d/objExport.ts`), written by the Tauri command `write_obj_files`. Reached through the
   pipe method `export_obj` (CLI `msh export-obj`, live MCP tool `export_obj`) or the export
   dialog; the window that shows the 3D view (main or separate) answers.
-- App: "Exportâ€¦" dialog in the toolbar for all three exports.
+- App: "Export…" dialog in the toolbar for all three exports.
+
+### 4.16 Status after P6b (2026-11-07)
+
+- `export_document`: the printed home like Sweet Home 3D: furniture list as table pages
+  (columns of the furniture table, check marks, totals of price columns, landscape when wide),
+  the plan of every level (fitted or 1:N) and the 3D view, with titles, "Page n of m" and the
+  scale. Written as PDF, or returned as SVG pages (`pages`, `landscape`, `paper_mm`) without a
+  path. The 3D image is a parameter (`view_3d_image`, PNG): the app's pipe adds it for
+  `--live` calls by capturing the 3D view, the dialog captures it through the Tauri command
+  `capture_3d_image`; headless calls leave the page out and say so in `notes`.
+- `msh-export::pages`: one page frame for all page kinds (`Page`, `page_svgs`), plan, table and
+  image pages.
+- Printing: the SVG pages go into a hidden frame with `@page` sizes per orientation (named
+  pages) and the WebView's print dialog (preview, printer choice). Ctrl+P opens the dialog
+  ("Print / Export…", now with a shared page setup).
 
 ## 5. Feature scope (parity with SH3D 7.x)
 
@@ -439,25 +454,25 @@ Deliberately **not** adopted: SH3D Java plugins (not compatible; replaced by CLI
 | **P6 Rendering & export** | Photo rendering (path tracer), video, PDF/SVG/OBJ/CSV, printing | Exports match the original |
 | **P7 Polish** | Preferences (incl. colors of the left/right wall side markings, angle snap steps, default wall thickness), i18n, accessibility, performance benchmarks, installer (MSI via Tauri), optional auto-update | Release candidate 1.0 |
 
-Realistic assessment: P0â€“P3 quickly produce an AI-controllable foundation. Full parity (P4â€“P7) is a project of **several months**. The phases are cut so that each one delivers something usable.
+Realistic assessment: P0–P3 quickly produce an AI-controllable foundation. Full parity (P4–P7) is a project of **several months**. The phases are cut so that each one delivers something usable.
 
 ## 7. Repository layout
 
 ```
 my-sweet-home/
-â”œâ”€ Cargo.toml                  # workspace
-â”œâ”€ CLAUDE.md                   # rules for AI agents (language policy, commands)
-â”œâ”€ crates/
-â”‚  â”œâ”€ msh-model/  msh-geometry/  msh-format/  msh-catalog/
-â”‚  â”œâ”€ msh-core/   msh-export/    msh-ipc/
-â”‚  â””â”€ msh-cli/                 # binary "msh" (CLI + "msh mcp")
-â”œâ”€ app/
-â”‚  â”œâ”€ src-tauri/               # Tauri backend (uses the crates)
-â”‚  â””â”€ src/                     # React/TS frontend (plan2d/, view3d/, catalog/, panels/)
-â”œâ”€ tools/compat/               # Java test program using the original SH3D reader
-â”œâ”€ tests/corpus/               # test files (only own/free files in the repository)
-â”œâ”€ docs/
-â””â”€ libraries/                  # local, in .gitignore â€“ imported libraries
+├─ Cargo.toml                  # workspace
+├─ CLAUDE.md                   # rules for AI agents (language policy, commands)
+├─ crates/
+│  ├─ msh-model/  msh-geometry/  msh-format/  msh-catalog/
+│  ├─ msh-core/   msh-export/    msh-ipc/
+│  └─ msh-cli/                 # binary "msh" (CLI + "msh mcp")
+├─ app/
+│  ├─ src-tauri/               # Tauri backend (uses the crates)
+│  └─ src/                     # React/TS frontend (plan2d/, view3d/, catalog/, panels/)
+├─ tools/compat/               # Java test program using the original SH3D reader
+├─ tests/corpus/               # test files (only own/free files in the repository)
+├─ docs/
+└─ libraries/                  # local, in .gitignore – imported libraries
 ```
 
 ## 8. Open points (not blocking)

@@ -6,6 +6,8 @@
 //!   [`PlanOptions::export`] the plan as shown in the app (`export_plan`).
 //! - [`plan_page_svg`] places a plan on a paper page at a scale and
 //!   [`pdf_from_svg_pages`] turns pages into a PDF document.
+//! - [`furniture_pages`] and [`image_page`] make the other pages of a printed home;
+//!   [`page_svgs`] adds titles, footers and page numbers.
 //! - [`furniture_csv`] writes the furniture list.
 
 mod csv;
@@ -13,7 +15,10 @@ mod pages;
 mod plan;
 
 pub use csv::{COLUMNS as FURNITURE_COLUMNS, furniture_csv, resolve_columns};
-pub use pages::{PageOptions, Paper, pdf_from_svg_pages, plan_page_svg};
+pub use pages::{
+    Page, PageOptions, Paper, furniture_pages, image_page, page_svgs, pdf_from_svg_pages,
+    plan_page, plan_page_svg,
+};
 pub use plan::{PlanDrawing, PlanOptions, draw_plan, format_length, plan_images, plan_svg};
 
 /// Rasterizes an SVG to PNG with the given pixel width (height keeps the aspect ratio).

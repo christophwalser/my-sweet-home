@@ -197,7 +197,10 @@ export default function App() {
       if (key === "z" && !e.shiftKey) void undo();
       else if (key === "y" || (key === "z" && e.shiftKey)) void redo();
       else if (key === "s") void save(e.shiftKey);
-      else return;
+      // Ctrl+P opens the print dialog of the home (not the WebView's print of the UI)
+      else if (key === "p") {
+        if (useStore.getState().opened) setExporting(true);
+      } else return;
       e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
@@ -254,9 +257,9 @@ export default function App() {
           type="button"
           onClick={() => setExporting(true)}
           disabled={!opened}
-          title="Export the plan (PDF, SVG, PNG), the furniture list (CSV) or the 3D view (OBJ)"
+          title="Print the home or save it as PDF (Ctrl+P); export the plan (PDF, SVG, PNG), the furniture list (CSV) or the 3D view (OBJ)"
         >
-          Export…
+          Print / Export…
         </button>
         <button
           type="button"

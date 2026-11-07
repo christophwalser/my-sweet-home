@@ -1,10 +1,12 @@
-// Export dialog: plan as PDF, SVG or PNG, furniture list as CSV and the 3D view as OBJ.
-// The plan and CSV exports are the registry commands export_plan and
-// export_furniture_csv; the OBJ export is built from the 3D view.
+// Print and export dialog: the printed home (furniture list, plans, 3D view) to the
+// printer or as PDF, the plan as PDF, SVG or PNG, the furniture list as CSV and the
+// 3D view as OBJ. The documents are the registry commands export_document,
+// export_plan and export_furniture_csv; the 3D image and the OBJ come from the 3D view.
 
 import { save } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { type PrintPages, printPages } from "./print";
 
 type PlanFormat = "pdf" | "svg" | "png";
 
@@ -32,6 +34,7 @@ export default function ExportDialog({
   const [scale, setScale] = useState("fit");
   const [width, setWidth] = useState(2000);
   const [separator, setSeparator] = useState(",");
+  const [parts, setParts] = useState({ furniture: true, plan: true, view3d: true });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -63,6 +66,44 @@ export default function ExportDialog({
       setBusy(false);
     }
   };
+
+  /** Parameters of export_document from the dialog settings, with the 3D image if wanted. */
+  const documentParams = async (): Promise<Record<string, unknown>> => {
+    const params: Record<string, unknown> = {
+      furniture: parts.furniture,
+      plan: parts.plan,
+      view_3d: parts.view3d,
+      paper,
+    };
+    if (orientation !== "auto") params.landscape = orientation === "landscape";
+    if (scale !== "fit") params.scale = Number(scale);
+    if (parts.view3d) params.view_3d_image = await api.capture3d();
+    return params;
+  };
+  const nothingToPrint = !parts.furniture && !parts.plan && !parts.view3d;
+
+  const print = async () => {
+    setBusy(true);
+    setMessage("Preparing pages…");
+    try {
+      const r = (await api.execute("export_document", await documentParams())) as PrintPages;
+      setMessage(null);
+      await printPages(r);
+    } catch (e) {
+      setMessage(`Printing failed: ${String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveDocument = () =>
+    runExport({ name: "PDF document", extensions: ["pdf"] }, async (path) => {
+      const r = (await api.execute("export_document", {
+        ...(await documentParams()),
+        path,
+      })) as { pages: number };
+      return `Saved ${r.pages} page${r.pages > 1 ? "s" : ""} to ${path}.`;
+    });
 
   const exportPlan = () =>
     runExport(FORMAT_FILTERS[format], async (path) => {
@@ -100,13 +141,93 @@ export default function ExportDialog({
 
   return (
     <div className="dialog-backdrop">
-      <div className="dialog export-dialog" role="dialog" aria-modal="true" aria-label="Export">
+      <div
+        className="dialog export-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Print and export"
+      >
         <header className="dialog-header">
-          <h2>Export</h2>
+          <h2>Print and export</h2>
           <button type="button" onClick={onClose} aria-label="Close" disabled={busy}>
             {"✕"}
           </button>
         </header>
+
+        <section className="export-section">
+          <h3>Page setup</h3>
+          <div className="export-grid">
+            <label>
+              Paper
+              <select value={paper} onChange={(e) => setPaper(e.currentTarget.value)}>
+                <option value="a4">A4</option>
+                <option value="a3">A3</option>
+                <option value="letter">Letter</option>
+              </select>
+            </label>
+            <label>
+              Orientation
+              <select value={orientation} onChange={(e) => setOrientation(e.currentTarget.value)}>
+                <option value="auto">Automatic</option>
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
+              </select>
+            </label>
+            <label>
+              Plan scale
+              <select value={scale} onChange={(e) => setScale(e.currentTarget.value)}>
+                <option value="fit">Fit to page</option>
+                {SCALES.map((s) => (
+                  <option key={s} value={s}>
+                    1:{s}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section className="export-section">
+          <h3>Print</h3>
+          <div className="export-checks">
+            <label>
+              <input
+                type="checkbox"
+                checked={parts.furniture}
+                onChange={(e) => setParts({ ...parts, furniture: e.currentTarget.checked })}
+              />
+              Furniture list
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={parts.plan}
+                onChange={(e) => setParts({ ...parts, plan: e.currentTarget.checked })}
+              />
+              Plan{hasLevels ? " (every level)" : ""}
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={parts.view3d}
+                onChange={(e) => setParts({ ...parts, view3d: e.currentTarget.checked })}
+              />
+              3D view
+            </label>
+          </div>
+          <div className="dialog-actions">
+            <button type="button" onClick={() => void print()} disabled={busy || nothingToPrint}>
+              Print…
+            </button>
+            <button
+              type="button"
+              onClick={() => void saveDocument()}
+              disabled={busy || nothingToPrint}
+            >
+              Save as PDF…
+            </button>
+          </div>
+        </section>
 
         <section className="export-section">
           <h3>Plan</h3>
@@ -117,7 +238,7 @@ export default function ExportDialog({
                 value={format}
                 onChange={(e) => setFormat(e.currentTarget.value as PlanFormat)}
               >
-                <option value="pdf">PDF (for printing)</option>
+                <option value="pdf">PDF (page setup above)</option>
                 <option value="svg">SVG (vector image)</option>
                 <option value="png">PNG (image)</option>
               </select>
@@ -135,40 +256,6 @@ export default function ExportDialog({
                   </option>
                 </select>
               </label>
-            )}
-            {format === "pdf" && (
-              <>
-                <label>
-                  Paper
-                  <select value={paper} onChange={(e) => setPaper(e.currentTarget.value)}>
-                    <option value="a4">A4</option>
-                    <option value="a3">A3</option>
-                    <option value="letter">Letter</option>
-                  </select>
-                </label>
-                <label>
-                  Orientation
-                  <select
-                    value={orientation}
-                    onChange={(e) => setOrientation(e.currentTarget.value)}
-                  >
-                    <option value="auto">Automatic</option>
-                    <option value="portrait">Portrait</option>
-                    <option value="landscape">Landscape</option>
-                  </select>
-                </label>
-                <label>
-                  Scale
-                  <select value={scale} onChange={(e) => setScale(e.currentTarget.value)}>
-                    <option value="fit">Fit to page</option>
-                    {SCALES.map((s) => (
-                      <option key={s} value={s}>
-                        1:{s}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
             )}
             {format === "png" && (
               <label>

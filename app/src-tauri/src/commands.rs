@@ -96,6 +96,16 @@ pub fn write_obj_files(
     Ok(written)
 }
 
+/// PNG (base64) of the 3D view, rendered by the window that shows it.
+#[tauri::command]
+pub async fn capture_3d_image(app: tauri::AppHandle) -> Result<String, String> {
+    let image = crate::pipe::capture_3d(&app, None).await?;
+    image["image_base64"]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| "no image".to_string())
+}
+
 /// Exports the 3D view as OBJ (from the export dialog); the window showing the 3D
 /// view builds and writes the files.
 #[tauri::command]

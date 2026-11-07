@@ -189,3 +189,66 @@ fn furniture_list_exports_to_csv() {
     assert!(err.to_string().contains("unknown column"));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn printed_home_has_furniture_plan_and_3d_pages() {
+    use base64::Engine;
+    let r = Registry::standard();
+    let mut doc = small_house(&r);
+    let dir = out_dir("document");
+
+    // Pages for printing: furniture list, three levels and the 3D view
+    let image = msh_export::svg_to_png(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="40" height="30" fill="red"/></svg>"#,
+        40,
+    )
+    .unwrap();
+    let image = base64::engine::general_purpose::STANDARD.encode(image);
+    let result = run(
+        &r,
+        &mut doc,
+        "export_document",
+        json!({ "view_3d_image": image, "columns": ["NAME", "PRICE"] }),
+    );
+    let pages = result["pages"].as_array().unwrap();
+    assert_eq!(pages.len(), 5);
+    let first = pages[0].as_str().unwrap();
+    assert!(
+        first.contains("Export test - Furniture"),
+        "title without .sh3d"
+    );
+    assert!(first.contains("Page 1 of 5"));
+    assert!(first.contains("Table &quot;Oslo&quot;"));
+    // No prices in the home: no total row
+    assert!(!first.contains("Total"));
+    assert!(
+        pages[4]
+            .as_str()
+            .unwrap()
+            .contains("data:image/png;base64,")
+    );
+    assert_eq!(result["landscape"].as_array().unwrap().len(), 5);
+    assert_eq!(result["paper_mm"], json!([210.0, 297.0]));
+
+    // PDF without the 3D image: the 3D page is left out with a note
+    let pdf = dir.join("home.pdf");
+    let result = run(
+        &r,
+        &mut doc,
+        "export_document",
+        json!({ "path": pdf, "furniture": false, "scale": 100 }),
+    );
+    assert_eq!(result["pages"], 3);
+    assert_eq!(result["notes"].as_array().unwrap().len(), 1);
+    assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF"));
+
+    assert!(
+        r.execute(
+            &mut doc,
+            "export_document",
+            json!({ "furniture": false, "plan": false, "view_3d": false })
+        )
+        .is_err()
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}

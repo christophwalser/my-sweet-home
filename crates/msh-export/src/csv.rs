@@ -34,7 +34,7 @@ pub const COLUMNS: &[&str] = &[
 ];
 
 /// Header text of a column.
-fn header(column: &str) -> &str {
+pub(crate) fn header(column: &str) -> &str {
     match column {
         "CATALOG_ID" => "Catalog ID",
         "NAME" => "Name",
@@ -106,7 +106,7 @@ pub fn furniture_csv(home: &Home, columns: &[String], separator: char) -> String
     out
 }
 
-fn cell(home: &Home, p: &Piece, column: &str) -> String {
+pub(crate) fn cell(home: &Home, p: &Piece, column: &str) -> String {
     let a = &p.attrs;
     let flag = |b: bool| if b { "true" } else { "false" }.to_string();
     let price = a.price.as_deref().and_then(|v| v.parse::<f64>().ok());

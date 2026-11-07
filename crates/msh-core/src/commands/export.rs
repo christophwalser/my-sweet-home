@@ -35,6 +35,32 @@ struct PlanParams {
 }
 
 #[derive(Deserialize, JsonSchema)]
+struct DocumentParams {
+    /// PDF file to write; without a path the pages are returned as SVG documents (for
+    /// printing)
+    path: Option<PathBuf>,
+    /// Include the furniture list (default true)
+    furniture: Option<bool>,
+    /// Include the plan (default true)
+    plan: Option<bool>,
+    /// Include the 3D view (default true; needs `view_3d_image`, which the running app
+    /// supplies in live mode)
+    view_3d: Option<bool>,
+    /// Plan level ID or "all" (default: all levels, one page each)
+    level: Option<String>,
+    /// Paper size "a4" (default), "a3" or "letter"
+    paper: Option<String>,
+    /// Landscape pages (default: per page, whichever fits better)
+    landscape: Option<bool>,
+    /// Plan scale denominator, e.g. 100 for 1:100 (default: fit to the page)
+    scale: Option<f32>,
+    /// Columns of the furniture list (default: the home's furniture table columns)
+    columns: Option<Vec<String>>,
+    /// Image of the 3D view as PNG (base64 or data URL)
+    view_3d_image: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct CsvParams {
     /// File to write (.csv)
     path: PathBuf,
@@ -53,6 +79,13 @@ pub(super) fn register(r: &mut Registry) {
          use a scale such as 1:100.",
         false,
         |doc, p: PlanParams| export_plan(doc, p),
+    );
+    r.add(
+        "export_document",
+        "Prints the home to a PDF document like Sweet Home 3D: furniture list, plan of each level \
+         (fitted or at a scale such as 1:100) and the 3D view, with titles and page numbers.",
+        false,
+        |doc, p: DocumentParams| export_document(doc, p),
     );
     r.add(
         "export_furniture_csv",
@@ -89,72 +122,13 @@ fn export_plan(doc: &Document, p: PlanParams) -> Result<serde_json::Value, Comma
         },
     };
 
-    // Levels to export, lowest first
-    let mut levels: Vec<&msh_model::Level> = home.levels.iter().collect();
-    levels.sort_by(|a, b| {
-        a.attrs
-            .elevation
-            .total_cmp(&b.attrs.elevation)
-            .then(a.attrs.elevation_index.cmp(&b.attrs.elevation_index))
-    });
-    let selected: Vec<Option<&msh_model::Level>> = match p.level.as_deref() {
-        _ if levels.is_empty() => vec![None],
-        Some("all") => levels.iter().map(|l| Some(*l)).collect(),
-        Some(id) => {
-            vec![Some(*levels.iter().find(|l| l.attrs.id == id).ok_or_else(
-                || CommandError::failed(format!("unknown level '{id}'")),
-            )?)]
-        }
-        None => {
-            let id = home.attrs.selected_level.as_deref();
-            vec![Some(
-                levels
-                    .iter()
-                    .find(|l| Some(l.attrs.id.as_str()) == id)
-                    .copied()
-                    .unwrap_or(levels[0]),
-            )]
-        }
-    };
-
-    let home_name = home
-        .attrs
-        .name
-        .clone()
-        .or_else(|| {
-            doc.path
-                .as_ref()
-                .and_then(|p| p.file_stem())
-                .map(|s| s.to_string_lossy().into_owned())
-        })
-        .unwrap_or_else(|| "Home".into());
-    // Homes named after their file often keep the extension in the name
-    let home_name = match home_name.to_ascii_lowercase().strip_suffix(".sh3d") {
-        Some(stem) => home_name[..stem.len()].to_string(),
-        None => home_name,
-    };
-    let mut images = ImageSource::default();
-    let drawings: Vec<(Option<&msh_model::Level>, msh_export::PlanDrawing)> = selected
-        .iter()
-        .map(|level| {
-            let id = level.map(|l| l.attrs.id.clone());
-            let mut opts = msh_export::PlanOptions::export(id.clone());
-            opts.images = msh_export::plan_images(home, id.as_deref())
-                .into_iter()
-                .filter_map(|name| images.get(doc, &name).map(|data| (name, data)))
-                .collect();
-            (*level, msh_export::draw_plan(home, &opts))
-        })
-        .collect();
+    let selected = select_levels(home, p.level.as_deref())?;
+    let home_name = home_title(doc);
+    let drawings = plan_drawings(doc, &selected);
 
     match format {
         PlanFormat::Pdf => {
-            let paper = match p.paper.as_deref() {
-                None => msh_export::Paper::A4,
-                Some(name) => msh_export::Paper::by_name(name).ok_or_else(|| {
-                    CommandError::failed(format!("unknown paper '{name}' (a4, a3 or letter)"))
-                })?,
-            };
+            let paper = paper(p.paper.as_deref())?;
             let mut scales = Vec::new();
             let pages: Vec<String> = drawings
                 .iter()
@@ -205,6 +179,182 @@ fn export_plan(doc: &Document, p: PlanParams) -> Result<serde_json::Value, Comma
             }
             Ok(json!({ "paths": paths }))
         }
+    }
+}
+
+/// Levels to draw, lowest first: one by ID, "all", or the selected one (`None` entries for
+/// homes without levels).
+fn select_levels<'a>(
+    home: &'a msh_model::Home,
+    level: Option<&str>,
+) -> Result<Vec<Option<&'a msh_model::Level>>, CommandError> {
+    let mut levels: Vec<&msh_model::Level> = home.levels.iter().collect();
+    levels.sort_by(|a, b| {
+        a.attrs
+            .elevation
+            .total_cmp(&b.attrs.elevation)
+            .then(a.attrs.elevation_index.cmp(&b.attrs.elevation_index))
+    });
+    Ok(match level {
+        _ if levels.is_empty() => vec![None],
+        Some("all") => levels.iter().map(|l| Some(*l)).collect(),
+        Some(id) => {
+            vec![Some(*levels.iter().find(|l| l.attrs.id == id).ok_or_else(
+                || CommandError::failed(format!("unknown level '{id}'")),
+            )?)]
+        }
+        None => {
+            let id = home.attrs.selected_level.as_deref();
+            vec![Some(
+                levels
+                    .iter()
+                    .find(|l| Some(l.attrs.id.as_str()) == id)
+                    .copied()
+                    .unwrap_or(levels[0]),
+            )]
+        }
+    })
+}
+
+/// Name of the home for page titles: its name or file name, without ".sh3d".
+fn home_title(doc: &Document) -> String {
+    let name = doc
+        .home()
+        .attrs
+        .name
+        .clone()
+        .or_else(|| {
+            doc.path
+                .as_ref()
+                .and_then(|p| p.file_stem())
+                .map(|s| s.to_string_lossy().into_owned())
+        })
+        .unwrap_or_else(|| "Home".into());
+    // Homes named after their file often keep the extension in the name
+    match name.to_ascii_lowercase().strip_suffix(".sh3d") {
+        Some(stem) => name[..stem.len()].to_string(),
+        None => name,
+    }
+}
+
+/// Plans of the levels as the app draws them, with icons and textures.
+fn plan_drawings<'a>(
+    doc: &Document,
+    levels: &[Option<&'a msh_model::Level>],
+) -> Vec<(Option<&'a msh_model::Level>, msh_export::PlanDrawing)> {
+    let home = doc.home();
+    let mut images = ImageSource::default();
+    levels
+        .iter()
+        .map(|level| {
+            let id = level.map(|l| l.attrs.id.clone());
+            let mut opts = msh_export::PlanOptions::export(id.clone());
+            opts.images = msh_export::plan_images(home, id.as_deref())
+                .into_iter()
+                .filter_map(|name| images.get(doc, &name).map(|data| (name, data)))
+                .collect();
+            (*level, msh_export::draw_plan(home, &opts))
+        })
+        .collect()
+}
+
+fn paper(name: Option<&str>) -> Result<msh_export::Paper, CommandError> {
+    match name {
+        None => Ok(msh_export::Paper::A4),
+        Some(name) => msh_export::Paper::by_name(name).ok_or_else(|| {
+            CommandError::failed(format!("unknown paper '{name}' (a4, a3 or letter)"))
+        }),
+    }
+}
+
+const PAGE_MARGIN: f32 = 12.0;
+
+/// Pages of the printed home: furniture list, plan of each level and the 3D view, like
+/// Sweet Home 3D's print. Written as PDF, or returned as SVG pages for printing.
+fn export_document(doc: &Document, p: DocumentParams) -> Result<serde_json::Value, CommandError> {
+    use base64::Engine;
+    let home = doc.home();
+    let paper = paper(p.paper.as_deref())?;
+    let title = home_title(doc);
+    let mut pages: Vec<msh_export::Page> = Vec::new();
+    let mut notes: Vec<String> = Vec::new();
+
+    if p.furniture.unwrap_or(true) {
+        let columns = msh_export::resolve_columns(home, p.columns.as_deref())
+            .map_err(CommandError::failed)?;
+        pages.extend(msh_export::furniture_pages(
+            home,
+            &columns,
+            paper,
+            p.landscape,
+            PAGE_MARGIN,
+            &format!("{title} - Furniture"),
+        ));
+    }
+    if p.plan.unwrap_or(true) {
+        let levels = select_levels(home, Some(p.level.as_deref().unwrap_or("all")))?;
+        for (level, drawing) in plan_drawings(doc, &levels) {
+            let page_title = match level {
+                Some(l) => format!("{title} - {}", l.attrs.name),
+                None => format!("{title} - Plan"),
+            };
+            let (page, _) = msh_export::plan_page(
+                &drawing,
+                &msh_export::PageOptions {
+                    paper,
+                    landscape: p.landscape,
+                    margin_mm: PAGE_MARGIN,
+                    scale: p.scale,
+                    title: Some(page_title),
+                },
+            );
+            pages.push(page);
+        }
+    }
+    if p.view_3d.unwrap_or(true) {
+        match &p.view_3d_image {
+            Some(data) => {
+                let base64 = data.split_once(',').map_or(data.as_str(), |(_, b)| b);
+                let png = base64::engine::general_purpose::STANDARD
+                    .decode(base64)
+                    .map_err(|e| CommandError::failed(format!("invalid view_3d_image: {e}")))?;
+                let page = msh_export::image_page(
+                    &png,
+                    paper,
+                    p.landscape,
+                    PAGE_MARGIN,
+                    &format!("{title} - 3D view"),
+                )
+                .ok_or_else(|| CommandError::failed("view_3d_image must be a PNG image"))?;
+                pages.push(page);
+            }
+            None => notes.push(
+                "3D view not included: it is rendered by the running app (use --live or the \
+                 app's print dialog)"
+                    .into(),
+            ),
+        }
+    }
+    if pages.is_empty() {
+        return Err(CommandError::failed(
+            "nothing to print: choose at least one part",
+        ));
+    }
+
+    let landscape: Vec<bool> = pages.iter().map(|p| p.landscape).collect();
+    let svgs = msh_export::page_svgs(&pages, paper, PAGE_MARGIN, Some(&title));
+    match &p.path {
+        Some(path) => {
+            let pdf = msh_export::pdf_from_svg_pages(&svgs).map_err(CommandError::failed)?;
+            write(path, &pdf)?;
+            Ok(json!({ "path": path, "pages": svgs.len(), "notes": notes }))
+        }
+        None => Ok(json!({
+            "pages": svgs,
+            "landscape": landscape,
+            "paper_mm": [paper.width_mm, paper.height_mm],
+            "notes": notes,
+        })),
     }
 }
 
