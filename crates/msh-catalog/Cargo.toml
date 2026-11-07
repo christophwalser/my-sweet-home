@@ -1,0 +1,15 @@
+[package]
+name = "msh-catalog"
+description = "Möbel- und Texturbibliotheken von Sweet Home 3D lesen (.sh3f, .sh3t, .jar)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+zip.workspace = true
+
+[lints]
+workspace = true

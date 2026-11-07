@@ -98,6 +98,11 @@ MCP-Tools (Auszug): `home_open`, `home_save`, `home_describe` (strukturierte Zus
   - **Lesen:** `Home.xml`. Sehr alte Dateien (< 5.3, nur `Home`) bekommen einen eingeschränkten Java-Serialisierungs-Leser oder einen einmaligen Konverter. Das ist niedrig priorisiert.
   - **Schreiben:** `Home.xml` + Inhalte, ohne `Home`-Eintrag (so macht es auch SweetHome3DJS). **Muss früh mit SH3D 7.6.1 per Round-Trip verifiziert werden.**
   - Unbekannte Attribute und Elemente werden beim Speichern **unverändert erhalten** (forward compatibility), damit kein Datenverlust entsteht.
+- **Ergebnisse aus P1 (2026-11-07):**
+  - Die App Sweet Home 3D 7.6.1 liest mit `HomeFileRecorder(0, false, prefs, false, preferXmlEntry=true, true)`. Dateien ohne `Home`-Eintrag werden damit korrekt gelesen. Das ist mit `scripts/compat-check.ps1` gegen den Original-Leser geprüft: identische Struktur und identische Ressourcen-Bytes.
+  - **Einschränkung:** Werkzeuge, die mit `preferXmlEntry=false` lesen, verlangen den Java-serialisierten `Home`-Eintrag und können unsere Dateien nicht öffnen. Betroffen sind ältere Versionen und manche Plugins oder Fremdtools. Die App selbst ist nicht betroffen.
+  - `ContentDigests` wird vorerst unverändert übernommen. Sobald Ressourcen hinzukommen oder entfernt werden (P4/P5), müssen die Digests neu berechnet werden. Das Format der Digests für Ressourcen aus mehreren Dateien (`1/puerta.obj`) muss dann gegen den Original-Leser geprüft werden.
+  - Die Beispielprojekte verweisen auf Modelle im Katalog von SH3D (`com/eteks/.../armchair.obj`). Eine eigenständige `.sh3d` muss diese Ressourcen einbetten. Das gehört zu P5 (Möbel aus Bibliotheken platzieren).
 - `.sh3f` / `.sh3t`: ZIP mit `PluginFurnitureCatalog.properties` / `PluginTexturesCatalog.properties` (lokalisierte Schlüssel), Modelle (OBJ/MTL, 3DS, DAE), Icons und Bilder. Lesen und Schreiben (Bibliothekseditor später).
 - 3D-Modellformate: OBJ, 3DS, DAE (Collada) wie im Original, zusätzlich glTF/GLB. Geladen wird im Frontend über die three.js-Loader. Rust liefert nur die Bytes.
 - **Testkorpus:** `Examples.jar` (Beispielprojekte) + eigene Dateien. Automatischer Round-Trip-Test (lesen → schreiben → lesen → semantisch vergleichen).

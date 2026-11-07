@@ -11,7 +11,13 @@ publish = false
 
 [workspace.dependencies]
 msh-core = { path = "crates/msh-core" }
+msh-model = { path = "crates/msh-model" }
+msh-format = { path = "crates/msh-format" }
+msh-catalog = { path = "crates/msh-catalog" }
 anyhow = "1"
+thiserror = "2"
+quick-xml = "0.38"
+zip = { version = "5", default-features = false, features = ["deflate"] }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
