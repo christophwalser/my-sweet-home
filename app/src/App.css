@@ -539,7 +539,7 @@ input[type="search"]:focus {
 .view3d-option {
   position: absolute;
   top: 8px;
-  right: 8px;
+  left: 8px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -930,7 +930,7 @@ body.resizing-horizontal {
 .view3d-buttons {
   position: absolute;
   top: 8px;
-  left: 8px;
+  right: 8px;
   margin: 0;
 }
 
