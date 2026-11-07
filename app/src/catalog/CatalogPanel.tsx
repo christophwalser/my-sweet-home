@@ -11,6 +11,7 @@ import {
 } from "../api";
 import { useStore } from "../store";
 import FurnitureList from "./FurnitureList";
+import ImportFurnitureDialog from "./ImportFurnitureDialog";
 import LibraryDialog from "./LibraryDialog";
 
 const MAX_RESULTS = 300;
@@ -69,6 +70,7 @@ export default function CatalogPanel() {
   /** "home": the furniture of the open home instead of the catalog */
   const [showHome, setShowHome] = useState(false);
   const [librariesOpen, setLibrariesOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
 
@@ -163,6 +165,14 @@ export default function CatalogPanel() {
           <button
             type="button"
             className="link-button"
+            onClick={() => setImportOpen(true)}
+            title="Import a 3D model (OBJ, DAE, 3DS, glTF, GLB) as piece of furniture"
+          >
+            Import furniture…
+          </button>
+          <button
+            type="button"
+            className="link-button"
             onClick={() => setLibrariesOpen(true)}
             title="Import and manage furniture and texture libraries"
           >
@@ -170,6 +180,7 @@ export default function CatalogPanel() {
           </button>
         </div>
         {librariesOpen && <LibraryDialog onClose={() => setLibrariesOpen(false)} />}
+        {importOpen && <ImportFurnitureDialog onClose={() => setImportOpen(false)} />}
         <div className="catalog-count muted" hidden={showHome}>
           {loading
             ? "Loading libraries…"

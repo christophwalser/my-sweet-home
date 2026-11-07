@@ -28,6 +28,7 @@ pub fn run() {
             commands::execute,
             commands::capture_result,
             commands::catalog_load,
+            commands::model_stage,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Tauri application");

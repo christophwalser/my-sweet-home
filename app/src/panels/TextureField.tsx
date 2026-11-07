@@ -1,8 +1,10 @@
 // Texture chooser of the properties panel: shows the current texture and opens a
-// searchable grid of the textures of all installed libraries.
+// searchable grid of the textures of all installed libraries. "Import…" adds an
+// image file as texture to the user's library "My textures" and applies it.
 
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useMemo, useState } from "react";
-import { docResourceUrl, libResourceUrl } from "../api";
+import { api, docResourceUrl, libResourceUrl } from "../api";
 import type { Texture } from "../model";
 import { useStore } from "../store";
 
@@ -18,9 +20,19 @@ type Props = {
   onCommit: (catalogId: string) => void;
 };
 
+/** An image chosen for import, with the values of the import form. */
+type PendingImport = { path: string; name: string; width: string; height: string };
+
+function fileStem(path: string): string {
+  const file = path.split(/[\\/]/).pop() ?? path;
+  return file.replace(/\.[^.]+$/, "");
+}
+
 export default function TextureField({ label, current, mixed, onCommit }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [pending, setPending] = useState<PendingImport | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const catalog = useStore((s) => s.catalog);
   const docId = useStore((s) => s.opened?.id);
 
@@ -36,6 +48,38 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
   const pick = (id: string) => {
     onCommit(id);
     setOpen(false);
+  };
+
+  const chooseImage = async () => {
+    const chosen = await openDialog({
+      multiple: false,
+      filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "bmp", "gif"] }],
+    });
+    if (typeof chosen !== "string") return;
+    setError(null);
+    setPending({ path: chosen, name: fileStem(chosen), width: "100", height: "100" });
+  };
+
+  const importTexture = async () => {
+    if (!pending) return;
+    const width = Number.parseFloat(pending.width.replace(",", "."));
+    const height = Number.parseFloat(pending.height.replace(",", "."));
+    if (!(width > 0) || !(height > 0)) {
+      setError("Width and height must be positive numbers.");
+      return;
+    }
+    try {
+      const r = (await api.execute("texture_import", {
+        path: pending.path,
+        name: pending.name.trim() || fileStem(pending.path),
+        width,
+        height,
+      })) as { catalog_id: string };
+      setPending(null);
+      pick(r.catalog_id);
+    } catch (e) {
+      setError(String(e));
+    }
   };
 
   return (
@@ -66,7 +110,55 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
             <button type="button" onClick={() => pick("")} disabled={!current && !mixed}>
               None
             </button>
+            <button
+              type="button"
+              onClick={() => void chooseImage()}
+              title="Import an image as texture (added to your library 'My textures')"
+            >
+              Import…
+            </button>
           </div>
+          {pending && (
+            <div className="texture-import">
+              <label className="prop-row">
+                <span className="prop-label">Name</span>
+                <input
+                  type="text"
+                  value={pending.name}
+                  onChange={(e) => setPending({ ...pending, name: e.currentTarget.value })}
+                />
+              </label>
+              <label className="prop-row">
+                <span className="prop-label">Tile width</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={pending.width}
+                  onChange={(e) => setPending({ ...pending, width: e.currentTarget.value })}
+                />
+                <span className="prop-unit">cm</span>
+              </label>
+              <label className="prop-row">
+                <span className="prop-label">Tile height</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={pending.height}
+                  onChange={(e) => setPending({ ...pending, height: e.currentTarget.value })}
+                />
+                <span className="prop-unit">cm</span>
+              </label>
+              <div className="prop-actions">
+                <button type="button" onClick={() => void importTexture()}>
+                  Import and apply
+                </button>
+                <button type="button" onClick={() => setPending(null)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {error && <p className="small error-text">{error}</p>}
           {!catalog && <p className="muted small">Loading catalog…</p>}
           <div className="texture-grid">
             {textures.slice(0, MAX_SHOWN).map((item) => (

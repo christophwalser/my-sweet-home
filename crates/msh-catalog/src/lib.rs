@@ -7,6 +7,7 @@
 //! `…_de.properties` etc. and override individual keys.
 
 pub mod properties;
+pub mod user_library;
 
 use serde::Serialize;
 use std::collections::BTreeMap;

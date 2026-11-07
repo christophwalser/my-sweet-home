@@ -13,6 +13,7 @@ mod flip;
 mod furniture;
 mod group;
 mod home;
+mod import;
 mod level;
 mod library;
 mod room;
@@ -25,6 +26,7 @@ use msh_model::{Color, Home};
 
 pub(crate) fn register_all(r: &mut Registry) {
     home::register(r);
+    import::register(r);
     level::register(r);
     library::register(r);
     wall::register(r);

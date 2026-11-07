@@ -61,6 +61,8 @@ pub struct AppState {
     next_id: AtomicU32,
     libraries: Mutex<Option<Arc<LibraryStore>>>,
     captures: Mutex<HashMap<u64, CaptureSender>>,
+    /// Models collected for the furniture import preview, served under /stage/{id}/
+    stages: Mutex<HashMap<u32, msh_core::model_package::ModelPackage>>,
     next_capture: AtomicU64,
 }
 
@@ -72,6 +74,7 @@ impl Default for AppState {
             next_id: AtomicU32::new(0),
             libraries: Mutex::new(None),
             captures: Mutex::new(HashMap::new()),
+            stages: Mutex::new(HashMap::new()),
             next_capture: AtomicU64::new(1),
         }
     }
@@ -108,6 +111,27 @@ impl AppState {
                 Arc::new(LibraryStore::new(msh_catalog::find_all_libraries(&[])))
             })
             .clone()
+    }
+
+    /// Keeps a collected model for the import preview (only the latest few) and returns its ID.
+    pub fn stage_model(&self, package: msh_core::model_package::ModelPackage) -> u32 {
+        let id = self.new_id();
+        let mut stages = self.stages.lock().unwrap_or_else(|e| e.into_inner());
+        // The preview needs only the current model; older ones are dropped
+        stages.retain(|k, _| *k + 8 > id);
+        stages.insert(id, package);
+        id
+    }
+
+    /// A file of a staged model.
+    pub fn staged_file(&self, id: u32, name: &str) -> Option<Vec<u8>> {
+        let stages = self.stages.lock().ok()?;
+        stages
+            .get(&id)?
+            .files
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, d)| d.clone())
     }
 
     /// Discovers the library files again (after an import or removal).
@@ -162,7 +186,10 @@ pub fn execute<R: Runtime>(app: &AppHandle<R>, name: &str, params: Value) -> Res
     if let Some(view) = view {
         let _ = app.emit(HOME_CHANGED_EVENT, view);
     }
-    if matches!(name, "library_import" | "library_remove") {
+    if matches!(
+        name,
+        "library_import" | "library_remove" | "texture_import" | "furniture_import"
+    ) {
         state.reload_libraries();
         let _ = app.emit(CATALOG_CHANGED_EVENT, ());
     }

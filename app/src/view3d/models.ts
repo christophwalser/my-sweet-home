@@ -40,6 +40,11 @@ export function disposeObject(obj: THREE.Object3D): void {
   });
 }
 
+/** Loads a model without caching it (import preview; dispose it when done). */
+export function loadModelUncached(url: string): Promise<THREE.Object3D> {
+  return fetchAndParse(url);
+}
+
 function loadModel(url: string): Promise<THREE.Object3D> {
   let p = cache.get(url);
   if (!p) {
@@ -50,6 +55,24 @@ function loadModel(url: string): Promise<THREE.Object3D> {
 }
 
 async function fetchAndParse(url: string): Promise<THREE.Object3D> {
+  return withNormals(await fetchAndParseRaw(url));
+}
+
+/**
+ * Computes normals for meshes without them (e.g. OBJ files without `vn` lines), like
+ * Sweet Home 3D does; otherwise they would render black.
+ */
+function withNormals(obj: THREE.Object3D): THREE.Object3D {
+  obj.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh && mesh.geometry && !mesh.geometry.getAttribute("normal")) {
+      mesh.geometry.computeVertexNormals();
+    }
+  });
+  return obj;
+}
+
+async function fetchAndParseRaw(url: string): Promise<THREE.Object3D> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`model not found: ${url}`);
   const buffer = await res.arrayBuffer();

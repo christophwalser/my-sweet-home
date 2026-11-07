@@ -346,6 +346,35 @@ two levels, compass settings and room text styles is read by the original Sweet 
 Still open from the feature scope (moved to later phases): stairs and walls spanning several
 levels, a draggable compass, font families and text alignment, prices with VAT in the list.
 
+
+### 4.13 Status after P5a/P5b (2026-11-07)
+
+Implemented:
+- Libraries (P5a): `library_list`, `library_import` (copies a .sh3f/.sh3t into Sweet Home 3D's
+  user library folders `%APPDATA%\eTeks\Sweet Home 3D\furniture|textures`), `library_remove`
+  (moves a user library to a `removed` folder next to them). `CatalogIndex` and the app's
+  library store reload afterwards; the backend emits `catalog-changed` and the frontend
+  reloads the catalog. "Libraries…" dialog in the catalog panel.
+- Own libraries (`msh_catalog::user_library`): imported items are appended to "My
+  furniture.sh3f" / "My textures.sh3t" in the user folders (Plugin*Catalog.properties +
+  files, written atomically), so they stay in the catalog of both applications.
+- Texture import: `texture_import` (JPEG/PNG/BMP/GIF, tile size in cm); "Import…" in the
+  texture chooser imports and applies the texture.
+- Furniture import: `furniture_import` (OBJ with MTL and textures, DAE, 3DS, glTF/GLB) via
+  `msh_core::model_package` (collects referenced files; converts glTF to OBJ + MTL +
+  textures, since Sweet Home 3D cannot read glTF; computes the size of OBJ/glTF models).
+  "Import furniture…" wizard: preview, 90° rotations (stored as `modelRotation`), name,
+  category, size with proportions, elevation, door/window, icon rendered from the preview,
+  optional placement in the home. Models are staged for the preview under `msh://stage/`.
+- 3D view: missing normals are computed (OBJ without `vn`), and the view redraws when
+  textures of models finish loading (they stayed black until the next interaction).
+
+Verified: Sweet Home 3D's `DefaultFurnitureCatalog` / `DefaultTexturesCatalog` read the
+written libraries (`tools/compat/ReadCatalog.java`), and a home with imported OBJ and glTF
+furniture is read by its home reader.
+
+Next (P5c): material editor (colors, textures and shininess per model material).
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

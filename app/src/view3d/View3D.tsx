@@ -100,6 +100,11 @@ export default function View3D() {
       if (!frame) frame = requestAnimationFrame(render);
     };
     controls.addEventListener("change", requestRender);
+    // Textures of model materials (MTL, Collada, 3DS) load after the model: redraw when
+    // each of them arrives, otherwise they stay black until the next interaction
+    const manager = THREE.DefaultLoadingManager;
+    manager.onProgress = requestRender;
+    manager.onLoad = requestRender;
 
     const state: NonNullable<typeof ctx.current> = {
       renderer,

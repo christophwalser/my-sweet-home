@@ -115,6 +115,37 @@ pub struct CatalogDto {
     pub errors: Vec<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StagedModel {
+    pub id: u32,
+    /// Main model file, served at msh://stage/{id}/{main}
+    pub main: String,
+    /// Size along x, y (up) and z in cm, if it could be computed (OBJ, glTF)
+    pub size_cm: Option<[f32; 3]>,
+    pub files: Vec<String>,
+}
+
+/// Collects a 3D model with its files for the furniture import preview.
+#[tauri::command]
+pub async fn model_stage(path: PathBuf, state: State<'_, AppState>) -> CmdResult<StagedModel> {
+    let package = tauri::async_runtime::spawn_blocking(move || {
+        msh_core::model_package::collect(&path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let main = package.main.clone();
+    let size_cm = package.size_cm;
+    let files = package.files.iter().map(|(n, _)| n.clone()).collect();
+    let id = state.stage_model(package);
+    Ok(StagedModel {
+        id,
+        main,
+        size_cm,
+        files,
+    })
+}
+
 /// Loads all furniture and texture catalogs found on this machine.
 #[tauri::command]
 pub async fn catalog_load(lang: String, state: State<'_, AppState>) -> CmdResult<CatalogDto> {

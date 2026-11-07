@@ -93,6 +93,7 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, request: &Request<Vec<u8>>) -> Res
             .doc_content(doc_id as u32, entry)
             .or_else(|| state.libraries().find(entry)),
         (Some("lib"), Some(lib), Some(entry)) => state.libraries().read(lib, entry),
+        (Some("stage"), Some(stage), Some(entry)) => state.staged_file(stage as u32, entry),
         _ => None,
     };
 

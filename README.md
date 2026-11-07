@@ -51,6 +51,10 @@ bar at the bottom of the plan explains the next step.
 - Levels: tabs above the plan; the level below is shown faded. Furniture groups (Ctrl+G /
   Ctrl+Shift+G), Flip ↔ / ↕, compass settings in the home panel, and the furniture of the home
   as a sortable list ("In home" tab next to the catalog).
+- Libraries: "Libraries…" imports .sh3f/.sh3t files and removes your own ones; "Import
+  furniture…" imports OBJ, DAE, 3DS, glTF or GLB models, "Import…" in the texture chooser
+  imports images. Imported items go to "My furniture" / "My textures" in Sweet Home 3D's user
+  library folders, so both applications show them.
 - Drag furniture from the catalog onto the plan (doors and windows snap into walls); properties
   of the selection on the right (incl. textures and baseboards).
 
@@ -84,6 +88,8 @@ msh --file house.sh3d home new --name "My house"
 msh --file house.sh3d wall add-path --points "[[0,0],[900,0],[900,700],[0,700]]" --closed --thickness 30
 msh --file house.sh3d room add --name "Living room" --inside-point "[300,300]"
 msh catalog search --query "door"
+msh furniture import --model-path chair.glb --name "My chair"   # into "My furniture"
+msh texture import --path oak.jpg --width 60                    # into "My textures"
 msh --file house.sh3d furniture add-in-wall --catalog-id "eTeks#frontDoor" --wall-id <id> --offset 400
 msh --file house.sh3d furniture add --catalog-id "eTeks#sofa" --x 300 --y 500 --angle-deg 180
 msh --file house.sh3d view plan-image --out plan.png

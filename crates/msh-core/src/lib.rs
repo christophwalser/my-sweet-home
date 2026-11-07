@@ -8,6 +8,7 @@ pub mod catalog;
 pub mod clipboard;
 mod commands;
 pub mod document;
+pub mod model_package;
 pub mod registry;
 
 pub use document::Document;

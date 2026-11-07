@@ -49,6 +49,12 @@ export const api = {
   captureResult: (requestId: number, data: string | null, error: string | null) =>
     invoke<void>("capture_result", { requestId, data, error }),
   catalogLoad: (lang: string) => invoke<CatalogData>("catalog_load", { lang }),
+  /** Collects a 3D model for the import preview (served under stageResourceUrl). */
+  modelStage: (path: string) =>
+    invoke<{ id: number; main: string; sizeCm: [number, number, number] | null; files: string[] }>(
+      "model_stage",
+      { path },
+    ),
 };
 
 /** Event sent by the backend whenever the open home changed (from the UI, CLI or MCP). */
@@ -77,6 +83,11 @@ function encodePath(path: string): string {
 /** URL of a resource inside an opened home (falls back to the libraries). */
 export function docResourceUrl(docId: number, entry: string): string {
   return `${MSH_BASE}/doc/${docId}/${encodePath(entry)}`;
+}
+
+/** URL of a file of a model staged for the import preview. */
+export function stageResourceUrl(stage: number, entry: string): string {
+  return `${MSH_BASE}/stage/${stage}/${encodePath(entry)}`;
 }
 
 /** URL of a resource inside a library file. */

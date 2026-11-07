@@ -1,0 +1,186 @@
+//! Importing textures and furniture into the user's own libraries.
+
+use crate::catalog::CatalogIndex;
+use crate::model_package::{collect, placeholder_icon};
+use crate::registry::{CommandError, Registry};
+use base64::Engine;
+use msh_catalog::user_library::{NewFurniture, NewTexture, add_furniture, add_texture};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::json;
+use std::path::{Path, PathBuf};
+
+#[derive(Deserialize, JsonSchema)]
+struct TextureImportParams {
+    /// Image file (JPEG, PNG, BMP or GIF)
+    path: PathBuf,
+    /// Name in the catalog (default: the file name)
+    name: Option<String>,
+    /// Catalog category (default "My textures")
+    category: Option<String>,
+    /// Width of one tile of the texture in cm (default 100)
+    width: Option<f32>,
+    /// Height of one tile in cm (default: same as width)
+    height: Option<f32>,
+    creator: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct FurnitureImportParams {
+    /// 3D model file: OBJ (with its MTL and texture files next to it), DAE, 3DS, glTF or GLB.
+    /// glTF/GLB models are converted to OBJ.
+    model_path: PathBuf,
+    /// Name in the catalog (default: the file name)
+    name: Option<String>,
+    /// Catalog category (default "My furniture")
+    category: Option<String>,
+    /// Size in cm. Missing values are taken from the model (OBJ, glTF) keeping its
+    /// proportions; DAE and 3DS models need at least one of them.
+    width: Option<f32>,
+    depth: Option<f32>,
+    height: Option<f32>,
+    /// Elevation above the floor in cm (default 0)
+    elevation: Option<f32>,
+    /// The piece is a door or window (cuts openings into walls)
+    door_or_window: Option<bool>,
+    /// The piece can be moved (default true)
+    movable: Option<bool>,
+    /// 3x3 rotation matrix (row major) that turns the model upright and to the front,
+    /// e.g. [1,0,0, 0,0,1, 0,-1,0] for models with z up
+    model_rotation: Option<[f32; 9]>,
+    /// Icon as PNG (base64); a neutral placeholder is used if missing
+    icon_png_base64: Option<String>,
+    creator: Option<String>,
+}
+
+/// Size of the model after `rotation` (each axis of the result as extent of the rotated box).
+fn rotated_size(size: [f32; 3], rotation: Option<[f32; 9]>) -> [f32; 3] {
+    let Some(r) = rotation else { return size };
+    let mut out = [0.0; 3];
+    for (row, o) in out.iter_mut().enumerate() {
+        *o = (0..3).map(|c| r[row * 3 + c].abs() * size[c]).sum();
+    }
+    out
+}
+
+/// Lower-case file extension.
+pub(super) fn extension(path: &Path) -> String {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+}
+
+/// File name without extension.
+pub(super) fn stem(path: &Path) -> String {
+    path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Imported")
+        .to_owned()
+}
+
+pub(super) fn register(r: &mut Registry) {
+    r.add(
+        "furniture_import",
+        "Imports a 3D model (OBJ, DAE, 3DS, glTF or GLB) as piece of furniture into the user's \
+         furniture library 'My furniture' (shared with Sweet Home 3D). Returns its catalog ID; \
+         place it with furniture_add.",
+        false,
+        |_doc, p: FurnitureImportParams| {
+            let package =
+                collect(&p.model_path).map_err(|e| CommandError::failed(e.to_string()))?;
+            // Size: given values, the rest from the model keeping its proportions
+            let model = package.size_cm.map(|s| rotated_size(s, p.model_rotation));
+            let size = match (p.width, p.depth, p.height, model) {
+                (Some(w), Some(d), Some(h), _) => [w, d, h],
+                (w, d, h, Some([mx, my, mz])) => {
+                    let base = [mx, mz, my]; // width = x, depth = z, height = y (up)
+                    let factor = [w, d, h]
+                        .iter()
+                        .zip(base)
+                        .find_map(|(given, b)| given.filter(|_| b > 0.0).map(|g| g / b))
+                        .unwrap_or(1.0);
+                    [
+                        w.unwrap_or(base[0] * factor),
+                        d.unwrap_or(base[1] * factor),
+                        h.unwrap_or(base[2] * factor),
+                    ]
+                }
+                _ => {
+                    return Err(CommandError::failed(
+                        "the size of DAE and 3DS models cannot be computed: give width, depth \
+                         and height",
+                    ));
+                }
+            };
+            let size = size.map(|v| (v * 10.0).round() / 10.0);
+            if size.iter().any(|v| *v <= 0.0) {
+                return Err(CommandError::failed(format!(
+                    "the model has no extent in one direction ({size:?} cm); give its size"
+                )));
+            }
+            let icon = match &p.icon_png_base64 {
+                Some(b64) => base64::engine::general_purpose::STANDARD
+                    .decode(b64.trim_start_matches("data:image/png;base64,"))
+                    .map_err(|e| CommandError::failed(format!("invalid icon: {e}")))?,
+                None => placeholder_icon(),
+            };
+            let added = add_furniture(NewFurniture {
+                name: p.name.unwrap_or_else(|| stem(&p.model_path)),
+                category: p.category.unwrap_or_else(|| "My furniture".into()),
+                creator: p.creator,
+                icon,
+                model: package.main.clone(),
+                model_files: package.files,
+                width: size[0],
+                depth: size[1],
+                height: size[2],
+                elevation: p.elevation.unwrap_or(0.0),
+                movable: p.movable.unwrap_or(true),
+                door_or_window: p.door_or_window.unwrap_or(false),
+                model_rotation: p.model_rotation,
+            })
+            .map_err(|e| CommandError::failed(e.to_string()))?;
+            CatalogIndex::reload();
+            Ok(json!({
+                "catalog_id": added.catalog_id,
+                "library": added.library,
+                "width": size[0],
+                "depth": size[1],
+                "height": size[2],
+            }))
+        },
+    );
+    r.add(
+        "texture_import",
+        "Imports an image as texture into the user's texture library 'My textures' (shared \
+         with Sweet Home 3D). Returns its catalog ID, usable as wall, floor or ceiling texture.",
+        false,
+        |_doc, p: TextureImportParams| {
+            let ext = extension(&p.path);
+            if !matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "bmp" | "gif") {
+                return Err(CommandError::failed(
+                    "textures must be JPEG, PNG, BMP or GIF images",
+                ));
+            }
+            let image = std::fs::read(&p.path).map_err(|e| CommandError::failed(e.to_string()))?;
+            let width = p.width.unwrap_or(100.0);
+            let height = p.height.unwrap_or(width);
+            if width <= 0.0 || height <= 0.0 {
+                return Err(CommandError::failed("width and height must be positive"));
+            }
+            let added = add_texture(NewTexture {
+                name: p.name.unwrap_or_else(|| stem(&p.path)),
+                category: p.category.unwrap_or_else(|| "My textures".into()),
+                creator: p.creator,
+                image,
+                image_extension: ext,
+                width,
+                height,
+            })
+            .map_err(|e| CommandError::failed(e.to_string()))?;
+            CatalogIndex::reload();
+            Ok(json!({ "catalog_id": added.catalog_id, "library": added.library }))
+        },
+    );
+}

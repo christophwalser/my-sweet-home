@@ -776,3 +776,42 @@ input[type="search"]:focus {
   display: flex;
   justify-content: flex-end;
 }
+
+.texture-import {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+
+.import-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.import-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.import-preview canvas {
+  width: 260px;
+  height: 260px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.import-fields {
+  flex: 1;
+  min-width: 280px;
+  padding: 0;
+}
+
+.catalog-tools {
+  gap: 12px;
+}

@@ -542,7 +542,9 @@ impl Summary {
         }
         println!(
             "Walls:           {} ({:.2} m)",
-            self.walls, self.total_wall_length_m
+            self.walls,
+            // Float sums start at -0.0; adding 0.0 avoids printing "-0.00"
+            self.total_wall_length_m + 0.0
         );
         println!("Rooms:           {}", self.rooms.len());
         for r in &self.rooms {
