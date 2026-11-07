@@ -1,7 +1,7 @@
 //! Room commands.
 
 use super::wall::texture_for;
-use super::{new_id, non_empty, optional_color, parse_color, resolve_level};
+use super::{new_id, non_empty, optional_color, parse_color, resolve_level, target_ids, updated};
 use crate::registry::{CommandError, Registry};
 use msh_model::{Point, Room, RoomAttrs};
 use schemars::JsonSchema;
@@ -30,7 +30,10 @@ struct AddParams {
 
 #[derive(Deserialize, JsonSchema)]
 struct UpdateParams {
-    id: String,
+    /// Room to change (or use `ids`)
+    id: Option<String>,
+    /// Several rooms that get the same values (one undo step)
+    ids: Option<Vec<String>>,
     name: Option<String>,
     points: Option<Vec<[f32; 2]>>,
     area_visible: Option<bool>,
@@ -90,52 +93,61 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "room_update",
-        "Changes name, outline, visibility, colors or textures of a room.",
+        "Changes name, outline, visibility, colors or textures of a room (or of several rooms \
+         with ids; the outline only for one room).",
         true,
         |doc, p: UpdateParams| {
             let floor_tex = texture_for(doc, non_empty(&p.floor_texture), "floorTexture")?;
             let ceiling_tex = texture_for(doc, non_empty(&p.ceiling_texture), "ceilingTexture")?;
-            let room = doc
-                .home_mut()
-                .rooms
-                .iter_mut()
-                .find(|r| r.attrs.id.as_deref() == Some(p.id.as_str()))
-                .ok_or_else(|| CommandError::failed(format!("unknown room '{}'", p.id)))?;
-            let a = &mut room.attrs;
-            if let Some(v) = p.name {
-                a.name = Some(v);
+            let targets = target_ids(p.id.clone(), p.ids.clone())?;
+            if targets.len() > 1 && p.points.is_some() {
+                return Err(CommandError::failed(
+                    "the outline can only be changed for one room at a time",
+                ));
             }
-            if let Some(v) = p.area_visible {
-                a.area_visible = Some(v);
-            }
-            if let Some(v) = p.floor_visible {
-                a.floor_visible = Some(v);
-            }
-            if let Some(v) = p.ceiling_visible {
-                a.ceiling_visible = Some(v);
-            }
-            if let Some(c) = &p.floor_color {
-                a.floor_color = optional_color(c)?;
-            }
-            if let Some(c) = &p.ceiling_color {
-                a.ceiling_color = optional_color(c)?;
-            }
-            if let Some(points) = &p.points {
-                if points.len() < 3 {
-                    return Err(CommandError::failed("a room needs at least 3 points"));
+            for target in &targets {
+                let room = doc
+                    .home_mut()
+                    .rooms
+                    .iter_mut()
+                    .find(|r| r.attrs.id.as_deref() == Some(target.as_str()))
+                    .ok_or_else(|| CommandError::failed(format!("unknown room '{target}'")))?;
+                let a = &mut room.attrs;
+                if let Some(v) = &p.name {
+                    a.name = Some(v.clone());
                 }
-                room.points = to_points(points);
-            }
-            for (role, tex, param) in [
-                ("floorTexture", floor_tex, &p.floor_texture),
-                ("ceilingTexture", ceiling_tex, &p.ceiling_texture),
-            ] {
-                if param.is_some() {
-                    room.textures.retain(|t| t.role.as_deref() != Some(role));
+                if let Some(v) = p.area_visible {
+                    a.area_visible = Some(v);
                 }
-                room.textures.extend(tex);
+                if let Some(v) = p.floor_visible {
+                    a.floor_visible = Some(v);
+                }
+                if let Some(v) = p.ceiling_visible {
+                    a.ceiling_visible = Some(v);
+                }
+                if let Some(c) = &p.floor_color {
+                    a.floor_color = optional_color(c)?;
+                }
+                if let Some(c) = &p.ceiling_color {
+                    a.ceiling_color = optional_color(c)?;
+                }
+                if let Some(points) = &p.points {
+                    if points.len() < 3 {
+                        return Err(CommandError::failed("a room needs at least 3 points"));
+                    }
+                    room.points = to_points(points);
+                }
+                for (role, tex, param) in [
+                    ("floorTexture", floor_tex.clone(), &p.floor_texture),
+                    ("ceilingTexture", ceiling_tex.clone(), &p.ceiling_texture),
+                ] {
+                    if param.is_some() {
+                        room.textures.retain(|t| t.role.as_deref() != Some(role));
+                    }
+                    room.textures.extend(tex);
+                }
             }
-            Ok(json!({ "id": p.id }))
+            Ok(updated(&targets))
         },
     );
 }

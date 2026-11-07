@@ -12,11 +12,13 @@ const MAX_SHOWN = 150;
 type Props = {
   label: string;
   current: Texture | null | undefined;
+  /** The selected elements have different textures */
+  mixed?: boolean;
   /** Called with a catalog texture ID, or "" to remove the texture */
   onCommit: (catalogId: string) => void;
 };
 
-export default function TextureField({ label, current, onCommit }: Props) {
+export default function TextureField({ label, current, mixed, onCommit }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const catalog = useStore((s) => s.catalog);
@@ -46,10 +48,10 @@ export default function TextureField({ label, current, onCommit }: Props) {
           onClick={() => setOpen(!open)}
           aria-expanded={open}
         >
-          {current && docId !== undefined && (
+          {!mixed && current && docId !== undefined && (
             <img src={docResourceUrl(docId, current.image)} alt="" />
           )}
-          <span>{current?.name ?? "None"}</span>
+          <span>{mixed ? "mixed" : (current?.name ?? "None")}</span>
         </button>
       </div>
       {open && (
@@ -61,7 +63,7 @@ export default function TextureField({ label, current, onCommit }: Props) {
               value={query}
               onChange={(e) => setQuery(e.currentTarget.value)}
             />
-            <button type="button" onClick={() => pick("")} disabled={!current}>
+            <button type="button" onClick={() => pick("")} disabled={!current && !mixed}>
               None
             </button>
           </div>

@@ -228,6 +228,30 @@ fn copy_paste_duplicate_and_room_detection() {
     run(&r, &mut doc, "edit_undo", json!({}));
     run(&r, &mut doc, "edit_undo", json!({}));
 
+    // Several walls get the same thickness and height in one undo step
+    let res = run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "ids": walls, "thickness": 25, "height": 260, "pattern": "crossHatch" }),
+    );
+    assert_eq!(res["ids"].as_array().unwrap().len(), 4);
+    for id in &walls {
+        let w = doc.home().walls.iter().find(|w| &w.attrs.id == id).unwrap();
+        assert_eq!((w.attrs.thickness, w.attrs.height), (25.0, Some(260.0)));
+    }
+    assert!(
+        r.execute(
+            &mut doc,
+            "wall_update",
+            json!({ "ids": walls, "x_start": 0 })
+        )
+        .is_err(),
+        "coordinates only for one wall"
+    );
+    run(&r, &mut doc, "edit_undo", json!({}));
+    assert_eq!(doc.home().walls[0].attrs.thickness, 20.0);
+
     // Two separate walls are joined at the intersection of their axes (mitered corner)
     let h = run(
         &r,

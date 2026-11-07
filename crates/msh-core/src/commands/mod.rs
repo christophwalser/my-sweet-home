@@ -84,6 +84,29 @@ pub(crate) fn optional_color(s: &str) -> Result<Option<Color>, CommandError> {
     }
 }
 
+/// IDs an update command applies to: `id` and/or `ids` (at least one).
+pub(crate) fn target_ids(
+    id: Option<String>,
+    ids: Option<Vec<String>>,
+) -> Result<Vec<String>, CommandError> {
+    let mut out: Vec<String> = id.into_iter().chain(ids.unwrap_or_default()).collect();
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|i| seen.insert(i.clone()));
+    if out.is_empty() {
+        return Err(CommandError::failed("give id or ids"));
+    }
+    Ok(out)
+}
+
+/// Result of an update command for one or several elements.
+pub(crate) fn updated(targets: &[String]) -> serde_json::Value {
+    if targets.len() == 1 {
+        serde_json::json!({ "id": targets[0] })
+    } else {
+        serde_json::json!({ "ids": targets })
+    }
+}
+
 /// The string unless it is empty ("" is used to remove a texture).
 pub(crate) fn non_empty(s: &Option<String>) -> Option<&str> {
     s.as_deref().filter(|s| !s.is_empty())

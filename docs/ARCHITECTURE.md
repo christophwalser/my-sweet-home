@@ -313,6 +313,13 @@ Based on user feedback; Sweet Home 3D's interaction is the baseline, with additi
   The same staging applies to wall end, wall rotation, arc and furniture rotation handles.
   Finer steps alone would make the important angles harder to hit (±2.5° capture instead of
   ±7.5°); the stages keep them easy while allowing 5° and 1° angles.
+- Editing several elements at once: with a multi-selection the properties panel shows
+  sections for the selected walls (thickness, heights, pattern, side colors, textures and
+  baseboards), rooms (visibility, floor and ceiling colors and textures) and furniture
+  (elevation, angle, size, color, mirrored, visible). Fields show the common value or
+  "mixed"; a change applies to all elements of that kind as one command and undo step.
+  `wall_update`, `room_update` and `furniture_update` accept `ids` instead of `id`
+  (coordinates, outlines and x/y only for one element).
 
 Next (P4c): multi-level editing details (elements of other levels as background, walls through
 levels), arc walls and wall splitting in the plan, furniture groups, text style and room label

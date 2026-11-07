@@ -46,6 +46,8 @@ bar at the bottom of the plan explains the next step.
 - Drag to move (a single wall moves straight; corner angles are shown), R to rotate, Del to
   delete, arrow keys to nudge; Ctrl+C / X / V / D copy, cut, paste and duplicate (also into
   another home), Ctrl+A selects all; Ctrl+Z / Ctrl+Y.
+- Several selected walls, rooms or pieces of furniture can be edited together in the
+  properties panel (common values are shown, different ones as "mixed").
 - Drag furniture from the catalog onto the plan (doors and windows snap into walls); properties
   of the selection on the right (incl. textures and baseboards).
 

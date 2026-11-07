@@ -1,6 +1,6 @@
 //! Wall commands.
 
-use super::{new_id, non_empty, optional_color, rad, resolve_level};
+use super::{new_id, non_empty, optional_color, rad, resolve_level, target_ids, updated};
 use crate::catalog::{CatalogIndex, embed_texture};
 use crate::document::Document;
 use crate::registry::{CommandError, Registry};
@@ -48,7 +48,10 @@ struct PathParams {
 
 #[derive(Deserialize, JsonSchema)]
 struct UpdateParams {
-    id: String,
+    /// Wall to change (or use `ids`)
+    id: Option<String>,
+    /// Several walls that get the same values (one undo step)
+    ids: Option<Vec<String>>,
     x_start: Option<f32>,
     y_start: Option<f32>,
     x_end: Option<f32>,
@@ -170,7 +173,7 @@ pub(super) fn register(r: &mut Registry) {
     r.add(
         "wall_update",
         "Changes coordinates, thickness, height, colors, textures, baseboards or pattern of a \
-         wall. Joined walls keep their connection: when an end point moves, the touching end \
+         wall (or of several walls with ids; coordinates only for one wall). Joined walls keep their connection: when an end point moves, the touching end \
          of the joined wall moves along.",
         true,
         |doc, p: UpdateParams| {
@@ -184,12 +187,23 @@ pub(super) fn register(r: &mut Registry) {
                 };
                 baseboard_tex.push(tex);
             }
+            let targets = target_ids(p.id.clone(), p.ids.clone())?;
+            if targets.len() > 1
+                && [p.x_start, p.y_start, p.x_end, p.y_end]
+                    .iter()
+                    .any(Option::is_some)
+            {
+                return Err(CommandError::failed(
+                    "coordinates can only be changed for one wall at a time",
+                ));
+            }
             let home = doc.home_mut();
+            for target in &targets {
             let w = home
                 .walls
                 .iter_mut()
-                .find(|w| w.attrs.id == p.id)
-                .ok_or_else(|| CommandError::failed(format!("unknown wall '{}'", p.id)))?;
+                .find(|w| &w.attrs.id == target)
+                .ok_or_else(|| CommandError::failed(format!("unknown wall '{target}'")))?;
             let a = &mut w.attrs;
             let old_start = (a.x_start, a.y_start);
             let old_end = (a.x_end, a.y_end);
@@ -219,8 +233,8 @@ pub(super) fn register(r: &mut Registry) {
                 a.pattern = Some(v.clone());
             }
             for (role, tex, param) in [
-                ("leftSideTexture", left_tex, &p.left_side_texture),
-                ("rightSideTexture", right_tex, &p.right_side_texture),
+                ("leftSideTexture", left_tex.clone(), &p.left_side_texture),
+                ("rightSideTexture", right_tex.clone(), &p.right_side_texture),
             ] {
                 if param.is_some() {
                     w.textures.retain(|t| t.role.as_deref() != Some(role));
@@ -229,7 +243,7 @@ pub(super) fn register(r: &mut Registry) {
             }
             for ((role, tex), params) in ["leftSideBaseboard", "rightSideBaseboard"]
                 .into_iter()
-                .zip(baseboard_tex)
+                .zip(baseboard_tex.iter().cloned())
                 .zip([&p.left_side_baseboard, &p.right_side_baseboard])
             {
                 if let Some(b) = params {
@@ -268,7 +282,8 @@ pub(super) fn register(r: &mut Registry) {
                     join_free_end(home, &id, [new.0, new.1], at_start, &level);
                 }
             }
-            Ok(json!({ "id": p.id }))
+            }
+            Ok(updated(&targets))
         },
     );
 }

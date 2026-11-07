@@ -1,0 +1,147 @@
+// Input fields of the properties panel. Fields commit on Enter or blur (one
+// command and undo step per change) and can show "mixed" values when several
+// elements with different values are selected.
+
+import { useRef } from "react";
+import type { Texture } from "../model";
+
+type FieldType = "number" | "text" | "color" | "checkbox" | "angle";
+
+type FieldProps = {
+  label: string;
+  type: FieldType;
+  value: string | number | boolean | null | undefined;
+  unit?: string;
+  /** The selected elements have different values: show the field empty ("mixed") */
+  mixed?: boolean;
+  onCommit: (value: string | number | boolean) => void;
+};
+
+export function toHex(argb: number | null | undefined): string {
+  if (argb === null || argb === undefined) return "#ffffff";
+  return `#${(argb & 0xffffff).toString(16).padStart(6, "0")}`;
+}
+
+/** Input that commits on Enter or blur, not on every keystroke. */
+export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps) {
+  // A mixed color field shows a placeholder color: only a real change may commit it
+  const changed = useRef(false);
+  if (type === "checkbox") {
+    return (
+      <label className="prop-row prop-check">
+        <input
+          type="checkbox"
+          checked={!mixed && !!value}
+          ref={(el) => {
+            if (el) el.indeterminate = !!mixed;
+          }}
+          onChange={(e) => onCommit(e.currentTarget.checked)}
+        />
+        <span>{label}</span>
+      </label>
+    );
+  }
+  const display = mixed
+    ? ""
+    : type === "angle" && typeof value === "number"
+      ? Math.round(((value * 180) / Math.PI) * 10) / 10
+      : typeof value === "number"
+        ? Math.round(value * 10) / 10
+        : (value ?? "");
+  const commit = (raw: string) => {
+    if (mixed && (raw === "" || (type === "color" && !changed.current))) return;
+    changed.current = false;
+    if (type === "number" || type === "angle") {
+      const n = Number.parseFloat(raw.replace(",", "."));
+      if (Number.isFinite(n) && n !== display) onCommit(n);
+    } else if (raw !== display) {
+      onCommit(raw);
+    }
+  };
+  return (
+    <label className="prop-row">
+      <span className="prop-label">{label}</span>
+      <input
+        // Re-create the input when the value changes from outside (undo, CLI, MCP)
+        key={String(display)}
+        type={type === "color" ? "color" : "text"}
+        inputMode={type === "number" || type === "angle" ? "decimal" : undefined}
+        defaultValue={type === "color" && mixed ? "#ffffff" : String(display)}
+        placeholder={mixed ? "mixed" : undefined}
+        // Also for colors: one command (and undo step) when leaving the field
+        onInput={() => {
+          changed.current = true;
+        }}
+        onBlur={(e) => commit(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+        }}
+      />
+      {(unit || (mixed && type === "color")) && (
+        <span className="prop-unit">{mixed && type === "color" ? "mixed" : unit}</span>
+      )}
+    </label>
+  );
+}
+
+/** Drop-down field that commits on change. */
+export function SelectField({
+  label,
+  value,
+  options,
+  mixed,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  options: [string, string][];
+  mixed?: boolean;
+  onCommit: (value: string) => void;
+}) {
+  return (
+    <label className="prop-row">
+      <span className="prop-label">{label}</span>
+      <select
+        value={mixed ? "" : value}
+        onChange={(e) => {
+          if (e.currentTarget.value) onCommit(e.currentTarget.value);
+        }}
+      >
+        {mixed && <option value="">mixed</option>}
+        {options.map(([v, text]) => (
+          <option key={v} value={v}>
+            {text}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+export const WALL_PATTERNS: [string, string][] = [
+  ["hatchUp", "Hatch up"],
+  ["hatchDown", "Hatch down"],
+  ["reversedHatchUp", "Reversed hatch up"],
+  ["reversedHatchDown", "Reversed hatch down"],
+  ["crossHatch", "Cross hatch"],
+  ["background", "Background"],
+  ["foreground", "Foreground"],
+];
+
+export const DASH_STYLES: [string, string][] = [
+  ["SOLID", "Solid"],
+  ["DOT", "Dot"],
+  ["DASH", "Dash"],
+  ["DASH_DOT", "Dash dot"],
+  ["DASH_DOT_DOT", "Dash dot dot"],
+];
+
+export const ARROW_STYLES: [string, string][] = [
+  ["NONE", "None"],
+  ["DELTA", "Triangle"],
+  ["OPEN", "Open"],
+  ["DISC", "Disc"],
+];
+
+export const byRole = (textures: Texture[] | undefined, role: string) =>
+  textures?.find((t) => t.role === role) ?? null;

@@ -1,123 +1,19 @@
 // Properties of the selected element (or of the home and level if nothing is
 // selected). Every change runs an *_update command: one undo step per field.
 
-import { forEachPiece, type Home, type Piece, type Texture, type Wall } from "../model";
+import { forEachPiece, type Home, type Piece, type Wall } from "../model";
 import { useStore } from "../store";
+import {
+  ARROW_STYLES,
+  byRole,
+  DASH_STYLES,
+  Field,
+  SelectField,
+  toHex,
+  WALL_PATTERNS,
+} from "./fields";
+import MultiPanel from "./MultiPanel";
 import TextureField from "./TextureField";
-
-type FieldType = "number" | "text" | "color" | "checkbox" | "angle";
-
-type FieldProps = {
-  label: string;
-  type: FieldType;
-  value: string | number | boolean | null | undefined;
-  unit?: string;
-  onCommit: (value: string | number | boolean) => void;
-};
-
-function toHex(argb: number | null | undefined): string {
-  if (argb === null || argb === undefined) return "#ffffff";
-  return `#${(argb & 0xffffff).toString(16).padStart(6, "0")}`;
-}
-
-/** Input that commits on Enter or blur, not on every keystroke. */
-function Field({ label, type, value, unit, onCommit }: FieldProps) {
-  if (type === "checkbox") {
-    return (
-      <label className="prop-row prop-check">
-        <input
-          type="checkbox"
-          checked={!!value}
-          onChange={(e) => onCommit(e.currentTarget.checked)}
-        />
-        <span>{label}</span>
-      </label>
-    );
-  }
-  const display =
-    type === "angle" && typeof value === "number"
-      ? Math.round(((value * 180) / Math.PI) * 10) / 10
-      : typeof value === "number"
-        ? Math.round(value * 10) / 10
-        : (value ?? "");
-  const commit = (raw: string) => {
-    if (type === "number" || type === "angle") {
-      const n = Number.parseFloat(raw.replace(",", "."));
-      if (Number.isFinite(n) && n !== display) onCommit(n);
-    } else if (raw !== display) {
-      onCommit(raw);
-    }
-  };
-  return (
-    <label className="prop-row">
-      <span className="prop-label">{label}</span>
-      <input
-        // Re-create the input when the value changes from outside (undo, CLI, MCP)
-        key={String(display)}
-        type={type === "color" ? "color" : "text"}
-        inputMode={type === "number" || type === "angle" ? "decimal" : undefined}
-        defaultValue={String(display)}
-        // Also for colors: one command (and undo step) when leaving the field
-        onBlur={(e) => commit(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
-        }}
-      />
-      {unit && <span className="prop-unit">{unit}</span>}
-    </label>
-  );
-}
-
-/** Drop-down field that commits on change. */
-function SelectField({
-  label,
-  value,
-  options,
-  onCommit,
-}: {
-  label: string;
-  value: string;
-  options: [string, string][];
-  onCommit: (value: string) => void;
-}) {
-  return (
-    <label className="prop-row">
-      <span className="prop-label">{label}</span>
-      <select value={value} onChange={(e) => onCommit(e.currentTarget.value)}>
-        {options.map(([v, text]) => (
-          <option key={v} value={v}>
-            {text}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-const WALL_PATTERNS: [string, string][] = [
-  ["hatchUp", "Hatch up"],
-  ["hatchDown", "Hatch down"],
-  ["reversedHatchUp", "Reversed hatch up"],
-  ["reversedHatchDown", "Reversed hatch down"],
-  ["crossHatch", "Cross hatch"],
-  ["background", "Background"],
-  ["foreground", "Foreground"],
-];
-
-const DASH_STYLES: [string, string][] = [
-  ["SOLID", "Solid"],
-  ["DOT", "Dot"],
-  ["DASH", "Dash"],
-  ["DASH_DOT", "Dash dot"],
-  ["DASH_DOT_DOT", "Dash dot dot"],
-];
-
-const ARROW_STYLES: [string, string][] = [
-  ["NONE", "None"],
-  ["DELTA", "Triangle"],
-  ["OPEN", "Open"],
-  ["DISC", "Disc"],
-];
 
 /**
  * Angle in degrees between `wall` and the wall joined at its start (or end), measured
@@ -196,9 +92,6 @@ function CornerAngleField({
     </>
   );
 }
-
-const byRole = (textures: Texture[] | undefined, role: string) =>
-  textures?.find((t) => t.role === role) ?? null;
 
 /** Color, texture and baseboard of one wall side. */
 function WallSide({
@@ -346,8 +239,9 @@ export default function PropertiesPanel() {
   if (selection.length > 1) {
     return (
       <div className="props">
-        <h2>{selection.length} elements selected</h2>
-        <p className="muted">Drag to move, arrow keys move by 1 cm (Shift: 10 cm).</p>
+        <p className="muted small">
+          {selection.length} elements selected · changes apply to all of the same kind
+        </p>
         {selectedWalls.length === 2 &&
           (() => {
             const [w1, w2] = selectedWalls;
@@ -370,6 +264,7 @@ export default function PropertiesPanel() {
           </p>
         )}
         {wallActions}
+        <MultiPanel home={home} selection={selection} run={run} />
         {actions}
       </div>
     );

@@ -1,6 +1,6 @@
 //! Catalog search and furniture commands (including doors and windows).
 
-use super::{deg, new_id, parse_color, rad, resolve_level, round2};
+use super::{deg, new_id, parse_color, rad, resolve_level, round2, target_ids, updated};
 use crate::catalog::{CatalogIndex, EmbeddedResources, FurnitureEntry, embed_furniture_resources};
 use crate::document::Document;
 use crate::registry::{CommandError, Registry};
@@ -72,7 +72,10 @@ struct AddInWallParams {
 
 #[derive(Deserialize, JsonSchema)]
 struct UpdateParams {
-    id: String,
+    /// Piece to change (or use `ids`)
+    id: Option<String>,
+    /// Several pieces that get the same values (one undo step)
+    ids: Option<Vec<String>>,
     x: Option<f32>,
     y: Option<f32>,
     angle_deg: Option<f32>,
@@ -260,41 +263,50 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "furniture_update",
-        "Moves, rotates, resizes, renames, colors, mirrors or hides a piece of furniture.",
+        "Moves, rotates, resizes, renames, colors, mirrors or hides a piece of furniture (or \
+         several pieces with ids; x and y only for one piece).",
         true,
         |doc, p: UpdateParams| {
-            let piece = find_piece_mut(doc, &p.id)?;
-            let a = &mut piece.attrs;
-            if let Some(v) = p.x {
-                a.x = v;
+            let targets = target_ids(p.id.clone(), p.ids.clone())?;
+            if targets.len() > 1 && (p.x.is_some() || p.y.is_some()) {
+                return Err(CommandError::failed(
+                    "x and y can only be changed for one piece at a time (use edit_move)",
+                ));
             }
-            if let Some(v) = p.y {
-                a.y = v;
+            for target in &targets {
+                let piece = find_piece_mut(doc, target)?;
+                let a = &mut piece.attrs;
+                if let Some(v) = p.x {
+                    a.x = v;
+                }
+                if let Some(v) = p.y {
+                    a.y = v;
+                }
+                if let Some(v) = p.angle_deg {
+                    a.angle = Some(normalize_angle(rad(v)));
+                }
+                if let Some(v) = p.elevation {
+                    a.elevation = Some(v);
+                }
+                apply_size(a, p.width, p.depth, p.height);
+                if let Some(v) = &p.name {
+                    a.name = v.clone();
+                }
+                if let Some(c) = &p.color {
+                    a.color = if c.is_empty() {
+                        None
+                    } else {
+                        Some(parse_color(c)?)
+                    };
+                }
+                if let Some(v) = p.mirrored {
+                    a.model_mirrored = Some(v);
+                }
+                if let Some(v) = p.visible {
+                    a.visible = Some(v);
+                }
             }
-            if let Some(v) = p.angle_deg {
-                a.angle = Some(normalize_angle(rad(v)));
-            }
-            if let Some(v) = p.elevation {
-                a.elevation = Some(v);
-            }
-            apply_size(a, p.width, p.depth, p.height);
-            if let Some(v) = p.name {
-                a.name = v;
-            }
-            if let Some(c) = &p.color {
-                a.color = if c.is_empty() {
-                    None
-                } else {
-                    Some(parse_color(c)?)
-                };
-            }
-            if let Some(v) = p.mirrored {
-                a.model_mirrored = Some(v);
-            }
-            if let Some(v) = p.visible {
-                a.visible = Some(v);
-            }
-            Ok(json!({ "id": p.id }))
+            Ok(updated(&targets))
         },
     );
 }
