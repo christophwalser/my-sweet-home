@@ -817,7 +817,7 @@ Deliberately **not** adopted: SH3D Java plugins (not compatible; replaced by CLI
 | **P9 3D and environment** | Virtual visit with WASD + mouse and collisions, points of view, all levels switch, 3D view settings, sun from location / date / time with address search, lights and light power, tilting furniture, photo date / time / lens | The 3D view is fully editable and walkable |
 | **P10 Building** | Staircase cut-outs, walls across levels, shelves | Multi-storey homes with stairs look right |
 | **P11 Files** | One window per home, autosave and recovery | Several homes open; no work lost after a crash |
-| **P12 Polish** | Preferences (incl. units, defaults for new elements, colors of the wall side markings, angle snap steps), i18n (German), accessibility, performance benchmarks, installer (MSI via Tauri), optional auto-update | Release candidate 1.0 |
+| **P12 Polish** | Preferences (incl. units, defaults for new elements, colors of the wall side markings, angle snap steps), i18n (German), open import (more formats, library editor, online sources), installer (MSI via Tauri), plugins, accessibility, performance benchmarks, optional auto-update | Release candidate 1.0 |
 
 Realistic assessment: P0–P3 quickly produce an AI-controllable foundation. Full parity (P4–P7) is a project of **several months**. The phases are cut so that each one delivers something usable.
 
@@ -884,16 +884,39 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
   speed, autosave interval, language, theme. Window size and position remembered.
 - P12d (done, see 4.32) German user interface through translation files (English stays in the code); number
   and date formats.
-- P12e Stand-alone installer without dependencies on other programs: MSI via Tauri with the
+- P12e Open import of furniture, textures and libraries (added 2026-11-08). Everything
+  imported is stored in Sweet Home 3D compatible form (OBJ + MTL + textures inside .sh3f /
+  .sh3t) in the Sweet Home 3D library folders, so both applications use it. In sub-steps:
+  - P12e-a More formats. Furniture: OBJ, DAE, 3DS, glTF / GLB (as before), plus FBX, ZIP
+    archives with models and textures, KMZ, STL, 3MF, PLY and VRML (WRL); converted to OBJ
+    through the three.js loaders. Textures: JPG, PNG, BMP, GIF (as before), plus WebP, TIFF,
+    SVG and PBR material packages (ZIP; the color map becomes the texture, the other maps
+    are kept for later). Drag and drop of files onto the catalog. Not possible: SketchUp
+    .skp and Blender .blend (no free reader; export to DAE, FBX or glTF instead).
+  - P12e-b Library editor in the app with the scope of Sweet Home 3D's Furniture Library
+    Editor and Textures Library Editor: create and open .sh3f / .sh3t libraries, add pieces
+    or textures one by one or in batches (folder or ZIP), edit every property (name,
+    category, tags, description, information, creator, license, price and VAT, size,
+    elevation, door or window, staircase cut-out, light sources, shelves, movable /
+    deformable / resizable / texturable, model rotation, back faces, ...), save and export.
+    Pieces of the open home can be exported as a library. Commands in msh-core
+    (`library_create`, `library_add_items`, `library_update_item`, `library_remove_item`,
+    `library_save`), so CLI and MCP can build libraries too. Checked with the original
+    Sweet Home 3D reader.
+  - P12e-c Online sources: search and import the free libraries of sweethome3d.com (whole
+    .sh3f / .sh3t files), CC0 textures and models of ambientCG and Poly Haven (their public
+    APIs, no account). License and source are kept with each item; network access can be
+    turned off in the preferences.
+- P12f Stand-alone installer without dependencies on other programs: MSI via Tauri with the
   WebView2 runtime, `.sh3d` file association, the CLI `msh`, and the freely licensed Sweet
   Home 3D default catalog (furniture GPL / CC-BY, textures CC-BY, with attribution; taken
   from a Sweet Home 3D installation at build time, never committed). Installed Sweet Home 3D
   libraries are still found. Auto-update prepared (Tauri updater, signing keys), the update
   source is decided later.
-- P12f Plugins: TypeScript plugins inside the app (folder with manifest and permissions; use
+- P12g Plugins: TypeScript plugins inside the app (folder with manifest and permissions; use
   the command registry like CLI / MCP, add menu entries, tools and panels, run isolated) and
   external programs that control the app through CLI / MCP and appear as menu entries.
-- P12g Performance benchmarks with large homes and accessibility (keyboard, screen readers,
+- P12h Performance benchmarks with large homes and accessibility (keyboard, screen readers,
   contrast). Small open points of P7–P11 (time zone suggestion from the address search,
   automatic dimensions while the context menu is open, brighter spots in draft photos).
 
