@@ -119,6 +119,8 @@ export type Piece = {
     wall_top: number | null;
     cut_out_shape: string | null;
     power: number | null;
+    /** `false`: part of the base plan (fixed furniture) */
+    movable: boolean | null;
   };
   sashes?: Sash[];
   light_sources?: LightSource[];
@@ -261,6 +263,8 @@ export type Home = {
     camera: string | null;
     selected_level: string | null;
     wall_height: number | null;
+    /** Walls, rooms, texts, doors, windows and fixed furniture cannot be selected */
+    base_plan_locked: boolean | null;
   };
   environment: {
     attrs: {

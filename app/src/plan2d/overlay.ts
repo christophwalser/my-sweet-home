@@ -45,6 +45,8 @@ export type PlanOverlay = {
   handleDrag: { drag: HandleDrag; cursor: Pt } | null;
   /** Rubber band rectangle (two corners in cm) */
   rubberBand: [Pt, Pt] | null;
+  /** Distance measured with the measuring tool */
+  measure: [Pt, Pt] | null;
   /** Point the cursor snapped to */
   snap: Pt | null;
   accent: string;
@@ -269,6 +271,8 @@ export function drawOverlay(
   if (overlay.note && cursor)
     drawTag(ctx, overlay.note, cursor[0] + 14 * px, cursor[1] - 18 * px, px);
 
+  if (overlay.measure) drawMeasure(ctx, overlay.measure[0], overlay.measure[1], overlay.guide, px);
+
   // Rubber band
   if (overlay.rubberBand) {
     const [[x0, y0], [x1, y1]] = overlay.rubberBand;
@@ -289,6 +293,46 @@ export function drawOverlay(
     ctx.arc(x, y, 6 * px, 0, Math.PI * 2);
     ctx.stroke();
   }
+}
+
+/** Number with at most one decimal. */
+function oneDecimal(v: number): string {
+  return String(Math.round(v * 10) / 10);
+}
+
+/**
+ * Measured distance: a line with end marks, the length, the direction (degrees,
+ * clockwise from the x axis like the plan) and the horizontal and vertical parts.
+ */
+function drawMeasure(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, color: string, px: number) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5 * px;
+  strokePath(ctx, [a, b], false);
+  // End marks across the line (a cross while nothing is measured yet)
+  const nx = len > 1e-6 ? -dy / len : 0;
+  const ny = len > 1e-6 ? dx / len : 1;
+  const m = 7 * px;
+  for (const p of [a, b]) {
+    strokePath(
+      ctx,
+      [
+        [p[0] - nx * m, p[1] - ny * m],
+        [p[0] + nx * m, p[1] + ny * m],
+      ],
+      false,
+    );
+  }
+  if (len < 0.05) return;
+  // Rounded first, so that -0.01° shows as 0°, not 360°
+  const angle = (((Math.round((Math.atan2(dy, dx) * 1800) / Math.PI) / 10) % 360) + 360) % 360;
+  let text = `${oneDecimal(len)} cm · ${oneDecimal(angle)}°`;
+  if (Math.abs(dx) >= 0.05 && Math.abs(dy) >= 0.05) {
+    text += ` · Δx ${oneDecimal(Math.abs(dx))} · Δy ${oneDecimal(Math.abs(dy))}`;
+  }
+  drawCenteredTag(ctx, text, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);
 }
 
 /** Angle mark at a wall corner: a square for 90°, otherwise an arc with the value. */

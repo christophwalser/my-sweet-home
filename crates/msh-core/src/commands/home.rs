@@ -40,6 +40,9 @@ struct SetParams {
     name: Option<String>,
     /// Default height of new walls in cm
     wall_height: Option<f32>,
+    /// Lock the base plan (walls, rooms, dimensions, labels, polylines, doors, windows and
+    /// fixed furniture) so that only movable furniture can be selected in the plan
+    base_plan_locked: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -150,7 +153,7 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "home_set",
-        "Changes home settings such as name and default wall height.",
+        "Changes home settings such as name, default wall height and the lock of the base plan.",
         true,
         |doc, p: SetParams| {
             let a = &mut doc.home_mut().attrs;
@@ -162,6 +165,10 @@ pub(super) fn register(r: &mut Registry) {
                     return Err(CommandError::failed("wall_height must be positive"));
                 }
                 a.wall_height = Some(h);
+            }
+            if let Some(l) = p.base_plan_locked {
+                // Sweet Home 3D writes the attribute only when the plan is locked
+                a.base_plan_locked = l.then_some(true);
             }
             Ok(json!({ "updated": true }))
         },

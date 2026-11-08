@@ -11,6 +11,7 @@ import {
   openView3DWindow,
   syncUiState,
 } from "./layout/view3dWindow";
+import PreferencesDialog from "./PreferencesDialog";
 import PropertiesPanel from "./panels/PropertiesPanel";
 import PlanView from "./plan2d/PlanView";
 import { applyHome, subscribeToHomeChanges, type Tool, useStore } from "./store";
@@ -40,7 +41,40 @@ const PLAN_TOOLS: { tool: Tool; label: string; hint: string }[] = [
   },
   { tool: "dimension", label: "Dimension", hint: "Click start and end point" },
   { tool: "label", label: "Text", hint: "Click to place a text label" },
+  {
+    tool: "measure",
+    label: "Measure",
+    hint: "Click two points (or drag) to measure their distance; nothing is added to the plan",
+  },
 ];
+
+/** Tools that create base plan elements: choosing one unlocks the base plan, as in Sweet Home 3D. */
+const BASE_PLAN_TOOLS: Tool[] = ["wall", "room", "polyline", "dimension", "label"];
+
+/** Lock of the base plan: walls, rooms, texts, doors, windows and fixed furniture. */
+function BasePlanLock() {
+  const opened = useStore((s) => s.opened);
+  const locked = opened?.home.attrs.base_plan_locked === true;
+  return (
+    <label
+      className="tool-option base-plan-lock"
+      title="Lock the base plan: walls, rooms, dimensions, texts, doors, windows and fixed furniture can no longer be selected in the plan, only movable furniture. Drawing walls, rooms, lines, dimensions or texts unlocks it."
+    >
+      <input
+        type="checkbox"
+        checked={locked}
+        onChange={async (e) => {
+          const lock = e.currentTarget.checked;
+          const { run, setSelection } = useStore.getState();
+          await run("home_set", { base_plan_locked: lock });
+          // Locked elements leave the selection, as in Sweet Home 3D
+          if (lock) setSelection([]);
+        }}
+      />
+      Lock base plan
+    </label>
+  );
+}
 
 /** Thickness of the walls drawn next, shown while the wall tool is active. */
 function WallThicknessInput() {
@@ -122,6 +156,7 @@ export default function App() {
   const [detached, setDetached] = useState(false);
   const [editingLevel, setEditingLevel] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const centerRef = useRef<HTMLDivElement>(null);
   const opened = useStore((s) => s.opened);
   const loading = useStore((s) => s.loading);
@@ -218,6 +253,13 @@ export default function App() {
     if (typeof path === "string") await openHome(path);
   };
 
+  const chooseTool = (t: Tool) => {
+    setTool(t);
+    if (BASE_PLAN_TOOLS.includes(t) && useStore.getState().opened?.home.attrs.base_plan_locked) {
+      void run("home_set", { base_plan_locked: false });
+    }
+  };
+
   const levels = [...(opened?.home.levels ?? [])].sort(
     (a, b) =>
       a.attrs.elevation - b.attrs.elevation ||
@@ -283,6 +325,13 @@ export default function App() {
             {opened?.modified ? " •" : ""}
           </span>
         )}
+        <button
+          type="button"
+          onClick={() => setPreferencesOpen(true)}
+          title="Rulers, grid and magnetism"
+        >
+          Preferences…
+        </button>
         <span className="spacer" />
         {opened && (
           <fieldset className="segmented" aria-label="3D view">
@@ -304,6 +353,8 @@ export default function App() {
         )}
         <span className="muted version">{info ? `v${info.version}` : ""}</span>
       </header>
+
+      {preferencesOpen && <PreferencesDialog onClose={() => setPreferencesOpen(false)} />}
 
       {exporting && opened && (
         <ExportDialog
@@ -343,7 +394,7 @@ export default function App() {
                     type="button"
                     key={t.tool}
                     className={tool === t.tool ? "active" : ""}
-                    onClick={() => setTool(t.tool)}
+                    onClick={() => chooseTool(t.tool)}
                     title={t.hint}
                   >
                     {t.label}
@@ -351,6 +402,7 @@ export default function App() {
                 ))}
               </fieldset>
               {tool === "wall" && <WallThicknessInput />}
+              {tool === "select" && <BasePlanLock />}
               <nav className="level-tabs" aria-label="Levels">
                 {levels.map((l) =>
                   editingLevel === l.attrs.id ? (

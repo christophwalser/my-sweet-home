@@ -67,6 +67,8 @@ bar at the bottom of the plan explains the next step.
   stored point of view as key points, choose size, frame rate and speed; the video moves from
   point to point (draft in seconds, path traced frames on request). The path is saved in the
   home, as in Sweet Home 3D.
+- Plan: rulers along the edges, "Measure" tool for distances, "Lock base plan" (only movable
+  furniture stays selectable), "Preferences…" to switch rulers, grid and magnetism.
 - Window layout: drag the borders of the side panels and between plan and 3D view; plan and 3D
   view can be maximized or minimized, the 3D view can open in its own window.
 - Drag furniture from the catalog onto the plan (doors and windows snap into walls); properties

@@ -126,6 +126,7 @@ export function drawPlan(
   view: ViewTransform,
   input: PlanInput,
   colors: PlanColors,
+  options: { grid?: boolean } = {},
 ): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = colors.background;
@@ -134,7 +135,7 @@ export function drawPlan(
   ctx.setTransform(view.scale, 0, 0, view.scale, view.offsetX, view.offsetY);
   const px = 1 / view.scale; // one device pixel in world units
 
-  drawGrid(ctx, width, height, view, colors);
+  if (options.grid !== false) drawGrid(ctx, width, height, view, colors);
 
   const { home, wallShapes, levelId } = input;
 

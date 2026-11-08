@@ -21,6 +21,14 @@ function sameLevel(itemLevel: string | null, levelId: string | null): boolean {
   return levelId === null || itemLevel === levelId;
 }
 
+/**
+ * Pieces that belong to the base plan (Sweet Home 3D's `isBasePlanItem`): doors, windows and
+ * furniture that is not movable. A locked base plan keeps them from being selected.
+ */
+export function isBasePlanPiece(piece: Piece): boolean {
+  return piece.kind === "DoorOrWindow" || piece.attrs.movable === false;
+}
+
 export function pointInPolygon(p: Pt, poly: Pt[]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -70,15 +78,23 @@ export function hitTest(
   tolerance: number,
 ): Hit | null {
   // Doors and windows are drawn on top of the walls, other furniture below; a piece
-  // inside a group selects the whole group
+  // inside a group selects the whole group. A locked base plan leaves only movable
+  // furniture selectable, like Sweet Home 3D.
+  const locked = home.attrs.base_plan_locked === true;
   const pieces = piecesWithTop(home.furniture).filter(
-    (e) => sameLevel(e.level, levelId) && e.topId,
+    (e) => sameLevel(e.level, levelId) && e.topId && !(locked && isBasePlanPiece(e.piece)),
   );
   pieces.sort((a, b) => (b.piece.attrs.elevation ?? 0) - (a.piece.attrs.elevation ?? 0));
   for (const { piece, topId } of pieces) {
     if (piece.kind === "DoorOrWindow" && pieceContains(piece, p)) {
       return { id: topId as string, kind: "piece" };
     }
+  }
+  if (locked) {
+    for (const { piece, topId } of pieces) {
+      if (pieceContains(piece, p)) return { id: topId as string, kind: "piece" };
+    }
+    return null;
   }
   for (const label of home.labels) {
     if (!sameLevel(label.attrs.level, levelId) || !label.attrs.id) continue;
@@ -246,11 +262,13 @@ export function elementsInRect(home: Home, levelId: string | null, a: Pt, b: Pt)
   const [x0, x1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
   const [y0, y1] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
   const inside = (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+  const locked = home.attrs.base_plan_locked === true;
   const ids: string[] = [];
   // Pieces and groups (a group when all its pieces are inside)
   const groups = new Map<string, boolean>();
   for (const { piece, topId, level } of piecesWithTop(home.furniture)) {
     if (!sameLevel(level, levelId) || !topId) continue;
+    if (locked && isBasePlanPiece(piece)) continue;
     const isInside = inside(piece.attrs.x, piece.attrs.y);
     if (topId === piece.attrs.id) {
       if (isInside) ids.push(topId);
@@ -259,6 +277,7 @@ export function elementsInRect(home: Home, levelId: string | null, a: Pt, b: Pt)
     }
   }
   for (const [id, all] of groups) if (all) ids.push(id);
+  if (locked) return ids;
   for (const w of home.walls) {
     const a2 = w.attrs;
     if (

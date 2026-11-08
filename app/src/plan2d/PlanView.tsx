@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api";
 import { forEachPiece, type Piece, type Pt } from "../model";
+import { magnetismActive, usePreferences } from "../preferences";
 import { type Tool, useStore } from "../store";
 import {
   drawPlan,
@@ -38,6 +39,7 @@ import {
 import { elementsInRect, hitTest, nearestWall } from "./interaction";
 import { constrainMove, type Docked, dockToWall, movePreview, selectionJoints } from "./moving";
 import { type DraftKind, drawOverlay, type PlanOverlay } from "./overlay";
+import { drawRuler, type RulerColors } from "./rulers";
 import { type SnapPurpose, type Snapped, snapContext, snapDraw } from "./snapping";
 
 const LIGHT: PlanColors = {
@@ -62,6 +64,20 @@ const DARK: PlanColors = {
   furnitureStroke: "#aab0b8",
   text: "#e6e8eb",
   dimension: "#6c9cf2",
+};
+
+const LIGHT_RULER: RulerColors = {
+  background: "#f4f5f7",
+  text: "#4b5058",
+  tick: "#9aa0a8",
+  marker: "#2f6fde",
+};
+
+const DARK_RULER: RulerColors = {
+  background: "#23262b",
+  text: "#aab0b8",
+  tick: "#5d636b",
+  marker: "#5b8ff0",
 };
 
 /** Pick and snap radius in screen pixels. */
@@ -94,6 +110,8 @@ type Gesture =
 /** Tools that draw a path of points. */
 const PATH_TOOLS: Tool[] = ["wall", "room", "dimension", "polyline"];
 const isPathTool = (t: Tool) => PATH_TOOLS.includes(t);
+/** Tools whose clicks snap to the plan: drawing tools and the measuring tool. */
+const isSnapTool = (t: Tool) => isPathTool(t) || t === "measure";
 
 /** Minimum number of points of a finished drawing. */
 const MIN_POINTS: Record<DraftKind, number> = { wall: 2, room: 3, polyline: 2, dimension: 2 };
@@ -122,6 +140,7 @@ const cursorStyle: Record<Tool, string> = {
   polyline: "crosshair",
   dimension: "crosshair",
   label: "text",
+  measure: "crosshair",
 };
 
 const FINISH = "Enter, Esc, right-click or double-click to finish · Backspace: remove last point";
@@ -149,13 +168,23 @@ export default function PlanView() {
   const tool = useStore((s) => s.tool);
   const wallThickness = useStore((s) => s.wallThickness);
   const highlightSide = useStore((s) => s.highlightSide);
+  const showRulers = usePreferences((s) => s.rulers);
+  const showGrid = usePreferences((s) => s.grid);
+  const magnetism = usePreferences((s) => s.magnetism);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const topRulerRef = useRef<HTMLCanvasElement>(null);
+  const leftRulerRef = useRef<HTMLCanvasElement>(null);
+  /** World position of the mouse over the plan (for the ruler marks) */
+  const mouseWorld = useRef<Pt | null>(null);
+  /** Distance measured with the measuring tool; `b` follows the mouse until `done` */
+  const measure = useRef<{ a: Pt; b: Pt | null; done: boolean } | null>(null);
   const viewRef = useRef<ViewTransform>({ scale: 1, offsetX: 0, offsetY: 0 });
   const [icons, setIcons] = useState(() => new Map<string, HTMLImageElement>());
   const [, setRedraw] = useState(0);
   const [hint, setHint] = useState("");
   const dark = useDarkMode();
   const colors = dark ? DARK : LIGHT;
+  const rulerColors = dark ? DARK_RULER : LIGHT_RULER;
   const accent = dark ? "#5b8ff0" : "#2f6fde";
   const guideColor = dark ? "#e0a030" : "#d07a00";
 
@@ -219,15 +248,24 @@ export default function PlanView() {
   /** Explanation of what the next mouse action does, shown below the plan. */
   const hintText = (): string => {
     const g = gesture.current;
-    if (g?.kind === "handle") return `${HANDLE_HINT[g.handle.kind]} · Alt: no magnetism`;
+    const alt = magnetism ? "Alt: no magnetism" : "Alt: magnetism (off in the preferences)";
+    if (g?.kind === "handle") return `${HANDLE_HINT[g.handle.kind]} · ${alt}`;
     if (g?.kind === "move")
-      return "Release to drop · a single wall moves straight, furniture docks to walls · Alt: free";
+      return magnetism
+        ? "Release to drop · a single wall moves straight, furniture docks to walls · Alt: free"
+        : "Release to drop · Alt: magnetism";
     const drawing = draft.current.length > 0;
     switch (tool) {
+      case "measure": {
+        const m = measure.current;
+        if (m && !m.done) return `Click the end point · Shift: 1° steps · ${alt}`;
+        if (m?.done) return "Click to measure again · Esc: clear · nothing is added to the plan";
+        return `Click the start point, or drag · ${alt}`;
+      }
       case "wall":
         return drawing
           ? `Click the next point, or type a length + Enter · click the first point to close · ${FINISH}`
-          : "Click the start point, or drag to draw a single wall · Shift: 1° steps · Alt: no magnetism";
+          : `Click the start point, or drag to draw a single wall · Shift: 1° steps · ${alt}`;
       case "room":
         return drawing
           ? `Click the next corner · click the first corner, ${FINISH}`
@@ -252,6 +290,16 @@ export default function PlanView() {
     }
   };
 
+  /** Rulers along the plan; also redrawn on every mouse move for the position mark. */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reads refs only
+  const drawRulers = useCallback(() => {
+    const mouse = mouseWorld.current;
+    if (topRulerRef.current)
+      drawRuler(topRulerRef.current, true, viewRef.current, mouse?.[0] ?? null, rulerColors);
+    if (leftRulerRef.current)
+      drawRuler(leftRulerRef.current, false, viewRef.current, mouse?.[1] ?? null, rulerColors);
+  }, [rulerColors]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: hintText and pxToCm read refs only
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -264,12 +312,15 @@ export default function PlanView() {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       return;
     }
-    drawPlan(ctx, canvas.width, canvas.height, viewRef.current, input, colors);
+    drawPlan(ctx, canvas.width, canvas.height, viewRef.current, input, colors, {
+      grid: showGrid,
+    });
     const g = gesture.current;
     const drawing = isPathTool(tool);
     const points = cursor.current && drawing ? [...draft.current, cursor.current] : draft.current;
     const sel = useStore.getState().selection;
-    const snap = drawing ? snapState.current : null;
+    const snap = isSnapTool(tool) ? snapState.current : null;
+    const m = tool === "measure" ? measure.current : null;
     const handleDrag = g?.kind === "handle" && g.drag ? { drag: g.drag, cursor: g.cursor } : null;
     const overlay: PlanOverlay = {
       selection: sel,
@@ -288,18 +339,32 @@ export default function PlanView() {
       guides: handleDrag?.drag.guides ?? snap?.guides ?? [],
       note: snap?.note ?? null,
       noteAt: snap?.pt ?? null,
-      hints: drawing ? (snapHints.current ?? []) : [],
+      hints: isSnapTool(tool) ? (snapHints.current ?? []) : [],
       typedLength: drawing ? typed.current : null,
       handles:
         tool === "select" && sel.length === 1 ? elementHandles(input.home, sel[0], pxToCm(1)) : [],
       handleDrag,
       rubberBand: g?.kind === "band" ? [g.start, g.end] : null,
+      measure: m ? [m.a, m.b ?? m.a] : null,
       snap: snap?.marker ?? null,
       accent,
       guide: guideColor,
     };
     drawOverlay(ctx, viewRef.current, input.home, input.wallShapes, overlay);
-  }, [input, colors, tool, accent, guideColor, wallThickness, highlightSide]);
+    drawRulers();
+  }, [
+    input,
+    colors,
+    tool,
+    accent,
+    guideColor,
+    wallThickness,
+    highlightSide,
+    showGrid,
+    showRulers,
+    magnetism,
+    drawRulers,
+  ]);
 
   const fit = useCallback(() => {
     const canvas = canvasRef.current;
@@ -355,6 +420,7 @@ export default function PlanView() {
     draft.current = [];
     snapState.current = null;
     typed.current = null;
+    measure.current = null;
     draw();
   }, [tool]);
 
@@ -374,17 +440,18 @@ export default function PlanView() {
 
   const levelParam = () => (effectiveLevel ? { level: effectiveLevel } : {});
 
-  /** Cursor point for drawing tools, with magnetism unless Alt is pressed. */
+  /** Cursor point for drawing tools and the measuring tool, with magnetism if active. */
   const snapped = (p: Pt, altKey: boolean, shiftKey = false): Pt => {
-    if (!input || altKey || !isPathTool(tool)) {
+    if (!input || !magnetismActive(altKey) || !isSnapTool(tool)) {
       snapState.current = null;
       snapHints.current = null;
       return p;
     }
-    const path = draft.current;
+    const m = measure.current;
+    const path = tool === "measure" ? (m && !m.done ? [m.a] : []) : draft.current;
     const previous = path.length > 0 ? path[path.length - 1] : null;
     const ctx = snapContext(
-      tool as SnapPurpose,
+      (tool === "measure" ? "dimension" : tool) as SnapPurpose,
       input.home,
       input.wallShapes,
       effectiveLevel,
@@ -568,6 +635,17 @@ export default function PlanView() {
         hitId: hit?.id ?? null,
         shift: e.shiftKey,
       };
+    } else if (tool === "measure") {
+      const s = snapped(p, e.altKey, e.shiftKey);
+      const m = measure.current;
+      if (!m || m.done) {
+        measure.current = { a: s, b: null, done: false };
+        gesture.current = { kind: "draw", screen: [e.clientX, e.clientY], dragged: false };
+      } else {
+        m.b = s;
+        m.done = true;
+      }
+      draw();
     } else if (tool === "label") {
       const text = window.prompt("Label text");
       if (text?.trim()) {
@@ -592,6 +670,7 @@ export default function PlanView() {
 
   const onPointerMove = (e: React.PointerEvent) => {
     const g = gesture.current;
+    mouseWorld.current = toWorld(e.clientX, e.clientY);
     if (g?.kind === "pan") {
       if (Math.hypot(e.clientX - g.screen[0], e.clientY - g.screen[1]) >= DRAG_THRESHOLD_PX) {
         g.moved = true;
@@ -617,7 +696,7 @@ export default function PlanView() {
         g.handle,
         p,
         pxToCm(SNAP_PX),
-        !e.altKey,
+        magnetismActive(e.altKey),
         e.shiftKey,
       );
       draw();
@@ -639,6 +718,7 @@ export default function PlanView() {
         setHint(hintText());
       }
       canvasRef.current.style.cursor = handle ? HANDLE_CURSOR[handle.kind] : cursorStyle.select;
+      drawRulers();
     }
     if (g?.kind === "press") {
       if (Math.hypot(e.clientX - g.screen[0], e.clientY - g.screen[1]) < DRAG_THRESHOLD_PX) return;
@@ -657,7 +737,7 @@ export default function PlanView() {
       const sel = useStore.getState().selection;
       let offset: Pt = [Math.round(p[0] - g2.start[0]), Math.round(p[1] - g2.start[1])];
       g2.dock = null;
-      if (!e.altKey) {
+      if (magnetismActive(e.altKey)) {
         offset = constrainMove(input.home, sel, offset);
         const piece = sel.length === 1 ? findPiece(sel[0]) : null;
         if (piece) {
@@ -681,6 +761,13 @@ export default function PlanView() {
       const s = snapped(p, e.altKey, e.shiftKey);
       cursor.current = draft.current.length > 0 ? s : null;
       draw();
+    } else if (tool === "measure") {
+      const s = snapped(p, e.altKey, e.shiftKey);
+      const m = measure.current;
+      if (m && !m.done) m.b = s;
+      draw();
+    } else if (!g) {
+      drawRulers();
     }
   };
 
@@ -693,7 +780,19 @@ export default function PlanView() {
       // A right click without dragging finishes the drawing (or leaves the tool)
       if (!g.moved) {
         if (isPathTool(tool) && draft.current.length > 0) void finishDraft();
-        else if (tool !== "select") useStore.getState().setTool("select");
+        else if (tool === "measure" && measure.current) {
+          measure.current = null;
+          draw();
+        } else if (tool !== "select") useStore.getState().setTool("select");
+      }
+      return;
+    }
+    if (g.kind === "draw" && tool === "measure") {
+      // Press, drag, release measures the dragged distance
+      const m = measure.current;
+      if (g.dragged && m && !m.done && m.b) {
+        m.done = true;
+        draw();
       }
       return;
     }
@@ -848,6 +947,12 @@ export default function PlanView() {
         e.preventDefault();
         return;
       }
+      if (state.tool === "measure" && e.key === "Escape" && measure.current) {
+        measure.current = null;
+        draw();
+        e.preventDefault();
+        return;
+      }
       if (e.key === "Escape") {
         if (state.tool !== "select") state.setTool("select");
         else setSelection([]);
@@ -922,29 +1027,46 @@ export default function PlanView() {
   };
 
   return (
-    <div className="plan-view">
-      <canvas
-        ref={canvasRef}
-        style={{ cursor: cursorStyle[tool] }}
-        onWheel={onWheel}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={() => {
-          cursor.current = null;
-          draw();
-        }}
-        onDoubleClick={onDoubleClick}
-        onContextMenu={(e) => e.preventDefault()}
-        onDragOver={onDragOver}
-        onDrop={(e) => void onDrop(e)}
-      />
-      {opened && hint && <div className="plan-hint">{hint}</div>}
-      {opened && (
-        <button type="button" className="overlay-button" onClick={refit} title="Fit plan to window">
-          Fit
-        </button>
+    <div className={`plan-view${showRulers && opened ? " with-rulers" : ""}`}>
+      {showRulers && opened && (
+        <>
+          <div className="ruler-corner" title="Rulers in centimeters">
+            cm
+          </div>
+          <canvas ref={topRulerRef} className="ruler ruler-top" />
+          <canvas ref={leftRulerRef} className="ruler ruler-left" />
+        </>
       )}
+      <div className="plan-area">
+        <canvas
+          ref={canvasRef}
+          style={{ cursor: cursorStyle[tool] }}
+          onWheel={onWheel}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={() => {
+            cursor.current = null;
+            mouseWorld.current = null;
+            draw();
+          }}
+          onDoubleClick={onDoubleClick}
+          onContextMenu={(e) => e.preventDefault()}
+          onDragOver={onDragOver}
+          onDrop={(e) => void onDrop(e)}
+        />
+        {opened && hint && <div className="plan-hint">{hint}</div>}
+        {opened && (
+          <button
+            type="button"
+            className="overlay-button"
+            onClick={refit}
+            title="Fit plan to window"
+          >
+            Fit
+          </button>
+        )}
+      </div>
     </div>
   );
 }

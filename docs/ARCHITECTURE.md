@@ -470,6 +470,24 @@ furniture is read by its home reader.
   about 1.2 s per frame. Path traced frames of interiors are noisy and dark at 32 samples
   without lamps (aerial view), and the noise changes from frame to frame.
 
+### 4.19 Status after P7a (2026-11-08)
+
+- Rulers along the top and left edge of the plan (`plan2d/rulers.ts`, own canvases in a CSS
+  grid around the plan canvas): marks in cm that follow zoom and scrolling (labeled steps at
+  least ~70 px apart, tenths or halves as minor marks) and a mark at the mouse position.
+- Preferences (`preferences.ts`, local storage of the WebView) with a first dialog
+  ("Preferences…"): rulers, grid, magnetism. With magnetism off, Alt turns it on for the current
+  action (Alt inverts the preference).
+- Measuring tool ("Measure"): two clicks or a drag measure a distance with the magnetism of the
+  dimension tool; the overlay shows length, direction (degrees, clockwise from the x axis) and
+  the horizontal and vertical parts. Nothing is added to the home; Esc or a right click clears.
+- Lock base plan: `home_set` `base_plan_locked` (written only when locked, as Sweet Home 3D
+  does). While locked, clicks, the rubber band and Ctrl+A select only movable furniture; walls,
+  rooms, dimensions, labels, polylines, doors, windows and pieces with `movable="false"` are
+  skipped (`isBasePlanPiece`). Locking clears the selection; choosing a tool that creates base
+  plan elements unlocks the plan, like Sweet Home 3D. Checkbox in the plan toolbar of the select
+  tool.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
