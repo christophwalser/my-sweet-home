@@ -55,10 +55,21 @@ export type PlanOverlay = {
   snap: Pt | null;
   /** Virtual visitor in the plan (position in cm, yaw and field of view in radians) */
   visitor: { x: number; y: number; yaw: number; fov: number } | null;
+  /** The visitor is selected: outline and the handle that turns it */
+  visitorHandle: Pt | null;
   accent: string;
   /** Color of guides */
   guide: string;
 };
+
+/** Radius around the visitor that selects it (cm). */
+export const VISITOR_PICK_RADIUS = 26;
+
+/** Position of the handle that turns the visitor: in front of its head. */
+export function visitorHandlePos(v: { x: number; y: number; yaw: number }, px: number): Pt {
+  const d = VISITOR_PICK_RADIUS + 18 * px;
+  return [v.x - Math.sin(v.yaw) * d, v.y + Math.cos(v.yaw) * d];
+}
 
 /** Body of the visitor with the field of view it sees in the 3D view. */
 function drawVisitor(
@@ -111,6 +122,18 @@ export function drawOverlay(
   ctx.lineJoin = "round";
 
   if (overlay.visitor) drawVisitor(ctx, overlay.visitor, overlay.accent, px);
+  if (overlay.visitor && overlay.visitorHandle) {
+    ctx.strokeStyle = overlay.accent;
+    ctx.lineWidth = 2 * px;
+    ctx.beginPath();
+    ctx.arc(overlay.visitor.x, overlay.visitor.y, VISITOR_PICK_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    const [hx, hy] = overlay.visitorHandle;
+    drawHandleIcon(ctx, "rotate", hx, hy, overlay.accent, px, [
+      overlay.visitor.x,
+      overlay.visitor.y,
+    ]);
+  }
 
   // Selection outlines
   ctx.strokeStyle = overlay.accent;

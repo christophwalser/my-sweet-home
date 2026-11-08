@@ -5,8 +5,9 @@ import { useEffect, useState } from "react";
 import { docResourceUrl } from "../api";
 import { forEachPiece, type Home, type Piece, type Wall } from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
-import { useStore } from "../store";
+import { currentVisitor, setVisitor, useStore, VISITOR_ID } from "../store";
 import { modelMaterialNames } from "../view3d/models";
+import { levelOfEye } from "../view3d/visitor";
 import BackgroundImageSection from "./BackgroundImageSection";
 import {
   ARROW_STYLES,
@@ -171,6 +172,76 @@ function WallSide({
 }
 
 /** Compass of the home: position, size, north direction and geographic position. */
+/** Position, eye height and view of the virtual visitor (Sweet Home 3D's observer). */
+function VisitorSection() {
+  const opened = useStore((s) => s.opened);
+  // Re-render while the visitor walks
+  useStore((s) => s.visitorPose);
+  const v = currentVisitor();
+  if (!opened || !v) return <p className="muted">The home has no visitor yet.</p>;
+  const levels = [...opened.home.levels].sort((a, b) => a.attrs.elevation - b.attrs.elevation);
+  const level = levels.find((l) => l.attrs.id === levelOfEye(opened.home, v.z));
+  const floor = level?.attrs.elevation ?? 0;
+  const deg = (r: number) => Math.round(((r * 180) / Math.PI) * 10) / 10;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const num = (f: (n: number) => void) => (value: string | number | boolean) => {
+    const n = Number(value);
+    if (Number.isFinite(n)) f(n);
+  };
+  return (
+    <div className="props">
+      <h2>Visitor</h2>
+      <Field
+        label="X"
+        type="number"
+        unit="cm"
+        value={Math.round(v.x * 10) / 10}
+        onCommit={num((x) => void setVisitor({ x }))}
+      />
+      <Field
+        label="Y"
+        type="number"
+        unit="cm"
+        value={Math.round(v.y * 10) / 10}
+        onCommit={num((y) => void setVisitor({ y }))}
+      />
+      <Field
+        label="Eye height"
+        type="number"
+        unit="cm"
+        value={Math.round((v.z - floor) * 10) / 10}
+        onCommit={num((h) => void setVisitor({ z: floor + Math.max(10, h) }))}
+      />
+      <Field
+        label="Direction"
+        type="number"
+        unit="°"
+        value={((deg(v.yaw) % 360) + 360) % 360}
+        onCommit={num((d) => void setVisitor({ yaw: rad(d) }))}
+      />
+      <Field
+        label="Head tilt"
+        type="number"
+        unit="°"
+        value={deg(v.pitch)}
+        onCommit={num((d) => void setVisitor({ pitch: rad(Math.max(-85, Math.min(85, d))) }))}
+      />
+      <Field
+        label="Field of view"
+        type="number"
+        unit="°"
+        value={deg(v.fov)}
+        onCommit={num((d) => void setVisitor({ fov: rad(Math.max(20, Math.min(120, d))) }))}
+      />
+      {level && levels.length > 1 && <p className="muted small">On level {level.attrs.name}</p>}
+      <p className="muted small">
+        Drag the visitor to move it, the handle in front of it to turn it. Arrow keys move it, R
+        turns it by 15°.
+      </p>
+    </div>
+  );
+}
+
 function CompassSection({
   home,
   run,
@@ -732,6 +803,10 @@ export default function PropertiesPanel() {
         {actions}
       </div>
     );
+  }
+
+  if (id === VISITOR_ID) {
+    return <VisitorSection />;
   }
 
   if (id === "compass") {

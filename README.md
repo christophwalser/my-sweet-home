@@ -84,7 +84,7 @@ bar at the bottom of the plan explains the next step.
   turned and resized in the plan.
 - Virtual visit like in games: drag to look around, W A S D to walk, Q / E down and up, Shift
   faster, mouse wheel to zoom. Walls stop the visitor, doors can be walked through; the
-  visitor is shown in the plan. "Points of view" stores views and goes back to them; "All
+  visitor is shown in the plan, where it can be selected, dragged and turned. "Points of view" stores views and goes back to them; "All
   levels" shows every level in 3D.
 - Furniture in the plan is drawn as seen from above, rendered from its 3D model with its
   colors and materials (Preferences: off shows the catalog icons); exports and prints use

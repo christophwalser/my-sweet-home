@@ -621,6 +621,10 @@ furniture is read by its home reader.
   by a stored point of view) may move along it or away from it, never closer.
 - The visitor is drawn in the plan (body and field of view) on the level it stands on; it
   follows the selected level like Sweet Home 3D's "adjust elevation to level".
+- In the plan the visitor (selection id `observer`, not an element of the home) can be selected,
+  dragged and turned with a handle in front of it; arrow keys move it, R turns it by 15°.
+  Its properties (position, eye height above its floor, direction, head tilt, field of view)
+  are editable; all of it goes through `camera_set`.
 - Cameras: moving in the 3D view is kept in the frontend (no undo steps, no scene rebuilds)
   and written into the home with `camera_set` before saving. `Registry::add_view` registers
   commands that change only the view (no undo step, home not marked modified); the UI

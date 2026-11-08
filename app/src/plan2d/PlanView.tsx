@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api";
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
 import { magnetismActive, usePreferences } from "../preferences";
-import { type Tool, useStore } from "../store";
+import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../store";
 import { levelOfEye } from "../view3d/visitor";
 import { autoDimensions, dimensionLine } from "./autoDims";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
@@ -49,12 +49,19 @@ import {
   selectionJoints,
   slideInWall,
 } from "./moving";
-import { type DraftKind, drawOverlay, type PlanOverlay } from "./overlay";
+import {
+  type DraftKind,
+  drawOverlay,
+  type PlanOverlay,
+  VISITOR_PICK_RADIUS,
+  visitorHandlePos,
+} from "./overlay";
 import { drawRuler, type RulerColors } from "./rulers";
 import {
   projectOnSegment,
   type SnapPurpose,
   type Snapped,
+  snapAngleDeg,
   snapContext,
   snapDraw,
 } from "./snapping";
@@ -122,6 +129,8 @@ type Gesture =
   | { kind: "move"; start: Pt; offset: Pt; dock: Docked | null; slide: Slid | null }
   | { kind: "band"; start: Pt; end: Pt }
   | { kind: "handle"; handle: Handle; drag: HandleDrag | null; cursor: Pt }
+  /** The handle in front of the visitor is dragged: its new direction */
+  | { kind: "visitor-rotate"; yaw: number }
   /** First point of a drawing pressed: a drag draws a single segment */
   | { kind: "draw"; screen: [number, number]; dragged: boolean };
 
@@ -343,6 +352,11 @@ export default function PlanView() {
     const g = gesture.current;
     const alt = magnetism ? "Alt: no magnetism" : "Alt: magnetism (off in the preferences)";
     if (g?.kind === "handle") return `${HANDLE_HINT[g.handle.kind]} · ${alt}`;
+    if (g?.kind === "visitor-rotate") return `Drag to turn the visitor · Shift: 1° steps · ${alt}`;
+    const selected = useStore.getState().selection;
+    if (!g && tool === "select" && selected.length === 1 && selected[0] === VISITOR_ID) {
+      return "Drag to move the visitor, the handle in front of it to turn it · arrow keys: move · R: turn by 15°";
+    }
     if (g?.kind === "move")
       return magnetism
         ? "Release to drop · a single wall moves straight, furniture docks to walls · Alt: free"
@@ -453,7 +467,13 @@ export default function PlanView() {
       rubberBand: g?.kind === "band" ? [g.start, g.end] : null,
       measure: m ? [m.a, m.b ?? m.a] : null,
       snap: snap?.marker ?? null,
-      visitor: viewMode === "observer" ? visitorInPlan(input, visitorPose) : null,
+      visitor: shownVisitor(g),
+      visitorHandle: (() => {
+        const v = shownVisitor(g);
+        return v && tool === "select" && sel.length === 1 && sel[0] === VISITOR_ID
+          ? visitorHandlePos(v, pxToCm(1))
+          : null;
+      })(),
       accent,
       guide: guideColor,
     };
@@ -709,6 +729,31 @@ export default function PlanView() {
     draw();
   };
 
+  /** The visitor drawn in the plan, moved or turned by the gesture in progress. */
+  const shownVisitor = (g: Gesture | null) => {
+    if (!input || viewMode !== "observer") return null;
+    const v = visitorInPlan(input, visitorPose);
+    if (!v) return null;
+    if (g?.kind === "visitor-rotate") return { ...v, yaw: g.yaw };
+    if (g?.kind === "move" && useStore.getState().selection.includes(VISITOR_ID)) {
+      return { ...v, x: v.x + g.offset[0], y: v.y + g.offset[1] };
+    }
+    return v;
+  };
+
+  /** What is under the pointer of the visitor: its turning handle, its body or nothing. */
+  const visitorUnder = (p: Pt): "handle" | "body" | null => {
+    const v = shownVisitor(null);
+    if (!v || tool !== "select") return null;
+    const sel = useStore.getState().selection;
+    if (sel.length === 1 && sel[0] === VISITOR_ID) {
+      const h = visitorHandlePos(v, pxToCm(1));
+      if (Math.hypot(p[0] - h[0], p[1] - h[1]) <= pxToCm(PICK_PX + 4)) return "handle";
+    }
+    if (Math.hypot(p[0] - v.x, p[1] - v.y) <= VISITOR_PICK_RADIUS + pxToCm(PICK_PX)) return "body";
+    return null;
+  };
+
   const handleUnder = (p: Pt): Handle | null => {
     const sel = useStore.getState().selection;
     if (!input || tool !== "select" || sel.length !== 1) return null;
@@ -739,20 +784,30 @@ export default function PlanView() {
     if (e.button !== 0 || !input) return;
     const p = toWorld(e.clientX, e.clientY);
     if (tool === "select") {
-      const handle = handleUnder(p);
+      const onVisitor = visitorUnder(p);
+      if (onVisitor === "handle") {
+        userMoved.current = true;
+        gesture.current = { kind: "visitor-rotate", yaw: shownVisitor(null)?.yaw ?? 0 };
+        draw();
+        return;
+      }
+      const handle = onVisitor ? null : handleUnder(p);
       if (handle) {
         userMoved.current = true;
         gesture.current = { kind: "handle", handle, drag: null, cursor: p };
         draw();
         return;
       }
-      const hit = hitTest(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+      // The visitor stands on top of the plan
+      const hit = onVisitor
+        ? { id: VISITOR_ID }
+        : hitTest(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
       gesture.current = {
         kind: "press",
         start: p,
         screen: [e.clientX, e.clientY],
         hitId: hit?.id ?? null,
-        shift: e.shiftKey,
+        shift: e.shiftKey && hit?.id !== VISITOR_ID,
       };
     } else if (tool === "measure") {
       const s = snapped(p, e.altKey, e.shiftKey);
@@ -806,6 +861,18 @@ export default function PlanView() {
       return;
     }
     const p = toWorld(e.clientX, e.clientY);
+    if (g?.kind === "visitor-rotate") {
+      const v = shownVisitor(null);
+      if (v && Math.hypot(p[0] - v.x, p[1] - v.y) > 1) {
+        // Direction (-sin yaw, cos yaw) towards the pointer; 5° steps, Shift: 1°
+        let deg = (Math.atan2(-(p[0] - v.x), p[1] - v.y) * 180) / Math.PI;
+        deg = magnetismActive(e.altKey) ? snapAngleDeg(deg, e.shiftKey) : Math.round(deg);
+        g.yaw = (deg * Math.PI) / 180;
+        setHint(`Direction ${(((Math.round(deg) % 360) + 360) % 360).toString()}°`);
+      }
+      draw();
+      return;
+    }
     if (g?.kind === "handle" && input) {
       g.cursor = p;
       g.drag = dragHandle(
@@ -836,9 +903,15 @@ export default function PlanView() {
         hoverHandle.current = handle;
         setHint(hintText());
       }
-      canvasRef.current.style.cursor = handle
-        ? handleCursor(input.home, handle)
-        : cursorStyle.select;
+      const onVisitor = visitorUnder(p);
+      canvasRef.current.style.cursor =
+        onVisitor === "handle"
+          ? ROTATE_CURSOR
+          : onVisitor === "body"
+            ? "move"
+            : handle
+              ? handleCursor(input.home, handle)
+              : cursorStyle.select;
       drawRulers();
     }
     if (g?.kind === "press") {
@@ -847,7 +920,8 @@ export default function PlanView() {
       if (g.hitId) {
         // Dragging an unselected element selects it first
         const sel = useStore.getState().selection;
-        if (!sel.includes(g.hitId)) setSelection(g.shift ? [...sel, g.hitId] : [g.hitId]);
+        if (g.hitId === VISITOR_ID) setSelection([VISITOR_ID]);
+        else if (!sel.includes(g.hitId)) setSelection(g.shift ? [...sel, g.hitId] : [g.hitId]);
         gesture.current = { kind: "move", start: g.start, offset: [0, 0], dock: null, slide: null };
       } else {
         gesture.current = { kind: "band", start: g.start, end: p };
@@ -872,7 +946,7 @@ export default function PlanView() {
           pxToCm(SNAP_PX),
           magnetismActive(e.altKey),
         );
-      } else if (magnetismActive(e.altKey)) {
+      } else if (magnetismActive(e.altKey) && !sel.includes(VISITOR_ID)) {
         offset = constrainMove(input.home, sel, offset);
         const piece = sel.length === 1 ? findPiece(sel[0]) : null;
         if (piece) {
@@ -948,6 +1022,12 @@ export default function PlanView() {
       draw();
       return;
     }
+    if (g.kind === "visitor-rotate") {
+      void setVisitor({ yaw: g.yaw });
+      setHint(hintText());
+      draw();
+      return;
+    }
     if (g.kind === "press") {
       // Plain click: select the element under the cursor (Shift toggles)
       if (g.hitId) {
@@ -978,6 +1058,9 @@ export default function PlanView() {
           y: g.dock.y,
           angle_deg: g.dock.angleDeg,
         });
+      } else if ((dx !== 0 || dy !== 0) && sel.includes(VISITOR_ID)) {
+        const v = currentVisitor();
+        if (v) void setVisitor({ x: v.x + dx, y: v.y + dy });
       } else if ((dx !== 0 || dy !== 0) && sel.length > 0) {
         void run("edit_move", { ids: sel, dx, dy });
       }
@@ -1099,6 +1182,16 @@ export default function PlanView() {
       if (ids) setSelection(ids);
     };
     const items: MenuItem[] = [];
+    if (sel.includes(VISITOR_ID)) {
+      return [
+        {
+          label: "Look from here in 3D",
+          action: () => useStore.getState().setViewMode("observer"),
+        },
+        { separator: true },
+        { label: "Fit plan to window", action: () => refit() },
+      ];
+    }
     if (sel.length === 1 && sel[0] === "compass") {
       return [
         { label: "Hide compass", action: () => void run("compass_update", { visible: false }) },
@@ -1330,8 +1423,10 @@ export default function PlanView() {
   // ---------------------------------------------------------------- keyboard
 
   /** Ctrl shortcuts of the plan; returns false for keys it does not handle. */
-  const onShortcut = (key: string, sel: string[], shift = false): boolean => {
+  const onShortcut = (key: string, selected: string[], shift = false): boolean => {
     if (!input) return false;
+    // The visitor is no element of the home: it cannot be copied or grouped
+    const sel = selected.filter((id) => id !== VISITOR_ID);
     const topLevelFurniture = (ids: string[]) =>
       input.home.furniture
         .map((f) => f.attrs.id)
@@ -1410,6 +1505,24 @@ export default function PlanView() {
       if (target.closest?.(".view3d-canvas") && !e.ctrlKey && !e.metaKey) return;
       const state = useStore.getState();
       const sel = state.selection;
+      if (!e.ctrlKey && !e.metaKey && sel.length === 1 && sel[0] === VISITOR_ID) {
+        // Arrow keys move the selected visitor, R / Shift+R turn it by 15°
+        const v = currentVisitor();
+        const d = e.shiftKey ? 10 : 1;
+        if (v && e.key.startsWith("Arrow")) {
+          const dx = e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0;
+          const dy = e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0;
+          void setVisitor({ x: v.x + dx, y: v.y + dy });
+          e.preventDefault();
+          return;
+        }
+        if (v && (e.key === "r" || e.key === "R")) {
+          void setVisitor({ yaw: v.yaw + ((e.shiftKey ? -15 : 15) * Math.PI) / 180 });
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "Delete" || e.key === "Backspace") return;
+      }
       if (e.ctrlKey || e.metaKey) {
         const key = e.key.toLowerCase();
         // Keys of the plan never trigger WebView functions (Ctrl+G is "find next" there)

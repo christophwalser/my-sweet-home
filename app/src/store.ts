@@ -9,6 +9,9 @@ import type { CameraPose } from "./view3d/camera";
 
 export type ViewMode = "aerial" | "observer";
 
+/** Selection ID of the virtual visitor in the plan (not an element of the home). */
+export const VISITOR_ID = "observer";
+
 /** Tool of the 2D plan. */
 export type Tool = "select" | "wall" | "room" | "polyline" | "dimension" | "label" | "measure";
 
@@ -189,6 +192,24 @@ async function syncCameras(): Promise<void> {
   }
 }
 
+/** The visitor as shown in the plan: its live pose, else the camera stored in the home. */
+export function currentVisitor(): CameraPose | null {
+  const { visitorPose, opened } = useStore.getState();
+  if (visitorPose) return visitorPose;
+  const c = opened?.home.cameras.find((cam) => cam.attrs.role === "observerCamera")?.attrs;
+  return c ? { x: c.x, y: c.y, z: c.z, yaw: c.yaw, pitch: c.pitch, fov: c.field_of_view } : null;
+}
+
+/** Moves the visitor (from the plan or the properties); the 3D view follows. */
+export function setVisitor(change: Partial<CameraPose>): Promise<unknown> {
+  const pose = currentVisitor();
+  if (!pose) return Promise.resolve(undefined);
+  const next = { ...pose, ...change };
+  // Shown at once; the 3D view takes it over when the command returns
+  useStore.setState({ visitorPose: next });
+  return useStore.getState().run("camera_set", { mode: "observer", ...poseParams(next) });
+}
+
 /** Parameters of `camera_set` / `viewpoint_store` for a camera pose. */
 export function poseParams(p: CameraPose): Record<string, number> {
   const deg = (r: number) => Math.round(((r * 180) / Math.PI) * 100) / 100;
@@ -218,8 +239,9 @@ function allIds(opened: OpenedHome): Set<string> {
     const id = (x.attrs as { id?: string | null }).id;
     if (id) ids.add(id);
   }
-  // The compass is selectable in the plan while it is visible
+  // The compass is selectable in the plan while it is visible, the visitor in the visit
   if (h.compass && h.compass.attrs.visible !== false) ids.add("compass");
+  ids.add(VISITOR_ID);
   return ids;
 }
 
