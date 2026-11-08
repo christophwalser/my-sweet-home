@@ -11,6 +11,7 @@ import {
 } from "../api";
 import { language, t } from "../i18n";
 import Splitter from "../layout/Splitter";
+import { usePreferences } from "../preferences";
 import { useStore } from "../store";
 import { useUi } from "../ui/uiStore";
 import { formatPrecise } from "../units";
@@ -25,23 +26,47 @@ function formatSize(item: CatalogItem): string {
     : `${formatPrecise(item.width)} × ${formatPrecise(item.height)}`;
 }
 
-function ItemRow({ item, libraryName }: { item: CatalogItem; libraryName: string }) {
+/** Item the mouse points at, with the screen position of its row. */
+type Hovered = { item: CatalogItem; libraryName: string; top: number; bottom: number };
+
+/** Delay before the preview opens, so moving over the list does not flash previews. */
+const PREVIEW_DELAY_MS = 250;
+const PREVIEW_WIDTH = 280;
+
+function ItemRow({
+  item,
+  libraryName,
+  preview,
+  onHover,
+}: {
+  item: CatalogItem;
+  libraryName: string;
+  /** The large preview is on: no native tooltip */
+  preview: boolean;
+  onHover: (hovered: Hovered | null) => void;
+}) {
   const tooltip = [
     item.name,
     formatSize(item),
-    item.creator && `Creator: ${item.creator}`,
-    item.license && `License: ${item.license}`,
-    `Library: ${libraryName}`,
+    item.creator && t("Creator: {name}", { name: item.creator }),
+    item.license && t("License: {name}", { name: item.license }),
+    t("Library: {name}", { name: libraryName }),
   ]
     .filter(Boolean)
     .join("\n");
   return (
     <li
       className="catalog-item"
-      title={tooltip}
+      title={preview ? undefined : tooltip}
+      onMouseEnter={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        onHover({ item, libraryName, top: r.top, bottom: r.bottom });
+      }}
+      onMouseLeave={() => onHover(null)}
       // Furniture can be dragged onto the plan
       draggable={item.kind === "furniture" && !!item.id}
       onDragStart={(e) => {
+        onHover(null);
         if (!item.id) return;
         const data: CatalogDragData = {
           catalogId: item.id,
@@ -71,6 +96,44 @@ const SPLIT_DEFAULT = 0.6;
 const SPLIT_MIN = 0.2;
 const SPLIT_MAX = 0.9;
 
+/** Large picture and details of the item the mouse points at, beside the catalog. */
+function ItemPreview({ hovered, left }: { hovered: Hovered; left: number }) {
+  const { item, libraryName } = hovered;
+  const height = item.kind === "textures" ? PREVIEW_WIDTH + 130 : PREVIEW_WIDTH + 150;
+  // Next to the row, inside the window
+  const top = Math.max(8, Math.min(hovered.top - 20, window.innerHeight - height - 8));
+  const details: [string, string | null][] = [
+    [t("Size"), formatSize(item)],
+    [t("Category"), item.category],
+    [t("Creator"), item.creator],
+    [t("License"), item.license],
+    [t("Library"), libraryName],
+  ];
+  return (
+    <div className="catalog-preview" style={{ left, top, width: PREVIEW_WIDTH }} aria-hidden="true">
+      <div className={`catalog-preview-image ${item.kind}`}>
+        {item.icon ? (
+          <img src={libResourceUrl(item.library, item.icon)} alt="" />
+        ) : (
+          <span className="catalog-icon-placeholder" />
+        )}
+      </div>
+      <strong className="catalog-preview-name">{item.name}</strong>
+      <dl className="catalog-preview-details">
+        {details
+          .filter(([, v]) => v)
+          .map(([k, v]) => (
+            <div key={k}>
+              <dt>{k}</dt>
+              <dd>{v}</dd>
+            </div>
+          ))}
+      </dl>
+      {item.doorOrWindow && <span className="muted small">{t("Door or window")}</span>}
+    </div>
+  );
+}
+
 function loadSplit(): number {
   try {
     const v = Number(localStorage.getItem(SPLIT_KEY));
@@ -86,6 +149,17 @@ export default function CatalogPanel() {
   const loadCatalog = useStore((s) => s.loadCatalog);
   const [kind, setKind] = useState<CatalogKind>("furniture");
   const openDialog = useUi((s) => s.openDialog);
+  const previewOn = usePreferences((s) => s.catalogPreview);
+  const [hovered, setHovered] = useState<Hovered | null>(null);
+  const hoverTimer = useRef(0);
+  /** Opens the preview after a short delay; closes it at once */
+  const onHover = (h: Hovered | null) => {
+    window.clearTimeout(hoverTimer.current);
+    if (!h) setHovered(null);
+    else if (previewOn)
+      hoverTimer.current = window.setTimeout(() => setHovered(h), PREVIEW_DELAY_MS);
+  };
+  useEffect(() => () => window.clearTimeout(hoverTimer.current), []);
   const [query, setQuery] = useState("");
   const [homeQuery, setHomeQuery] = useState("");
   const [split, setSplit] = useState(loadSplit);
@@ -260,7 +334,7 @@ export default function CatalogPanel() {
                   })}
           </div>
         </div>
-        <div className="catalog-list">
+        <div className="catalog-list" onScroll={() => onHover(null)}>
           {results ? (
             <ul>
               {results.slice(0, MAX_RESULTS).map((i) => (
@@ -268,6 +342,8 @@ export default function CatalogPanel() {
                   key={`${i.library}:${i.id ?? i.name}:${i.icon}`}
                   item={i}
                   libraryName={libraryNames.get(i.library) ?? ""}
+                  preview={previewOn}
+                  onHover={onHover}
                 />
               ))}
               {results.length > MAX_RESULTS && (
@@ -293,6 +369,8 @@ export default function CatalogPanel() {
                         key={`${i.library}:${i.id ?? i.name}:${i.icon}`}
                         item={i}
                         libraryName={libraryNames.get(i.library) ?? ""}
+                        preview={previewOn}
+                        onHover={onHover}
                       />
                     ))}
                   </ul>
@@ -308,6 +386,12 @@ export default function CatalogPanel() {
         onDrag={dragSplit}
         onReset={() => setSplit(SPLIT_DEFAULT)}
       />
+      {hovered && previewOn && (
+        <ItemPreview
+          hovered={hovered}
+          left={(panelRef.current?.getBoundingClientRect().right ?? 280) + 8}
+        />
+      )}
       <section className="home-furniture" style={{ flex: `${1 - split} 1 0` }}>
         <div className="home-furniture-header">
           <h2>

@@ -21,6 +21,8 @@ export type Preferences = {
   /** Colors of the marks of the left and right wall sides */
   leftSideColor: string;
   rightSideColor: string;
+  /** Larger preview of catalog items while the mouse points at them */
+  catalogPreview: boolean;
   /** Unit of lengths shown and typed (internally always cm) */
   unit: LengthUnit;
   // New elements
@@ -59,6 +61,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   roomRendering: "floor",
   leftSideColor: "#e8913a",
   rightSideColor: "#2bb3a3",
+  catalogPreview: true,
   unit: "cm",
   newWallThickness: 10,
   newWallHeight: 250,

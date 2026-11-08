@@ -342,6 +342,12 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                   options={LANGUAGES.map((l) => [l.id, l.id === "system" ? t(l.label) : l.label])}
                   onChange={setLanguage}
                 />
+                <Check
+                  label={t("Catalog preview")}
+                  hint={t("Larger picture and details while pointing at furniture or textures")}
+                  checked={p.catalogPreview}
+                  onChange={(catalogPreview) => set({ catalogPreview })}
+                />
                 <Choice
                   label={t("Autosave")}
                   value={p.autosaveMinutes}
