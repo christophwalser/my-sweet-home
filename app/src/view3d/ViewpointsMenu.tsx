@@ -8,9 +8,11 @@ import type { CameraPose } from "./camera";
 type Props = {
   /** Camera of the 3D view right now */
   currentPose: () => { mode: ViewMode; pose: CameraPose };
+  /** Opens the settings of the 3D view */
+  onSettings: () => void;
 };
 
-export default function ViewpointsMenu({ currentPose }: Props) {
+export default function ViewpointsMenu({ currentPose, onSettings }: Props) {
   const opened = useStore((s) => s.opened);
   const run = useStore((s) => s.run);
   const [open, setOpen] = useState(false);
@@ -65,6 +67,14 @@ export default function ViewpointsMenu({ currentPose }: Props) {
           All levels
         </label>
       )}
+      <button
+        type="button"
+        className="view3d-button"
+        onClick={onSettings}
+        title="Ground, sky, light, walls transparency, location of the home and the sun"
+      >
+        3D settings…
+      </button>
       {open && (
         <div className="viewpoints-menu">
           <form

@@ -365,6 +365,8 @@ fn group_about(group: &str) -> &'static str {
         "camera" => "Cameras of the 3D view and the camera path of the video",
         "viewpoint" => "Stored points of view of the 3D view",
         "view3d" => "Settings of the 3D view",
+        "location" => "Geographic location of the home (address search, latitude, longitude)",
+        "sun" => "Date, time and position of the sun",
         "background" => "Background image of the plan (per level)",
         "video" => "Video settings and rendering along the camera path",
         _ => "Commands",

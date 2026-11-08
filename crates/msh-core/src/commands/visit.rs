@@ -1,4 +1,4 @@
-//! Cameras of the 3D view, points of view and 3D view settings.
+//! Cameras of the 3D view and points of view.
 //!
 //! A home has a camera for the aerial view (`topCamera`) and one for the virtual
 //! visitor (`observerCamera`); `home.camera` says which one the 3D view uses. Stored
@@ -7,7 +7,7 @@
 
 use super::rad;
 use crate::registry::{CommandError, Registry};
-use msh_model::{Camera, CameraAttrs, Environment, Home};
+use msh_model::{Camera, CameraAttrs, Home};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -22,7 +22,7 @@ const MAX_STORED: usize = 50;
 
 #[derive(Deserialize, JsonSchema, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-enum Mode {
+pub(super) enum Mode {
     /// Virtual visit (observer camera)
     Observer,
     /// Aerial view (top camera)
@@ -82,12 +82,6 @@ struct NameParams {
 
 #[derive(Deserialize, JsonSchema)]
 struct NoParams {}
-
-#[derive(Deserialize, JsonSchema)]
-struct View3dParams {
-    /// Show all levels in the 3D view (otherwise the selected level and the ones below)
-    all_levels_visible: Option<bool>,
-}
 
 pub(super) fn register(r: &mut Registry) {
     r.add_view(
@@ -214,22 +208,6 @@ pub(super) fn register(r: &mut Registry) {
             Ok(json!({ "points_of_view": stored_json(home) }))
         },
     );
-    r.add(
-        "view3d_update",
-        "Changes the settings of the 3D view stored in the home: all_levels_visible shows all \
-         levels instead of the selected level and the ones below.",
-        true,
-        |doc, p: View3dParams| {
-            let env = doc
-                .home_mut()
-                .environment
-                .get_or_insert_with(Environment::default);
-            if let Some(v) = p.all_levels_visible {
-                env.attrs.all_levels_visible = Some(v);
-            }
-            Ok(json!({ "all_levels_visible": env.attrs.all_levels_visible.unwrap_or(false) }))
-        },
-    );
 }
 
 fn active_mode(home: &Home) -> &'static str {
@@ -249,7 +227,7 @@ fn mode_of(name: &str) -> Mode {
 }
 
 /// The camera of a mode, created with Sweet Home 3D's defaults if the home has none.
-fn camera_mut(home: &mut Home, mode: Mode) -> &mut Camera {
+pub(super) fn camera_mut(home: &mut Home, mode: Mode) -> &mut Camera {
     let role = mode.role();
     let index = match home.cameras.iter().position(|c| c.attrs.role == role) {
         Some(i) => i,

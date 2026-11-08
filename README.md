@@ -86,6 +86,9 @@ bar at the bottom of the plan explains the next step.
   faster, mouse wheel to zoom. Walls stop the visitor, doors can be walked through; the
   visitor is shown in the plan, where it can be selected, dragged and turned. "Points of view" stores views and goes back to them; "All
   levels" shows every level in 3D.
+- "3D settings…": ground and sky color or texture, light brightness, walls transparency, the
+  location of the home (address search with OpenStreetMap) and the date and time of the sun
+  (or the current time); the sun position is computed offline and lights the 3D view.
 - Furniture in the plan is drawn as seen from above, rendered from its 3D model with its
   colors and materials (Preferences: off shows the catalog icons); exports and prints use
   the view from above too, or the icons ("Furniture in plans" in the export dialog).

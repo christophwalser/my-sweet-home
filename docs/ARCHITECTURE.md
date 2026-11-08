@@ -637,6 +637,26 @@ furniture is read by its home reader.
 - `view3d_update all_levels_visible` and the "All levels" switch in the 3D view.
 - `camera_get` returns both cameras and the active one. Verified with Sweet Home 3D's reader.
 
+### 4.26 Status after P9b (2026-11-08)
+
+- 3D view settings (non-modal "3D settings…" panel, `view3d_update`): ground and sky color or
+  catalog texture, light brightness (stored as Sweet Home 3D's gray `lightColor`, 100 % =
+  0xD0) and walls transparency (`wallsAlpha`), besides "all levels".
+- Location: `location_search` asks OpenStreetMap Nominatim (msh-core uses `ureq`, one request
+  per search, identified by the application name); `location_set` stores latitude,
+  longitude and the IANA time zone in the compass. The time zone cannot be derived offline
+  from a position: the home's (else this computer's) is kept and can be chosen in the panel.
+- Sun: `sun_update` stores the date and time (in the home's time zone, `chrono-tz`) as the
+  `time` of both cameras like Sweet Home 3D; without one the sun stands at summer noon.
+  "Follow the current time" is the home property `mySweetHome.sunFollowsClock`.
+  `sun_get` computes azimuth, elevation and the direction in the plan offline (Astronomical
+  Almanac formulas; within 0.1° of Sweet Home 3D's `Compass.getSunAzimuth/Elevation`).
+- The 3D view places the sun light (and its shadows) from `sun_get`, updates it every minute
+  when it follows the clock, dims the sun near the horizon (warmer color) and turns it off at
+  night, when the ambient light is lowered. Photos and videos use the same sun.
+- Verified with Sweet Home 3D's reader: compass time zone and position, camera time, colors,
+  light, walls alpha and the property.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

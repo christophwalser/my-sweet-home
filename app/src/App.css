@@ -1484,3 +1484,80 @@ body.resizing-horizontal {
 .photo-progress {
   width: 100%;
 }
+
+/* 3D view settings: beside the 3D view, not modal */
+.settings3d-panel {
+  position: fixed;
+  top: 84px;
+  right: 16px;
+  z-index: 20;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+  font-size: 13px;
+}
+
+.settings3d-group {
+  margin: 8px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.settings3d-group legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.settings3d-group input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings3d-search {
+  display: flex;
+  gap: 4px;
+}
+
+.settings3d-search input {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings3d-results {
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.settings3d-results button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 3px 4px;
+  font-size: 12px;
+}
+
+.settings3d-results button:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.settings3d-buttons {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.settings3d-error {
+  color: #e57373;
+  font-size: 12px;
+}

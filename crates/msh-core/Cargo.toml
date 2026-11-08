@@ -19,6 +19,12 @@ thiserror.workspace = true
 uuid.workspace = true
 base64.workspace = true
 gltf = { version = "1.4.1", default-features = false, features = ["utils", "names"] }
+# Sun position: local date and time in the time zone of the compass
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+chrono-tz = "0.10"
+iana-time-zone = "0.1"
+# Address search (OpenStreetMap Nominatim) for the location of the home
+ureq = "2.12"
 
 [dev-dependencies]
 serde_json.workspace = true

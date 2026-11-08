@@ -21,6 +21,7 @@ mod import;
 mod level;
 mod library;
 mod room;
+mod sun;
 mod text;
 mod view;
 mod visit;
@@ -47,6 +48,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     flip::register(r);
     view::register(r);
     visit::register(r);
+    sun::register(r);
     export::register(r);
     camera::register(r);
     background::register(r);

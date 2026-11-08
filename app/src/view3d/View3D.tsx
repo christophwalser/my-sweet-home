@@ -11,7 +11,7 @@ import {
   RENDER_PHOTO_EVENT,
   RENDER_VIDEO_EVENT,
 } from "../api";
-import { forEachPiece } from "../model";
+import { forEachPiece, type Home } from "../model";
 import { poseParams, useStore, type ViewMode } from "../store";
 import { buildAnnotations } from "./annotations";
 import {
@@ -31,6 +31,7 @@ import { buildObj } from "./objExport";
 import PhotoDialog from "./PhotoDialog";
 import { type PhotoJob, type PhotoQuality, type PhotoSource, renderPhoto } from "./photo";
 import VideoDialog from "./VideoDialog";
+import View3DSettings from "./View3DSettings";
 import ViewpointsMenu from "./ViewpointsMenu";
 import {
   type CameraPathInfo,
@@ -48,8 +49,40 @@ import { buildColliders, EYE_HEIGHT, levelOfEye, VisitorControls } from "./visit
  * the pole of OrbitControls, where the yaw is lost and tilting feels stuck.
  */
 const MAX_AERIAL_PITCH = Math.PI / 2 - 0.05;
-/** Direction from the scene towards the sun (fixed for now; no compass-based sun yet). */
-const SUN_DIRECTION = new THREE.Vector3(-1000, 2500, 1500).normalize();
+/** Direction towards the sun until its position is known (`sun_get`). */
+const DEFAULT_SUN_DIRECTION = new THREE.Vector3(-1000, 2500, 1500).normalize();
+/** Light color of Sweet Home 3D's default homes: 100 % brightness. */
+const DEFAULT_LIGHT_GRAY = 0xd0;
+/** Intensity of the sun and of the ambient light at 100 % brightness. */
+const SUN_INTENSITY = 1.4;
+const AMBIENT_INTENSITY = 1.6;
+
+/** Sun of the home as returned by `sun_get`. */
+export type SunInfo = {
+  latitude: number;
+  longitude: number;
+  location_set: boolean;
+  time_zone: string;
+  follow_clock: boolean;
+  date: string;
+  time: string;
+  azimuth: number;
+  elevation: number;
+  /** Towards the sun in plan coordinates (x right, y down, z up) */
+  direction: [number, number, number];
+};
+
+/** Brightness factor of the home's light color (1 at Sweet Home 3D's default). */
+function brightness(home: Home): number {
+  const c = home.environment?.attrs.light_color;
+  return c == null ? 1 : ((c >> 8) & 0xff) / DEFAULT_LIGHT_GRAY;
+}
+
+/** How much of the sun reaches the ground: 0 below the horizon, 1 from 10° up. */
+function daylight(elevation: number): number {
+  const t = THREE.MathUtils.clamp((elevation + 1) / 11, 0, 1);
+  return t * t * (3 - 2 * t);
+}
 
 export default function View3D() {
   const opened = useStore((s) => s.opened);
@@ -58,6 +91,7 @@ export default function View3D() {
   const [shadows, setShadows] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const ctx = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -90,8 +124,8 @@ export default function View3D() {
     const visitor = new VisitorControls(camera, renderer.domElement);
     const content = new THREE.Group();
     const lamps = new THREE.Group();
-    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
-    sun.position.copy(SUN_DIRECTION).multiplyScalar(3000);
+    const sun = new THREE.DirectionalLight(0xffffff, SUN_INTENSITY);
+    sun.position.copy(DEFAULT_SUN_DIRECTION).multiplyScalar(3000);
     sun.shadow.mapSize.set(4096, 4096);
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 1;
@@ -189,7 +223,8 @@ export default function View3D() {
     const levels = levelInfos(home);
     const shown = visibleLevels(home, levelId);
 
-    const ambient = new THREE.HemisphereLight(0xffffff, lightColor(home), 1.6);
+    const ambient = new THREE.HemisphereLight(0xffffff, lightColor(home), AMBIENT_INTENSITY);
+    ambient.name = "ambient";
     c.content.add(ambient);
 
     c.sky = buildSky(opened, c.requestRender);
@@ -225,12 +260,63 @@ export default function View3D() {
     c.requestRender();
   }, [opened, levelId]);
 
+  // Position of the sun from the location, date and time of the home (computed by the
+  // core); it follows the clock if the home says so
+  const [sun, setSun] = useState<SunInfo | null>(null);
+  useEffect(() => {
+    if (!opened) {
+      setSun(null);
+      return;
+    }
+    let alive = true;
+    const load = () => {
+      api
+        .execute("sun_get", {})
+        .then((s) => {
+          if (alive) setSun(s as SunInfo);
+        })
+        .catch(() => {});
+    };
+    load();
+    const timer = window.setInterval(() => {
+      if (sunRef.current?.follow_clock) load();
+    }, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [opened]);
+  const sunRef = useRef<SunInfo | null>(null);
+  sunRef.current = sun;
+
+  // Light of the sun and the sky: direction, daylight and the brightness of the home
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new level rebuilds the scene and its ambient light
+  useEffect(() => {
+    const c = ctx.current;
+    if (!c || !opened) return;
+    const light = brightness(opened.home);
+    const day = sun ? daylight(sun.elevation) : 1;
+    c.sun.intensity = SUN_INTENSITY * light * day;
+    // Warmer light when the sun is low
+    const warm = sun ? THREE.MathUtils.clamp(1 - (sun.elevation - 2) / 20, 0, 1) : 0;
+    c.sun.color.setRGB(1, 1 - 0.22 * warm, 1 - 0.45 * warm);
+    const ambient = c.content.getObjectByName("ambient") as THREE.HemisphereLight | undefined;
+    // At night the interior stays visible, only darker
+    if (ambient) ambient.intensity = AMBIENT_INTENSITY * light * (0.45 + 0.55 * day);
+    c.requestRender();
+  }, [sun, opened, levelId]);
+
   // Sun shadows (optional, they cost a second render pass)
   useEffect(() => {
     const c = ctx.current;
     if (!c || !opened || levelId === undefined) return;
-    c.renderer.shadowMap.enabled = shadows;
-    c.sun.castShadow = shadows;
+    const sunDirection = sun
+      ? new THREE.Vector3(sun.direction[0], sun.direction[2], sun.direction[1]).normalize()
+      : DEFAULT_SUN_DIRECTION;
+    // Below the horizon there are no shadows (and the light is off)
+    const castShadow = shadows && (!sun || sun.elevation > 0);
+    c.renderer.shadowMap.enabled = castShadow;
+    c.sun.castShadow = castShadow;
     // Fit the shadow camera around the walls of the shown levels
     const walls = c.content.getObjectByName("walls");
     const box = walls ? new THREE.Box3().setFromObject(walls) : new THREE.Box3();
@@ -240,7 +326,7 @@ export default function View3D() {
     const center = box.getCenter(new THREE.Vector3());
     const radius = Math.max(500, box.getSize(new THREE.Vector3()).length() / 2 + 200);
     c.sun.target.position.copy(center);
-    c.sun.position.copy(center).addScaledVector(SUN_DIRECTION, radius * 2);
+    c.sun.position.copy(center).addScaledVector(sunDirection, radius * 2);
     const cam = c.sun.shadow.camera;
     cam.left = -radius;
     cam.right = radius;
@@ -255,7 +341,7 @@ export default function View3D() {
       for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) m.needsUpdate = true;
     });
     c.requestRender();
-  }, [shadows, opened, levelId]);
+  }, [shadows, opened, levelId, sun]);
 
   // Lamps light the virtual visit; only the ones nearest to the visitor are used
   useEffect(() => {
@@ -656,6 +742,7 @@ export default function View3D() {
       )}
       {opened && (
         <ViewpointsMenu
+          onSettings={() => setSettingsOpen(!settingsOpen)}
           currentPose={() => {
             const c = ctx.current;
             if (!c) throw new Error("3D view not available");
@@ -696,6 +783,9 @@ export default function View3D() {
         >
           Video…
         </button>
+      )}
+      {settingsOpen && opened && (
+        <View3DSettings sun={sun} onClose={() => setSettingsOpen(false)} />
       )}
       {videoOpen && opened && (
         <VideoDialog
