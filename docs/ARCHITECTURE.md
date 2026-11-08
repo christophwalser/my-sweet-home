@@ -506,7 +506,7 @@ furniture is read by its home reader.
   1. image (PNG, JPEG, BMP, GIF) or a PDF page, rendered with `pdfjs-dist` 5.5.207 at up to
      300 dpi and 4000 px (white paper behind transparent content) and imported as PNG;
   2. scale: the marker ends are dragged onto two points of known distance (Shift: horizontal or
-     vertical), with a magnifier (4x) while dragging; the length is typed in cm, the resulting
+     vertical) or the marker as a whole, with a magnifier (4x) while dragging an end; the length is typed in cm, the resulting
      cm per pixel and the real size of the image are shown;
   3. origin: click or drag the point that becomes (0, 0), or type it in cm.
   Zoom with the wheel, move by dragging, double-click to fit; zoom and position are kept
@@ -514,8 +514,9 @@ furniture is read by its home reader.
 - Checked with a 1:100 PDF exported by `export_plan`: 0.848 cm per pixel at 300 dpi (exact:
   0.8467), the A4 sheet comes out as 29.7 x 21 m, and a dimension of 873 cm from the origin
   ends on the image's corner within about 1 cm.
-- Not yet: rotating the image, the background image in the 3D view
-  (`backgroundImageVisibleOnGround3D`), in exports and in the printed plan.
+- The 3D view never shows the background image (also not for files with
+  `backgroundImageVisibleOnGround3D`); not yet: rotating the image, the image in exports and in
+  the printed plan.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

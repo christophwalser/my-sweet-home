@@ -113,6 +113,8 @@ function ImageStage({
   const drag = useRef<
     | { kind: "pan"; last: [number, number] }
     | { kind: "end"; index: 0 | 1 }
+    /** The whole marker, grabbed at `start` (image pixels) */
+    | { kind: "line"; start: Pt; from: [Pt, Pt] }
     | { kind: "origin" }
     | null
   >(null);
@@ -279,16 +281,34 @@ function ImageStage({
     Math.min(Math.max(p[1], 0), img.naturalHeight),
   ];
 
+  /** What the pointer is over in the scale step: an end of the marker, the marker, or nothing. */
+  const markerPart = (p: Pt): 0 | 1 | "line" | null => {
+    const tol = ((HANDLE_PX + 4) * devicePixelRatio) / view.current.scale;
+    const index = marker.findIndex((m) => Math.hypot(m[0] - p[0], m[1] - p[1]) <= tol);
+    if (index === 0 || index === 1) return index;
+    const [a, b] = marker;
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len2 = dx * dx + dy * dy;
+    const t =
+      len2 > 0 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) : 0;
+    const d = Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+    return d <= tol ? "line" : null;
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
     (e.target as Element).setPointerCapture(e.pointerId);
     const p = toImage(e);
     if (e.button === 0 && mode === "scale") {
-      const tol = ((HANDLE_PX + 4) * devicePixelRatio) / view.current.scale;
-      const index = marker.findIndex((m) => Math.hypot(m[0] - p[0], m[1] - p[1]) <= tol);
-      if (index === 0 || index === 1) {
-        drag.current = { kind: "end", index };
-        loupe.current = marker[index];
+      const part = markerPart(p);
+      if (part === 0 || part === 1) {
+        drag.current = { kind: "end", index: part };
+        loupe.current = marker[part];
         draw();
+        return;
+      }
+      if (part === "line") {
+        drag.current = { kind: "line", start: p, from: marker };
         return;
       }
     }
@@ -304,13 +324,35 @@ function ImageStage({
 
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
-    if (!d) return;
+    if (!d) {
+      // Cursor shows what a drag would do
+      const canvas = canvasRef.current;
+      if (canvas && mode === "scale") {
+        const part = markerPart(toImage(e));
+        canvas.style.cursor = part === "line" ? "move" : part !== null ? "crosshair" : "";
+      }
+      return;
+    }
     if (d.kind === "pan") {
       const dpr = devicePixelRatio;
       view.current.x += (e.clientX - d.last[0]) * dpr;
       view.current.y += (e.clientY - d.last[1]) * dpr;
       d.last = [e.clientX, e.clientY];
       draw();
+      return;
+    }
+    if (d.kind === "line") {
+      // Move both ends; the marker stays on the image
+      const p = toImage(e);
+      const [a, b] = d.from;
+      let dx = p[0] - d.start[0];
+      let dy = p[1] - d.start[1];
+      dx = Math.min(Math.max(dx, -Math.min(a[0], b[0])), img.naturalWidth - Math.max(a[0], b[0]));
+      dy = Math.min(Math.max(dy, -Math.min(a[1], b[1])), img.naturalHeight - Math.max(a[1], b[1]));
+      onMarker([
+        [a[0] + dx, a[1] + dy],
+        [b[0] + dx, b[1] + dy],
+      ]);
       return;
     }
     let p = clamp(toImage(e));
@@ -591,8 +633,9 @@ export default function BackgroundImageWizard({
           <div className="bg-step-body">
             <p className="muted small">
               Drag the ends of the orange marker onto two points whose distance you know, e.g. the
-              ends of a dimension line, and type that distance. Zoom with the mouse wheel, move the
-              image by dragging, double-click to fit. Shift keeps the marker horizontal or vertical.
+              ends of a dimension line, and type that distance. Drag the marker itself to move it as
+              a whole. Zoom with the mouse wheel, move the image by dragging, double-click to fit.
+              Shift keeps the marker horizontal or vertical.
             </p>
             <ImageStage
               img={source.img}
