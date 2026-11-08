@@ -75,6 +75,10 @@ export async function importDroppedFiles(files: File[]): Promise<string> {
       textures.push(p);
     }
   }
+  if (textures.length === 1 && done.length === 0) {
+    useUi.getState().openDialog("importTexture", textures[0]);
+    return "";
+  }
   for (const p of textures) {
     await api.execute("texture_import", { path: p });
     done.push(fileName(p));

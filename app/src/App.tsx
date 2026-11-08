@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { api, docResourceUrl, TOP_VIEWS_EVENT } from "./api";
 import CatalogPanel from "./catalog/CatalogPanel";
 import ImportFurnitureDialog from "./catalog/ImportFurnitureDialog";
+import ImportTextureDialog from "./catalog/ImportTextureDialog";
 import LibraryDialog from "./catalog/LibraryDialog";
 import ErrorBoundary from "./ErrorBoundary";
 import ExportDialog from "./export/ExportDialog";
@@ -301,6 +302,9 @@ export default function App() {
       )}
       {dialog === "importFurniture" && (
         <ImportFurnitureDialog initialPath={dialogArg ?? undefined} onClose={closeDialog} />
+      )}
+      {dialog === "importTexture" && (
+        <ImportTextureDialog initialPath={dialogArg ?? undefined} onClose={closeDialog} />
       )}
       {dialog === "libraries" && <LibraryDialog onClose={closeDialog} />}
       {(dialog === "backgroundImport" || dialog === "backgroundModify") && opened && (

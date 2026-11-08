@@ -1142,7 +1142,7 @@ input[type="search"]:focus {
 
 .catalog-tools {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .texture-import {
@@ -2150,4 +2150,27 @@ body.moving-dialog * {
   border: 0;
   background: transparent;
   padding: 0 4px;
+}
+
+/* Texture import */
+.import-texture-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.texture-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 220px;
+  height: 220px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.texture-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }

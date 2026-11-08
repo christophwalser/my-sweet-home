@@ -9,6 +9,7 @@ export type DialogName =
   | "preferences"
   | "export"
   | "importFurniture"
+  | "importTexture"
   | "libraries"
   | "backgroundImport"
   | "backgroundModify"

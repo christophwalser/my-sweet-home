@@ -213,14 +213,25 @@ export default function CatalogPanel() {
             aria-label={t("Search catalog")}
           />
           <div className="catalog-tools">
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => openDialog("importFurniture")}
-              title={t("Import a 3D model (OBJ, DAE, 3DS, glTF, GLB) as piece of furniture")}
-            >
-              {t("Import furniture…")}
-            </button>
+            {kind === "furniture" ? (
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => openDialog("importFurniture")}
+                title={t("Import a 3D model as piece of furniture (OBJ, DAE, 3DS, glTF, FBX, ...)")}
+              >
+                {t("Import furniture…")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => openDialog("importTexture")}
+                title={t("Import an image or a PBR material package as texture into the catalog")}
+              >
+                {t("Import textures…")}
+              </button>
+            )}
             <button
               type="button"
               className="link-button"

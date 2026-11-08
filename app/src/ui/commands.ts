@@ -634,6 +634,14 @@ const LIST: Command[] = [
     run: () => useUi.getState().openDialog("importFurniture"),
   },
   {
+    id: "furniture.importTexture",
+    label: t("Import textures…"),
+    icon: "texture",
+    hint: t("Import an image or a PBR material package as texture into the catalog"),
+    keywords: "image webp tiff svg pbr material",
+    run: () => useUi.getState().openDialog("importTexture"),
+  },
+  {
     id: "furniture.libraries",
     label: t("Furniture and texture libraries…"),
     icon: "library",
@@ -902,7 +910,11 @@ export const MENUS: Menu[] = [
         kind: "submenu",
         label: t("Import"),
         icon: "import",
-        entries: () => [cmd("furniture.import"), cmd("plan.backgroundImport")],
+        entries: () => [
+          cmd("furniture.import"),
+          cmd("furniture.importTexture"),
+          cmd("plan.backgroundImport"),
+        ],
       },
       cmd("file.print"),
       sep,
@@ -994,6 +1006,7 @@ export const MENUS: Menu[] = [
     label: t("Furniture"),
     entries: () => [
       cmd("furniture.import"),
+      cmd("furniture.importTexture"),
       cmd("furniture.libraries"),
       sep,
       cmd("furniture.group"),
