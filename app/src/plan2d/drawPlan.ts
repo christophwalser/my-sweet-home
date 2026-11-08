@@ -51,6 +51,8 @@ export type PlanInput = {
   wallShapes: WallShape[];
   levelId: string | null;
   icons: Map<string, HTMLImageElement>;
+  /** View of a piece from above (rendered from its model), or null to draw its icon */
+  topView?: (p: Piece) => CanvasImageSource | null;
 };
 
 /** Bounding box of all walls, rooms and furniture on a level. */
@@ -270,7 +272,7 @@ export function drawPlan(
   // Sort by elevation like Sweet Home 3D: higher pieces are drawn on top
   pieces.sort((a, b) => (a.attrs.elevation ?? 0) - (b.attrs.elevation ?? 0));
   for (const p of pieces) {
-    if (p.kind !== "DoorOrWindow") drawPiece(ctx, p, input.icons, colors, px);
+    if (p.kind !== "DoorOrWindow") drawPiece(ctx, p, input, colors, px);
   }
 
   // Walls, drawn as one area like Sweet Home 3D: first all outlines with double
@@ -322,7 +324,7 @@ export function drawPlan(
 
   // Doors and windows on top of walls
   for (const p of pieces) {
-    if (p.kind === "DoorOrWindow") drawDoorOrWindow(ctx, p, input.icons, colors, px);
+    if (p.kind === "DoorOrWindow") drawDoorOrWindow(ctx, p, input, colors, px);
   }
 
   // Room names and areas
@@ -431,7 +433,7 @@ function pieceTransform(ctx: CanvasRenderingContext2D, p: Piece): void {
 function drawPiece(
   ctx: CanvasRenderingContext2D,
   p: Piece,
-  icons: Map<string, HTMLImageElement>,
+  input: PlanInput,
   colors: PlanColors,
   px: number,
 ): void {
@@ -441,8 +443,12 @@ function drawPiece(
   ctx.save();
   pieceTransform(ctx, p);
   const iconKey = p.attrs.plan_icon ?? p.attrs.icon;
-  const img = iconKey ? icons.get(iconKey) : undefined;
-  if (img?.complete && img.naturalWidth > 0) {
+  const img = iconKey ? input.icons.get(iconKey) : undefined;
+  const top = input.topView?.(p) ?? null;
+  if (top) {
+    // Rendered with the model's mirroring already applied; fills the footprint exactly
+    ctx.drawImage(top, -w / 2, -d / 2, w, d);
+  } else if (img?.complete && img.naturalWidth > 0) {
     // Keep the icon's aspect ratio inside the piece rectangle
     const ratio = img.naturalWidth / img.naturalHeight;
     let iw = w;
@@ -467,17 +473,20 @@ function drawPiece(
 function drawDoorOrWindow(
   ctx: CanvasRenderingContext2D,
   p: Piece,
-  icons: Map<string, HTMLImageElement>,
+  input: PlanInput,
   colors: PlanColors,
   px: number,
 ): void {
   const { width: w, depth: d } = p.attrs;
+  const icons = input.icons;
   ctx.save();
   pieceTransform(ctx, p);
-  if (p.attrs.model_mirrored) ctx.scale(-1, 1);
-  // Opening in the wall
+  // Opening in the wall, with the frame seen from above
   ctx.fillStyle = colors.background;
   ctx.fillRect(-w / 2, -d / 2, w, d);
+  const top = input.topView?.(p) ?? null;
+  if (top) ctx.drawImage(top, -w / 2, -d / 2, w, d);
+  if (p.attrs.model_mirrored) ctx.scale(-1, 1);
   ctx.lineWidth = px;
   ctx.strokeStyle = colors.furnitureStroke;
   ctx.strokeRect(-w / 2, -d / 2, w, d);
@@ -495,7 +504,7 @@ function drawDoorOrWindow(
     ctx.arc(ax, ay, r, end, start, end > start);
     ctx.stroke();
   }
-  if (!p.sashes?.length) {
+  if (!p.sashes?.length && !top) {
     const img = p.attrs.icon ? icons.get(p.attrs.icon) : undefined;
     if (img?.complete && img.naturalWidth > 0) ctx.drawImage(img, -w / 2, -d / 2, w, d);
   }

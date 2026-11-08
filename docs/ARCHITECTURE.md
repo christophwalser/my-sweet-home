@@ -518,6 +518,23 @@ furniture is read by its home reader.
   `backgroundImageVisibleOnGround3D`); not yet: rotating the image, the image in exports and in
   the printed plan.
 
+### 4.21 Status after P7c (2026-11-08)
+
+- Furniture seen from above in the plan (`plan2d/topView.ts`), like Sweet Home 3D's preference
+  "furniture icon in plan: top view": the piece's model, normalized and colored exactly as in
+  the 3D view (`createPieceObject`: model rotation, size, mirroring, pitch/roll, color,
+  materials and their textures), rendered with an orthographic camera looking down onto its
+  footprint (`widthInPlan` x `depthInPlan`), 384 px on the long side, ambient light plus a
+  light from above, transparent background. One shared offscreen WebGL renderer works through
+  a queue; results are cached as canvases per home and appearance (model, rotation,
+  mirroring, color, materials, size, tilt), so an edit renders only the changed piece. The
+  plan draws the catalog icon until a view is ready and redraws once per frame as views
+  arrive. Models come from the 3D view's model cache; their geometry is not disposed.
+- Doors and windows: the frame seen from above is drawn in the opening, the sash arcs on top.
+- Preference "Furniture seen from above" (default on); off draws the catalog icons as before.
+- Not yet: top views in the plan export (SVG / PNG / PDF) and in the printed plan; they keep
+  the icons.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

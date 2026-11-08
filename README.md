@@ -69,6 +69,8 @@ bar at the bottom of the plan explains the next step.
   home, as in Sweet Home 3D.
 - Plan: rulers along the edges, "Measure" tool for distances, "Lock base plan" (only movable
   furniture stays selectable), "Preferences…" to switch rulers, grid and magnetism.
+- Furniture in the plan is drawn as seen from above, rendered from its 3D model with its
+  colors and materials (Preferences: off shows the catalog icons).
 - Background image per level: import an image or a page of a PDF (e.g. the architect's plan),
   set its scale with a marker on a known distance and its origin, then draw walls and rooms
   on top of it (level properties: Import…, Modify…, Hide, Delete).

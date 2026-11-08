@@ -11,6 +11,11 @@ const OPTIONS: { key: keyof Preferences; label: string; hint: string }[] = [
   },
   { key: "grid", label: "Grid", hint: "Grid lines in the plan" },
   {
+    key: "furnitureTopView",
+    label: "Furniture seen from above",
+    hint: "Draw furniture as a view from above rendered from its 3D model; off: the catalog icon",
+  },
+  {
     key: "magnetism",
     label: "Magnetism",
     hint: "Snap points, angles and lengths while drawing and dragging. Holding Alt inverts it for the current action.",

@@ -41,6 +41,7 @@ import { constrainMove, type Docked, dockToWall, movePreview, selectionJoints } 
 import { type DraftKind, drawOverlay, type PlanOverlay } from "./overlay";
 import { drawRuler, type RulerColors } from "./rulers";
 import { type SnapPurpose, type Snapped, snapContext, snapDraw } from "./snapping";
+import { topView } from "./topView";
 
 const LIGHT: PlanColors = {
   background: "#ffffff",
@@ -174,6 +175,10 @@ export default function PlanView() {
   const showRulers = usePreferences((s) => s.rulers);
   const showGrid = usePreferences((s) => s.grid);
   const magnetism = usePreferences((s) => s.magnetism);
+  const furnitureTopView = usePreferences((s) => s.furnitureTopView);
+  /** Redraw once per frame when top views of furniture become ready */
+  const redrawFrame = useRef(0);
+  const drawRef = useRef<() => void>(() => {});
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const topRulerRef = useRef<HTMLCanvasElement>(null);
   const leftRulerRef = useRef<HTMLCanvasElement>(null);
@@ -199,18 +204,24 @@ export default function PlanView() {
   const typed = useRef<string | null>(null);
   const hoverHandle = useRef<Handle | null>(null);
 
-  const input: PlanInput | null = useMemo(
-    () =>
-      opened
-        ? {
-            home: opened.home,
-            wallShapes: opened.wallShapes,
-            levelId: opened.home.levels.length ? levelId : null,
-            icons,
-          }
-        : null,
-    [opened, levelId, icons],
-  );
+  const input: PlanInput | null = useMemo(() => {
+    if (!opened) return null;
+    const redraw = () => {
+      if (!redrawFrame.current) {
+        redrawFrame.current = requestAnimationFrame(() => {
+          redrawFrame.current = 0;
+          drawRef.current();
+        });
+      }
+    };
+    return {
+      home: opened.home,
+      wallShapes: opened.wallShapes,
+      levelId: opened.home.levels.length ? levelId : null,
+      icons,
+      topView: furnitureTopView ? (p) => topView(p, opened.id, redraw) : undefined,
+    };
+  }, [opened, levelId, icons, furnitureTopView]);
   const effectiveLevel = input?.levelId ?? null;
 
   // Load furniture icons and floor textures of the home
@@ -380,6 +391,8 @@ export default function PlanView() {
     magnetism,
     drawRulers,
   ]);
+
+  drawRef.current = draw;
 
   const fit = useCallback(() => {
     const canvas = canvasRef.current;

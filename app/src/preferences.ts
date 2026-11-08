@@ -10,10 +10,17 @@ export type Preferences = {
   grid: boolean;
   /** Magnetism while drawing and dragging; Alt inverts it temporarily */
   magnetism: boolean;
+  /** Furniture in the plan seen from above (rendered from the model) instead of its icon */
+  furnitureTopView: boolean;
 };
 
 const KEY = "msh.preferences";
-export const DEFAULT_PREFERENCES: Preferences = { rulers: true, grid: true, magnetism: true };
+export const DEFAULT_PREFERENCES: Preferences = {
+  rulers: true,
+  grid: true,
+  magnetism: true,
+  furnitureTopView: true,
+};
 
 function load(): Preferences {
   try {
@@ -30,9 +37,9 @@ export const usePreferences = create<Store>((set, get) => ({
   ...load(),
   update: (changes) => {
     set(changes);
-    const { rulers, grid, magnetism } = get();
+    const { rulers, grid, magnetism, furnitureTopView } = get();
     try {
-      localStorage.setItem(KEY, JSON.stringify({ rulers, grid, magnetism }));
+      localStorage.setItem(KEY, JSON.stringify({ rulers, grid, magnetism, furnitureTopView }));
     } catch {
       // Storage unavailable: the preference applies until the app is closed
     }
