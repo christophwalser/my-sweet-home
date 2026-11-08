@@ -20,6 +20,7 @@ import {
 } from "./fields";
 import MultiPanel from "./MultiPanel";
 import OpeningDistances from "./OpeningDistances";
+import TextStyleFields from "./TextStyleFields";
 import TextureField from "./TextureField";
 
 /**
@@ -648,6 +649,21 @@ export default function PropertiesPanel() {
           value={a.visible !== false}
           onCommit={set("visible")}
         />
+        <Field
+          label="Name in plan"
+          type="checkbox"
+          value={a.name_visible === true}
+          onCommit={set("name_visible")}
+        />
+        {a.name_visible && (
+          <TextStyleFields
+            title="Name"
+            style={p.text_style}
+            defaultSize={18}
+            prefix="name_"
+            onChange={(params) => void run("furniture_update", { id, ...params })}
+          />
+        )}
         <MaterialsSection piece={p} docId={opened.id} run={run} />
         {a.catalog_id && <p className="muted small">Catalog ID: {a.catalog_id}</p>}
         {actions}
@@ -718,6 +734,17 @@ export default function PropertiesPanel() {
     );
   }
 
+  if (id === "compass") {
+    return (
+      <div className="props">
+        <CompassSection home={home} run={run} />
+        <p className="muted small">
+          Drag the compass to move it, the arrow tip to turn north, the ring to change its size.
+        </p>
+      </div>
+    );
+  }
+
   const room = home.rooms.find((r) => r.attrs.id === id);
   if (room) {
     const a = room.attrs;
@@ -734,23 +761,19 @@ export default function PropertiesPanel() {
         <h2>Room</h2>
         <p className="muted small">Area: {(Math.abs(area) / 20000).toFixed(2)} m²</p>
         <Field label="Name" type="text" value={a.name} onCommit={set("name")} />
-        <Field
-          label="Name size"
-          type="number"
-          unit="cm"
-          value={
-            room.text_styles?.find((t) => t.role === "nameStyle")?.font_size ?? DEFAULT_ROOM_FONT
-          }
-          onCommit={set("name_font_size")}
+        <TextStyleFields
+          title="Name"
+          style={room.text_styles?.find((t) => t.role === "nameStyle")}
+          defaultSize={DEFAULT_ROOM_FONT}
+          prefix="name_"
+          onChange={(params) => void run("room_update", { id, ...params })}
         />
-        <Field
-          label="Area size"
-          type="number"
-          unit="cm"
-          value={
-            room.text_styles?.find((t) => t.role === "areaStyle")?.font_size ?? DEFAULT_ROOM_FONT
-          }
-          onCommit={set("area_font_size")}
+        <TextStyleFields
+          title="Area"
+          style={room.text_styles?.find((t) => t.role === "areaStyle")}
+          defaultSize={DEFAULT_ROOM_FONT}
+          prefix="area_"
+          onChange={(params) => void run("room_update", { id, ...params })}
         />
         <Field
           label="Show area"
@@ -833,12 +856,11 @@ export default function PropertiesPanel() {
         <Field label="Text" type="text" value={label.text} onCommit={set("text")} />
         <Field label="X" type="number" unit="cm" value={label.attrs.x} onCommit={set("x")} />
         <Field label="Y" type="number" unit="cm" value={label.attrs.y} onCommit={set("y")} />
-        <Field
-          label="Font size"
-          type="number"
-          unit="cm"
-          value={label.text_style?.font_size ?? 18}
-          onCommit={set("font_size")}
+        <TextStyleFields
+          style={label.text_style}
+          defaultSize={18}
+          prefix=""
+          onChange={(params) => void run("label_update", { id, ...params })}
         />
         {actions}
       </div>
@@ -868,6 +890,12 @@ export default function PropertiesPanel() {
           onCommit={set("dash_style")}
         />
         <Field label="Closed" type="checkbox" value={a.closed_path} onCommit={set("closed")} />
+        <Field
+          label="Curved"
+          type="checkbox"
+          value={a.join_style === "CURVED"}
+          onCommit={set("curved")}
+        />
         {!a.closed_path && (
           <>
             <SelectField
@@ -896,9 +924,15 @@ export default function PropertiesPanel() {
       void run("dimension_update", { id, [field]: v });
     return (
       <div className="props">
-        <h2>Dimension</h2>
+        <h2>{a.x_start === a.x_end && a.y_start === a.y_end ? "Height dimension" : "Dimension"}</h2>
         <p className="muted small">
-          Length: {(Math.hypot(a.x_end - a.x_start, a.y_end - a.y_start) / 100).toFixed(2)} m
+          Length:{" "}
+          {(
+            (a.x_start === a.x_end && a.y_start === a.y_end
+              ? Math.abs((a.elevation_end ?? 0) - (a.elevation_start ?? 0))
+              : Math.hypot(a.x_end - a.x_start, a.y_end - a.y_start)) / 100
+          ).toFixed(2)}{" "}
+          m
         </p>
         <Field
           label="X start"
@@ -917,6 +951,12 @@ export default function PropertiesPanel() {
         <Field label="X end" type="number" unit="cm" value={a.x_end} onCommit={set("x_end")} />
         <Field label="Y end" type="number" unit="cm" value={a.y_end} onCommit={set("y_end")} />
         <Field label="Offset" type="number" unit="cm" value={a.offset} onCommit={set("offset")} />
+        <TextStyleFields
+          style={dim.text_style}
+          defaultSize={18}
+          prefix=""
+          onChange={(params) => void run("dimension_update", { id, ...params })}
+        />
         {actions}
       </div>
     );

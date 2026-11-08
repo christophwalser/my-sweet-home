@@ -49,6 +49,8 @@ export type PlanOverlay = {
   measure: [Pt, Pt] | null;
   /** Free spaces beside a door or window being slid along its wall */
   gaps: [Pt, Pt][];
+  /** Automatic dimensions of the selected wall or piece */
+  autoDims: [Pt, Pt][];
   /** Point the cursor snapped to */
   snap: Pt | null;
   accent: string;
@@ -279,6 +281,7 @@ export function drawOverlay(
 
   if (overlay.measure) drawMeasure(ctx, overlay.measure[0], overlay.measure[1], overlay.guide, px);
   for (const [a, b] of overlay.gaps) drawGap(ctx, a, b, overlay.guide, px);
+  for (const [a, b] of overlay.autoDims) drawGap(ctx, a, b, overlay.accent, px);
 
   // Rubber band
   if (overlay.rubberBand) {

@@ -587,6 +587,28 @@ furniture is read by its home reader.
 - Properties of a door or window in a wall: "Space left / right" (or top / bottom for walls
   running down the plan) to its neighbors; typing a value moves the piece along the wall.
 
+### 4.24 Status after P8c (2026-11-08)
+
+- Text styles (msh-core `commands/text.rs`): font family, bold, italic and size for labels
+  (`label_update`), dimensions (`dimension_update`), room name and area (`room_update`,
+  `name_*` / `area_*`) and furniture names (`furniture_update`, `name_visible` and `name_*`).
+  Stored as SH3D `textStyle` elements (an empty font name means the default font; bold and
+  italic are written only when set). Properties panel: shared `TextStyleFields`; furniture
+  have "Name in plan". The plan and the SVG/PDF export draw the styles.
+- Height dimensions: `dimension_add_height` creates SH3D elevation dimensions (start and end
+  at the same point, different elevations, visible in 3D). The plan shows them as a marker
+  with the measured height; the context menu adds one for a selected wall (0 to its height at
+  the start) or piece (its elevation to its top, at the front right corner).
+- Automatic dimensions: while a single wall (both faces) or piece (width at the back, depth at
+  the right) is selected, its dimensions are drawn next to it (`plan2d/autoDims.ts`); "Add
+  dimensions of the wall / piece" in the context menu turns them into dimension lines.
+  Placing a dimension also snaps to furniture corners, with guide lines and "corner of …".
+- Curved polylines: `curved` on `polyline_add` / `polyline_update` sets SH3D's `CURVED` join
+  style; plan, export and 3D draw a Catmull-Rom curve through the points (`plan2d/curve.ts`).
+- Compass in the plan: selectable (unless the base plan is locked), draggable, a handle beyond
+  the north arrow turns north (5° steps, Shift 1°), a handle on the ring changes the diameter.
+  Delete or "Hide compass" hides it (the compass is part of every SH3D home).
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

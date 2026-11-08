@@ -235,16 +235,22 @@ pub fn draw_plan(home: &Home, opts: &PlanOptions) -> PlanDrawing {
         let width = a.thickness.unwrap_or(1.0).max(thin);
         let color = a.color.map(css_color).unwrap_or_else(|| TEXT.into());
         let dash = dash_array(a.dash_style.as_deref(), width);
-        let tag = if a.closed_path == Some(true) {
-            "polygon"
+        let closed = a.closed_path == Some(true);
+        if a.join_style.as_deref() == Some("CURVED") && pts.len() > 2 {
+            // Smooth curve through the points (Catmull-Rom as cubic Bézier, like the app)
+            let _ = write!(
+                s,
+                r#"<path d="{}" fill="none" stroke="{color}" stroke-width="{width}" stroke-linejoin="round"{dash}/>"#,
+                curve_path(&pts, closed)
+            );
         } else {
-            "polyline"
-        };
-        let _ = write!(
-            s,
-            r#"<{tag} points="{}" fill="none" stroke="{color}" stroke-width="{width}" stroke-linejoin="round"{dash}/>"#,
-            points(&pts)
-        );
+            let tag = if closed { "polygon" } else { "polyline" };
+            let _ = write!(
+                s,
+                r#"<{tag} points="{}" fill="none" stroke="{color}" stroke-width="{width}" stroke-linejoin="round"{dash}/>"#,
+                points(&pts)
+            );
+        }
         if a.closed_path != Some(true) {
             let n = pts.len();
             arrow(
@@ -583,10 +589,71 @@ fn draw_door_or_window(s: &mut String, defs: &mut Defs, p: &Piece, opts: &PlanOp
     s.push_str("</g>");
 }
 
+/// SVG path of a smooth curve through `pts` (Catmull-Rom spline as cubic Bézier segments).
+fn curve_path(pts: &[[f32; 2]], closed: bool) -> String {
+    let n = pts.len() as isize;
+    let at = |i: isize| -> [f32; 2] {
+        if closed {
+            pts[i.rem_euclid(n) as usize]
+        } else {
+            pts[i.clamp(0, n - 1) as usize]
+        }
+    };
+    let mut d = format!("M{} {}", pts[0][0], pts[0][1]);
+    let count = if closed { n } else { n - 1 };
+    for i in 0..count {
+        let (p0, p1, p2, p3) = (at(i - 1), at(i), at(i + 1), at(i + 2));
+        let _ = write!(
+            d,
+            "C{} {} {} {} {} {}",
+            p1[0] + (p2[0] - p0[0]) / 6.0,
+            p1[1] + (p2[1] - p0[1]) / 6.0,
+            p2[0] - (p3[0] - p1[0]) / 6.0,
+            p2[1] - (p3[1] - p1[1]) / 6.0,
+            p2[0],
+            p2[1]
+        );
+    }
+    d
+}
+
+/// A height dimension (one point, two elevations): a marker with the measured height.
+fn draw_height_dimension(s: &mut String, dl: &msh_model::DimensionLine, thin: f32) {
+    let a = &dl.attrs;
+    let height = (a.elevation_end.unwrap_or(0.0) - a.elevation_start.unwrap_or(0.0)).abs();
+    if height < 0.05 {
+        return;
+    }
+    let color = a.color.map(css_color).unwrap_or_else(|| DIMENSION.into());
+    let r = 6.0;
+    let _ = write!(
+        s,
+        r#"<g transform="translate({} {})"><circle r="{r}" fill="none" stroke="{color}" stroke-width="{thin}"/><path d="M0 {}V{}M{} {}L0 {}L{} {}M{} {}L0 {}L{} {}" stroke="{color}" stroke-width="{thin}" fill="none"/><text x="{}" y="0" dominant-baseline="middle" fill="{color}"{}>&#8597; {}</text></g>"#,
+        a.x_start,
+        a.y_start,
+        -r * 0.65,
+        r * 0.65,
+        -r * 0.35,
+        -r * 0.3,
+        -r * 0.65,
+        r * 0.35,
+        -r * 0.3,
+        -r * 0.35,
+        r * 0.3,
+        r * 0.65,
+        r * 0.35,
+        r * 0.3,
+        r * 1.6,
+        font_attrs(dl.text_style.as_ref(), DEFAULT_DIMENSION_FONT),
+        format_length(height)
+    );
+}
+
 fn draw_dimension(s: &mut String, dl: &msh_model::DimensionLine, thin: f32) {
     let a = &dl.attrs;
     let length = (a.x_end - a.x_start).hypot(a.y_end - a.y_start);
     if length == 0.0 {
+        draw_height_dimension(s, dl, thin);
         return;
     }
     let angle = (a.y_end - a.y_start)

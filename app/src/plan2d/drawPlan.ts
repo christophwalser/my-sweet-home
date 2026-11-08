@@ -18,6 +18,7 @@ import {
   wallPolygon,
 } from "../model";
 import { baseboardOf, baseboardPolygon } from "../view3d/wallSides";
+import { curveSegments, polylinePath } from "./curve";
 import { distanceToSegment, pointInPolygon } from "./interaction";
 
 export type ViewTransform = { scale: number; offsetX: number; offsetY: number };
@@ -45,6 +46,7 @@ const ROOM_ALPHA = 0.75;
 const DEFAULT_WALL_PATTERN = "hatchUp";
 const DEFAULT_LABEL_FONT = 18;
 const DEFAULT_DIMENSION_FONT = 18;
+const DEFAULT_PIECE_FONT = 18;
 
 export type PlanInput = {
   home: Home;
@@ -246,18 +248,26 @@ export function drawPlan(
   for (const pl of home.polylines) {
     if (!sameLevel(pl.attrs.level, levelId) || pl.points.length < 2) continue;
     ctx.beginPath();
-    tracePath(
-      ctx,
-      pl.points.map((p) => [p.x, p.y]),
-    );
-    if (pl.attrs.closed_path) ctx.closePath();
+    const linePts: Pt[] = pl.points.map((p) => [p.x, p.y]);
+    const curved = pl.attrs.join_style === "CURVED" && linePts.length > 2;
+    if (curved) {
+      // Smooth curve through the points
+      ctx.moveTo(linePts[0][0], linePts[0][1]);
+      for (const [c1, c2, to] of curveSegments(linePts, !!pl.attrs.closed_path)) {
+        ctx.bezierCurveTo(c1[0], c1[1], c2[0], c2[1], to[0], to[1]);
+      }
+    } else {
+      tracePath(ctx, linePts);
+      if (pl.attrs.closed_path) ctx.closePath();
+    }
     ctx.lineWidth = Math.max(pl.attrs.thickness ?? 1, px);
     ctx.strokeStyle = cssColor(pl.attrs.color, colors.text);
     ctx.setLineDash(dashPattern(pl.attrs.dash_style, ctx.lineWidth));
     ctx.stroke();
     ctx.setLineDash([]);
     if (!pl.attrs.closed_path) {
-      const pts: Pt[] = pl.points.map((p) => [p.x, p.y]);
+      // Arrows follow the curve's direction at its ends
+      const pts = polylinePath(pl.points, pl.attrs.join_style, false);
       const n = pts.length;
       drawArrow(ctx, pl.attrs.start_arrow_style, pts[1], pts[0], ctx.lineWidth);
       drawArrow(ctx, pl.attrs.end_arrow_style, pts[n - 2], pts[n - 1], ctx.lineWidth);
@@ -325,6 +335,21 @@ export function drawPlan(
   // Doors and windows on top of walls
   for (const p of pieces) {
     if (p.kind === "DoorOrWindow") drawDoorOrWindow(ctx, p, input, colors, px);
+  }
+
+  // Names of the furniture shown in the plan
+  for (const p of pieces) {
+    if (!p.attrs.name_visible || p.attrs.visible === false) continue;
+    drawText(
+      ctx,
+      p.attrs.name,
+      p.attrs.x + (p.attrs.name_x_offset ?? 0),
+      p.attrs.y + (p.attrs.name_y_offset ?? 0),
+      p.attrs.name_angle ?? 0,
+      p.text_style ?? null,
+      DEFAULT_PIECE_FONT,
+      colors.text,
+    );
   }
 
   // Room names and areas
@@ -519,7 +544,10 @@ function drawDimension(
 ): void {
   const { x_start: xs, y_start: ys, x_end: xe, y_end: ye, offset } = dl.attrs;
   const length = Math.hypot(xe - xs, ye - ys);
-  if (length === 0) return;
+  if (length === 0) {
+    drawHeightDimension(ctx, dl, colors, px);
+    return;
+  }
   const angle = Math.atan2(ye - ys, xe - xs);
   const color = cssColor(dl.attrs.color, colors.dimension);
   ctx.save();
@@ -548,6 +576,45 @@ function drawDimension(
   // Like Sweet Home 3D, the text sits on the outer side of the dimension line
   ctx.textBaseline = offset > 0 ? "top" : "bottom";
   ctx.fillText(formatLength(length), length / 2, offset + Math.sign(offset || -1) * size * 0.15);
+  ctx.restore();
+}
+
+/**
+ * A height dimension (Sweet Home 3D's elevation dimension line: one point of the plan, two
+ * elevations): a marker at the point with the measured height beside it.
+ */
+function drawHeightDimension(
+  ctx: CanvasRenderingContext2D,
+  dl: Home["dimension_lines"][number],
+  colors: PlanColors,
+  px: number,
+): void {
+  const a = dl.attrs;
+  const height = Math.abs((a.elevation_end ?? 0) - (a.elevation_start ?? 0));
+  if (height < 0.05) return;
+  const color = cssColor(a.color, colors.dimension);
+  const r = 6 * px;
+  ctx.save();
+  ctx.translate(a.x_start, a.y_start);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = px;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  // Vertical double arrow inside the marker
+  ctx.moveTo(0, -r * 0.65);
+  ctx.lineTo(0, r * 0.65);
+  ctx.moveTo(-r * 0.35, -r * 0.3);
+  ctx.lineTo(0, -r * 0.65);
+  ctx.lineTo(r * 0.35, -r * 0.3);
+  ctx.moveTo(-r * 0.35, r * 0.3);
+  ctx.lineTo(0, r * 0.65);
+  ctx.lineTo(r * 0.35, r * 0.3);
+  ctx.stroke();
+  ctx.font = fontOf(dl.text_style, DEFAULT_DIMENSION_FONT);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`↕ ${formatLength(height)}`, r * 1.6, 0);
   ctx.restore();
 }
 

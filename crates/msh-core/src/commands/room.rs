@@ -56,6 +56,13 @@ struct UpdateParams {
     name_font_size: Option<f32>,
     /// Font size of the area in cm
     area_font_size: Option<f32>,
+    /// Font family of the name / the area ("" = default font)
+    name_font_name: Option<String>,
+    area_font_name: Option<String>,
+    name_bold: Option<bool>,
+    name_italic: Option<bool>,
+    area_bold: Option<bool>,
+    area_italic: Option<bool>,
     /// Remove the label offsets: name and area are placed automatically again
     reset_label_positions: Option<bool>,
     /// Remove only the offset of the name label
@@ -133,19 +140,27 @@ pub(super) fn register(r: &mut Registry) {
                 if let Some(v) = &p.name {
                     a.name = Some(v.clone());
                 }
-                for (role, size) in [("nameStyle", p.name_font_size), ("areaStyle", p.area_font_size)] {
-                    let Some(size) = size else { continue };
-                    if size <= 0.0 {
-                        return Err(CommandError::failed("font size must be positive"));
-                    }
-                    match room.text_styles.iter_mut().find(|t| t.role.as_deref() == Some(role)) {
-                        Some(style) => style.font_size = size,
-                        None => room.text_styles.push(msh_model::TextStyle {
-                            role: Some(role.to_owned()),
-                            font_size: size,
-                            ..Default::default()
-                        }),
-                    }
+                for (role, change) in [
+                    (
+                        "nameStyle",
+                        super::text::StyleChange {
+                            size: p.name_font_size,
+                            font: p.name_font_name.clone(),
+                            bold: p.name_bold,
+                            italic: p.name_italic,
+                        },
+                    ),
+                    (
+                        "areaStyle",
+                        super::text::StyleChange {
+                            size: p.area_font_size,
+                            font: p.area_font_name.clone(),
+                            bold: p.area_bold,
+                            italic: p.area_italic,
+                        },
+                    ),
+                ] {
+                    super::text::update_role_style(&mut room.text_styles, role, 24.0, &change)?;
                 }
                 let a = &mut room.attrs;
                 let reset_all = p.reset_label_positions == Some(true);

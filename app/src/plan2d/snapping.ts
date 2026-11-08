@@ -401,8 +401,27 @@ export function snapContext(
     }
   }
   if (purpose === "dimension") {
+    // Corners of furniture: points to measure from and guides to align with
     forEachPiece(home.furniture, (p) => {
-      if (sameLevel(p.attrs.level, levelId)) refs.push([p.attrs.x, p.attrs.y]);
+      const a = p.attrs;
+      if (!sameLevel(a.level, levelId) || a.visible === false) return;
+      refs.push([a.x, a.y]);
+      const w = (a.width_in_plan ?? a.width) / 2;
+      const d = (a.depth_in_plan ?? a.depth) / 2;
+      const c = Math.cos(a.angle ?? 0);
+      const s = Math.sin(a.angle ?? 0);
+      for (const [lx, ly] of [
+        [-w, -d],
+        [w, -d],
+        [w, d],
+        [-w, d],
+      ]) {
+        const q: Pt = [a.x + lx * c - ly * s, a.y + lx * s + ly * c];
+        if (!keep(q)) continue;
+        points.push(q);
+        refs.push(q);
+        labels.set(pointKey(q), `corner of ${a.name}`);
+      }
     });
   }
 

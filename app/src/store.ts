@@ -173,6 +173,8 @@ function allIds(opened: OpenedHome): Set<string> {
     const id = (x.attrs as { id?: string | null }).id;
     if (id) ids.add(id);
   }
+  // The compass is selectable in the plan while it is visible
+  if (h.compass && h.compass.attrs.visible !== false) ids.add("compass");
   return ids;
 }
 

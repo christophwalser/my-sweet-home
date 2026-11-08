@@ -44,6 +44,24 @@ struct DimensionUpdateParams {
     y_end: Option<f32>,
     /// Distance of the dimension line from the measured points in cm
     offset: Option<f32>,
+    /// Text style of the length: size in cm, font family ("" = default), bold, italic
+    font_size: Option<f32>,
+    font_name: Option<String>,
+    bold: Option<bool>,
+    italic: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct HeightDimensionParams {
+    /// Point in the plan where the height is measured (cm)
+    x: f32,
+    y: f32,
+    /// Lower and upper end of the measured height in cm above the level (default 0)
+    elevation_start: Option<f32>,
+    elevation_end: f32,
+    /// Distance of the dimension line from the point in cm (default 20)
+    offset: Option<f32>,
+    level: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema, Clone, Copy)]
@@ -101,6 +119,8 @@ struct PolylineParams {
     dash_style: Option<DashStyle>,
     start_arrow: Option<ArrowStyle>,
     end_arrow: Option<ArrowStyle>,
+    /// Smooth curve through the points instead of straight segments
+    curved: Option<bool>,
     level: Option<String>,
 }
 
@@ -114,6 +134,13 @@ struct PolylineUpdateParams {
     dash_style: Option<DashStyle>,
     start_arrow: Option<ArrowStyle>,
     end_arrow: Option<ArrowStyle>,
+    /// Smooth curve through the points instead of straight segments
+    curved: Option<bool>,
+}
+
+/// Join style of polylines drawn as curves (Sweet Home 3D's `CURVED`).
+fn join_style(curved: bool) -> String {
+    if curved { "CURVED" } else { "MITER" }.into()
 }
 
 /// Thickness of new polylines in cm.
@@ -139,6 +166,10 @@ struct LabelUpdateParams {
     font_size: Option<f32>,
     angle_deg: Option<f32>,
     color: Option<String>,
+    /// Font family ("" = default font), bold, italic
+    font_name: Option<String>,
+    bold: Option<bool>,
+    italic: Option<bool>,
 }
 
 pub(super) fn register(r: &mut Registry) {
@@ -159,7 +190,7 @@ pub(super) fn register(r: &mut Registry) {
                     level,
                     thickness: Some(p.thickness.unwrap_or(DEFAULT_POLYLINE_THICKNESS)),
                     cap_style: Some("BUTT".into()),
-                    join_style: Some("MITER".into()),
+                    join_style: Some(join_style(p.curved.unwrap_or(false))),
                     dash_style: Some(p.dash_style.unwrap_or(DashStyle::Solid).as_str().into()),
                     start_arrow_style: Some(
                         p.start_arrow.unwrap_or(ArrowStyle::None).as_str().into(),
@@ -180,7 +211,7 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "polyline_update",
-        "Changes points, thickness, color, dash style or arrows of a polyline.",
+        "Changes points, thickness, color, dash style, arrows or curving of a polyline.",
         true,
         |doc, p: PolylineUpdateParams| {
             let pl = doc
@@ -214,12 +245,15 @@ pub(super) fn register(r: &mut Registry) {
             if let Some(v) = p.end_arrow {
                 a.end_arrow_style = Some(v.as_str().into());
             }
+            if let Some(v) = p.curved {
+                a.join_style = Some(join_style(v));
+            }
             Ok(json!({ "id": p.id }))
         },
     );
     r.add(
         "dimension_update",
-        "Changes the measured points or the offset of a dimension line.",
+        "Changes the measured points, the offset or the text style of a dimension line.",
         true,
         |doc, p: DimensionUpdateParams| {
             let d = doc
@@ -235,12 +269,22 @@ pub(super) fn register(r: &mut Registry) {
                 ($($f:ident),*) => { $( if let Some(v) = p.$f { a.$f = v; } )* };
             }
             set!(x_start, y_start, x_end, y_end, offset);
+            super::text::update_style(
+                &mut d.text_style,
+                18.0,
+                &super::text::StyleChange {
+                    size: p.font_size,
+                    font: p.font_name.clone(),
+                    bold: p.bold,
+                    italic: p.italic,
+                },
+            )?;
             Ok(json!({ "id": p.id }))
         },
     );
     r.add(
         "label_update",
-        "Changes text, position, size, angle or color of a label.",
+        "Changes text, position, angle, color or text style (size, font, bold, italic) of a label.",
         true,
         |doc, p: LabelUpdateParams| {
             let l = doc
@@ -267,14 +311,16 @@ pub(super) fn register(r: &mut Registry) {
             if let Some(c) = &p.color {
                 l.attrs.color = Some(parse_color(c)?);
             }
-            if let Some(size) = p.font_size {
-                l.text_style
-                    .get_or_insert_with(|| TextStyle {
-                        font_size: size,
-                        ..Default::default()
-                    })
-                    .font_size = size;
-            }
+            super::text::update_style(
+                &mut l.text_style,
+                18.0,
+                &super::text::StyleChange {
+                    size: p.font_size,
+                    font: p.font_name.clone(),
+                    bold: p.bold,
+                    italic: p.italic,
+                },
+            )?;
             Ok(json!({ "id": p.id }))
         },
     );
@@ -322,6 +368,41 @@ pub(super) fn register(r: &mut Registry) {
                     x_end: p.x_end,
                     y_end: p.y_end,
                     offset: p.offset.unwrap_or(20.0),
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+            Ok(json!({ "id": id }))
+        },
+    );
+    r.add(
+        "dimension_add_height",
+        "Adds a height dimension: a vertical dimension line at a point of the plan between two \
+         elevations (e.g. 0 and the height of a wall or a piece), shown in the plan and in 3D.",
+        true,
+        |doc, p: HeightDimensionParams| {
+            let level = resolve_level(doc.home(), p.level)?;
+            let start = p.elevation_start.unwrap_or(0.0);
+            if (p.elevation_end - start).abs() < 0.1 {
+                return Err(CommandError::failed(
+                    "the measured height must be at least 0.1 cm",
+                ));
+            }
+            let id = new_id("dimensionLine");
+            doc.home_mut().dimension_lines.push(DimensionLine {
+                attrs: DimensionLineAttrs {
+                    id: Some(id.clone()),
+                    level,
+                    // Same point in the plan, different elevations: Sweet Home 3D's elevation
+                    // dimension line
+                    x_start: p.x,
+                    y_start: p.y,
+                    x_end: p.x,
+                    y_end: p.y,
+                    elevation_start: Some(start),
+                    elevation_end: Some(p.elevation_end),
+                    offset: p.offset.unwrap_or(20.0),
+                    visible_in_3d: Some(true),
                     ..Default::default()
                 },
                 ..Default::default()

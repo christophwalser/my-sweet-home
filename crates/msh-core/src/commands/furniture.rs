@@ -88,6 +88,14 @@ struct UpdateParams {
     color: Option<String>,
     mirrored: Option<bool>,
     visible: Option<bool>,
+    /// Show the name of the piece in the plan
+    name_visible: Option<bool>,
+    /// Text style of the name in the plan: size in cm, font family ("" = default), bold,
+    /// italic
+    name_font_size: Option<f32>,
+    name_font_name: Option<String>,
+    name_bold: Option<bool>,
+    name_italic: Option<bool>,
     /// Changes of single materials of the model (by material name, see the model file)
     materials: Option<Vec<MaterialParams>>,
     /// Remove all material changes: the model shows its own materials again
@@ -375,6 +383,19 @@ pub(super) fn register(r: &mut Registry) {
                 if let Some(v) = p.visible {
                     a.visible = Some(v);
                 }
+                if let Some(v) = p.name_visible {
+                    a.name_visible = v.then_some(true);
+                }
+                super::text::update_style(
+                    &mut piece.text_style,
+                    18.0,
+                    &super::text::StyleChange {
+                        size: p.name_font_size,
+                        font: p.name_font_name.clone(),
+                        bold: p.name_bold,
+                        italic: p.name_italic,
+                    },
+                )?;
                 if p.reset_materials == Some(true) {
                     piece.materials.clear();
                 }

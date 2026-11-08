@@ -132,6 +132,7 @@ export type Piece = {
     model_mirrored: boolean | null;
     model_rotation: string | null;
     name_visible: boolean | null;
+    name_angle: number | null;
     name_x_offset: number | null;
     name_y_offset: number | null;
     color: number | null;
@@ -245,6 +246,8 @@ export type Polyline = {
     elevation: number | null;
     color: number | null;
     closed_path: boolean | null;
+    /** "CURVED": smooth curve through the points */
+    join_style: string | null;
   };
   points: { x: number; y: number }[];
 };

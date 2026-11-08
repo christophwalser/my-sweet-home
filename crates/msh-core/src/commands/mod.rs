@@ -21,6 +21,7 @@ mod import;
 mod level;
 mod library;
 mod room;
+mod text;
 mod view;
 mod wall;
 mod wall_ops;

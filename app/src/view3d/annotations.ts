@@ -3,6 +3,7 @@
 
 import * as THREE from "three";
 import type { DimensionLine, Home, Label, Polyline, TextStyle } from "../model";
+import { polylinePath } from "../plan2d/curve";
 import { formatLength } from "../plan2d/drawPlan";
 import { colorOf, type LevelInfo } from "./buildScene";
 
@@ -193,8 +194,10 @@ function polylineObject(p: Polyline, baseY: number): THREE.Object3D {
   const a = p.attrs;
   const y = baseY + (a.elevation ?? 0);
   const half = Math.max(a.thickness ?? 1, 0.5) / 2;
-  const pts = p.points.map((q) => new THREE.Vector2(q.x, q.y));
-  if (a.closed_path) pts.push(pts[0].clone());
+  const pts = polylinePath(p.points, a.join_style, !!a.closed_path).map(
+    (q) => new THREE.Vector2(q[0], q[1]),
+  );
+  if (a.closed_path && a.join_style !== "CURVED") pts.push(pts[0].clone());
   const positions: number[] = [];
   for (let i = 0; i < pts.length - 1; i++) {
     const s = pts[i];

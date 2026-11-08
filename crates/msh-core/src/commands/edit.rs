@@ -370,11 +370,29 @@ pub(super) fn move_elements(home: &mut Home, ids: &[String], dx: f32, dy: f32) -
         d.attrs.y_end += dy;
         moved += 1;
     }
+    // The compass is selected in the plan by the ID "compass"
+    if ids.contains("compass")
+        && let Some(c) = home.compass.as_mut()
+    {
+        c.attrs.x += dx;
+        c.attrs.y += dy;
+        moved += 1;
+    }
     moved
 }
 
 /// Deletes one element; returns `true` if something was removed.
 fn delete(home: &mut Home, id: &str) -> bool {
+    // The compass cannot be removed from a home: deleting it hides it, as in Sweet Home 3D
+    if id == "compass" {
+        return match home.compass.as_mut() {
+            Some(c) if c.attrs.visible != Some(false) => {
+                c.attrs.visible = Some(false);
+                true
+            }
+            _ => false,
+        };
+    }
     let before = count(home);
     if home.levels.iter().any(|l| l.attrs.id == id) {
         let level = Some(id.to_owned());

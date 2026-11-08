@@ -32,6 +32,8 @@ export type HandleKind =
   | "piece-rotate"
   | "piece-elevation"
   | "piece-height"
+  | "compass-rotate"
+  | "compass-resize"
   | "room-name"
   | "room-area";
 
@@ -61,6 +63,8 @@ export const HANDLE_SHAPE: Record<HandleKind, HandleShape> = {
   "piece-rotate": "rotate",
   "piece-elevation": "elevation",
   "piece-height": "height",
+  "compass-rotate": "rotate",
+  "compass-resize": "resize",
   "room-name": "label",
   "room-area": "label",
 };
@@ -80,6 +84,8 @@ export const HANDLE_HINT: Record<HandleKind, string> = {
   "piece-rotate": "Drag to rotate · Shift: 1° steps",
   "piece-elevation": "Drag up or down to change the elevation above the floor",
   "piece-height": "Drag up or down to change the height",
+  "compass-rotate": "Drag to turn north · 5° steps, Shift: 1° steps",
+  "compass-resize": "Drag to change the size of the compass",
   "room-name": "Drag to move the room name · it snaps back to the automatic position",
   "room-area": "Drag to move the area label · it snaps back to the automatic position",
 };
@@ -234,6 +240,32 @@ export function elementHandles(home: Home, id: string, cmPerPx: number): Handle[
     return [
       { id, kind: "dimension-start", index: 0, pos: [a.x_start, a.y_start] },
       { id, kind: "dimension-end", index: 0, pos: [a.x_end, a.y_end] },
+    ];
+  }
+  const compass = home.compass?.attrs;
+  if (id === "compass" && compass) {
+    const r = compass.diameter / 2;
+    const nd = compass.north_direction ?? 0;
+    const center: Pt = [compass.x, compass.y];
+    const off = PIECE_HANDLE_OFFSET_PX * cmPerPx;
+    // Beyond the tip of the north arrow, and on the ring towards the lower right
+    const tip: Pt = [compass.x + Math.sin(nd) * r, compass.y - Math.cos(nd) * r];
+    const ring: Pt = [compass.x + Math.SQRT1_2 * r, compass.y + Math.SQRT1_2 * r];
+    return [
+      {
+        id,
+        kind: "compass-rotate",
+        index: 0,
+        pos: [tip[0] + Math.sin(nd) * off * 1.6, tip[1] - Math.cos(nd) * off * 1.6],
+        anchor: center,
+      },
+      {
+        id,
+        kind: "compass-resize",
+        index: 0,
+        pos: [ring[0] + Math.SQRT1_2 * off, ring[1] + Math.SQRT1_2 * off],
+        anchor: center,
+      },
     ];
   }
   const piece = findPiece(home, id);
@@ -555,6 +587,55 @@ export function dragHandle(
         info: `${deg}°`,
         command: "furniture_update",
         params: { id, angle_deg: deg },
+      };
+    }
+    case "compass-rotate":
+    case "compass-resize": {
+      const c = home.compass?.attrs;
+      if (!c) return null;
+      const ring = (r: number) => {
+        const pts: Pt[] = [];
+        for (let k = 0; k < 32; k++) {
+          const a = (k / 32) * Math.PI * 2;
+          pts.push([c.x + Math.cos(a) * r, c.y + Math.sin(a) * r]);
+        }
+        return pts;
+      };
+      if (handle.kind === "compass-rotate") {
+        // Direction from the center to the pointer, clockwise from the top of the plan
+        let deg = (Math.atan2(p[0] - c.x, -(p[1] - c.y)) * 180) / Math.PI;
+        deg = ((deg % 360) + 360) % 360;
+        deg = magnetism ? snapAngleDeg(deg, fine) % 360 : Math.round(deg * 10) / 10;
+        const r = (deg * Math.PI) / 180;
+        const len = c.diameter / 2;
+        return {
+          preview: [
+            { pts: ring(len), closed: true },
+            {
+              pts: [
+                [c.x, c.y],
+                [c.x + Math.sin(r) * len, c.y - Math.cos(r) * len],
+              ],
+              closed: false,
+            },
+          ],
+          ...none,
+          info: `North ${deg}°`,
+          command: "compass_update",
+          params: { north_direction_deg: deg },
+        };
+      }
+      const offset = handle.anchor
+        ? Math.hypot(handle.pos[0] - c.x, handle.pos[1] - c.y) - c.diameter / 2
+        : 0;
+      let diameter = Math.max(10, 2 * (Math.hypot(p[0] - c.x, p[1] - c.y) - offset));
+      diameter = magnetism ? Math.round(diameter) : Math.round(diameter * 10) / 10;
+      return {
+        preview: [{ pts: ring(diameter / 2), closed: true }],
+        ...none,
+        info: `Diameter ${diameter} cm`,
+        command: "compass_update",
+        params: { diameter },
       };
     }
     case "piece-elevation":

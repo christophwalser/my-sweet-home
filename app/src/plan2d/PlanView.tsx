@@ -21,6 +21,7 @@ import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api"
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
 import { magnetismActive, usePreferences } from "../preferences";
 import { type Tool, useStore } from "../store";
+import { autoDimensions, dimensionLine } from "./autoDims";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
 import {
   drawPlan,
@@ -166,7 +167,9 @@ function handleCursor(home: Home, h: Handle): string {
   switch (h.kind) {
     case "wall-rotate":
     case "piece-rotate":
+    case "compass-rotate":
       return ROTATE_CURSOR;
+    case "compass-resize":
     case "piece-elevation":
       return ELEVATION_CURSOR;
     case "piece-height":
@@ -418,6 +421,11 @@ export default function PlanView() {
           ? movePreview(input.home, input.wallShapes, sel, g.offset[0], g.offset[1])
           : null,
       gaps: g?.kind === "move" && g.slide ? g.slide.gaps : [],
+      // Size of the selected wall or piece while nothing is dragged
+      autoDims:
+        tool === "select" && sel.length === 1 && !g
+          ? autoDimensions(input.home, input.wallShapes, sel[0]).map(dimensionLine)
+          : [],
       selectionJoints: tool === "select" ? selectionJoints(input.home, sel) : [],
       wallSides: tool === "select" ? selectedWallSides(input, sel, highlightSide) : null,
       draft:
@@ -1085,6 +1093,13 @@ export default function PlanView() {
       if (ids) setSelection(ids);
     };
     const items: MenuItem[] = [];
+    if (sel.length === 1 && sel[0] === "compass") {
+      return [
+        { label: "Hide compass", action: () => void run("compass_update", { visible: false }) },
+        { separator: true },
+        { label: "Fit plan to window", action: () => refit() },
+      ];
+    }
     if (sel.length > 0) {
       items.push(
         {
@@ -1204,6 +1219,59 @@ export default function PlanView() {
       if (walls.some((w) => w.attrs.wall_at_start || w.attrs.wall_at_end)) {
         items.push({ label: "Detach", action: () => void run("wall_detach", { ids: wallIds }) });
       }
+    }
+    // Dimensions of a single wall or piece
+    if (sel.length === 1 && (walls.length === 1 || furniture.length === 1)) {
+      const dims = autoDimensions(home, input.wallShapes, sel[0]);
+      const r = (v: number) => Math.round(v * 10) / 10;
+      items.push({ separator: true });
+      if (dims.length > 0) {
+        items.push({
+          label: walls.length ? "Add dimensions of the wall" : "Add dimensions of the piece",
+          action: () => {
+            for (const d of dims) {
+              void run("dimension_add", {
+                x_start: r(d.start[0]),
+                y_start: r(d.start[1]),
+                x_end: r(d.end[0]),
+                y_end: r(d.end[1]),
+                offset: d.offset,
+                ...levelParam(),
+              });
+            }
+          },
+        });
+      }
+      items.push({
+        label: "Add height dimension",
+        action: () => {
+          if (walls.length) {
+            const a = walls[0].attrs;
+            void run("dimension_add_height", {
+              x: r(a.x_start),
+              y: r(a.y_start),
+              elevation_end: a.height ?? home.attrs.wall_height ?? 250,
+              ...levelParam(),
+            });
+            return;
+          }
+          let piece: Piece | null = null;
+          forEachPiece(home.furniture, (q) => {
+            if (q.attrs.id === sel[0]) piece = q;
+          });
+          if (!piece) return;
+          const a = (piece as Piece).attrs;
+          const corner = dims[1]?.end ?? [a.x, a.y];
+          const bottom = a.elevation ?? 0;
+          void run("dimension_add_height", {
+            x: r(corner[0]),
+            y: r(corner[1]),
+            elevation_start: bottom,
+            elevation_end: bottom + (a.height_in_plan ?? a.height),
+            ...levelParam(),
+          });
+        },
+      });
     }
     if (rooms.length === 1 && sel.length === 1) {
       const room = rooms[0];

@@ -11,9 +11,10 @@ import {
   type WallShape,
   wallPolygon,
 } from "../model";
+import { polylinePath } from "./curve";
 
 /** Kind of element found by a hit test. */
-export type HitKind = "piece" | "wall" | "room" | "label" | "dimension" | "polyline";
+export type HitKind = "piece" | "wall" | "room" | "label" | "dimension" | "polyline" | "compass";
 
 export type Hit = { id: string; kind: HitKind };
 
@@ -90,6 +91,13 @@ export function hitTest(
       return { id: topId as string, kind: "piece" };
     }
   }
+  // The compass is drawn on top of the plan (part of the base plan)
+  const compass = home.compass?.attrs;
+  if (!locked && compass && compass.visible !== false) {
+    if (Math.hypot(p[0] - compass.x, p[1] - compass.y) <= compass.diameter / 2 + tolerance) {
+      return { id: "compass", kind: "compass" };
+    }
+  }
   if (locked) {
     for (const { piece, topId } of pieces) {
       if (pieceContains(piece, p)) return { id: topId as string, kind: "piece" };
@@ -139,10 +147,9 @@ export function hitTest(
   }
   for (const pl of home.polylines) {
     if (!sameLevel(pl.attrs.level, levelId) || !pl.attrs.id) continue;
-    for (let i = 0; i + 1 < pl.points.length; i++) {
-      const a = pl.points[i];
-      const b = pl.points[i + 1];
-      if (distanceToSegment(p, [a.x, a.y], [b.x, b.y]) <= tolerance)
+    const pts = polylinePath(pl.points, pl.attrs.join_style, !!pl.attrs.closed_path);
+    for (let i = 0; i + 1 < pts.length; i++) {
+      if (distanceToSegment(p, pts[i], pts[i + 1]) <= tolerance)
         return { id: pl.attrs.id, kind: "polyline" };
     }
   }
@@ -218,9 +225,22 @@ export function elementOutlines(
   for (const r of home.rooms) {
     if (r.attrs.id === id) out.push({ pts: r.points.map((p) => [p.x, p.y]), closed: true });
   }
+  const compass = home.compass?.attrs;
+  if (id === "compass" && compass) {
+    const r = compass.diameter / 2;
+    const ring: Pt[] = [];
+    for (let k = 0; k < 32; k++) {
+      const a = (k / 32) * Math.PI * 2;
+      ring.push([compass.x + Math.cos(a) * r, compass.y + Math.sin(a) * r]);
+    }
+    out.push({ pts: ring, closed: true });
+  }
   for (const pl of home.polylines) {
     if (pl.attrs.id === id)
-      out.push({ pts: pl.points.map((p) => [p.x, p.y]), closed: !!pl.attrs.closed_path });
+      out.push({
+        pts: polylinePath(pl.points, pl.attrs.join_style, !!pl.attrs.closed_path),
+        closed: !!pl.attrs.closed_path && pl.attrs.join_style !== "CURVED",
+      });
   }
   for (const l of home.labels) {
     if (l.attrs.id !== id) continue;

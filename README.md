@@ -77,6 +77,11 @@ bar at the bottom of the plan explains the next step.
   Doors and windows slide along their wall with the free space to both sides shown, snap to
   the middle of the free space and into line with openings in parallel walls (also on other
   levels); their depth follows the wall thickness. The spaces can be typed in the properties.
+- A selected wall or piece shows its dimensions; the context menu adds them as dimension lines
+  or adds a height dimension. Dimensions snap to furniture corners.
+- Text styles (font, bold, italic, size) for labels, dimensions, room names and areas, and
+  furniture names ("Name in plan"); polylines can be curved; the compass can be dragged,
+  turned and resized in the plan.
 - Furniture in the plan is drawn as seen from above, rendered from its 3D model with its
   colors and materials (Preferences: off shows the catalog icons); exports and prints use
   the view from above too, or the icons ("Furniture in plans" in the export dialog).
