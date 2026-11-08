@@ -3,9 +3,10 @@
 // shows or hides it. Groups are listed as one row.
 
 import { useMemo, useState } from "react";
-import { t } from "../i18n";
+import { formatNumber, t } from "../i18n";
 import type { Furniture, Home } from "../model";
 import { useStore } from "../store";
+import { formatFieldValue, toUnit, unitSymbol } from "../units";
 
 type Column = "name" | "width" | "depth" | "height" | "elevation" | "level" | "price";
 
@@ -60,7 +61,8 @@ function rowOf(item: Furniture, home: Home): Row | null {
   };
 }
 
-const fmt = (v: number) => (Math.round(v * 10) / 10).toString();
+/** A length in cm in the unit and number format of the preferences. */
+const fmt = (cm: number) => formatFieldValue(toUnit(cm));
 
 export default function FurnitureList({ query }: { query: string }) {
   const opened = useStore((s) => s.opened);
@@ -97,12 +99,12 @@ export default function FurnitureList({ query }: { query: string }) {
   const hasPrices = rows.some((r) => r.price !== null);
   const total = rows.reduce((sum, r) => sum + (r.price ?? 0), 0);
 
-  const header = (column: Column, label: string, numeric = true) => (
+  const header = (column: Column, label: string, numeric = true, full = label) => (
     <th className={numeric ? "num" : ""}>
       <button
         type="button"
         onClick={() => setSort((s) => ({ column, desc: s.column === column ? !s.desc : false }))}
-        title={t("Sort")}
+        title={`${full} · ${t("Sort")}`}
       >
         {label}
         {sort.column === column ? (sort.desc ? " ▾" : " ▴") : ""}
@@ -129,10 +131,10 @@ export default function FurnitureList({ query }: { query: string }) {
           <tr>
             <th className="check" title={t("Visible")} />
             {header("name", t("Name"), false)}
-            {header("width", "W")}
-            {header("depth", "D")}
-            {header("height", "H")}
-            {header("elevation", t("Elev."))}
+            {header("width", t("W"), true, t("Width"))}
+            {header("depth", t("D"), true, t("Depth"))}
+            {header("height", t("H"), true, t("Height"))}
+            {header("elevation", t("Elev."), true, t("Elevation"))}
             {hasLevels && header("level", t("Level"), false)}
             {hasPrices && header("price", t("Price"))}
           </tr>
@@ -165,14 +167,16 @@ export default function FurnitureList({ query }: { query: string }) {
               <td className="num">{fmt(r.height)}</td>
               <td className="num">{fmt(r.elevation)}</td>
               {hasLevels && <td className="name">{r.level}</td>}
-              {hasPrices && <td className="num">{r.price !== null ? r.price.toFixed(2) : ""}</td>}
+              {hasPrices && (
+                <td className="num">{r.price !== null ? formatNumber(r.price, 2, 2) : ""}</td>
+              )}
             </tr>
           ))}
         </tbody>
       </table>
       <p className="muted small catalog-empty">
-        {rows.length} {t("items · sizes in cm")}
-        {hasPrices ? ` · total ${total.toFixed(2)}` : ""}
+        {t("{n} items · sizes in {unit}", { n: rows.length, unit: unitSymbol() })}
+        {hasPrices ? t(" · total {total}", { total: formatNumber(total, 2, 2) }) : ""}
       </p>
     </div>
   );
