@@ -12,8 +12,9 @@ import {
   wallPolygon,
 } from "../model";
 import { sameLevel } from "./drawPlan";
-import { pieceCorners, wallOutline } from "./handles";
+import { lengthText, pieceCorners, wallOutline } from "./handles";
 import { pointInPolygon } from "./interaction";
+import type { Segment } from "./snapping";
 
 /** Corner between two walls during a move. */
 export type Joint = {
@@ -282,4 +283,206 @@ export function dockToWall(
     }
   });
   return best;
+}
+
+// ---------------------------------------------------------------- doors and windows in walls
+
+/** A door or window in a wall: the wall axis and the free space around the piece. */
+export type WallSlot = {
+  wallIndex: number;
+  /** Wall start and unit direction along the wall */
+  start: Pt;
+  u: Pt;
+  thickness: number;
+  /** Position of the piece center along the wall axis */
+  t: number;
+  /** Ends of the free space around the piece: wall corners (inner face) or other openings */
+  prev: number;
+  next: number;
+  /** Angle that keeps the piece along the wall, on the side it opens to */
+  angle: number;
+};
+
+/** Depth of a door or window in a wall of this thickness (its wall part fills the wall). */
+export function depthInWall(piece: Piece, thickness: number): number {
+  const a = piece.attrs;
+  if (a.resizable === false || a.width_depth_deformable === false) return a.depth;
+  return thickness / Math.max(a.wall_thickness ?? 1, 0.01);
+}
+
+/** Center of a door or window whose wall part lies on the wall axis at `t`. */
+export function centerInWall(slot: WallSlot, piece: Piece, t: number, depth: number): Pt {
+  const a = piece.attrs;
+  const fraction = Math.max(a.wall_thickness ?? 1, 0.01);
+  const wallPart = -depth / 2 + ((a.wall_distance ?? 0) + fraction / 2) * depth;
+  const px = slot.start[0] + slot.u[0] * t;
+  const py = slot.start[1] + slot.u[1] * t;
+  return [px + Math.sin(slot.angle) * wallPart, py - Math.cos(slot.angle) * wallPart];
+}
+
+/**
+ * The straight wall a door or window at `center` stands in (or is moved to, within
+ * `capture` cm of its sides), with the free space around it.
+ */
+export function wallSlot(
+  home: Home,
+  wallShapes: WallShape[],
+  levelId: string | null,
+  piece: Piece,
+  center: Pt,
+  capture: number,
+): WallSlot | null {
+  const a = piece.attrs;
+  let best: WallSlot | null = null;
+  let bestAcross = Number.POSITIVE_INFINITY;
+  home.walls.forEach((wall, i) => {
+    const w = wall.attrs;
+    if (!sameLevel(w.level, levelId) || w.arc_extent) return;
+    const start: Pt = [w.x_start, w.y_start];
+    const len = Math.hypot(w.x_end - w.x_start, w.y_end - w.y_start);
+    if (len < 1) return;
+    const u: Pt = [(w.x_end - w.x_start) / len, (w.y_end - w.y_start) / len];
+    const rx = center[0] - start[0];
+    const ry = center[1] - start[1];
+    const t = rx * u[0] + ry * u[1];
+    const across = Math.abs(rx * -u[1] + ry * u[0]);
+    if (t < 0 || t > len || across > w.thickness / 2 + capture || across >= bestAcross) return;
+    // Usable length: where both wall faces run (the inner face at corners)
+    const shape = wallShapes[i];
+    const range = (side: Pt[]) => {
+      const ts = side.map((q) => (q[0] - start[0]) * u[0] + (q[1] - start[1]) * u[1]);
+      return [Math.min(...ts), Math.max(...ts)];
+    };
+    const [l0, l1] = range(shape.left);
+    const [r0, r1] = range(shape.right);
+    let prev = Math.max(l0, r0);
+    let next = Math.min(l1, r1);
+    // Other doors and windows in this wall split the free space
+    const poly = wallPolygon(shape);
+    forEachPiece(home.furniture, (p) => {
+      if (p.kind !== "DoorOrWindow" || p.attrs.id === a.id) return;
+      if (!sameLevel(p.attrs.level, levelId)) return;
+      if (!pointInPolygon([p.attrs.x, p.attrs.y], poly)) return;
+      const tc = (p.attrs.x - start[0]) * u[0] + (p.attrs.y - start[1]) * u[1];
+      const half = p.attrs.width / 2;
+      if (tc < t) prev = Math.max(prev, tc + half);
+      else next = Math.min(next, tc - half);
+    });
+    // Keep the side the piece opens to: the wall direction or the opposite one
+    const wallAngle = Math.atan2(u[1], u[0]);
+    const diff = Math.abs(
+      (((((a.angle ?? 0) - wallAngle) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI)) - Math.PI,
+    );
+    // `diff` is the angle between the piece and the wall direction (0..π)
+    const angle = diff > Math.PI / 2 ? wallAngle + Math.PI : wallAngle;
+    bestAcross = across;
+    best = { wallIndex: i, start, u, thickness: w.thickness, t, prev, next, angle };
+  });
+  return best;
+}
+
+/** A door or window slid along a wall while it is dragged. */
+export type Slid = Docked & {
+  depth: number;
+  guides: Segment[];
+  /** Free spaces to the neighbors, drawn as measured distances */
+  gaps: [Pt, Pt][];
+  note: string | null;
+};
+
+/**
+ * Slides a dragged door or window along the wall it is moved to: it turns along the wall,
+ * its depth follows the wall thickness, and with magnetism it snaps to the middle of the free
+ * space and into line with doors and windows of parallel walls (also on other levels).
+ */
+export function slideInWall(
+  home: Home,
+  wallShapes: WallShape[],
+  levelId: string | null,
+  piece: Piece,
+  center: Pt,
+  capture: number,
+  snap: number,
+  magnetism: boolean,
+): Slid | null {
+  const slot = wallSlot(home, wallShapes, levelId, piece, center, capture);
+  if (!slot) return null;
+  const a = piece.attrs;
+  const w = a.width;
+  const depth = depthInWall(piece, slot.thickness);
+  const proj = (q: Pt) => (q[0] - slot.start[0]) * slot.u[0] + (q[1] - slot.start[1]) * slot.u[1];
+  let t = slot.t;
+  let note: string | null = null;
+  let guideFrom: Pt | null = null;
+  let guideAt: "center" | "start" | "end" = "center";
+  if (magnetism) {
+    let bestDist = snap;
+    const consider = (target: number, label: string, from: Pt | null, at: typeof guideAt) => {
+      const d = Math.abs(target - slot.t);
+      if (d < bestDist) {
+        bestDist = d;
+        t = target;
+        note = label;
+        guideFrom = from;
+        guideAt = at;
+      }
+    };
+    if (slot.next - slot.prev >= w) {
+      consider((slot.prev + slot.next) / 2, "middle of the free space", null, "center");
+    }
+    // In line with doors and windows of parallel walls (any level)
+    const wallAngle = Math.atan2(slot.u[1], slot.u[0]);
+    forEachPiece(home.furniture, (p) => {
+      if (p.kind !== "DoorOrWindow" || p.attrs.id === a.id) return;
+      const pa = p.attrs.angle ?? 0;
+      const diff = (((pa - wallAngle) % Math.PI) + Math.PI) % Math.PI;
+      if (Math.min(diff, Math.PI - diff) > 0.05) return;
+      const c: Pt = [p.attrs.x, p.attrs.y];
+      const half = p.attrs.width / 2;
+      const ux = Math.cos(pa) * half;
+      const uy = Math.sin(pa) * half;
+      const tc = proj(c);
+      // The edge nearer to the wall start first (the piece may be turned by 180°)
+      const e1: Pt = [c[0] - ux, c[1] - uy];
+      const e2: Pt = [c[0] + ux, c[1] + uy];
+      const [lo, hi] = proj(e1) <= proj(e2) ? [e1, e2] : [e2, e1];
+      const onOtherLevel = !sameLevel(p.attrs.level, levelId);
+      const where = onOtherLevel ? " (other level)" : "";
+      consider(tc, `in line with ${p.attrs.name}${where}`, c, "center");
+      consider(proj(lo) + w / 2, `edge in line with ${p.attrs.name}${where}`, lo, "start");
+      consider(proj(hi) - w / 2, `edge in line with ${p.attrs.name}${where}`, hi, "end");
+    });
+    if (!note) t = Math.round(t);
+  }
+  const [x, y] = centerInWall(slot, piece, t, depth);
+  const guides: Segment[] = [];
+  if (guideFrom) {
+    const along = guideAt === "center" ? t : guideAt === "start" ? t - w / 2 : t + w / 2;
+    const to: Pt = [slot.start[0] + slot.u[0] * along, slot.start[1] + slot.u[1] * along];
+    guides.push([guideFrom, to]);
+  }
+  // Distances to the neighbors, beside the wall
+  const n: Pt = [-slot.u[1], slot.u[0]];
+  const off = slot.thickness / 2 + 25;
+  const onAxis = (v: number): Pt => [
+    slot.start[0] + slot.u[0] * v + n[0] * off,
+    slot.start[1] + slot.u[1] * v + n[1] * off,
+  ];
+  const gaps: [Pt, Pt][] = [];
+  if (t - w / 2 - slot.prev > 0.05) gaps.push([onAxis(slot.prev), onAxis(t - w / 2)]);
+  if (slot.next - (t + w / 2) > 0.05) gaps.push([onAxis(t + w / 2), onAxis(slot.next)]);
+  const angleDeg = Math.round((((((slot.angle * 180) / Math.PI) % 360) + 360) % 360) * 100) / 100;
+  const left = Math.max(0, t - w / 2 - slot.prev);
+  const right = Math.max(0, slot.next - (t + w / 2));
+  const distances = `${lengthText(left)} | ${lengthText(right)}`;
+  return {
+    x: Math.round(x * 10) / 10,
+    y: Math.round(y * 10) / 10,
+    angleDeg,
+    outline: pieceCorners(x, y, w, depth, slot.angle),
+    depth: Math.round(depth * 10) / 10,
+    guides,
+    gaps,
+    note: note ? `${note} · ${distances}` : distances,
+  };
 }

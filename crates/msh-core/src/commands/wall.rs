@@ -198,6 +198,16 @@ pub(super) fn register(r: &mut Registry) {
                 ));
             }
             let home = doc.home_mut();
+            // Doors and windows follow a new wall thickness
+            let old_thickness: Vec<(String, f32)> = if p.thickness.is_some() {
+                home.walls
+                    .iter()
+                    .filter(|w| targets.contains(&w.attrs.id))
+                    .map(|w| (w.attrs.id.clone(), w.attrs.thickness))
+                    .collect()
+            } else {
+                Vec::new()
+            };
             for target in &targets {
             let w = home
                 .walls
@@ -283,6 +293,7 @@ pub(super) fn register(r: &mut Registry) {
                 }
             }
             }
+            super::furniture::refit_openings(home, &old_thickness);
             Ok(updated(&targets))
         },
     );

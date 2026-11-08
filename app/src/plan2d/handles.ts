@@ -1,8 +1,9 @@
 // Drag handles ("indicators") of a single selected element in the 2D plan.
 // Walls: both ends (length and direction), the middle of a side (thickness),
 // the middle of the axis (bend into an arc) and a rotation handle beyond the end.
-// Rooms and polylines: their points. Dimension lines: both ends. Furniture:
-// resize (bottom-right) and rotate (top-left). Each handle turns a pointer
+// Rooms and polylines: their points. Dimension lines: both ends. Furniture, like
+// Sweet Home 3D: rotate (top-left), elevation (top-right), resize (bottom-right) and
+// height (bottom-left), drawn as icons just outside the corners. Each handle turns a pointer
 // position into a preview outline and the registry command that applies it.
 
 import { forEachPiece, type Home, type Piece, type Pt, type WallShape } from "../model";
@@ -29,24 +30,37 @@ export type HandleKind =
   | "dimension-end"
   | "piece-resize"
   | "piece-rotate"
+  | "piece-elevation"
+  | "piece-height"
   | "room-name"
   | "room-area";
 
 /** How a handle is drawn. */
-export type HandleShape = "square" | "circle" | "diamond" | "label";
+export type HandleShape =
+  | "square"
+  | "circle"
+  | "diamond"
+  | "label"
+  /** Icons that show what the handle does */
+  | "rotate"
+  | "elevation"
+  | "height"
+  | "resize";
 
 export const HANDLE_SHAPE: Record<HandleKind, HandleShape> = {
   "wall-start": "square",
   "wall-end": "square",
   "wall-thickness": "square",
   "wall-arc": "diamond",
-  "wall-rotate": "circle",
+  "wall-rotate": "rotate",
   "room-point": "square",
   "polyline-point": "square",
   "dimension-start": "square",
   "dimension-end": "square",
-  "piece-resize": "square",
-  "piece-rotate": "circle",
+  "piece-resize": "resize",
+  "piece-rotate": "rotate",
+  "piece-elevation": "elevation",
+  "piece-height": "height",
   "room-name": "label",
   "room-area": "label",
 };
@@ -62,8 +76,10 @@ export const HANDLE_HINT: Record<HandleKind, string> = {
   "polyline-point": "Drag to move this point",
   "dimension-start": "Drag to move the start of the dimension",
   "dimension-end": "Drag to move the end of the dimension",
-  "piece-resize": "Drag to resize",
+  "piece-resize": "Drag to resize (the opposite corner stays)",
   "piece-rotate": "Drag to rotate · Shift: 1° steps",
+  "piece-elevation": "Drag up or down to change the elevation above the floor",
+  "piece-height": "Drag up or down to change the height",
   "room-name": "Drag to move the room name · it snaps back to the automatic position",
   "room-area": "Drag to move the area label · it snaps back to the automatic position",
 };
@@ -75,6 +91,8 @@ export type Handle = {
   index: number;
   /** Position in plan coordinates (cm) */
   pos: Pt;
+  /** Point of the element the handle belongs to, if the handle sits beside it */
+  anchor?: Pt;
 };
 
 export type HandleDrag = {
@@ -96,6 +114,8 @@ export type HandleDrag = {
 
 /** Distance of offset handles from the element, in screen pixels. */
 const HANDLE_OFFSET_PX = 22;
+/** Distance of the furniture icons from the corners, in screen pixels. */
+const PIECE_HANDLE_OFFSET_PX = 11;
 
 function findPiece(home: Home, id: string): Piece | null {
   let found: Piece | null = null;
@@ -222,8 +242,23 @@ export function elementHandles(home: Home, id: string, cmPerPx: number): Handle[
     const w = a.width_in_plan ?? a.width;
     const d = a.depth_in_plan ?? a.depth;
     const corners = pieceCorners(a.x, a.y, w, d, a.angle ?? 0);
-    const handles: Handle[] = [{ id, kind: "piece-rotate", index: 0, pos: corners[0] }];
-    if (isResizable(piece)) handles.push({ id, kind: "piece-resize", index: 0, pos: corners[2] });
+    // Icons just outside the corners, so they do not hide the piece
+    const outside = (c: Pt): Pt => {
+      const len = Math.hypot(c[0] - a.x, c[1] - a.y) || 1;
+      const off = PIECE_HANDLE_OFFSET_PX * cmPerPx;
+      return [c[0] + ((c[0] - a.x) / len) * off, c[1] + ((c[1] - a.y) / len) * off];
+    };
+    const at = (kind: HandleKind, c: Pt): Handle => ({
+      id,
+      kind,
+      index: 0,
+      pos: outside(c),
+      anchor: c,
+    });
+    const handles: Handle[] = [at("piece-rotate", corners[0]), at("piece-elevation", corners[1])];
+    if (isResizable(piece)) {
+      handles.push(at("piece-resize", corners[2]), at("piece-height", corners[3]));
+    }
     return handles;
   }
   return [];
@@ -522,13 +557,50 @@ export function dragHandle(
         params: { id, angle_deg: deg },
       };
     }
+    case "piece-elevation":
+    case "piece-height": {
+      const piece = findPiece(home, id);
+      if (!piece) return null;
+      const a = piece.attrs;
+      // Up on the screen raises: the vertical distance dragged, in cm of the plan
+      let delta = handle.pos[1] - p[1];
+      if (magnetism) delta = Math.round(delta);
+      const w = a.width_in_plan ?? a.width;
+      const d = a.depth_in_plan ?? a.depth;
+      const outline = { pts: pieceCorners(a.x, a.y, w, d, a.angle ?? 0), closed: true };
+      if (handle.kind === "piece-elevation") {
+        const elevation = Math.max(0, Math.round(((a.elevation ?? 0) + delta) * 10) / 10);
+        return {
+          preview: [outline],
+          ...none,
+          info: `Elevation ${elevation} cm`,
+          command: "furniture_update",
+          params: { id, elevation },
+        };
+      }
+      const height = Math.max(1, Math.round((a.height + delta) * 10) / 10);
+      const params: Record<string, unknown> = { id, height };
+      let info = `Height ${height} cm`;
+      if (a.deformable === false) {
+        // Proportional pieces grow in all directions, around their center
+        const f = height / a.height;
+        params.width = Math.round(a.width * f * 10) / 10;
+        params.depth = Math.round(a.depth * f * 10) / 10;
+        info += ` · ${params.width} × ${params.depth} cm`;
+      }
+      return { preview: [outline], ...none, info, command: "furniture_update", params };
+    }
     case "piece-resize": {
       const piece = findPiece(home, id);
       if (!piece) return null;
       const a = piece.attrs;
       const angle = a.angle ?? 0;
+      // The icon sits beside the corner: drag the corner itself
+      const q: Pt = handle.anchor
+        ? [p[0] - (handle.pos[0] - handle.anchor[0]), p[1] - (handle.pos[1] - handle.anchor[1])]
+        : p;
       // Pointer in the piece's local frame, measured from the fixed top-left corner
-      const local = rotate([p[0] - a.x, p[1] - a.y], -angle);
+      const local = rotate([q[0] - a.x, q[1] - a.y], -angle);
       let w = local[0] + a.width / 2;
       let d = local[1] + a.depth / 2;
       let h = a.height;

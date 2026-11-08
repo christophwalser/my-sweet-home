@@ -73,6 +73,10 @@ bar at the bottom of the plan explains the next step.
   delete, flip, group, align furniture (sides, top, bottom, side by side) and distribute it,
   reverse, split, join or detach walls, add or delete points of rooms and lines, lock the base
   plan.
+- Selected furniture has four handles drawn as icons: rotate, elevation, resize and height.
+  Doors and windows slide along their wall with the free space to both sides shown, snap to
+  the middle of the free space and into line with openings in parallel walls (also on other
+  levels); their depth follows the wall thickness. The spaces can be typed in the properties.
 - Furniture in the plan is drawn as seen from above, rendered from its 3D model with its
   colors and materials (Preferences: off shows the catalog icons); exports and prints use
   the view from above too, or the icons ("Furniture in plans" in the export dialog).

@@ -47,6 +47,8 @@ export type PlanOverlay = {
   rubberBand: [Pt, Pt] | null;
   /** Distance measured with the measuring tool */
   measure: [Pt, Pt] | null;
+  /** Free spaces beside a door or window being slid along its wall */
+  gaps: [Pt, Pt][];
   /** Point the cursor snapped to */
   snap: Pt | null;
   accent: string;
@@ -123,8 +125,12 @@ export function drawOverlay(
     ctx.lineWidth = 1.5 * px;
     for (const h of overlay.handles) {
       const [x, y] = h.pos;
-      ctx.beginPath();
       const shape = HANDLE_SHAPE[h.kind];
+      if (shape === "rotate" || shape === "elevation" || shape === "height" || shape === "resize") {
+        drawHandleIcon(ctx, shape, x, y, overlay.accent, px, h.anchor);
+        continue;
+      }
+      ctx.beginPath();
       if (shape === "circle") {
         ctx.arc(x, y, r * 1.15, 0, Math.PI * 2);
       } else if (shape === "label") {
@@ -272,6 +278,7 @@ export function drawOverlay(
     drawTag(ctx, overlay.note, cursor[0] + 14 * px, cursor[1] - 18 * px, px);
 
   if (overlay.measure) drawMeasure(ctx, overlay.measure[0], overlay.measure[1], overlay.guide, px);
+  for (const [a, b] of overlay.gaps) drawGap(ctx, a, b, overlay.guide, px);
 
   // Rubber band
   if (overlay.rubberBand) {
@@ -293,6 +300,114 @@ export function drawOverlay(
     ctx.arc(x, y, 6 * px, 0, Math.PI * 2);
     ctx.stroke();
   }
+}
+
+/**
+ * A handle drawn as a small icon that says what it does: a turning arrow (rotate), an arrow
+ * up from a floor line (elevation), a double arrow between two lines (height) or a diagonal
+ * double arrow pointing away from the anchor corner (resize).
+ */
+function drawHandleIcon(
+  ctx: CanvasRenderingContext2D,
+  shape: "rotate" | "elevation" | "height" | "resize",
+  x: number,
+  y: number,
+  color: string,
+  px: number,
+  anchor?: Pt,
+) {
+  const s = 7 * px;
+  ctx.save();
+  // White disc so the icon reads on any floor color
+  ctx.beginPath();
+  ctx.arc(x, y, s * 1.35, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.lineWidth = 1.2 * px;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+  ctx.lineWidth = 1.6 * px;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const head = (tx: number, ty: number, dx: number, dy: number) => {
+    // Arrow head at (tx, ty) pointing along (dx, dy)
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const h = 3 * px;
+    ctx.moveTo(tx - ux * h - uy * h, ty - uy * h + ux * h);
+    ctx.lineTo(tx, ty);
+    ctx.lineTo(tx - ux * h + uy * h, ty - uy * h - ux * h);
+  };
+  ctx.beginPath();
+  if (shape === "rotate") {
+    const r = s * 0.75;
+    const a0 = -Math.PI * 0.9;
+    const a1 = Math.PI * 0.45;
+    ctx.arc(x, y, r, a0, a1);
+    const ex = x + Math.cos(a1) * r;
+    const ey = y + Math.sin(a1) * r;
+    head(ex, ey, -Math.sin(a1), Math.cos(a1));
+  } else if (shape === "elevation") {
+    ctx.moveTo(x - s * 0.8, y + s * 0.8);
+    ctx.lineTo(x + s * 0.8, y + s * 0.8);
+    ctx.moveTo(x, y + s * 0.5);
+    ctx.lineTo(x, y - s * 0.8);
+    head(x, y - s * 0.8, 0, -1);
+  } else if (shape === "height") {
+    ctx.moveTo(x - s * 0.6, y - s * 0.9);
+    ctx.lineTo(x + s * 0.6, y - s * 0.9);
+    ctx.moveTo(x - s * 0.6, y + s * 0.9);
+    ctx.lineTo(x + s * 0.6, y + s * 0.9);
+    ctx.moveTo(x, y - s * 0.6);
+    ctx.lineTo(x, y + s * 0.6);
+    head(x, y - s * 0.6, 0, -1);
+    head(x, y + s * 0.6, 0, 1);
+  } else {
+    // Diagonal away from the corner (the direction the piece grows)
+    let dx = 1;
+    let dy = 1;
+    if (anchor) {
+      const len = Math.hypot(x - anchor[0], y - anchor[1]) || 1;
+      dx = (x - anchor[0]) / len;
+      dy = (y - anchor[1]) / len;
+    } else {
+      dx = Math.SQRT1_2;
+      dy = Math.SQRT1_2;
+    }
+    const l = s * 0.75;
+    ctx.moveTo(x - dx * l, y - dy * l);
+    ctx.lineTo(x + dx * l, y + dy * l);
+    head(x + dx * l, y + dy * l, dx, dy);
+    head(x - dx * l, y - dy * l, -dx, -dy);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A free space beside a door or window: a line with end marks and its length. */
+function drawGap(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, color: string, px: number) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy);
+  if (len < 0.05) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5 * px;
+  strokePath(ctx, [a, b], false);
+  const nx = -dy / len;
+  const ny = dx / len;
+  const m = 6 * px;
+  for (const p of [a, b]) {
+    strokePath(
+      ctx,
+      [
+        [p[0] - nx * m, p[1] - ny * m],
+        [p[0] + nx * m, p[1] + ny * m],
+      ],
+      false,
+    );
+  }
+  drawCenteredTag(ctx, `${oneDecimal(len)} cm`, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);
 }
 
 /** Number with at most one decimal. */

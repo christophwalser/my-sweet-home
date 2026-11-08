@@ -307,9 +307,8 @@ pub(super) fn register(r: &mut Registry) {
             }
             a.angle = Some(normalize_angle(piece_angle)).filter(|v| *v != 0.0);
             apply_size(a, p.width, None, p.height);
-            // Fit the depth so that the wall part of the door (wallThickness fraction) matches the wall
-            let fraction = a.wall_thickness.unwrap_or(1.0).max(0.01);
-            a.depth = w.thickness / fraction;
+            // Depth from the wall thickness, the wall part of the door centered on the wall
+            fit_in_wall(a, w);
             if let Some(e) = p.elevation {
                 a.elevation = Some(e);
             }
@@ -585,4 +584,94 @@ fn piece_from_catalog(doc: &mut Document, entry: &FurnitureEntry) -> Result<Piec
         light_sources,
         ..Default::default()
     })
+}
+
+/// Fits a door or window into a wall like Sweet Home 3D's magnetism: its depth follows the
+/// wall thickness (the part `wallThickness` of the depth is the wall), and the piece is moved
+/// across the wall so that this part lies on the wall. Its position along the wall stays.
+pub(super) fn fit_in_wall(a: &mut msh_model::PieceAttrs, w: &msh_model::WallAttrs) {
+    let fraction = a.wall_thickness.unwrap_or(1.0).max(0.01);
+    if a.resizable != Some(false) && a.width_depth_deformable != Some(false) {
+        a.depth = w.thickness / fraction;
+    }
+    let (dx, dy) = (w.x_end - w.x_start, w.y_end - w.y_start);
+    let len = dx.hypot(dy);
+    if len < 1e-3 {
+        return;
+    }
+    let (ux, uy) = (dx / len, dy / len);
+    let t = (a.x - w.x_start) * ux + (a.y - w.y_start) * uy;
+    let (px, py) = (w.x_start + ux * t, w.y_start + uy * t);
+    // Middle of the wall part, measured from the piece center towards its front (local +y)
+    let wall_part = -a.depth / 2.0 + (a.wall_distance.unwrap_or(0.0) + fraction / 2.0) * a.depth;
+    let (s, c) = a.angle_or_default().sin_cos();
+    a.x = px + s * wall_part;
+    a.y = py - c * wall_part;
+}
+
+/// Refits the doors and windows standing in walls whose thickness changed (`old` thickness by
+/// wall ID): pieces parallel to the wall with their center inside the old wall.
+pub(super) fn refit_openings(home: &mut msh_model::Home, old: &[(String, f32)]) {
+    for (id, old_thickness) in old {
+        let Some(wall) = home
+            .walls
+            .iter()
+            .find(|w| &w.attrs.id == id)
+            .map(|w| w.attrs.clone())
+        else {
+            continue;
+        };
+        let (dx, dy) = (wall.x_end - wall.x_start, wall.y_end - wall.y_start);
+        let len = dx.hypot(dy);
+        if len < 1e-3 || wall.arc_extent.is_some_and(|e| e != 0.0) {
+            continue;
+        }
+        let (ux, uy) = (dx / len, dy / len);
+        let wall_angle = dy.atan2(dx);
+        fn walk(
+            items: &mut [Furniture],
+            wall: &msh_model::WallAttrs,
+            u: (f32, f32),
+            len: f32,
+            wall_angle: f32,
+            old_thickness: f32,
+        ) {
+            for item in items {
+                match item {
+                    Furniture::Group(g) => {
+                        walk(&mut g.items, wall, u, len, wall_angle, old_thickness)
+                    }
+                    Furniture::Piece(p) => {
+                        let a = &mut p.attrs;
+                        if p.kind != PieceKind::DoorOrWindow
+                            || a.level != wall.level
+                            || a.bound_to_wall == Some(false)
+                        {
+                            continue;
+                        }
+                        let diff =
+                            (a.angle_or_default() - wall_angle).rem_euclid(std::f32::consts::PI);
+                        let parallel = diff < 0.02 || diff > std::f32::consts::PI - 0.02;
+                        let (rx, ry) = (a.x - wall.x_start, a.y - wall.y_start);
+                        let t = rx * u.0 + ry * u.1;
+                        let across = (rx * -u.1 + ry * u.0).abs();
+                        if parallel
+                            && (0.0..=len).contains(&t)
+                            && across <= old_thickness / 2.0 + 0.5
+                        {
+                            fit_in_wall(a, wall);
+                        }
+                    }
+                }
+            }
+        }
+        walk(
+            &mut home.furniture,
+            &wall,
+            (ux, uy),
+            len,
+            wall_angle,
+            *old_thickness,
+        );
+    }
 }

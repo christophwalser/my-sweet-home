@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api";
-import { forEachPiece, type Piece, type Pt } from "../model";
+import { forEachPiece, type Home, type Piece, type Pt } from "../model";
 import { magnetismActive, usePreferences } from "../preferences";
 import { type Tool, useStore } from "../store";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
@@ -38,7 +38,15 @@ import {
   handleAt,
 } from "./handles";
 import { distanceToSegment, elementsInRect, hitTest, nearestWall } from "./interaction";
-import { constrainMove, type Docked, dockToWall, movePreview, selectionJoints } from "./moving";
+import {
+  constrainMove,
+  type Docked,
+  dockToWall,
+  movePreview,
+  type Slid,
+  selectionJoints,
+  slideInWall,
+} from "./moving";
 import { type DraftKind, drawOverlay, type PlanOverlay } from "./overlay";
 import { drawRuler, type RulerColors } from "./rulers";
 import {
@@ -109,7 +117,7 @@ function useDarkMode(): boolean {
 type Gesture =
   | { kind: "pan"; last: [number, number]; screen: [number, number]; moved: boolean }
   | { kind: "press"; start: Pt; screen: [number, number]; hitId: string | null; shift: boolean }
-  | { kind: "move"; start: Pt; offset: Pt; dock: Docked | null }
+  | { kind: "move"; start: Pt; offset: Pt; dock: Docked | null; slide: Slid | null }
   | { kind: "band"; start: Pt; end: Pt }
   | { kind: "handle"; handle: Handle; drag: HandleDrag | null; cursor: Pt }
   /** First point of a drawing pressed: a drag draws a single segment */
@@ -124,22 +132,65 @@ const isSnapTool = (t: Tool) => isPathTool(t) || t === "measure";
 /** Minimum number of points of a finished drawing. */
 const MIN_POINTS: Record<DraftKind, number> = { wall: 2, room: 3, polyline: 2, dimension: 2 };
 
-/** Cursor over a handle. */
-const HANDLE_CURSOR: Record<Handle["kind"], string> = {
-  "wall-start": "move",
-  "wall-end": "move",
-  "wall-thickness": "ew-resize",
-  "wall-arc": "pointer",
-  "wall-rotate": "grab",
-  "room-point": "move",
-  "polyline-point": "move",
-  "dimension-start": "move",
-  "dimension-end": "move",
-  "piece-resize": "nwse-resize",
-  "piece-rotate": "grab",
-  "room-name": "move",
-  "room-area": "move",
-};
+/** An SVG cursor (24 x 24, hot spot in the middle) with a white outline for any background. */
+function svgCursor(paths: string, fallback: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><g stroke="#ffffff" stroke-width="4">${paths}</g><g stroke="#1c2026" stroke-width="1.8">${paths}</g></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 12 12, ${fallback}`;
+}
+
+const ROTATE_CURSOR = svgCursor(
+  '<path d="M6.5 8.5 A7 7 0 1 1 5.5 15"/><path d="M3.5 6 L6.5 8.5 L9 5.5"/>',
+  "grab",
+);
+const ELEVATION_CURSOR = svgCursor(
+  '<path d="M5 19 H19"/><path d="M12 16 V4"/><path d="M8.5 7.5 L12 4 L15.5 7.5"/>',
+  "ns-resize",
+);
+const HEIGHT_CURSOR = svgCursor(
+  '<path d="M7 3 H17"/><path d="M7 21 H17"/><path d="M12 6 V18"/><path d="M9 9 L12 6 L15 9"/><path d="M9 15 L12 18 L15 15"/>',
+  "ns-resize",
+);
+const ARC_CURSOR = svgCursor('<path d="M4 16 Q12 4 20 16"/><path d="M12 13 V7"/>', "pointer");
+
+/** Resize cursor for a direction in the plan (radians, y down). */
+function resizeCursor(angle: number): string {
+  const deg = ((((angle * 180) / Math.PI) % 180) + 180) % 180;
+  if (deg < 22.5 || deg >= 157.5) return "ew-resize";
+  if (deg < 67.5) return "nwse-resize";
+  if (deg < 112.5) return "ns-resize";
+  return "nesw-resize";
+}
+
+/** Cursor over a handle (resize directions follow the element's rotation). */
+function handleCursor(home: Home, h: Handle): string {
+  switch (h.kind) {
+    case "wall-rotate":
+    case "piece-rotate":
+      return ROTATE_CURSOR;
+    case "piece-elevation":
+      return ELEVATION_CURSOR;
+    case "piece-height":
+      return HEIGHT_CURSOR;
+    case "wall-arc":
+      return ARC_CURSOR;
+    case "piece-resize":
+      return h.anchor
+        ? resizeCursor(Math.atan2(h.pos[1] - h.anchor[1], h.pos[0] - h.anchor[0]))
+        : "nwse-resize";
+    case "wall-thickness": {
+      const w = home.walls.find((x) => x.attrs.id === h.id);
+      if (!w) return "ew-resize";
+      const a = w.attrs;
+      // Across the wall
+      return resizeCursor(Math.atan2(a.y_end - a.y_start, a.x_end - a.x_start) + Math.PI / 2);
+    }
+    case "room-name":
+    case "room-area":
+      return "grab";
+    default:
+      return "move";
+  }
+}
 
 const cursorStyle: Record<Tool, string> = {
   select: "default",
@@ -360,20 +411,29 @@ export default function PlanView() {
     const overlay: PlanOverlay = {
       selection: sel,
       dragOffset: g?.kind === "move" ? g.offset : null,
-      dragGhost: g?.kind === "move" && g.dock ? g.dock.outline : null,
+      dragGhost:
+        g?.kind === "move" && (g.dock || g.slide) ? ((g.dock ?? g.slide)?.outline ?? null) : null,
       movePreview:
-        g?.kind === "move" && !g.dock
+        g?.kind === "move" && !g.dock && !g.slide
           ? movePreview(input.home, input.wallShapes, sel, g.offset[0], g.offset[1])
           : null,
+      gaps: g?.kind === "move" && g.slide ? g.slide.gaps : [],
       selectionJoints: tool === "select" ? selectionJoints(input.home, sel) : [],
       wallSides: tool === "select" ? selectedWallSides(input, sel, highlightSide) : null,
       draft:
         drawing && points.length > 0
           ? { points, kind: tool as DraftKind, thickness: wallThickness }
           : null,
-      guides: handleDrag?.drag.guides ?? snap?.guides ?? [],
-      note: snap?.note ?? null,
-      noteAt: snap?.pt ?? null,
+      guides:
+        g?.kind === "move" && g.slide
+          ? g.slide.guides
+          : (handleDrag?.drag.guides ?? snap?.guides ?? []),
+      note: g?.kind === "move" && g.slide ? g.slide.note : (snap?.note ?? null),
+      // At the pointer: beside the wall the distances already take the space
+      noteAt:
+        g?.kind === "move" && g.slide
+          ? (mouseWorld.current ?? [g.slide.x, g.slide.y])
+          : (snap?.pt ?? null),
       hints: isSnapTool(tool) ? (snapHints.current ?? []) : [],
       typedLength: drawing ? typed.current : null,
       handles:
@@ -762,7 +822,9 @@ export default function PlanView() {
         hoverHandle.current = handle;
         setHint(hintText());
       }
-      canvasRef.current.style.cursor = handle ? HANDLE_CURSOR[handle.kind] : cursorStyle.select;
+      canvasRef.current.style.cursor = handle
+        ? handleCursor(input.home, handle)
+        : cursorStyle.select;
       drawRulers();
     }
     if (g?.kind === "press") {
@@ -772,7 +834,7 @@ export default function PlanView() {
         // Dragging an unselected element selects it first
         const sel = useStore.getState().selection;
         if (!sel.includes(g.hitId)) setSelection(g.shift ? [...sel, g.hitId] : [g.hitId]);
-        gesture.current = { kind: "move", start: g.start, offset: [0, 0], dock: null };
+        gesture.current = { kind: "move", start: g.start, offset: [0, 0], dock: null, slide: null };
       } else {
         gesture.current = { kind: "band", start: g.start, end: p };
       }
@@ -782,7 +844,21 @@ export default function PlanView() {
       const sel = useStore.getState().selection;
       let offset: Pt = [Math.round(p[0] - g2.start[0]), Math.round(p[1] - g2.start[1])];
       g2.dock = null;
-      if (magnetismActive(e.altKey)) {
+      g2.slide = null;
+      const single = sel.length === 1 ? findPiece(sel[0]) : null;
+      if (single?.kind === "DoorOrWindow") {
+        // Doors and windows slide along the wall they are moved into
+        g2.slide = slideInWall(
+          input.home,
+          input.wallShapes,
+          effectiveLevel,
+          single,
+          [single.attrs.x + offset[0], single.attrs.y + offset[1]],
+          pxToCm(30),
+          pxToCm(SNAP_PX),
+          magnetismActive(e.altKey),
+        );
+      } else if (magnetismActive(e.altKey)) {
         offset = constrainMove(input.home, sel, offset);
         const piece = sel.length === 1 ? findPiece(sel[0]) : null;
         if (piece) {
@@ -873,7 +949,15 @@ export default function PlanView() {
       }
     } else if (g.kind === "move") {
       const [dx, dy] = g.offset;
-      if (g.dock && sel.length === 1) {
+      if (g.slide && sel.length === 1) {
+        void run("furniture_update", {
+          id: sel[0],
+          x: g.slide.x,
+          y: g.slide.y,
+          angle_deg: g.slide.angleDeg,
+          depth: g.slide.depth,
+        });
+      } else if (g.dock && sel.length === 1) {
         void run("furniture_update", {
           id: sel[0],
           x: g.dock.x,

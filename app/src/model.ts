@@ -144,6 +144,7 @@ export type Piece = {
     wall_height: number | null;
     wall_top: number | null;
     cut_out_shape: string | null;
+    width_depth_deformable: boolean | null;
     power: number | null;
     /** `false`: part of the base plan (fixed furniture) */
     movable: boolean | null;

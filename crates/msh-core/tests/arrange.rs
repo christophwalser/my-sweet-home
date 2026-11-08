@@ -218,3 +218,53 @@ fn style_of_the_copied_element_is_pasted() {
             .is_err()
     );
 }
+
+#[test]
+fn doors_and_windows_follow_the_wall_thickness() {
+    use msh_model::PieceKind;
+    let r = Registry::standard();
+    let mut doc = Document::default();
+    let wall = run(
+        &r,
+        &mut doc,
+        "wall_add",
+        json!({ "x_start": 0, "y_start": 0, "x_end": 400, "y_end": 0, "thickness": 20 }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // A window whose back half is the wall part (wallThickness 0.5, wallDistance 0)
+    doc.home_mut()
+        .furniture
+        .push(Furniture::Piece(Box::new(Piece {
+            kind: PieceKind::DoorOrWindow,
+            attrs: PieceAttrs {
+                id: Some("window".into()),
+                name: "Window".into(),
+                x: 150.0,
+                y: 10.0,
+                width: 100.0,
+                depth: 40.0,
+                height: 120.0,
+                wall_thickness: Some(0.5),
+                wall_distance: Some(0.0),
+                ..Default::default()
+            },
+            ..Default::default()
+        })));
+    // A piece in another wall direction is not touched
+    add_piece(&mut doc, "table", 300.0, 0.0, 80.0, 80.0, 0.0);
+
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": wall, "thickness": 30 }),
+    );
+    let w = piece(&doc, "window");
+    assert!(close(w.depth, 60.0), "depth {}", w.depth);
+    // The wall part (back half) lies on the wall: the center is 15 cm in front of the axis
+    assert!(close(w.y, 15.0), "y {}", w.y);
+    assert!(close(w.x, 150.0));
+    assert!(close(piece(&doc, "table").depth, 80.0));
+}

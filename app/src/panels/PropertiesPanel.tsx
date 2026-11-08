@@ -19,6 +19,7 @@ import {
   WALL_PATTERNS,
 } from "./fields";
 import MultiPanel from "./MultiPanel";
+import OpeningDistances from "./OpeningDistances";
 import TextureField from "./TextureField";
 
 /**
@@ -625,6 +626,7 @@ export default function PropertiesPanel() {
           value={a.angle ?? 0}
           onCommit={set("angle_deg")}
         />
+        {p.kind === "DoorOrWindow" && <OpeningDistances piece={p} />}
         <Field label="Width" type="number" unit="cm" value={a.width} onCommit={set("width")} />
         <Field label="Depth" type="number" unit="cm" value={a.depth} onCommit={set("depth")} />
         <Field label="Height" type="number" unit="cm" value={a.height} onCommit={set("height")} />

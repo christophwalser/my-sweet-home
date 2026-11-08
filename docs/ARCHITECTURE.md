@@ -563,6 +563,30 @@ furniture is read by its home reader.
   and polylines (`room_update` / `polyline_update` with the new points), select all, fit, lock
   or unlock the base plan. The menu stays inside the plan and scrolls when the plan is low.
 
+### 4.23 Status after P8b (2026-11-08)
+
+- Furniture handles like Sweet Home 3D's indicators, drawn as icons just outside the corners
+  (they no longer hide small pieces): rotate (top-left), elevation (top-right), resize
+  (bottom-right) and height (bottom-left), in the piece's orientation. Elevation and height
+  follow the vertical drag distance (cm of the plan); a non-deformable piece keeps its
+  proportions when its height changes. Cursors say what a handle does: SVG cursors for
+  rotating, elevation, height and bending walls, resize cursors along the actual direction
+  (piece corners, wall thickness across the wall).
+- Doors and windows in walls (msh-core `fit_in_wall`): the depth follows the wall thickness
+  (the `wallThickness` part of the depth is the wall, if the piece is resizable and
+  width/depth deformable), and the piece moves across the wall so that this part lies on the
+  wall axis (Sweet Home 3D's placement; the example homes keep their positions exactly).
+  Used by `furniture_add_in_wall` and by `wall_update` when the thickness changes (pieces
+  parallel to the wall with their center inside it).
+- Dragging a single door or window (`moving.ts` `slideInWall`): within 30 px of a straight
+  wall it slides along that wall, keeps the side it opens to and takes the wall's depth. The
+  free space to the neighbors (the inner faces at the wall ends, or other openings in that
+  wall) is drawn on both sides with its length. Magnetism snaps to the middle of the free
+  space and puts the center or an edge in line with doors and windows of parallel walls,
+  also on other levels (guide line and note at the pointer); otherwise to whole cm.
+- Properties of a door or window in a wall: "Space left / right" (or top / bottom for walls
+  running down the plan) to its neighbors; typing a value moves the piece along the wall.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
