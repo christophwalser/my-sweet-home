@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { api } from "./api";
+import ErrorBoundary from "./ErrorBoundary";
 import { syncUiState } from "./layout/view3dWindow";
 import { applyHome, subscribeToHomeChanges, useStore } from "./store";
 import View3D from "./view3d/View3D";
@@ -78,7 +79,9 @@ export default function View3DWindow() {
         {!opened && <span className="muted">No home open</span>}
       </header>
       <section className="view3d">
-        <View3D />
+        <ErrorBoundary name="3D view" resetKey={opened}>
+          <View3D />
+        </ErrorBoundary>
       </section>
     </div>
   );

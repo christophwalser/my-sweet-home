@@ -3,6 +3,7 @@ import { message, open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import { type AppInfo, api, TOP_VIEWS_EVENT } from "./api";
 import CatalogPanel from "./catalog/CatalogPanel";
+import ErrorBoundary from "./ErrorBoundary";
 import ExportDialog from "./export/ExportDialog";
 import { clampSide, DEFAULT_LAYOUT, type Maximized, useLayout } from "./layout/layout";
 import Splitter from "./layout/Splitter";
@@ -586,7 +587,9 @@ export default function App() {
         <section className="view3d" style={{ flex: view3dFlex }}>
           {!detached && (
             <>
-              <View3D />
+              <ErrorBoundary name="3D view" resetKey={opened}>
+                <View3D />
+              </ErrorBoundary>
               <span className="pane-buttons view3d-buttons">
                 <PaneButton
                   label={shown === "3d" ? "Restore the plan" : "Maximize the 3D view"}

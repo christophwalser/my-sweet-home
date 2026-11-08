@@ -271,7 +271,12 @@ export function buildWalls(
       const cut = openingBrush(p, baseY, p.attrs.depth + 2 * maxThickness + 10, materials);
       const cutBox = new THREE.Box3().setFromObject(cut);
       if (!cutBox.intersectsBox(box)) continue;
-      brush = evaluator.evaluate(brush, cut, SUBTRACTION) as Brush;
+      try {
+        brush = evaluator.evaluate(brush, cut, SUBTRACTION) as Brush;
+      } catch (e) {
+        // A failed cut leaves the wall closed instead of failing the 3D view
+        console.warn(`wall opening of ${p.attrs.name} skipped:`, e);
+      }
       brush.updateMatrixWorld();
     }
     return brush.geometry;
@@ -475,25 +480,43 @@ export function buildRooms(
   return group;
 }
 
-/** Holes whose bounding box overlaps the room (the others cannot cut it). */
+/** True if `p` lies inside the polygon (even-odd rule). */
+function insidePolygon(p: Pt, poly: Pt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/**
+ * Holes that reach into the room's area. Rooms are often drawn around the stairwell
+ * already (Sweet Home 3D's example homes): a hole in such a notch only touches the room's
+ * edges and must not be cut (the cut would fail on the coinciding edges).
+ */
 function touching(holes: Pt[][], points: { x: number; y: number }[]): Pt[][] {
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
-  const [minX, maxX, minY, maxY] = [
-    Math.min(...xs),
-    Math.max(...xs),
-    Math.min(...ys),
-    Math.max(...ys),
-  ];
-  return holes.filter(
-    (h) =>
-      h.some(([x, y]) => x >= minX - 1 && x <= maxX + 1 && y >= minY - 1 && y <= maxY + 1) ||
-      // A hole larger than the room
-      (Math.min(...h.map((p) => p[0])) <= minX &&
-        Math.max(...h.map((p) => p[0])) >= maxX &&
-        Math.min(...h.map((p) => p[1])) <= minY &&
-        Math.max(...h.map((p) => p[1])) >= maxY),
-  );
+  const room: Pt[] = points.map((p) => [p.x, p.y]);
+  return holes.filter((hole) => {
+    // Points of the hole slightly inside it: its corners pulled towards its center, and
+    // the middles of its edges
+    const cx = hole.reduce((s, p) => s + p[0], 0) / hole.length;
+    const cy = hole.reduce((s, p) => s + p[1], 0) / hole.length;
+    const samples: Pt[] = [[cx, cy]];
+    hole.forEach((p, i) => {
+      const q = hole[(i + 1) % hole.length];
+      samples.push([p[0] + (cx - p[0]) * 0.02, p[1] + (cy - p[1]) * 0.02]);
+      const mx = (p[0] + q[0]) / 2;
+      const my = (p[1] + q[1]) / 2;
+      samples.push([mx + (cx - mx) * 0.02, my + (cy - my) * 0.02]);
+    });
+    if (samples.some((p) => insidePolygon(p, room))) return true;
+    // A room smaller than the hole lies inside it
+    return room.some((p) => insidePolygon(p, hole));
+  });
 }
 
 /**
@@ -517,7 +540,12 @@ function cutOut(
     prism.translate(0, 200, 0);
     const hole = new Brush(prism, materials);
     hole.updateMatrixWorld();
-    brush = evaluator.evaluate(brush, hole, SUBTRACTION);
+    try {
+      brush = evaluator.evaluate(brush, hole, SUBTRACTION);
+    } catch (e) {
+      // A failed cut leaves the surface without this hole instead of failing the 3D view
+      console.warn("staircase cut-out skipped:", e);
+    }
     prism.dispose();
   }
   return brush.geometry;

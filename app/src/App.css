@@ -1561,3 +1561,25 @@ body.resizing-horizontal {
   color: #e57373;
   font-size: 12px;
 }
+
+/* A part of the window that failed (see ErrorBoundary) */
+.error-boundary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 16px;
+  overflow: auto;
+  font-size: 13px;
+}
+
+.error-boundary code {
+  color: #e57373;
+}
+
+.error-boundary pre {
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.7;
+  white-space: pre-wrap;
+}
