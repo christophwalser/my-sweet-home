@@ -17,6 +17,7 @@ import {
   snapDraw,
   wallAxis,
 } from "./snapping";
+import { surfacesAt } from "./support";
 
 export type HandleKind =
   | "wall-start"
@@ -650,11 +651,22 @@ export function dragHandle(
       const d = a.depth_in_plan ?? a.depth;
       const outline = { pts: pieceCorners(a.x, a.y, w, d, a.angle ?? 0), closed: true };
       if (handle.kind === "piece-elevation") {
-        const elevation = Math.max(0, Math.round(((a.elevation ?? 0) + delta) * 10) / 10);
+        let elevation = Math.max(0, Math.round(((a.elevation ?? 0) + delta) * 10) / 10);
+        // Snaps to the tops and shelves of the furniture under the piece
+        let on = "";
+        if (magnetism) {
+          const near = surfacesAt(home, piece, [a.x, a.y]).find(
+            (s) => Math.abs(s.elevation - elevation) < 4,
+          );
+          if (near) {
+            elevation = Math.round(near.elevation * 10) / 10;
+            on = ` · ${near.label}`;
+          }
+        }
         return {
           preview: [outline],
           ...none,
-          info: `Elevation ${elevation} cm`,
+          info: `Elevation ${elevation} cm${on}`,
           command: "furniture_update",
           params: { id, elevation },
         };

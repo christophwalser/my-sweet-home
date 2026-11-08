@@ -65,6 +65,7 @@ import {
   snapContext,
   snapDraw,
 } from "./snapping";
+import { dropElevation } from "./support";
 import { topView } from "./topView";
 
 const LIGHT: PlanColors = {
@@ -1043,6 +1044,12 @@ export default function PlanView() {
       }
     } else if (g.kind === "move") {
       const [dx, dy] = g.offset;
+      // A single piece moved onto a table or shelf, or off it back to the floor
+      const single = sel.length === 1 ? findPiece(sel[0]) : null;
+      const drop =
+        single && (dx !== 0 || dy !== 0) && magnetismActive(e.altKey)
+          ? dropElevation(input.home, single, [single.attrs.x + dx, single.attrs.y + dy])
+          : null;
       if (g.slide && sel.length === 1) {
         void run("furniture_update", {
           id: sel[0],
@@ -1052,11 +1059,24 @@ export default function PlanView() {
           depth: g.slide.depth,
         });
       } else if (g.dock && sel.length === 1) {
+        const docked =
+          single && magnetismActive(e.altKey)
+            ? dropElevation(input.home, single, [g.dock.x, g.dock.y])
+            : null;
         void run("furniture_update", {
           id: sel[0],
           x: g.dock.x,
           y: g.dock.y,
           angle_deg: g.dock.angleDeg,
+          ...(docked ? { elevation: docked.elevation } : {}),
+        });
+      } else if (single && drop) {
+        // Move and change the elevation in one step
+        void run("furniture_update", {
+          id: sel[0],
+          x: single.attrs.x + dx,
+          y: single.attrs.y + dy,
+          elevation: drop.elevation,
         });
       } else if ((dx !== 0 || dy !== 0) && sel.includes(VISITOR_ID)) {
         const v = currentVisitor();

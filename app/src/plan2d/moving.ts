@@ -9,6 +9,7 @@ import {
   type Piece,
   type Pt,
   type WallShape,
+  wallAtLevel,
   wallPolygon,
 } from "../model";
 import { sameLevel } from "./drawPlan";
@@ -246,7 +247,7 @@ export function dockToWall(
   let best: Docked | null = null;
   let bestGap = radius;
   home.walls.forEach((wall, i) => {
-    if (!sameLevel(wall.attrs.level, levelId)) return;
+    if (!wallAtLevel(home, wall, levelId)) return;
     const shape = wallShapes[i];
     for (const side of [shape.left, shape.right]) {
       for (let k = 0; k + 1 < side.length; k++) {
@@ -337,7 +338,7 @@ export function wallSlot(
   let bestAcross = Number.POSITIVE_INFINITY;
   home.walls.forEach((wall, i) => {
     const w = wall.attrs;
-    if (!sameLevel(w.level, levelId) || w.arc_extent) return;
+    if (!wallAtLevel(home, wall, levelId) || w.arc_extent) return;
     const start: Pt = [w.x_start, w.y_start];
     const len = Math.hypot(w.x_end - w.x_start, w.y_end - w.y_start);
     if (len < 1) return;

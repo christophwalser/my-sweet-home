@@ -680,6 +680,27 @@ furniture is read by its home reader.
 - Fixed: changing the sun time or the lens moved the 3D view back to the stored camera (only
   the pose of a stored camera counts now).
 
+### 4.28 Status after P10 (2026-11-08)
+
+- Staircases cut holes (`view3d/staircase.ts`): the piece's `staircaseCutOutShape` (SVG path
+  in the unit square; M, L, H, V, C, S, Q, T, A, Z) placed like the piece removes its outline
+  from the floors of the levels it reaches up to and from the ceilings it reaches through
+  (CSG on the floor slab; ceilings are cut as a thin slab whose lower faces are kept).
+- Walls and pieces of other levels in the plan, like Sweet Home 3D's `isAtLevel`
+  (`wallAtLevel`, `pieceAtLevel` in model.ts): walls of lower levels that reach into the
+  level, pieces whose top reaches above its floor (staircases up to its floor), and items of
+  lower levels at the same elevation are drawn, picked, snapped to and edited there.
+- Shelf units: catalog pieces with `shelfElevations` / `shelfBoxes` become `shelfUnit`s
+  with shelves relative to their size (as Sweet Home 3D stores them, so resizing keeps
+  them). With magnetism a smaller piece moved onto a larger one lands on its top
+  (`dropOnTopElevation`) or on the shelf of a shelf unit nearest to its elevation, and back
+  on the floor when moved off it (`plan2d/support.ts`); the elevation handle snaps to tops
+  and shelves. Verified with Sweet Home 3D's reader.
+- Walking stairs in the virtual visit: on a staircase's footprint the floor rises from its
+  front to its back up to the level it leads to; the eyes keep their height above the
+  steps. The level ahead is selected while on the stairs, so the floor above is shown
+  instead of the sky through the hole.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

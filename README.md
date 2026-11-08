@@ -92,6 +92,9 @@ bar at the bottom of the plan explains the next step.
 - Furniture can be tilted (forward and sideways); lamps have an editable light power and an
   optional light cone. Photos offer normal, fisheye and spherical (360°) lenses, ceiling
   lights in the rooms and the date and time of the sun.
+- Staircases cut holes in the floor above and can be walked up and down in the virtual visit;
+  walls reaching into upper levels appear in their plans. Furniture moved onto tables or
+  shelf units lands on their top or shelves.
 - Furniture in the plan is drawn as seen from above, rendered from its 3D model with its
   colors and materials (Preferences: off shows the catalog icons); exports and prints use
   the view from above too, or the icons ("Furniture in plans" in the export dialog).

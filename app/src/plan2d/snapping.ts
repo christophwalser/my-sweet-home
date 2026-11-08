@@ -8,7 +8,14 @@
 // 3. without a previous point: lines (projection), alignment guides, whole cm.
 // All coordinates in cm (y down).
 
-import { forEachPiece, type Home, type Pt, type WallShape } from "../model";
+import {
+  forEachPiece,
+  type Home,
+  type Pt,
+  pieceAtLevel,
+  type WallShape,
+  wallAtLevel,
+} from "../model";
 import { sameLevel } from "./drawPlan";
 
 export type Segment = [Pt, Pt];
@@ -331,7 +338,7 @@ export function snapContext(
 
   home.walls.forEach((w, i) => {
     const a = w.attrs;
-    if (!sameLevel(a.level, levelId) || a.id === excludeId) return;
+    if (!wallAtLevel(home, w, levelId) || a.id === excludeId) return;
     const start: Pt = [a.x_start, a.y_start];
     const end: Pt = [a.x_end, a.y_end];
     const s = wallShapes[i];
@@ -404,7 +411,7 @@ export function snapContext(
     // Corners of furniture: points to measure from and guides to align with
     forEachPiece(home.furniture, (p) => {
       const a = p.attrs;
-      if (!sameLevel(a.level, levelId) || a.visible === false) return;
+      if (!pieceAtLevel(home, p, levelId) || a.visible === false) return;
       refs.push([a.x, a.y]);
       const w = (a.width_in_plan ?? a.width) / 2;
       const d = (a.depth_in_plan ?? a.depth) / 2;
@@ -442,7 +449,7 @@ export function snapContext(
   if (anchor && purpose !== "polyline") {
     for (const w of home.walls) {
       const a = w.attrs;
-      if (!sameLevel(a.level, levelId) || a.id === excludeId || a.arc_extent) continue;
+      if (!wallAtLevel(home, w, levelId) || a.id === excludeId || a.arc_extent) continue;
       const s: Pt = [a.x_start, a.y_start];
       const e: Pt = [a.x_end, a.y_end];
       if (dist(s, anchor) < 0.01 || dist(e, anchor) < 0.01) {

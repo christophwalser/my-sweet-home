@@ -150,6 +150,10 @@ export type Piece = {
     wall_top: number | null;
     cut_out_shape: string | null;
     width_depth_deformable: boolean | null;
+    /** Part of the height other pieces stand on (1 = the top) */
+    drop_on_top_elevation?: number | null;
+    /** SVG path in the unit square: the hole a staircase cuts in the floor above */
+    staircase_cut_out_shape?: string | null;
     power: number | null;
     /** `false`: part of the base plan (fixed furniture) */
     movable: boolean | null;
@@ -158,6 +162,16 @@ export type Piece = {
   light_sources?: LightSource[];
   /** Materials of the model that glow when the light is on (Sweet Home 3D 7) */
   light_source_materials?: { name: string }[];
+  /** Shelves of a shelf unit: an elevation, or a box (all relative to the size) */
+  shelves?: {
+    elevation?: number | null;
+    x_lower?: number | null;
+    y_lower?: number | null;
+    z_lower?: number | null;
+    x_upper?: number | null;
+    y_upper?: number | null;
+    z_upper?: number | null;
+  }[];
   /** Free properties (e.g. `mySweetHome.spotAngle`) */
   properties?: { name: string; value: string }[];
   texture: Texture | null;
@@ -411,4 +425,54 @@ export function wallPolygon(s: WallShape): Pt[] {
 /** Whether an item on `itemLevel` belongs to the level `levelId` (no levels = everything). */
 export function onLevel(itemLevel: string | null, levelId: string | null): boolean {
   return levelId === null || itemLevel === levelId || (itemLevel === null && levelId === null);
+}
+
+/** Elevation and elevation index of a level (0 for homes without levels). */
+function levelPosition(home: Home, id: string | null): { elevation: number; index: number } | null {
+  const l = home.levels.find((lv) => lv.attrs.id === id);
+  return l ? { elevation: l.attrs.elevation, index: l.attrs.elevation_index ?? 0 } : null;
+}
+
+/** True if `own` is a lower level at the same elevation as `level` (Sweet Home 3D's rule). */
+function sameElevationBelow(
+  own: { elevation: number; index: number },
+  level: { elevation: number; index: number },
+): boolean {
+  return own.elevation === level.elevation && own.index < level.index;
+}
+
+/**
+ * Like Sweet Home 3D's `Wall.isAtLevel`: walls of the level, of lower levels at the same
+ * elevation, and walls of levels below that reach into this level.
+ */
+export function wallAtLevel(home: Home, wall: Wall, levelId: string | null): boolean {
+  if (levelId === null || wall.attrs.level === levelId) return true;
+  const own = levelPosition(home, wall.attrs.level);
+  const level = levelPosition(home, levelId);
+  if (!own || !level) return false;
+  const a = wall.attrs;
+  const height = Math.max(a.height ?? home.attrs.wall_height ?? 250, a.height_at_end ?? 0);
+  return (
+    sameElevationBelow(own, level) ||
+    (own.elevation < level.elevation && own.elevation + height > level.elevation)
+  );
+}
+
+/**
+ * Like Sweet Home 3D's `HomePieceOfFurniture.isAtLevel`: pieces of the level, of lower
+ * levels at the same elevation, and pieces of levels below whose top reaches into this
+ * level (staircases up to its floor, other pieces above its floor thickness).
+ */
+export function pieceAtLevel(home: Home, piece: Piece, levelId: string | null): boolean {
+  if (levelId === null || piece.attrs.level === levelId) return true;
+  const own = levelPosition(home, piece.attrs.level);
+  const level = levelPosition(home, levelId);
+  if (!own || !level) return false;
+  if (sameElevationBelow(own, level)) return true;
+  if (own.elevation >= level.elevation) return false;
+  const a = piece.attrs;
+  const top = own.elevation + (a.elevation ?? 0) + (a.height_in_plan ?? a.height);
+  if (a.staircase_cut_out_shape) return top >= level.elevation;
+  const floor = home.levels.find((l) => l.attrs.id === levelId)?.attrs.floor_thickness ?? 12;
+  return top > level.elevation + floor;
 }

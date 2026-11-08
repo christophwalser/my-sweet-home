@@ -580,10 +580,13 @@ fn piece_from_catalog(doc: &mut Document, entry: &FurnitureEntry) -> Result<Piec
     let (w, d, h) = (item.width, item.depth, item.height);
 
     let is_light = x.contains_key("lightSourceX");
+    let is_shelf_unit = x.contains_key("shelfElevations") || x.contains_key("shelfBoxes");
     let kind = if item.door_or_window {
         PieceKind::DoorOrWindow
     } else if is_light {
         PieceKind::Light
+    } else if is_shelf_unit {
+        PieceKind::ShelfUnit
     } else {
         PieceKind::Piece
     };
@@ -592,6 +595,7 @@ fn piece_from_catalog(doc: &mut Document, entry: &FurnitureEntry) -> Result<Piec
         id: Some(new_id(match kind {
             PieceKind::DoorOrWindow => "doorOrWindow",
             PieceKind::Light => "light",
+            PieceKind::ShelfUnit => "shelfUnit",
             _ => "pieceOfFurniture",
         })),
         catalog_id: item.id.clone(),
@@ -622,6 +626,27 @@ fn piece_from_catalog(doc: &mut Document, entry: &FurnitureEntry) -> Result<Piec
     };
     let mut sashes = Vec::new();
     let mut light_sources = Vec::new();
+    let mut shelves = Vec::new();
+    if kind == PieceKind::ShelfUnit && w > 0.0 && d > 0.0 && h > 0.0 {
+        // Sweet Home 3D keeps shelves relative to the size, so they follow resizing
+        for e in nums("shelfElevations") {
+            shelves.push(msh_model::Shelf {
+                elevation: Some(e / h),
+                ..Default::default()
+            });
+        }
+        for b in nums("shelfBoxes").as_chunks::<6>().0 {
+            shelves.push(msh_model::Shelf {
+                x_lower: Some(b[0] / w),
+                y_lower: Some(b[1] / d),
+                z_lower: Some(b[2] / h),
+                x_upper: Some(b[3] / w),
+                y_upper: Some(b[4] / d),
+                z_upper: Some(b[5] / h),
+                ..Default::default()
+            });
+        }
+    }
 
     if kind == PieceKind::DoorOrWindow {
         attrs.door_or_window = None; // implied by the element name
@@ -693,6 +718,7 @@ fn piece_from_catalog(doc: &mut Document, entry: &FurnitureEntry) -> Result<Piec
         attrs,
         sashes,
         light_sources,
+        shelves,
         ..Default::default()
     })
 }

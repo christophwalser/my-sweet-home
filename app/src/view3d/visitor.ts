@@ -38,11 +38,26 @@ type Passage = {
   top: number;
 };
 
+/**
+ * A staircase as a ramp: its floor rises from the front of the piece (bottom) to its
+ * back, up to the level it leads to.
+ */
+type Ramp = {
+  center: Pt;
+  cos: number;
+  sin: number;
+  halfW: number;
+  halfD: number;
+  bottom: number;
+  top: number;
+};
+
 export type Colliders = {
   obstacles: Obstacle[];
   passages: Passage[];
   /** Elevations of the floors (levels), ascending */
   floors: number[];
+  ramps: Ramp[];
 };
 
 /** Lowest eye height above the floor the visitor stands on (cm). */
@@ -56,11 +71,47 @@ export function levelOfEye(home: Home, eye: number): string | null {
   return (below[below.length - 1] ?? levels[0]).attrs.id;
 }
 
-/** Elevation of the floor the visitor stands on. */
+/** Elevation of the floor of the level the visitor is on. */
 function floorUnder(c: Colliders, eye: number): number {
   let floor = c.floors[0] ?? 0;
   for (const f of c.floors) if (f <= eye - MIN_EYE_ABOVE_FLOOR) floor = f;
   return floor;
+}
+
+/** Height of a ramp's floor at `p`, or null outside the staircase. */
+function rampHeight(r: Ramp, p: Pt): number | null {
+  const dx = p[0] - r.center[0];
+  const dy = p[1] - r.center[1];
+  const along = dx * r.cos + dy * r.sin;
+  const across = -dx * r.sin + dy * r.cos;
+  if (Math.abs(along) > r.halfW || Math.abs(across) > r.halfD) return null;
+  // Front (+depth) at the bottom, back at the top
+  const t = (r.halfD - across) / (2 * r.halfD);
+  return r.bottom + t * (r.top - r.bottom);
+}
+
+/**
+ * Floor under the visitor at `p`: the steps of a staircase it stands on (within a step of
+ * where it was, the nearest of several), else the floor of its level. Above a stairwell
+ * whose steps are far below, the visitor stays on its floor.
+ */
+export function groundAt(c: Colliders, p: Pt, eye: number, previous: number): number {
+  let best: number | null = null;
+  for (const r of c.ramps) {
+    const h = rampHeight(r, p);
+    if (h === null || Math.abs(h - previous) > 60) continue;
+    if (best === null || Math.abs(h - previous) < Math.abs(best - previous)) best = h;
+  }
+  return best ?? floorUnder(c, eye);
+}
+
+/** Elevation of the level a staircase leads to, if the visitor stands on its steps. */
+export function stairTopAt(c: Colliders, p: Pt, ground: number): number | null {
+  for (const r of c.ramps) {
+    const h = rampHeight(r, p);
+    if (h !== null && Math.abs(h - ground) < 0.5 && h > r.bottom + 1) return r.top;
+  }
+  return null;
 }
 
 /** Walls and doors of the home as obstacles and passages for the visitor. */
@@ -106,7 +157,26 @@ export function buildColliders(
   const floors = [...new Set([0, ...home.levels.map((l) => levelElevation(l.attrs.id))])].sort(
     (a, b) => a - b,
   );
-  return { obstacles, passages, floors };
+  const ramps: Ramp[] = [];
+  forEachPiece(home.furniture, (p) => {
+    const a = p.attrs;
+    if (!a.staircase_cut_out_shape || a.visible === false) return;
+    const bottom = levelElevation(a.level) + (a.elevation ?? 0);
+    const height = a.height_in_plan ?? a.height;
+    // Up to the level the staircase leads to (its model also has a handrail above it)
+    const top = floors.find((f) => f > bottom + 50 && f <= bottom + height + 1) ?? bottom + height;
+    const angle = a.angle ?? 0;
+    ramps.push({
+      center: [a.x, a.y],
+      cos: Math.cos(angle),
+      sin: Math.sin(angle),
+      halfW: (a.width_in_plan ?? a.width) / 2,
+      halfD: (a.depth_in_plan ?? a.depth) / 2,
+      bottom,
+      top,
+    });
+  });
+  return { obstacles, passages, floors, ramps };
 }
 
 function pointInPolygon(p: Pt, poly: Pt[]): boolean {
@@ -134,10 +204,10 @@ function distanceToSegment(p: Pt, a: Pt, b: Pt): number {
  * Distance from `p` to the nearest wall the visitor can touch with the eyes at `eye`
  * (negative inside a wall, infinite in a door opening or without walls).
  */
-export function clearance(c: Colliders, p: Pt, eye: number): number {
+export function clearance(c: Colliders, p: Pt, eye: number, ground?: number): number {
   // The feet are on the floor of the level the visitor is on (the eye height of points
-  // of view differs from home to home); what is lower than a step does not stop it
-  const feet = floorUnder(c, eye) + STEP;
+  // of view differs from home to home), or on the steps; lower than a step does not stop it
+  const feet = (ground ?? floorUnder(c, eye)) + STEP;
   for (const pa of c.passages) {
     if (pa.bottom > feet || pa.top < Math.min(eye, feet + 150)) continue;
     const dx = p[0] - pa.center[0];
@@ -171,14 +241,14 @@ export function blocked(c: Colliders, p: Pt, eye: number): boolean {
  * A visitor already touching a wall (e.g. a stored point of view close to it) may
  * move along it or away from it, but not closer.
  */
-export function collide(c: Colliders, from: Pt, to: Pt, eye: number): Pt {
+export function collide(c: Colliders, from: Pt, to: Pt, eye: number, ground?: number): Pt {
   // Long moves are checked in steps so that thin walls are not skipped
   const steps = Math.max(
     1,
     Math.ceil(Math.hypot(to[0] - from[0], to[1] - from[1]) / (VISITOR_RADIUS / 2)),
   );
   let p: Pt = from;
-  let here = clearance(c, p, eye);
+  let here = clearance(c, p, eye, ground);
   const sx = (to[0] - from[0]) / steps;
   const sy = (to[1] - from[1]) / steps;
   for (let i = 0; i < steps; i++) {
@@ -188,7 +258,7 @@ export function collide(c: Colliders, from: Pt, to: Pt, eye: number): Pt {
       [p[0] + sx, p[1]],
       [p[0], p[1] + sy],
     ] as Pt[]) {
-      const d = clearance(c, q, eye);
+      const d = clearance(c, q, eye, ground);
       if (d >= VISITOR_RADIUS || d >= here - 1e-3) {
         next = q;
         here = d;
@@ -205,13 +275,17 @@ export function collide(c: Colliders, from: Pt, to: Pt, eye: number): Pt {
 export class VisitorControls {
   pose: CameraPose;
   enabled = false;
-  colliders: Colliders = { obstacles: [], passages: [], floors: [0] };
+  colliders: Colliders = { obstacles: [], passages: [], floors: [0], ramps: [] };
   /** Called after each change of the pose (for rendering and the plan) */
   onChange: (pose: CameraPose) => void = () => {};
   /** Called when the visitor stopped moving (for storing the camera) */
   onStop: (pose: CameraPose) => void = () => {};
 
   private keys = new Set<string>();
+  /** Floor or step height under the visitor while walking */
+  private ground: number | null = null;
+  /** Elevation of the level ahead while the visitor is on a staircase, else null */
+  stairTop: number | null = null;
   private frame = 0;
   private last = 0;
   private drag: { x: number; y: number } | null = null;
@@ -249,6 +323,8 @@ export class VisitorControls {
 
   /** Places the visitor (e.g. from the camera stored in the home). */
   setPose(pose: CameraPose): void {
+    this.ground = null;
+    this.stairTop = null;
     this.pose = { ...pose, pitch: THREE.MathUtils.clamp(pose.pitch, -MAX_PITCH, MAX_PITCH) };
     applyPose(this.camera, this.pose);
   }
@@ -311,9 +387,21 @@ export class VisitorControls {
       const fy = Math.cos(p.yaw);
       const dx = ((forward * fx - side * fy) / len) * speed;
       const dy = ((forward * fy + side * fx) / len) * speed;
-      const [x, y] = collide(this.colliders, [p.x, p.y], [p.x + dx, p.y + dy], p.z);
+      // The eyes keep their height above the floor or the steps the visitor stands on
+      const ground = groundAt(
+        this.colliders,
+        [p.x, p.y],
+        p.z,
+        this.ground ?? floorUnder(this.colliders, p.z),
+      );
+      const eyeHeight = p.z - ground;
+      const [x, y] = collide(this.colliders, [p.x, p.y], [p.x + dx, p.y + dy], p.z, ground);
       p.x = x;
       p.y = y;
+      const next = groundAt(this.colliders, [x, y], p.z, ground);
+      p.z = next + eyeHeight;
+      this.ground = next;
+      this.stairTop = stairTopAt(this.colliders, [x, y], next);
     }
     if (up) p.z = Math.max(10, p.z + up * speed);
     this.changed();

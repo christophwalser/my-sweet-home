@@ -7,8 +7,10 @@ import {
   type Home,
   type Piece,
   type Pt,
+  pieceAtLevel,
   piecesWithTop,
   type WallShape,
+  wallAtLevel,
   wallPolygon,
 } from "../model";
 import { polylinePath } from "./curve";
@@ -83,7 +85,7 @@ export function hitTest(
   // furniture selectable, like Sweet Home 3D.
   const locked = home.attrs.base_plan_locked === true;
   const pieces = piecesWithTop(home.furniture).filter(
-    (e) => sameLevel(e.level, levelId) && e.topId && !(locked && isBasePlanPiece(e.piece)),
+    (e) => pieceAtLevel(home, e.piece, levelId) && e.topId && !(locked && isBasePlanPiece(e.piece)),
   );
   pieces.sort((a, b) => (b.piece.attrs.elevation ?? 0) - (a.piece.attrs.elevation ?? 0));
   for (const { piece, topId } of pieces) {
@@ -134,7 +136,7 @@ export function hitTest(
   }
   for (let i = home.walls.length - 1; i >= 0; i--) {
     const w = home.walls[i];
-    if (!sameLevel(w.attrs.level, levelId)) continue;
+    if (!wallAtLevel(home, w, levelId)) continue;
     const poly = wallPolygon(wallShapes[i]);
     if (pointInPolygon(p, poly)) return { id: w.attrs.id, kind: "wall" };
     // Thin walls are hard to hit: also accept clicks close to the axis
@@ -286,8 +288,8 @@ export function elementsInRect(home: Home, levelId: string | null, a: Pt, b: Pt)
   const ids: string[] = [];
   // Pieces and groups (a group when all its pieces are inside)
   const groups = new Map<string, boolean>();
-  for (const { piece, topId, level } of piecesWithTop(home.furniture)) {
-    if (!sameLevel(level, levelId) || !topId) continue;
+  for (const { piece, topId } of piecesWithTop(home.furniture)) {
+    if (!pieceAtLevel(home, piece, levelId) || !topId) continue;
     if (locked && isBasePlanPiece(piece)) continue;
     const isInside = inside(piece.attrs.x, piece.attrs.y);
     if (topId === piece.attrs.id) {
@@ -301,7 +303,7 @@ export function elementsInRect(home: Home, levelId: string | null, a: Pt, b: Pt)
   for (const w of home.walls) {
     const a2 = w.attrs;
     if (
-      sameLevel(a2.level, levelId) &&
+      wallAtLevel(home, w, levelId) &&
       inside(a2.x_start, a2.y_start) &&
       inside(a2.x_end, a2.y_end)
     ) {
@@ -345,7 +347,7 @@ export function nearestWall(
   let best: { id: string; offset: number; distance: number } | null = null;
   for (const w of home.walls) {
     const a = w.attrs;
-    if (!sameLevel(a.level, levelId) || a.arc_extent) continue;
+    if (!wallAtLevel(home, w, levelId) || a.arc_extent) continue;
     const start: Pt = [a.x_start, a.y_start];
     const end: Pt = [a.x_end, a.y_end];
     const distance = distanceToSegment(p, start, end);

@@ -14,6 +14,7 @@ import {
   type Pt,
   type Texture,
 } from "../model";
+import { holesAt, staircases } from "./staircase";
 import { baseboardOf, baseboardPolygon } from "./wallSides";
 
 export type LevelInfo = { elevation: number; height: number; floorThickness: number };
@@ -390,6 +391,10 @@ export function buildRooms(
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = "rooms";
+  // Staircases cut holes in the floors above and the ceilings they reach through
+  const stairs = staircases(opened.home, levels);
+  const evaluator = new Evaluator();
+  evaluator.useGroups = true;
   for (const room of opened.home.rooms) {
     const a = room.attrs;
     if (!shown.has(a.level) || room.points.length < 3) continue;
@@ -397,6 +402,10 @@ export function buildRooms(
     const shape = new THREE.Shape(room.points.map((p) => new THREE.Vector2(p.x, p.y)));
     const geom = new THREE.ShapeGeometry(shape);
     geom.rotateX(Math.PI / 2); // (x, y, 0) → (x, 0, y)
+    const floorY = level?.elevation ?? 0;
+    const ceilingY = floorY + (level?.height ?? 250) - 0.2;
+    const floorHoles = touching(holesAt(stairs, floorY), room.points);
+    const ceilingHoles = touching(holesAt(stairs, ceilingY), room.points);
 
     if (a.floor_visible !== false) {
       const floorTexture = room.textures?.find((t) => t.role === "floorTexture");
@@ -428,7 +437,9 @@ export function buildRooms(
         polygonOffsetFactor: 1,
         polygonOffsetUnits: 1,
       });
-      const floor = new THREE.Mesh(slab, [mat, edges]);
+      const floorGeometry =
+        floorHoles.length > 0 ? cutOut(evaluator, slab, floorHoles, [mat, edges]) : slab;
+      const floor = new THREE.Mesh(floorGeometry, [mat, edges]);
       floor.position.y = level?.elevation ?? 0;
       floor.name = `floor:${a.id ?? ""}`;
       group.add(floor);
@@ -447,13 +458,99 @@ export function buildRooms(
           requestRender,
         );
       }
-      const ceiling = new THREE.Mesh(geom, mat);
-      ceiling.position.y = (level?.elevation ?? 0) + (level?.height ?? 250) - 0.2;
+      let ceilingGeometry: THREE.BufferGeometry = geom;
+      if (ceilingHoles.length > 0) {
+        // Cut through a thin slab, then keep its downward faces: the ceiling with holes
+        const slab = new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false });
+        slab.rotateX(Math.PI / 2);
+        ceilingGeometry = facesDown(cutOut(evaluator, slab, ceilingHoles, [mat, mat]), -1);
+      }
+      const ceiling = new THREE.Mesh(ceilingGeometry, mat);
+      // The cut slab's lower face is 1 cm below its top
+      ceiling.position.y = ceilingY + (ceilingHoles.length > 0 ? 1 : 0);
       ceiling.name = `ceiling:${a.id ?? ""}`;
       group.add(ceiling);
     }
   }
   return group;
+}
+
+/** Holes whose bounding box overlaps the room (the others cannot cut it). */
+function touching(holes: Pt[][], points: { x: number; y: number }[]): Pt[][] {
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const [minX, maxX, minY, maxY] = [
+    Math.min(...xs),
+    Math.max(...xs),
+    Math.min(...ys),
+    Math.max(...ys),
+  ];
+  return holes.filter(
+    (h) =>
+      h.some(([x, y]) => x >= minX - 1 && x <= maxX + 1 && y >= minY - 1 && y <= maxY + 1) ||
+      // A hole larger than the room
+      (Math.min(...h.map((p) => p[0])) <= minX &&
+        Math.max(...h.map((p) => p[0])) >= maxX &&
+        Math.min(...h.map((p) => p[1])) <= minY &&
+        Math.max(...h.map((p) => p[1])) >= maxY),
+  );
+}
+
+/**
+ * Subtracts vertical prisms of the hole outlines from a slab made by ExtrudeGeometry and
+ * rotated like the floors (top at y = 0, bottom below).
+ */
+function cutOut(
+  evaluator: Evaluator,
+  slab: THREE.BufferGeometry,
+  holes: Pt[][],
+  materials: THREE.Material[],
+): THREE.BufferGeometry {
+  let brush = new Brush(slab, materials);
+  brush.updateMatrixWorld();
+  for (const outline of holes) {
+    const prism = new THREE.ExtrudeGeometry(
+      new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y))),
+      { depth: 400, bevelEnabled: false },
+    );
+    prism.rotateX(Math.PI / 2);
+    prism.translate(0, 200, 0);
+    const hole = new Brush(prism, materials);
+    hole.updateMatrixWorld();
+    brush = evaluator.evaluate(brush, hole, SUBTRACTION);
+    prism.dispose();
+  }
+  return brush.geometry;
+}
+
+/** Only the faces of a geometry that face down (keeps the material groups' order). */
+function facesDown(geometry: THREE.BufferGeometry, y: number): THREE.BufferGeometry {
+  const g = geometry.index ? geometry.toNonIndexed() : geometry;
+  const pos = g.getAttribute("position");
+  const keep: number[] = [];
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i);
+    b.fromBufferAttribute(pos, i + 1);
+    c.fromBufferAttribute(pos, i + 2);
+    const normal = b.clone().sub(a).cross(c.clone().sub(a));
+    if (normal.y < 0 && Math.abs(a.y - y) < 0.01) keep.push(i, i + 1, i + 2);
+  }
+  const out = new THREE.BufferGeometry();
+  for (const [name, attr] of Object.entries(g.attributes)) {
+    const src = attr as THREE.BufferAttribute;
+    const array = new (src.array.constructor as Float32ArrayConstructor)(
+      keep.length * src.itemSize,
+    );
+    keep.forEach((v, k) => {
+      for (let j = 0; j < src.itemSize; j++)
+        array[k * src.itemSize + j] = src.array[v * src.itemSize + j];
+    });
+    out.setAttribute(name, new THREE.BufferAttribute(array, src.itemSize));
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ Ground and environment

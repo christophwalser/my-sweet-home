@@ -138,3 +138,29 @@ fn photo_settings() {
     );
     assert_eq!(s["ceiling_lights"], json!(false));
 }
+
+#[test]
+fn shelf_units_from_the_catalog() {
+    // Needs the installed Sweet Home 3D catalog
+    let catalog = msh_core::catalog::CatalogIndex::get();
+    if catalog.furniture_by_id("eTeks#bookcase").is_none() {
+        return;
+    }
+    let r = Registry::standard();
+    let mut doc = Document::default();
+    let id = run(
+        &r,
+        &mut doc,
+        "furniture_add",
+        json!({ "catalog_id": "eTeks#bookcase", "x": 100, "y": 100 }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let p = piece(&doc, &id);
+    assert_eq!(p.kind, PieceKind::ShelfUnit);
+    // Shelves relative to the height, like Sweet Home 3D (12.8 cm of 211 cm)
+    let first = p.shelves[0].elevation.unwrap();
+    assert!((first - 12.8 / 211.0).abs() < 1e-4, "{first}");
+    assert_eq!(p.shelves.len(), 8);
+}

@@ -11,10 +11,12 @@ import {
   type Home,
   type Piece,
   type Pt,
+  pieceAtLevel,
   type Room,
   type TextStyle,
   type Texture,
   type WallShape,
+  wallAtLevel,
   wallPolygon,
 } from "../model";
 import { baseboardOf, baseboardPolygon } from "../view3d/wallSides";
@@ -71,7 +73,7 @@ export function planBounds(input: PlanInput): [number, number, number, number] |
   };
   const { home, wallShapes, levelId } = input;
   home.walls.forEach((w, i) => {
-    if (!sameLevel(w.attrs.level, levelId)) return;
+    if (!wallAtLevel(home, w, levelId)) return;
     for (const p of wallPolygon(wallShapes[i])) add(p[0], p[1]);
   });
   for (const r of home.rooms) {
@@ -83,7 +85,7 @@ export function planBounds(input: PlanInput): [number, number, number, number] |
     for (const p of pl.points) add(p.x, p.y);
   }
   forEachPiece(home.furniture, (p) => {
-    if (sameLevel(p.attrs.level, levelId)) add(p.attrs.x, p.attrs.y);
+    if (pieceAtLevel(home, p, levelId)) add(p.attrs.x, p.attrs.y);
   });
   for (const d of home.dimension_lines) {
     if (!sameLevel(d.attrs.level, levelId)) continue;
@@ -277,7 +279,7 @@ export function drawPlan(
   // Furniture (below walls so that doors in walls stay readable on top)
   const pieces: Piece[] = [];
   forEachPiece(home.furniture, (p) => {
-    if (sameLevel(p.attrs.level, levelId)) pieces.push(p);
+    if (pieceAtLevel(home, p, levelId)) pieces.push(p);
   });
   // Sort by elevation like Sweet Home 3D: higher pieces are drawn on top
   pieces.sort((a, b) => (a.attrs.elevation ?? 0) - (b.attrs.elevation ?? 0));
@@ -290,7 +292,7 @@ export function drawPlan(
   // only the outer half of each outline stays visible
   const wallPolys: { poly: Pt[]; pattern: string }[] = [];
   home.walls.forEach((w, i) => {
-    if (sameLevel(w.attrs.level, levelId)) {
+    if (wallAtLevel(home, w, levelId)) {
       wallPolys.push({
         poly: wallPolygon(wallShapes[i]),
         pattern: w.attrs.pattern ?? DEFAULT_WALL_PATTERN,
@@ -319,7 +321,7 @@ export function drawPlan(
   ctx.lineWidth = px;
   ctx.strokeStyle = colors.wallStroke;
   home.walls.forEach((w, i) => {
-    if (!sameLevel(w.attrs.level, levelId)) return;
+    if (!wallAtLevel(home, w, levelId)) return;
     for (const side of ["left", "right"] as const) {
       const bb = baseboardOf(w, side);
       if (!bb || bb.attrs.thickness <= 0) continue;

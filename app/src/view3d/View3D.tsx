@@ -175,6 +175,7 @@ export default function View3D() {
       state.hfov = pose.fov;
       requestRender();
       useStore.setState({ visitorPose: { ...pose } });
+      onVisitorMoved.current(pose);
     };
     // Debug handle for inspecting the scene from the WebView devtools
     if (import.meta.env.DEV) (window as unknown as { __msh3d: typeof state }).__msh3d = state;
@@ -399,6 +400,23 @@ export default function View3D() {
   const modeRef = useRef<ViewMode | null>(null);
   /** Level the visitor was on, to move it along when another level is selected */
   const lastLevel = useRef<string | null | undefined>(undefined);
+  /** Selects the level the visitor reached by stairs (without moving it again) */
+  const onVisitorMoved = useRef<(pose: CameraPose) => void>(() => {});
+  onVisitorMoved.current = (pose) => {
+    const { opened: current, selectedLevel } = useStore.getState();
+    if (!current || current.home.levels.length < 2) return;
+    // On a staircase the level it leads to is shown already (not the sky through the hole)
+    const stairTop = ctx.current?.visitor.stairTop ?? null;
+    const ahead =
+      stairTop === null
+        ? null
+        : current.home.levels.find((l) => Math.abs(l.attrs.elevation - stairTop) < 1)?.attrs.id;
+    const level = ahead ?? levelOfEye(current.home, pose.z);
+    if (level && level !== selectedLevel) {
+      lastLevel.current = level;
+      useStore.getState().selectLevel(level);
+    }
+  };
   useEffect(() => {
     const c = ctx.current;
     if (!c) return;
