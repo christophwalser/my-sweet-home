@@ -103,6 +103,11 @@ function pixelRatio(quality: "low" | "medium" | "high"): number {
   return quality === "low" ? 1 : quality === "medium" ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
 }
 
+/** Anisotropic filtering of textures for a quality preference (up to what the GPU can). */
+function anisotropy(quality: "low" | "medium" | "high", max: number): number {
+  return Math.max(1, Math.min(max, quality === "low" ? 2 : quality === "medium" ? 8 : 16));
+}
+
 /** Size of the sun's shadow map for a quality preference. */
 const SHADOW_MAP_SIZE = { low: 1024, medium: 2048, high: 4096 } as const;
 
@@ -143,6 +148,11 @@ export default function View3D() {
     if (!container) return;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(pixelRatio(usePreferences.getState().quality3d));
+    // Textures seen at flat angles (floors, walls) stay sharp and do not flicker
+    THREE.Texture.DEFAULT_ANISOTROPY = anisotropy(
+      usePreferences.getState().quality3d,
+      renderer.capabilities.getMaxAnisotropy(),
+    );
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
@@ -388,6 +398,19 @@ export default function View3D() {
     const c = ctx.current;
     if (!c) return;
     c.renderer.setPixelRatio(pixelRatio(quality));
+    // New textures get the filtering of the quality; the loaded ones are updated
+    const level = anisotropy(quality, c.renderer.capabilities.getMaxAnisotropy());
+    THREE.Texture.DEFAULT_ANISOTROPY = level;
+    c.scene.traverse((o) => {
+      const materials = (o as THREE.Mesh).material;
+      for (const m of Array.isArray(materials) ? materials : materials ? [materials] : []) {
+        const map = (m as THREE.MeshLambertMaterial).map;
+        if (map && map.anisotropy !== level) {
+          map.anisotropy = level;
+          map.needsUpdate = true;
+        }
+      }
+    });
     const size = SHADOW_MAP_SIZE[quality];
     if (c.sun.shadow.mapSize.x !== size) {
       c.sun.shadow.mapSize.set(size, size);

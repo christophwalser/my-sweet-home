@@ -68,6 +68,9 @@ export function colorOf(argb: number | null | undefined, fallback: number): THRE
   return new THREE.Color(argb === null || argb === undefined ? fallback : argb & 0xffffff);
 }
 
+/** Constant depth offset of floors (in depth buffer steps), see buildRooms. */
+const FLOOR_OFFSET_UNITS = 2;
+
 const textureLoader = new THREE.TextureLoader();
 textureLoader.setCrossOrigin("anonymous");
 
@@ -415,12 +418,14 @@ export function buildRooms(
     if (a.floor_visible !== false) {
       const floorTexture = room.textures?.find((t) => t.role === "floorTexture");
       // Polygon offset: where furniture stands exactly on the floor, the furniture wins the
-      // depth test, so nothing flickers and nothing pokes through the floor
+      // depth test, so nothing flickers and nothing pokes through the floor. Constant only
+      // (no slope factor): at flat viewing angles a slope factor pushed floors behind the
+      // ground just below them, which then showed through.
       const mat = new THREE.MeshLambertMaterial({
         color: floorTexture ? 0xffffff : colorOf(a.floor_color, 0xd8d2c4),
         polygonOffset: true,
-        polygonOffsetFactor: 1,
-        polygonOffsetUnits: 1,
+        polygonOffsetFactor: 0,
+        polygonOffsetUnits: FLOOR_OFFSET_UNITS,
       });
       if (floorTexture) {
         mat.map = loadTiledTexture(
@@ -439,8 +444,8 @@ export function buildRooms(
       const edges = new THREE.MeshLambertMaterial({
         color: colorOf(a.floor_color, 0xd8d2c4),
         polygonOffset: true,
-        polygonOffsetFactor: 1,
-        polygonOffsetUnits: 1,
+        polygonOffsetFactor: 0,
+        polygonOffsetUnits: FLOOR_OFFSET_UNITS,
       });
       const floorGeometry =
         floorHoles.length > 0 ? cutOut(evaluator, slab, floorHoles, [mat, edges]) : slab;
@@ -586,8 +591,12 @@ function facesDown(geometry: THREE.BufferGeometry, y: number): THREE.BufferGeome
 export function buildGround(opened: OpenedHome, requestRender: () => void): THREE.Mesh {
   const env = opened.home.environment;
   const groundTexture = env?.textures.find((t) => t.role === "groundTexture");
+  // The ground always loses against floors lying on it, also at flat viewing angles
   const mat = new THREE.MeshLambertMaterial({
     color: groundTexture ? 0xffffff : colorOf(env?.attrs.ground_color, 0xa8a8a8),
+    polygonOffset: true,
+    polygonOffsetFactor: 4,
+    polygonOffsetUnits: 8,
   });
   if (groundTexture) {
     mat.map = loadTiledTexture(
