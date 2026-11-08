@@ -614,8 +614,9 @@ furniture is read by its home reader.
 - Virtual visit with game-like controls (`view3d/visitor.ts`): drag with the mouse to look
   around, W A S D (or the arrow keys) to walk, Q / E down and up, Shift faster, the mouse
   wheel changes the field of view (20°..120°). Keys typed in the 3D view never reach the plan.
-- Collision: walls stop the visitor (radius 20 cm) when they overlap its body between knees
-  and eyes; it slides along them. Doors and windows starting near the floor (≤ 30 cm) and at
+- Collision: walls stop the visitor (radius 20 cm) when they overlap its body between the
+  floor of its level (+ 30 cm step) and its eyes; it slides along them. The floor comes from
+  the levels, not from a fixed eye height (points of view use different eye heights). Doors and windows starting near the floor (≤ 30 cm) and at
   least 150 cm high open a passage through their wall. A visitor placed close to a wall (e.g.
   by a stored point of view) may move along it or away from it, never closer.
 - The visitor is drawn in the plan (body and field of view) on the level it stands on; it
@@ -623,7 +624,8 @@ furniture is read by its home reader.
 - Cameras: moving in the 3D view is kept in the frontend (no undo steps, no scene rebuilds)
   and written into the home with `camera_set` before saving. `Registry::add_view` registers
   commands that change only the view (no undo step, home not marked modified); the UI
-  follows camera changes made by commands (CLI, MCP, points of view).
+  follows camera changes made by commands (CLI, MCP, points of view); `HomeView.cameraMoves`
+  counts them, so choosing the same point of view again moves the view too.
 - Points of view: `viewpoint_store` / `viewpoint_go` / `viewpoint_delete` / `viewpoint_list`
   (Sweet Home 3D `storedCamera`: `observerCamera` element for the visit, `camera` for the
   aerial view, newest first, at most 50); "Points of view" menu in the 3D view. Going to one

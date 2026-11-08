@@ -38,14 +38,29 @@ type Passage = {
   top: number;
 };
 
-export type Colliders = { obstacles: Obstacle[]; passages: Passage[] };
+export type Colliders = {
+  obstacles: Obstacle[];
+  passages: Passage[];
+  /** Elevations of the floors (levels), ascending */
+  floors: number[];
+};
 
-/** Level the visitor stands on: the highest one at most one meter below the eyes. */
+/** Lowest eye height above the floor the visitor stands on (cm). */
+const MIN_EYE_ABOVE_FLOOR = 60;
+
+/** Level the visitor stands on: the highest one sufficiently below the eyes. */
 export function levelOfEye(home: Home, eye: number): string | null {
   const levels = [...home.levels].sort((a, b) => a.attrs.elevation - b.attrs.elevation);
   if (levels.length === 0) return null;
-  const below = levels.filter((l) => l.attrs.elevation <= eye - 100);
+  const below = levels.filter((l) => l.attrs.elevation <= eye - MIN_EYE_ABOVE_FLOOR);
   return (below[below.length - 1] ?? levels[0]).attrs.id;
+}
+
+/** Elevation of the floor the visitor stands on. */
+function floorUnder(c: Colliders, eye: number): number {
+  let floor = c.floors[0] ?? 0;
+  for (const f of c.floors) if (f <= eye - MIN_EYE_ABOVE_FLOOR) floor = f;
+  return floor;
 }
 
 /** Walls and doors of the home as obstacles and passages for the visitor. */
@@ -88,7 +103,10 @@ export function buildColliders(
       top: bottom + a.height,
     });
   });
-  return { obstacles, passages };
+  const floors = [...new Set([0, ...home.levels.map((l) => levelElevation(l.attrs.id))])].sort(
+    (a, b) => a - b,
+  );
+  return { obstacles, passages, floors };
 }
 
 function pointInPolygon(p: Pt, poly: Pt[]): boolean {
@@ -117,9 +135,11 @@ function distanceToSegment(p: Pt, a: Pt, b: Pt): number {
  * (negative inside a wall, infinite in a door opening or without walls).
  */
 export function clearance(c: Colliders, p: Pt, eye: number): number {
-  const feet = eye - EYE_HEIGHT + STEP;
+  // The feet are on the floor of the level the visitor is on (the eye height of points
+  // of view differs from home to home); what is lower than a step does not stop it
+  const feet = floorUnder(c, eye) + STEP;
   for (const pa of c.passages) {
-    if (pa.bottom > feet || pa.top < eye - 20) continue;
+    if (pa.bottom > feet || pa.top < Math.min(eye, feet + 150)) continue;
     const dx = p[0] - pa.center[0];
     const dy = p[1] - pa.center[1];
     const along = dx * pa.cos + dy * pa.sin;
@@ -185,7 +205,7 @@ export function collide(c: Colliders, from: Pt, to: Pt, eye: number): Pt {
 export class VisitorControls {
   pose: CameraPose;
   enabled = false;
-  colliders: Colliders = { obstacles: [], passages: [] };
+  colliders: Colliders = { obstacles: [], passages: [], floors: [0] };
   /** Called after each change of the pose (for rendering and the plan) */
   onChange: (pose: CameraPose) => void = () => {};
   /** Called when the visitor stopped moving (for storing the camera) */

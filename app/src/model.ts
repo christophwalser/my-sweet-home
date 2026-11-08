@@ -340,6 +340,8 @@ export type OpenedHome = {
   modified: boolean;
   canUndo: boolean;
   canRedo: boolean;
+  /** Counts camera moves by commands (camera_set, viewpoint_go) */
+  cameraMoves: number;
 };
 
 /** Calls `fn` for every visible piece, expanding groups. */

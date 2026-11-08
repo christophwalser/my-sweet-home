@@ -291,7 +291,8 @@ export default function View3D() {
     observer: CameraPose | null;
     aerial: { pose: CameraPose; target: THREE.Vector3 } | null;
     seen: Record<string, string>;
-  }>({ home: null, observer: null, aerial: null, seen: {} });
+    moves: number;
+  }>({ home: null, observer: null, aerial: null, seen: {}, moves: 0 });
   const modeRef = useRef<ViewMode | null>(null);
   /** Level the visitor was on, to move it along when another level is selected */
   const lastLevel = useRef<string | null | undefined>(undefined);
@@ -315,6 +316,7 @@ export default function View3D() {
       P.observer = null;
       P.aerial = null;
       P.seen = {};
+      P.moves = opened.cameraMoves;
       userMoved.current = false;
       modeChanged = true;
     } else if (modeChanged && modeRef.current) {
@@ -330,8 +332,11 @@ export default function View3D() {
     const role = observer ? "observerCamera" : "topCamera";
     const stored = opened.home.cameras.find((cam) => cam.attrs.role === role);
     const storedKey = stored ? JSON.stringify(stored.attrs) : "";
-    // The stored camera changed: moved by a command (point of view, CLI, MCP)
-    const external = stored !== undefined && P.seen[role] !== storedKey;
+    // The stored camera was moved by a command (point of view, CLI, MCP), maybe to the
+    // same place again, or changed when another home state was loaded
+    const moved = opened.cameraMoves !== P.moves;
+    P.moves = opened.cameraMoves;
+    const external = stored !== undefined && (moved || P.seen[role] !== storedKey);
     P.seen[role] = storedKey;
     const local = observer ? P.observer : P.aerial;
 

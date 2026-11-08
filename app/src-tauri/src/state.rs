@@ -23,6 +23,9 @@ pub struct ActiveDoc {
     /// Changes when another home is opened or created, so the frontend reloads resources
     pub id: u32,
     pub doc: Document,
+    /// Counts camera moves by commands (camera_set, viewpoint_go), so the 3D view
+    /// moves even when the same point of view is chosen again
+    pub camera_moves: u32,
 }
 
 /// Everything the frontend needs to display the home.
@@ -36,6 +39,7 @@ pub struct HomeView {
     pub modified: bool,
     pub can_undo: bool,
     pub can_redo: bool,
+    pub camera_moves: u32,
 }
 
 impl HomeView {
@@ -49,6 +53,7 @@ impl HomeView {
             modified: active.doc.modified,
             can_undo: active.doc.can_undo(),
             can_redo: active.doc.can_redo(),
+            camera_moves: active.camera_moves,
         }
     }
 }
@@ -170,11 +175,15 @@ pub fn execute<R: Runtime>(app: &AppHandle<R>, name: &str, params: Value) -> Res
         let active = guard.get_or_insert_with(|| ActiveDoc {
             id: state.new_id(),
             doc: Document::default(),
+            camera_moves: 0,
         });
         let result = state
             .registry
             .execute(&mut active.doc, name, params)
             .map_err(|e| e.to_string())?;
+        if matches!(name, "camera_set" | "viewpoint_go") {
+            active.camera_moves = active.camera_moves.wrapping_add(1);
+        }
         let replaced = matches!(name, "home_new" | "home_open");
         if replaced {
             active.id = state.new_id();
