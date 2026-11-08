@@ -8,8 +8,10 @@ pub mod catalog;
 pub mod clipboard;
 mod commands;
 pub mod document;
+mod model_formats;
 pub mod model_package;
 pub mod registry;
+mod texture_formats;
 
 pub use commands::camera_path_len;
 pub use document::Document;

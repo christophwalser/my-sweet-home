@@ -5,6 +5,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
+import { language } from "./i18n";
 import { forEachGroup, forEachPiece, type OpenedHome } from "./model";
 import { usePreferences } from "./preferences";
 import type { CameraPose } from "./view3d/camera";
@@ -271,7 +272,7 @@ export async function subscribeToHomeChanges(): Promise<() => void> {
     applyHome(e.payload),
   );
   const offCatalog = await listen(CATALOG_CHANGED_EVENT, () => {
-    void useStore.getState().loadCatalog(navigator.language.split("-")[0] || "en");
+    void useStore.getState().loadCatalog(language());
   });
   return () => {
     offHome();

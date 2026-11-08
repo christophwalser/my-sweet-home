@@ -786,6 +786,23 @@ furniture is read by its home reader.
   (`--missing` lists them).
 - Error messages of msh-core (also used by CLI and MCP) stay English.
 
+### 4.33 Status after P12e-a (2026-11-08)
+
+- Furniture import of more formats, in msh-core (`model_formats.rs`, so CLI and MCP get them
+  too): 3MF (colors of base materials and color groups, units, components and build
+  transforms), STL (binary and ASCII), PLY (ASCII and binary, vertex colors as one average
+  color) and ZIP / KMZ archives (unpacked; the main model inside is chosen by format and
+  depth). STL and 3MF are millimeters with z up and become y up in cm. All become OBJ + MTL.
+- FBX and VRML (WRL) have no Rust reader: the import dialog reads them with the three.js
+  loaders (textures next to the file are found in a first pass), exports GLB and hands it to
+  the glTF converter of msh-core. FBX units are guessed from the size (cm or mm to meters).
+- Texture import (`texture_formats.rs`): WebP and TIFF are converted to PNG, SVG is rendered
+  to a 1024 px PNG, and from PBR material packages (ZIP) the color map is taken (by name:
+  base color, albedo, diffuse, color). The other maps are not used yet.
+- Files dropped onto the catalog: libraries (.sh3f / .sh3t) are imported, a model opens the
+  furniture import with it (MTL and textures dropped along lie next to it), images and
+  material packages become textures of "My textures"; a ZIP is tried as model first.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
@@ -887,11 +904,10 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
 - P12e Open import of furniture, textures and libraries (added 2026-11-08). Everything
   imported is stored in Sweet Home 3D compatible form (OBJ + MTL + textures inside .sh3f /
   .sh3t) in the Sweet Home 3D library folders, so both applications use it. In sub-steps:
-  - P12e-a More formats. Furniture: OBJ, DAE, 3DS, glTF / GLB (as before), plus FBX, ZIP
+  - P12e-a (done, see 4.33) More formats. Furniture: OBJ, DAE, 3DS, glTF / GLB (as before), plus FBX, ZIP
     archives with models and textures, KMZ, STL, 3MF, PLY and VRML (WRL); converted to OBJ
     through the three.js loaders. Textures: JPG, PNG, BMP, GIF (as before), plus WebP, TIFF,
-    SVG and PBR material packages (ZIP; the color map becomes the texture, the other maps
-    are kept for later). Drag and drop of files onto the catalog. Not possible: SketchUp
+    SVG and PBR material packages (ZIP; the color map becomes the texture). Drag and drop of files onto the catalog. Not possible: SketchUp
     .skp and Blender .blend (no free reader; export to DAE, FBX or glTF instead).
   - P12e-b Library editor in the app with the scope of Sweet Home 3D's Furniture Library
     Editor and Textures Library Editor: create and open .sh3f / .sh3t libraries, add pieces

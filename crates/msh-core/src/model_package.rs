@@ -6,7 +6,9 @@
 //! - glTF / GLB: converted to OBJ + MTL + textures, because Sweet Home 3D cannot
 //!   read glTF. Positions are kept in meters (glTF units).
 //!
-//! The size of OBJ and glTF models is computed from their vertices.
+//! - STL, 3MF, PLY, ZIP and KMZ: see `model_formats`.
+//!
+//! The size of OBJ, glTF, STL, 3MF and PLY models is computed from their vertices.
 
 use base64::Engine;
 use std::collections::BTreeMap;
@@ -30,8 +32,12 @@ pub struct ModelPackage {
 /// Errors while reading a model.
 #[derive(Debug, thiserror::Error)]
 pub enum ModelError {
-    #[error("unsupported model format '{0}' (use OBJ, DAE, 3DS, glTF or GLB)")]
+    #[error(
+        "unsupported model format '{0}' (use OBJ, DAE, 3DS, glTF, GLB, 3MF, STL, PLY, ZIP or KMZ)"
+    )]
     Unsupported(String),
+    #[error("{0}")]
+    Format(String),
     #[error("cannot read {path}: {source}")]
     Io {
         path: PathBuf,
@@ -78,6 +84,10 @@ pub fn collect(path: &Path) -> Result<ModelPackage, ModelError> {
         "dae" => collect_dae(path, dir, &file_name)?,
         "3ds" => collect_3ds(path, dir, &file_name)?,
         "gltf" | "glb" => convert_gltf(path, dir)?,
+        "stl" => crate::model_formats::convert_stl(&read(path)?)?,
+        "ply" => crate::model_formats::convert_ply(&read(path)?)?,
+        "3mf" => crate::model_formats::convert_3mf(&read(path)?)?,
+        "zip" | "kmz" => crate::model_formats::convert_archive(&read(path)?)?,
         other => return Err(ModelError::Unsupported(other.to_owned())),
     };
     let total: usize = package.files.iter().map(|(_, d)| d.len()).sum();

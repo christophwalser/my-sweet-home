@@ -18,6 +18,11 @@ schemars.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 base64.workspace = true
+quick-xml.workspace = true
+zip.workspace = true
+resvg.workspace = true
+# WebP and TIFF textures are converted to PNG
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "tiff", "gif", "bmp"] }
 gltf = { version = "1.4.1", default-features = false, features = ["utils", "names"] }
 # Sun position: local date and time in the time zone of the compass
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }

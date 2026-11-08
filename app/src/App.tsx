@@ -111,6 +111,7 @@ export default function App() {
   const setEditingLevel = useUi((s) => s.setEditingLevel);
   const dialog = useUi((s) => s.dialog);
   const closeDialog = useUi((s) => s.closeDialog);
+  const dialogArg = useUi((s) => s.dialogArg);
   const paletteOpen = useUi((s) => s.paletteOpen);
   const centerRef = useRef<HTMLDivElement>(null);
   const opened = useStore((s) => s.opened);
@@ -298,7 +299,9 @@ export default function App() {
           onClose={closeDialog}
         />
       )}
-      {dialog === "importFurniture" && <ImportFurnitureDialog onClose={closeDialog} />}
+      {dialog === "importFurniture" && (
+        <ImportFurnitureDialog initialPath={dialogArg ?? undefined} onClose={closeDialog} />
+      )}
       {dialog === "libraries" && <LibraryDialog onClose={closeDialog} />}
       {(dialog === "backgroundImport" || dialog === "backgroundModify") && opened && (
         <BackgroundImageWizard

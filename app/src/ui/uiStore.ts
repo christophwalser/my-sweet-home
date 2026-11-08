@@ -24,7 +24,9 @@ export type ThemeChoice = "system" | "light" | "dark";
 
 type UiState = {
   dialog: DialogName | null;
-  openDialog: (dialog: DialogName) => void;
+  /** Argument of the open dialog, e.g. the file to import */
+  dialogArg: string | null;
+  openDialog: (dialog: DialogName, arg?: string) => void;
   closeDialog: () => void;
   theme: ThemeChoice;
   setTheme: (theme: ThemeChoice) => void;
@@ -67,7 +69,8 @@ function saveJson(key: string, value: unknown): void {
 
 export const useUi = create<UiState>((set, get) => ({
   dialog: null,
-  openDialog: (dialog) => set({ dialog }),
+  dialogArg: null,
+  openDialog: (dialog, arg) => set({ dialog, dialogArg: arg ?? null }),
   closeDialog: () => set({ dialog: null }),
   theme: loadJson<ThemeChoice>(THEME_KEY, "system"),
   setTheme: (theme) => {

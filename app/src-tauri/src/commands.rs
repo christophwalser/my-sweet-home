@@ -214,6 +214,10 @@ pub fn save_file(request: tauri::ipc::Request<'_>) -> Result<(), String> {
     let path = percent_encoding::percent_decode_str(header)
         .decode_utf8()
         .map_err(|e| e.to_string())?;
+    // Temporary folders (dropped files, converted models) may not exist yet
+    if let Some(parent) = std::path::Path::new(path.as_ref()).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot create {path}: {e}"))?;
+    }
     std::fs::write(path.as_ref(), data).map_err(|e| format!("cannot write {path}: {e}"))
 }
 

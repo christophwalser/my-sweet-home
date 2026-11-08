@@ -5,6 +5,7 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useMemo, useState } from "react";
 import { api, docResourceUrl, libResourceUrl } from "../api";
+import { TEXTURE_EXTENSIONS } from "../catalog/modelConvert";
 import { t } from "../i18n";
 import type { Texture } from "../model";
 import { useStore } from "../store";
@@ -54,7 +55,7 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
   const chooseImage = async () => {
     const chosen = await openDialog({
       multiple: false,
-      filters: [{ name: t("Images"), extensions: ["jpg", "jpeg", "png", "bmp", "gif"] }],
+      filters: [{ name: t("Images and material packages"), extensions: TEXTURE_EXTENSIONS }],
     });
     if (typeof chosen !== "string") return;
     setError(null);

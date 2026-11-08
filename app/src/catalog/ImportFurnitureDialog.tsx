@@ -1,4 +1,5 @@
-// Furniture import wizard: choose a 3D model (OBJ, DAE, 3DS, glTF, GLB), turn it
+// Furniture import wizard: choose a 3D model (OBJ, DAE, 3DS, glTF, GLB, FBX, ZIP, KMZ, STL,
+// 3MF, PLY, VRML), turn it
 // upright with 90° rotations, set name and size, and import it into the user's
 // library "My furniture" (shared with Sweet Home 3D). The icon is rendered from
 // the preview. Optionally the new piece is placed in the home right away.
@@ -10,8 +11,12 @@ import { api, stageResourceUrl } from "../api";
 import { t } from "../i18n";
 import { useStore } from "../store";
 import { disposeObject, loadModelUncached } from "../view3d/models";
+import { MODEL_EXTENSIONS, prepareModel } from "./modelConvert";
 
 type Staged = { id: number; main: string; sizeCm: [number, number, number] | null; path: string };
+
+/** Labels of the size fields (translated when shown). */
+const SIZE_LABELS = { width: () => t("Width"), depth: () => t("Depth"), height: () => t("Height") };
 
 const PREVIEW_PX = 260;
 const ICON_PX = 128;
@@ -31,7 +36,14 @@ function rotationRowMajor(m: THREE.Matrix4): number[] {
 
 const fmt = (v: number) => String(Math.round(v * 10) / 10);
 
-export default function ImportFurnitureDialog({ onClose }: { onClose: () => void }) {
+export default function ImportFurnitureDialog({
+  initialPath,
+  onClose,
+}: {
+  /** Model to load right away (e.g. dropped onto the catalog) */
+  initialPath?: string;
+  onClose: () => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const three = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -125,13 +137,17 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
   const chooseModel = async () => {
     const chosen = await open({
       multiple: false,
-      filters: [{ name: "3D models", extensions: ["obj", "dae", "3ds", "gltf", "glb"] }],
+      filters: [{ name: t("3D models"), extensions: MODEL_EXTENSIONS }],
     });
-    if (typeof chosen !== "string") return;
+    if (typeof chosen === "string") await loadModel(chosen);
+  };
+
+  const loadModel = async (chosen: string) => {
     setBusy(true);
     setStatus(t("Loading model…"));
     try {
-      const s = await api.modelStage(chosen);
+      // FBX and VRML are converted to GLB in the app first
+      const s = await api.modelStage(await prepareModel(chosen));
       const model = await loadModelUncached(stageResourceUrl(s.id, s.main));
       const t = three.current;
       if (!t) return;
@@ -156,6 +172,12 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
       setBusy(false);
     }
   };
+
+  // A model given by the caller (dropped file) loads right away
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loads once for the given file
+  useEffect(() => {
+    if (initialPath) void loadModel(initialPath);
+  }, [initialPath]);
 
   const rotate = (axis: "x" | "y" | "z") => {
     const r = new THREE.Matrix4();
@@ -257,7 +279,7 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
         </header>
         <p className="muted small">
           {t(
-            'OBJ (with its MTL and texture files), DAE, 3DS, glTF or GLB. The piece is added to your library "My furniture", which Sweet Home 3D uses too. glTF models are converted to OBJ.',
+            'OBJ (with its MTL and texture files), DAE, 3DS, glTF, GLB, FBX, 3MF, STL, PLY, VRML, or a ZIP or KMZ archive with a model. The piece is added to your library "My furniture", which Sweet Home 3D uses too; formats Sweet Home 3D cannot read are converted to OBJ. Files can also be dropped onto the catalog.',
           )}
         </p>
         <div className="import-layout">
@@ -300,7 +322,7 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
             </label>
             {(["width", "depth", "height"] as const).map((f) => (
               <label className="prop-row" key={f}>
-                <span className="prop-label">{f[0].toUpperCase() + f.slice(1)}</span>
+                <span className="prop-label">{SIZE_LABELS[f]()}</span>
                 <input
                   type="text"
                   inputMode="decimal"

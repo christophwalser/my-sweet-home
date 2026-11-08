@@ -14,6 +14,7 @@ import Splitter from "../layout/Splitter";
 import { useStore } from "../store";
 import { useUi } from "../ui/uiStore";
 import { formatPrecise } from "../units";
+import { importDroppedFiles } from "./dropImport";
 import FurnitureList from "./FurnitureList";
 
 const MAX_RESULTS = 300;
@@ -90,6 +91,22 @@ export default function CatalogPanel() {
   const [split, setSplit] = useState(loadSplit);
   const panelRef = useRef<HTMLDivElement>(null);
   const pieces = useStore((s) => s.opened?.home.furniture.length ?? 0);
+  /** Files are dragged over the catalog / message about dropped files */
+  const [dropping, setDropping] = useState(false);
+  const [dropMessage, setDropMessage] = useState<string | null>(null);
+  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
+  const onDrop = async (e: React.DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    setDropping(false);
+    const files = [...e.dataTransfer.files];
+    setDropMessage(t("Importing…"));
+    try {
+      setDropMessage((await importDroppedFiles(files)) || null);
+    } catch (err) {
+      setDropMessage(String(err));
+    }
+  };
 
   // Share of the catalog in the height of the column, remembered
   useEffect(() => {
@@ -154,7 +171,22 @@ export default function CatalogPanel() {
     });
 
   return (
-    <div className="catalog-panel" ref={panelRef}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: drop zone for files from the desktop; the import buttons are the keyboard way
+    <div
+      className={`catalog-panel ${dropping ? "dropping" : ""}`}
+      ref={panelRef}
+      onDragOver={(e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setDropping(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropping(false);
+      }}
+      onDrop={(e) => void onDrop(e)}
+      title={t("Drop 3D models, images or libraries here to import them")}
+    >
       <div className="catalog-top" style={{ flex: `${split} 1 0` }}>
         <div className="catalog-header">
           <div className="segmented">
@@ -198,6 +230,14 @@ export default function CatalogPanel() {
               {t("Libraries…")}
             </button>
           </div>
+          {dropMessage && (
+            <div className="catalog-drop-message" role="status">
+              <span>{dropMessage}</span>
+              <button type="button" onClick={() => setDropMessage(null)} aria-label={t("Close")}>
+                ×
+              </button>
+            </div>
+          )}
           <div className="catalog-count muted">
             {loading
               ? t("Loading libraries…")
