@@ -1,11 +1,24 @@
 // 3D view in its own window, and the UI state shared between the windows.
 
-import { emit, listen } from "@tauri-apps/api/event";
+import { emitTo } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow, WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useStore, type ViewMode } from "../store";
 import type { CameraPose } from "../view3d/camera";
 
-export const VIEW3D_WINDOW = "view3d";
+/** Prefix of the labels of 3D windows ("view3d-<home window>"). */
+export const VIEW3D_PREFIX = "view3d-";
+
+/** Label of the 3D window of this home window (or of this 3D window itself). */
+function view3dLabel(): string {
+  const self = getCurrentWebviewWindow().label;
+  return self.startsWith(VIEW3D_PREFIX) ? self : `${VIEW3D_PREFIX}${self}`;
+}
+
+/** The other window of the pair: the 3D window of a home window, or its home window. */
+function partnerLabel(): string {
+  const self = getCurrentWebviewWindow().label;
+  return self.startsWith(VIEW3D_PREFIX) ? self.slice(VIEW3D_PREFIX.length) : view3dLabel();
+}
 /** Hash of the page URL that shows only the 3D view */
 export const VIEW3D_HASH = "#view3d";
 const UI_STATE_EVENT = "ui-state";
@@ -21,7 +34,7 @@ interface UiState {
 
 /** The 3D window if it is open. */
 export function findView3DWindow(): Promise<WebviewWindow | null> {
-  return WebviewWindow.getByLabel(VIEW3D_WINDOW);
+  return WebviewWindow.getByLabel(view3dLabel());
 }
 
 /** Opens (or focuses) the 3D window; `onClosed` runs when it is closed. */
@@ -32,7 +45,7 @@ export async function openView3DWindow(onClosed: () => void): Promise<void> {
     void existing.once("tauri://destroyed", onClosed);
     return;
   }
-  const win = new WebviewWindow(VIEW3D_WINDOW, {
+  const win = new WebviewWindow(view3dLabel(), {
     url: `index.html${VIEW3D_HASH}`,
     title: "3D view - My Sweet Home",
     width: 960,
@@ -58,7 +71,7 @@ export function syncUiState(requestInitial: boolean): () => void {
   let applying = false;
   const send = () => {
     const s = useStore.getState();
-    void emit(UI_STATE_EVENT, {
+    void emitTo(partnerLabel(), UI_STATE_EVENT, {
       from: self,
       selectedLevel: s.selectedLevel,
       viewMode: s.viewMode,
@@ -75,7 +88,7 @@ export function syncUiState(requestInitial: boolean): () => void {
       send();
     }
   });
-  const unlisten = listen<UiState>(UI_STATE_EVENT, (e) => {
+  const unlisten = getCurrentWebviewWindow().listen<UiState>(UI_STATE_EVENT, (e) => {
     const p = e.payload;
     if (p.from === self) return;
     if (p.request) {
@@ -91,7 +104,9 @@ export function syncUiState(requestInitial: boolean): () => void {
     applying = false;
   });
   if (requestInitial) {
-    void unlisten.then(() => emit(UI_STATE_EVENT, { from: self, request: true } satisfies UiState));
+    void unlisten.then(() =>
+      emitTo(partnerLabel(), UI_STATE_EVENT, { from: self, request: true } satisfies UiState),
+    );
   }
   return () => {
     unsubscribe();

@@ -1,5 +1,5 @@
-import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { message, open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import { type AppInfo, api, TOP_VIEWS_EVENT } from "./api";
 import CatalogPanel from "./catalog/CatalogPanel";
@@ -184,28 +184,43 @@ export default function App() {
           applyHome(current);
           return;
         }
-        // Open a file passed on the command line
+        // Open a file passed on the command line or chosen for this new window
         const path = await api.startupFile();
-        if (path) await openHome(path);
+        if (path) {
+          await openHome(path);
+          return;
+        }
+        const recovery = await api.startupRecovery();
+        if (recovery) {
+          applyHome(await api.recoveryOpen(recovery));
+          return;
+        }
+        // The first window offers the homes left unsaved by a crash; a new window gets an
+        // empty home to work on
+        if (getCurrentWebviewWindow().label === "main") await offerRecovery();
+        else if (!useStore.getState().opened) await run("home_new");
       })
-      .catch(() => {});
+      .catch((e) => useStore.setState({ error: String(e) }));
     return () => {
       void unsubscribe.then((off) => off());
     };
-  }, [openHome]);
+  }, [openHome, run]);
 
   // Views of the furniture from above for exports from the CLI or MCP server (live control)
   useEffect(() => {
-    const unlisten = listen<{ requestId: number }>(TOP_VIEWS_EVENT, async (e) => {
-      try {
-        const opened = useStore.getState().opened;
-        if (!opened) throw new Error("no home is open");
-        const views = await collectTopViews(opened.home, opened.id);
-        await api.captureResult(e.payload.requestId, JSON.stringify(views), null);
-      } catch (err) {
-        await api.captureResult(e.payload.requestId, null, String(err));
-      }
-    });
+    const unlisten = getCurrentWebviewWindow().listen<{ requestId: number }>(
+      TOP_VIEWS_EVENT,
+      async (e) => {
+        try {
+          const opened = useStore.getState().opened;
+          if (!opened) throw new Error("no home is open");
+          const views = await collectTopViews(opened.home, opened.id);
+          await api.captureResult(e.payload.requestId, JSON.stringify(views), null);
+        } catch (err) {
+          await api.captureResult(e.payload.requestId, null, String(err));
+        }
+      },
+    );
     return () => {
       void unlisten.then((off) => off());
     };
@@ -244,6 +259,7 @@ export default function App() {
     shown === "3d" ? "1 1 0" : shown === "plan" ? "0 0 0" : `${1 - layout.split} 1 0`;
 
   // Keyboard shortcuts
+  // biome-ignore lint/correctness/useExhaustiveDependencies: newHome and chooseFile read the store when called
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || (e.target as HTMLElement).tagName === "INPUT") return;
@@ -251,6 +267,8 @@ export default function App() {
       if (key === "z" && !e.shiftKey) void undo();
       else if (key === "y" || (key === "z" && e.shiftKey)) void redo();
       else if (key === "s") void save(e.shiftKey);
+      else if (key === "n") newHome();
+      else if (key === "o") void chooseFile();
       // Ctrl+P opens the print dialog of the home (not the WebView's print of the UI)
       else if (key === "p") {
         if (useStore.getState().opened) setExporting(true);
@@ -269,8 +287,50 @@ export default function App() {
         { name: "Home.xml", extensions: ["xml"] },
       ],
     });
-    if (typeof path === "string") await openHome(path);
+    if (typeof path !== "string") return;
+    // Like Sweet Home 3D: an untouched window takes the home, otherwise a new window opens
+    if (isUntouched()) await openHome(path);
+    else await api.newWindow(path);
   };
+
+  const newHome = () => {
+    if (isUntouched()) void run("home_new");
+    else void api.newWindow();
+  };
+
+  // Window title: name of the home, * while it has unsaved changes
+  const windowTitle = opened
+    ? `${homeTitle(opened.home.attrs.name, opened.path)}${opened.modified ? " *" : ""} - My Sweet Home`
+    : "My Sweet Home";
+  useEffect(() => {
+    void getCurrentWebviewWindow().setTitle(windowTitle);
+  }, [windowTitle]);
+
+  // Closing a window with unsaved changes asks whether to save them
+  useEffect(() => {
+    const off = getCurrentWebviewWindow().onCloseRequested(async (event) => {
+      const current = useStore.getState().opened;
+      if (!current?.modified) return;
+      const answer = await message(
+        `Save the changes of "${homeTitle(current.home.attrs.name, current.path)}" before closing?`,
+        {
+          title: "My Sweet Home",
+          kind: "warning",
+          buttons: { yes: "Save", no: "Don't save", cancel: "Cancel" },
+        },
+      );
+      if (answer === "Yes" || answer === "Save") {
+        await useStore.getState().save();
+        // Saving was cancelled or failed: keep the window
+        if (useStore.getState().opened?.modified) event.preventDefault();
+      } else if (!(answer === "No" || answer === "Don't save")) {
+        event.preventDefault();
+      }
+    });
+    return () => {
+      void off.then((f) => f());
+    };
+  }, []);
 
   const chooseTool = (t: Tool) => {
     setTool(t);
@@ -300,7 +360,7 @@ export default function App() {
     >
       <header className="toolbar">
         <strong className="app-name">{info?.name ?? "My Sweet Home"}</strong>
-        <button type="button" onClick={() => void run("home_new")} title="New home">
+        <button type="button" onClick={newHome} title="New home (Ctrl+N)">
           New
         </button>
         <button type="button" onClick={chooseFile} disabled={loading}>
@@ -562,4 +622,42 @@ export default function App() {
       </aside>
     </div>
   );
+}
+
+/** The window shows no work yet: a new home without changes. */
+function isUntouched(): boolean {
+  const o = useStore.getState().opened;
+  return !o || (!o.path && !o.modified && !o.canUndo);
+}
+
+/** Name of a home for titles: its name, else its file name, else "Untitled". */
+function homeTitle(name: string | null, path: string | null): string {
+  if (name) return name.replace(/\.sh3d$/i, "");
+  if (path) return (path.split(/[\\/]/).pop() ?? path).replace(/\.sh3d$/i, "");
+  return "Untitled";
+}
+
+/** Offers the homes autosave kept when the app ended without saving them (a crash). */
+async function offerRecovery(): Promise<void> {
+  const found = await api.recoveryList();
+  if (found.length === 0) return;
+  const names = found
+    .map((r) => `• ${homeTitle(r.name, r.path)} (${new Date(r.savedAt * 1000).toLocaleString()})`)
+    .join("\n");
+  const answer = await message(
+    `My Sweet Home was not closed properly. These homes had unsaved changes:\n\n${names}\n\nOpen them again?`,
+    {
+      title: "Recover homes",
+      kind: "info",
+      buttons: { yes: "Open", no: "Discard", cancel: "Later" },
+    },
+  );
+  if (answer === "Yes" || answer === "Open") {
+    // The first one in this window, the others in new windows
+    const [first, ...others] = found;
+    applyHome(await api.recoveryOpen(first.key));
+    for (const r of others) await api.newWindow(undefined, r.key);
+  } else if (answer === "No" || answer === "Discard") {
+    await api.recoveryDiscard(found.map((r) => r.key));
+  }
 }

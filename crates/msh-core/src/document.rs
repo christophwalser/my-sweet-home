@@ -118,6 +118,16 @@ impl Document {
         Ok(target)
     }
 
+    /// Copy of the file for autosave: written elsewhere without changing the path or the
+    /// modified state of the document.
+    pub fn recovery_copy(&self) -> Sh3dDocument {
+        let mut file = self.file.clone();
+        if self.contents_changed {
+            file.content_digests = None;
+        }
+        file
+    }
+
     /// Records the current state before a modifying command.
     pub(crate) fn checkpoint(&mut self, label: &str) {
         self.undo.push(Snapshot {

@@ -1,6 +1,7 @@
 //! Named pipe server for live control by the CLI and the MCP server.
 //!
-//! Protocol and pipe name are defined in the `msh-ipc` crate.
+//! Protocol and pipe name are defined in the `msh-ipc` crate. Commands go to the home of
+//! the window focused last; requests to render go to that window (and its 3D window).
 
 use crate::state::{self, AppState};
 use msh_ipc::{PIPE_NAME, Request, Response};
@@ -141,7 +142,7 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
             if command == "export_document"
                 && params["view_3d"] != Value::Bool(false)
                 && params["view_3d_image"].is_null()
-                && let Ok(image) = capture_3d(app, None).await
+                && let Ok(image) = capture_3d(app, None, None).await
                 && let Some(obj) = params.as_object_mut()
             {
                 obj.insert("view_3d_image".into(), image["image_base64"].clone());
@@ -152,25 +153,28 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
             if plan_wanted
                 && params["furniture_icons"] != "catalog"
                 && params["top_views"].is_null()
-                && let Ok(views) = top_views(app).await
+                && let Ok(views) = top_views(app, None).await
                 && let Some(obj) = params.as_object_mut()
             {
                 obj.insert("top_views".into(), views);
             }
             let a = app.clone();
-            match tauri::async_runtime::spawn_blocking(move || state::execute(&a, &command, params))
-                .await
+            match tauri::async_runtime::spawn_blocking(move || {
+                state::execute(&a, None, &command, params)
+            })
+            .await
             {
                 Ok(Ok(v)) => Response::ok(id, v),
                 Ok(Err(e)) => Response::err(id, e),
                 Err(e) => Response::err(id, e.to_string()),
             }
         }
-        "capture_3d" => match capture_3d(app, req.params["mode"].as_str().map(str::to_owned)).await
-        {
-            Ok(v) => Response::ok(id, v),
-            Err(e) => Response::err(id, e),
-        },
+        "capture_3d" => {
+            match capture_3d(app, None, req.params["mode"].as_str().map(str::to_owned)).await {
+                Ok(v) => Response::ok(id, v),
+                Err(e) => Response::err(id, e),
+            }
+        }
         "render_photo" => match render_photo(app, &req.params).await {
             Ok(v) => Response::ok(id, v),
             Err(e) => Response::err(id, e),
@@ -179,13 +183,13 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
             Ok(v) => Response::ok(id, v),
             Err(e) => Response::err(id, e),
         },
-        "export_obj" => match export_obj(app, req.params["path"].as_str()).await {
+        "export_obj" => match export_obj(app, None, req.params["path"].as_str()).await {
             Ok(v) => Response::ok(id, v),
             Err(e) => Response::err(id, e),
         },
         "status" => {
             let state = app.state::<AppState>();
-            let current = state.current();
+            let current = state.current(None);
             Response::ok(
                 id,
                 json!({
@@ -205,7 +209,8 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
 /// Asks the frontend to render a photo and waits for it (written to `path` if given).
 async fn render_photo(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let state = app.state::<AppState>();
-    if state.current().is_none() {
+    let label = state.focused();
+    if state.current(Some(&label)).is_none() {
         return Err("no home is open in the app".into());
     }
     let quality = params["quality"].as_str().unwrap_or("good").to_string();
@@ -224,7 +229,9 @@ async fn render_photo(app: &AppHandle, params: &Value) -> Result<Value, String> 
         None => None,
     };
     let (request_id, rx) = state.new_capture();
-    app.emit(
+    state::emit_home(
+        app,
+        &label,
         RENDER_PHOTO_EVENT,
         PhotoRequest {
             request_id,
@@ -233,8 +240,7 @@ async fn render_photo(app: &AppHandle, params: &Value) -> Result<Value, String> 
             quality,
             path,
         },
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     let result = tokio::time::timeout(PHOTO_TIMEOUT, rx)
         .await
         .map_err(|_| "the app did not finish the photo in time".to_string())?
@@ -246,7 +252,8 @@ async fn render_photo(app: &AppHandle, params: &Value) -> Result<Value, String> 
 /// until it is written to `path`.
 async fn render_video(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let state = app.state::<AppState>();
-    let Some(current) = state.current() else {
+    let label = state.focused();
+    let Some(current) = state.current(Some(&label)) else {
         return Err("no home is open in the app".into());
     };
     let points = msh_core::camera_path_len(&current.home);
@@ -267,7 +274,9 @@ async fn render_video(app: &AppHandle, params: &Value) -> Result<Value, String> 
         .to_string();
     let size = |key: &str| params[key].as_u64().map(|v| v.clamp(16, 3840) as u32);
     let (request_id, rx) = state.new_capture();
-    app.emit(
+    state::emit_home(
+        app,
+        &label,
         RENDER_VIDEO_EVENT,
         VideoRequest {
             request_id,
@@ -277,8 +286,7 @@ async fn render_video(app: &AppHandle, params: &Value) -> Result<Value, String> 
             quality,
             path,
         },
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     let result = tokio::time::timeout(VIDEO_TIMEOUT, rx)
         .await
         .map_err(|_| "the app did not finish the video in time".to_string())?
@@ -287,14 +295,19 @@ async fn render_video(app: &AppHandle, params: &Value) -> Result<Value, String> 
 }
 
 /// Asks the main window for the views of the furniture from above.
-async fn top_views(app: &AppHandle) -> Result<Value, String> {
+async fn top_views(app: &AppHandle, window: Option<&str>) -> Result<Value, String> {
     let state = app.state::<AppState>();
-    if state.current().is_none() {
+    let label = window.map_or_else(|| state.focused(), state::home_label);
+    if state.current(Some(&label)).is_none() {
         return Err("no home is open in the app".into());
     }
     let (request_id, rx) = state.new_capture();
-    app.emit(TOP_VIEWS_EVENT, TopViewsRequest { request_id })
-        .map_err(|e| e.to_string())?;
+    app.emit_to(
+        label.as_str(),
+        TOP_VIEWS_EVENT,
+        TopViewsRequest { request_id },
+    )
+    .map_err(|e| e.to_string())?;
     let result = tokio::time::timeout(TOP_VIEWS_TIMEOUT, rx)
         .await
         .map_err(|_| "the app did not render the views from above in time".to_string())?
@@ -303,22 +316,28 @@ async fn top_views(app: &AppHandle) -> Result<Value, String> {
 }
 
 /// Asks the frontend to export the 3D view as OBJ and waits for the written files.
-pub async fn export_obj(app: &AppHandle, path: Option<&str>) -> Result<Value, String> {
+pub async fn export_obj(
+    app: &AppHandle,
+    window: Option<&str>,
+    path: Option<&str>,
+) -> Result<Value, String> {
     let path = path.ok_or("missing \"path\"")?;
     let path = std::path::absolute(path).map_err(|e| e.to_string())?;
     let state = app.state::<AppState>();
-    if state.current().is_none() {
+    let label = window.map_or_else(|| state.focused(), state::home_label);
+    if state.current(Some(&label)).is_none() {
         return Err("no home is open in the app".into());
     }
     let (request_id, rx) = state.new_capture();
-    app.emit(
+    state::emit_home(
+        app,
+        &label,
         EXPORT_OBJ_EVENT,
         ExportRequest {
             request_id,
             path: path.display().to_string(),
         },
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     let result = tokio::time::timeout(EXPORT_TIMEOUT, rx)
         .await
         .map_err(|_| "the app did not finish the OBJ export in time".to_string())?
@@ -327,14 +346,23 @@ pub async fn export_obj(app: &AppHandle, path: Option<&str>) -> Result<Value, St
 }
 
 /// Asks the frontend to render the 3D view and waits for the PNG.
-pub async fn capture_3d(app: &AppHandle, mode: Option<String>) -> Result<Value, String> {
+pub async fn capture_3d(
+    app: &AppHandle,
+    window: Option<&str>,
+    mode: Option<String>,
+) -> Result<Value, String> {
     let state = app.state::<AppState>();
-    if state.current().is_none() {
+    let label = window.map_or_else(|| state.focused(), state::home_label);
+    if state.current(Some(&label)).is_none() {
         return Err("no home is open in the app".into());
     }
     let (request_id, rx) = state.new_capture();
-    app.emit(CAPTURE_EVENT, CaptureRequest { request_id, mode })
-        .map_err(|e| e.to_string())?;
+    state::emit_home(
+        app,
+        &label,
+        CAPTURE_EVENT,
+        CaptureRequest { request_id, mode },
+    )?;
     let data_url = tokio::time::timeout(CAPTURE_TIMEOUT, rx)
         .await
         .map_err(|_| "the app did not deliver the 3D image in time".to_string())?

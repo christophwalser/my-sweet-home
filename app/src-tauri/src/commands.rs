@@ -3,12 +3,13 @@
 //! Changes to the home go through `execute`, which runs a command of the
 //! `msh-core` registry — the same commands the CLI and the MCP server use.
 
-use crate::state::{self, AppState, HomeView};
+use crate::autosave::{self, RecoveryInfo};
+use crate::state::{self, AppState, HOME_CHANGED_EVENT, HomeView};
 use msh_catalog::{CatalogKind, open_library};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -21,40 +22,121 @@ pub fn app_info() -> msh_core::AppInfo {
     msh_core::app_info()
 }
 
-/// File passed on the command line (e.g. `msh-app.exe house.sh3d`).
+/// File the window should open when it starts: the one passed on the command line
+/// (`msh-app.exe house.sh3d`) for the first window, the chosen one for new windows.
 #[tauri::command]
-pub fn startup_file() -> Option<String> {
+pub fn startup_file(window: WebviewWindow, state: State<'_, AppState>) -> Option<String> {
+    if let Some(path) = state.take_pending_open(window.label()) {
+        return Some(path.display().to_string());
+    }
+    if window.label() != "main" {
+        return None;
+    }
     std::env::args()
         .skip(1)
         .find(|a| !a.starts_with('-') && Path::new(a).is_file())
 }
 
-/// The open home, if any (used when the frontend starts or reloads).
+/// The home of the window, if any (used when the frontend starts or reloads).
 #[tauri::command]
-pub fn current_home(state: State<'_, AppState>) -> Option<HomeView> {
-    state.current()
+pub fn current_home(window: WebviewWindow, state: State<'_, AppState>) -> Option<HomeView> {
+    state.current(Some(window.label()))
 }
 
-/// Opens a `.sh3d` file or a standalone `Home.xml`.
+/// Opens a `.sh3d` file or a standalone `Home.xml` in the window.
 #[tauri::command]
-pub async fn open_home(path: String, app: AppHandle) -> CmdResult<HomeView> {
+pub async fn open_home(path: String, window: WebviewWindow, app: AppHandle) -> CmdResult<HomeView> {
     let a = app.clone();
+    let label = window.label().to_owned();
+    let l = label.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        state::execute(&a, "home_open", json!({ "path": path }))
+        state::execute(&a, Some(&l), "home_open", json!({ "path": path }))
     })
     .await
     .map_err(err)??;
     app_state(&app)
-        .current()
+        .current(Some(&label))
         .ok_or_else(|| "no home open".into())
 }
 
-/// Runs a registry command (e.g. `edit_undo`, `home_save`) on the open home.
+/// Runs a registry command (e.g. `edit_undo`, `home_save`) on the home of the window.
 #[tauri::command]
-pub async fn execute(command: String, params: Value, app: AppHandle) -> CmdResult<Value> {
-    tauri::async_runtime::spawn_blocking(move || state::execute(&app, &command, params))
+pub async fn execute(
+    command: String,
+    params: Value,
+    window: WebviewWindow,
+    app: AppHandle,
+) -> CmdResult<Value> {
+    let label = window.label().to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        state::execute(&app, Some(&label), &command, params)
+    })
+    .await
+    .map_err(err)?
+}
+
+/// Opens a new window for another home: empty, with the file `path`, or with the
+/// recovered home `recovery`.
+#[tauri::command]
+pub async fn new_window(
+    path: Option<String>,
+    recovery: Option<String>,
+    app: AppHandle,
+) -> CmdResult<String> {
+    let state = app_state(&app);
+    let label = state.new_window_label();
+    if let Some(p) = path {
+        state.set_pending_open(&label, PathBuf::from(p));
+    }
+    if let Some(key) = recovery {
+        state.set_pending_recovery(&label, key);
+    }
+    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
+        .title("My Sweet Home")
+        .inner_size(1280.0, 800.0)
+        .min_inner_size(640.0, 480.0)
+        .drag_and_drop(false)
+        .build()
+        .map_err(err)?;
+    Ok(label)
+}
+
+/// Recovered home the window should open when it starts, if any.
+#[tauri::command]
+pub fn startup_recovery(window: WebviewWindow, state: State<'_, AppState>) -> Option<String> {
+    state.take_pending_recovery(window.label())
+}
+
+/// Unsaved homes left by an earlier session (after a crash).
+#[tauri::command]
+pub fn recovery_list(app: AppHandle) -> Vec<RecoveryInfo> {
+    autosave::list(&app)
+}
+
+/// Opens a recovered home in the window.
+#[tauri::command]
+pub async fn recovery_open(
+    key: String,
+    window: WebviewWindow,
+    app: AppHandle,
+) -> CmdResult<HomeView> {
+    let label = window.label().to_owned();
+    let a = app.clone();
+    let k = key.clone();
+    let doc = tauri::async_runtime::spawn_blocking(move || autosave::open(&a, &k))
         .await
-        .map_err(err)?
+        .map_err(err)??;
+    let view = app_state(&app).install_doc(&label, doc, Some(key));
+    let _ = state::emit_home(&app, &label, HOME_CHANGED_EVENT, view.clone());
+    Ok(view)
+}
+
+/// Deletes recovered homes the user does not want back.
+#[tauri::command]
+pub fn recovery_discard(keys: Vec<String>, app: AppHandle) {
+    for key in keys {
+        autosave::remove_recovery(&app, &key);
+    }
 }
 
 /// Writes the files of an OBJ export: the OBJ at `path`, the MTL and the texture
@@ -137,8 +219,11 @@ pub fn save_file(request: tauri::ipc::Request<'_>) -> Result<(), String> {
 
 /// PNG (base64) of the 3D view, rendered by the window that shows it.
 #[tauri::command]
-pub async fn capture_3d_image(app: tauri::AppHandle) -> Result<String, String> {
-    let image = crate::pipe::capture_3d(&app, None).await?;
+pub async fn capture_3d_image(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    let image = crate::pipe::capture_3d(&app, Some(window.label()), None).await?;
     image["image_base64"]
         .as_str()
         .map(str::to_owned)
@@ -148,8 +233,12 @@ pub async fn capture_3d_image(app: tauri::AppHandle) -> Result<String, String> {
 /// Exports the 3D view as OBJ (from the export dialog); the window showing the 3D
 /// view builds and writes the files.
 #[tauri::command]
-pub async fn export_obj(path: String, app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    crate::pipe::export_obj(&app, Some(&path)).await
+pub async fn export_obj(
+    path: String,
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<serde_json::Value, String> {
+    crate::pipe::export_obj(&app, Some(window.label()), Some(&path)).await
 }
 
 /// Result of a 3D capture requested over the pipe: a PNG data URL or an error.

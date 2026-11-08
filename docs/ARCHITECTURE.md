@@ -701,6 +701,24 @@ furniture is read by its home reader.
   steps. The level ahead is selected while on the stairs, so the floor above is shown
   instead of the sky through the hole.
 
+### 4.29 Status after P11 (2026-11-08)
+
+- One window per home, like Sweet Home 3D: the backend keeps a document per window label
+  ("main", "home-2", ...); Tauri commands act on the home of the calling window (a separate
+  3D window "view3d-<home window>" on its home). Events go to the home window and its 3D
+  window only (`emit_home`); the frontend listens per window. "New" and "Open…" (Ctrl+N,
+  Ctrl+O) use the current window while it is untouched, otherwise a new window
+  (`new_window`). The clipboard is shared, so elements can be copied between homes.
+- The CLI and the MCP server control the home of the window focused last.
+- Window titles show the home's name and * for unsaved changes. Closing a window with
+  unsaved changes asks Save / Don't save / Cancel; the app ends with its last home window.
+- Autosave and recovery (`app/src-tauri/src/autosave.rs`): every 5 minutes a copy of each
+  home changed since its last save or autosave goes to `%APPDATA%\ch.mysweethome.app\
+  recovery` (`<key>.sh3d` and `<key>.json`); saving or closing a home removes it. After a
+  crash the first window offers the copies (Open / Discard / Later); a recovered home keeps
+  its original path and is marked as changed. `MSH_AUTOSAVE_SECONDS` shortens the interval
+  for tests.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

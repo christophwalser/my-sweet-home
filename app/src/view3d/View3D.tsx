@@ -1,6 +1,6 @@
 // 3D view: WebGL renderer that only redraws when something changes.
 
-import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -597,7 +597,7 @@ export default function View3D() {
 
   // 3D screenshots requested by the CLI or MCP server (live control)
   useEffect(() => {
-    const unlisten = listen<{ requestId: number; mode: ViewMode | null }>(
+    const unlisten = getCurrentWebviewWindow().listen<{ requestId: number; mode: ViewMode | null }>(
       CAPTURE_EVENT,
       async (e) => {
         const { requestId, mode } = e.payload;
@@ -686,7 +686,7 @@ export default function View3D() {
 
   // Videos requested by the CLI or the MCP server: path and settings of the home
   useEffect(() => {
-    const unlisten = listen<{
+    const unlisten = getCurrentWebviewWindow().listen<{
       requestId: number;
       width: number | null;
       height: number | null;
@@ -739,7 +739,7 @@ export default function View3D() {
 
   // Photos requested by the CLI or the MCP server
   useEffect(() => {
-    const unlisten = listen<{
+    const unlisten = getCurrentWebviewWindow().listen<{
       requestId: number;
       width: number;
       height: number;
@@ -772,20 +772,23 @@ export default function View3D() {
 
   // OBJ export requested by the export dialog, the CLI or the MCP server
   useEffect(() => {
-    const unlisten = listen<{ requestId: number; path: string }>(EXPORT_OBJ_EVENT, async (e) => {
-      const { requestId, path } = e.payload;
-      try {
-        await waitForModels(60000);
-        const c = ctx.current;
-        if (!c) throw new Error("3D view not available");
-        const mtlName = `${(path.split(/[\\/]/).pop() ?? "home").replace(/\.[^.]*$/, "")}.mtl`;
-        const files = buildObj(c.content, mtlName);
-        const paths = await api.writeObjFiles(path, files.obj, files.mtl, files.textures);
-        await api.captureResult(requestId, JSON.stringify({ paths }), null);
-      } catch (err) {
-        await api.captureResult(requestId, null, String(err));
-      }
-    });
+    const unlisten = getCurrentWebviewWindow().listen<{ requestId: number; path: string }>(
+      EXPORT_OBJ_EVENT,
+      async (e) => {
+        const { requestId, path } = e.payload;
+        try {
+          await waitForModels(60000);
+          const c = ctx.current;
+          if (!c) throw new Error("3D view not available");
+          const mtlName = `${(path.split(/[\\/]/).pop() ?? "home").replace(/\.[^.]*$/, "")}.mtl`;
+          const files = buildObj(c.content, mtlName);
+          const paths = await api.writeObjFiles(path, files.obj, files.mtl, files.textures);
+          await api.captureResult(requestId, JSON.stringify({ paths }), null);
+        } catch (err) {
+          await api.captureResult(requestId, null, String(err));
+        }
+      },
+    );
     return () => {
       void unlisten.then((off) => off());
     };

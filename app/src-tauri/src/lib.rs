@@ -1,3 +1,4 @@
+mod autosave;
 mod commands;
 mod pipe;
 mod resources;
@@ -16,14 +17,46 @@ pub fn run() {
                 responder.respond(resources::handle(&app, &request));
             });
         })
-        // Closing the main window ends the app, also when the 3D window is open
         .on_window_event(|window, event| {
-            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
-                tauri::Manager::app_handle(window).exit(0);
+            use tauri::Manager;
+            let app = window.app_handle();
+            let state = app.state::<AppState>();
+            let label = window.label();
+            match event {
+                // The CLI and the MCP server control the home of the window focused last
+                tauri::WindowEvent::Focused(true) => state.set_focused(label),
+                tauri::WindowEvent::Destroyed if !label.starts_with(state::VIEW3D_PREFIX) => {
+                    // A closed home is gone: its recovery copy and its 3D window too
+                    if let Some(key) = state.close_doc(label) {
+                        autosave::remove_recovery(app, &key);
+                    }
+                    if let Some(w) =
+                        app.get_webview_window(&format!("{}{label}", state::VIEW3D_PREFIX))
+                    {
+                        let _ = w.close();
+                    }
+                    // The app ends with its last home window
+                    let homes_left = app
+                        .webview_windows()
+                        .keys()
+                        .any(|l| l != label && !l.starts_with(state::VIEW3D_PREFIX));
+                    if !homes_left {
+                        app.exit(0);
+                    } else if state.focused() == label
+                        && let Some(next) = app
+                            .webview_windows()
+                            .keys()
+                            .find(|l| *l != label && !l.starts_with(state::VIEW3D_PREFIX))
+                    {
+                        state.set_focused(next);
+                    }
+                }
+                _ => {}
             }
         })
         .setup(|app| {
             pipe::start(app.handle().clone());
+            autosave::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -41,6 +74,11 @@ pub fn run() {
             commands::save_image,
             commands::save_file,
             commands::read_file,
+            commands::new_window,
+            commands::recovery_list,
+            commands::startup_recovery,
+            commands::recovery_open,
+            commands::recovery_discard,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Tauri application");

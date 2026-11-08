@@ -1,6 +1,7 @@
 // Global UI state (zustand).
 
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
@@ -253,7 +254,10 @@ const CATALOG_CHANGED_EVENT = "catalog-changed";
  * backend. Returns the unsubscribe function.
  */
 export async function subscribeToHomeChanges(): Promise<() => void> {
-  const offHome = await listen<OpenedHome>(HOME_CHANGED_EVENT, (e) => applyHome(e.payload));
+  // Each window shows its own home: only its own changes count
+  const offHome = await getCurrentWebviewWindow().listen<OpenedHome>(HOME_CHANGED_EVENT, (e) =>
+    applyHome(e.payload),
+  );
   const offCatalog = await listen(CATALOG_CHANGED_EVENT, () => {
     void useStore.getState().loadCatalog(navigator.language.split("-")[0] || "en");
   });

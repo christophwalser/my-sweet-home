@@ -95,6 +95,8 @@ bar at the bottom of the plan explains the next step.
 - Staircases cut holes in the floor above and can be walked up and down in the virtual visit;
   walls reaching into upper levels appear in their plans. Furniture moved onto tables or
   shelf units lands on their top or shelves.
+- Each home has its own window (New / Open… open another one); elements can be copied between
+  them. Unsaved changes are kept by autosave and offered again after a crash.
 - Furniture in the plan is drawn as seen from above, rendered from its 3D model with its
   colors and materials (Preferences: off shows the catalog icons); exports and prints use
   the view from above too, or the icons ("Furniture in plans" in the export dialog).

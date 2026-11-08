@@ -41,6 +41,15 @@ export type CatalogData = {
 export const api = {
   appInfo: () => invoke<AppInfo>("app_info"),
   startupFile: () => invoke<string | null>("startup_file"),
+  /** Recovered home this window should open when it starts */
+  startupRecovery: () => invoke<string | null>("startup_recovery"),
+  /** Opens a new window: empty, with a file, or with a recovered home */
+  newWindow: (path?: string, recovery?: string) =>
+    invoke<string>("new_window", { path: path ?? null, recovery: recovery ?? null }),
+  /** Unsaved homes left by an earlier session */
+  recoveryList: () => invoke<RecoveryInfo[]>("recovery_list"),
+  recoveryOpen: (key: string) => invoke<OpenedHome>("recovery_open", { key }),
+  recoveryDiscard: (keys: string[]) => invoke<void>("recovery_discard", { keys }),
   currentHome: () => invoke<OpenedHome | null>("current_home"),
   openHome: (path: string) => invoke<OpenedHome>("open_home", { path }),
   /** Runs a command of the msh-core registry (same commands as CLI and MCP). */
@@ -120,3 +129,12 @@ export function stageResourceUrl(stage: number, entry: string): string {
 export function libResourceUrl(library: number, entry: string): string {
   return `${MSH_BASE}/lib/${library}/${encodePath(entry)}`;
 }
+
+/** A copy of an unsaved home written by autosave (see app/src-tauri/src/autosave.rs). */
+export type RecoveryInfo = {
+  key: string;
+  name: string | null;
+  path: string | null;
+  /** Seconds since 1970 */
+  savedAt: number;
+};
