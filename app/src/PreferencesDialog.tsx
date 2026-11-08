@@ -11,10 +11,10 @@ import { UNITS } from "./units";
 
 type Tab = "plan" | "new" | "view3d" | "general";
 const TABS: { id: Tab; label: string }[] = [
+  { id: "general", label: t("General") },
   { id: "plan", label: t("Plan") },
   { id: "new", label: t("New elements") },
   { id: "view3d", label: t("3D view") },
-  { id: "general", label: t("General") },
 ];
 
 function Check({
@@ -138,7 +138,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 
 export default function PreferencesDialog({ onClose }: { onClose: () => void }) {
   const p = usePreferences();
-  const [tab, setTab] = useState<Tab>("plan");
+  const [tab, setTab] = useState<Tab>("general");
   const theme = useUi((s) => s.theme);
   const setTheme = useUi((s) => s.setTheme);
   const set = (changes: Partial<Preferences>) => p.update(changes);
