@@ -359,7 +359,12 @@ export function snapContext(
         }
       }
     } else if (purpose === "room" || purpose === "dimension") {
-      points.push(...corners.filter(keep));
+      // Corners of the wall sides (outer and inner faces); dimensions and measurements
+      // name them, so the user sees that the point lies on the face, not on the axis
+      for (const c of corners.filter(keep)) {
+        points.push(c);
+        if (purpose === "dimension") labels.set(pointKey(c), "wall corner");
+      }
       // Sides near the cursor: their crossings with other walls' sides are corners too
       for (const side of [s.left, s.right]) {
         for (let k = 0; k + 1 < side.length; k++) {
@@ -369,14 +374,15 @@ export function snapContext(
           }
         }
       }
-      if (purpose === "dimension") points.push(...[start, end].filter(keep));
       for (const side of [s.left, s.right]) {
         for (let k = 0; k + 1 < side.length; k++) lines.push([side[k], side[k + 1]]);
       }
     }
     if (purpose !== "polyline") {
-      refs.push(...[start, end].filter(keep));
-      if (purpose === "room") refs.push(...corners.filter(keep));
+      // Dimensions and measurements align with the wall faces, never with the axis
+      // (the axis ends lie in the middle of the wall, where an outer length can't be read)
+      if (purpose !== "dimension") refs.push(...[start, end].filter(keep));
+      if (purpose === "room" || purpose === "dimension") refs.push(...corners.filter(keep));
       if (!a.arc_extent && (!near || distanceToWall(near, start, end) < 300)) {
         directions.push(Math.atan2(end[1] - start[1], end[0] - start[0]));
       }

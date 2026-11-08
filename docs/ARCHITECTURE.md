@@ -481,6 +481,8 @@ furniture is read by its home reader.
 - Measuring tool ("Measure"): two clicks or a drag measure a distance with the magnetism of the
   dimension tool; the overlay shows length, direction (degrees, clockwise from the x axis) and
   the horizontal and vertical parts. Nothing is added to the home; Esc or a right click clears.
+  Dimensions and measurements snap to the corners of the wall faces and align with them, not
+  with the wall axis (outer lengths can be measured corner to corner).
 - Lock base plan: `home_set` `base_plan_locked` (written only when locked, as Sweet Home 3D
   does). While locked, clicks, the rubber band and Ctrl+A select only movable furniture; walls,
   rooms, dimensions, labels, polylines, doors, windows and pieces with `movable="false"` are
