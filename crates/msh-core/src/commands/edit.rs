@@ -227,7 +227,7 @@ fn element_level(home: &Home, ids: &[String]) -> Option<String> {
 }
 
 /// Moves the elements with the given IDs; returns how many were moved.
-fn move_elements(home: &mut Home, ids: &[String], dx: f32, dy: f32) -> usize {
+pub(super) fn move_elements(home: &mut Home, ids: &[String], dx: f32, dy: f32) -> usize {
     let ids: HashSet<&str> = ids.iter().map(String::as_str).collect();
     let mut moved = 0;
 

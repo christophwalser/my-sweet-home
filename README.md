@@ -69,6 +69,10 @@ bar at the bottom of the plan explains the next step.
   home, as in Sweet Home 3D.
 - Plan: rulers along the edges, "Measure" tool for distances, "Lock base plan" (only movable
   furniture stays selectable), "Preferences…" to switch rulers, grid and magnetism.
+- Right click in the select mode opens a context menu: cut, copy, paste, paste style, duplicate,
+  delete, flip, group, align furniture (sides, top, bottom, side by side) and distribute it,
+  reverse, split, join or detach walls, add or delete points of rooms and lines, lock the base
+  plan.
 - Furniture in the plan is drawn as seen from above, rendered from its 3D model with its
   colors and materials (Preferences: off shows the catalog icons); exports and prints use
   the view from above too, or the icons ("Furniture in plans" in the export dialog).

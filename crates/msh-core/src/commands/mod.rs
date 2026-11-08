@@ -8,6 +8,7 @@
 //! - Elements on levels: if `level` is omitted, the selected level is used.
 
 mod annotate;
+mod arrange;
 mod background;
 mod camera;
 mod edit;
@@ -46,6 +47,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     export::register(r);
     camera::register(r);
     background::register(r);
+    arrange::register(r);
 }
 
 /// New element ID in the style of Sweet Home 3D 7 (`wall-<uuid>`).

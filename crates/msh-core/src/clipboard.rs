@@ -238,6 +238,22 @@ impl Clipboard {
         new_ids
     }
 
+    /// The clipboard with its resources added to `doc` and its references renamed where
+    /// names were taken (for applying styles of the copied elements).
+    pub fn merged_into(&self, doc: &mut Document) -> Self {
+        let mut clip = self.clone();
+        let renamed = clip.merge_contents_into(doc);
+        if !renamed.is_empty() {
+            clip.for_each_content_ref_mut(&mut |name| {
+                let top = top_segment(name);
+                if let Some(new_top) = renamed.get(top) {
+                    *name = format!("{new_top}{}", &name[top.len()..]);
+                }
+            });
+        }
+        clip
+    }
+
     /// Adds the clipboard resources to `doc`. Resources that already exist with the
     /// same data are reused; name conflicts get a new numeric prefix. Returns the
     /// renamed top-level prefixes (old → new).

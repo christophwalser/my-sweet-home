@@ -542,6 +542,27 @@ furniture is read by its home reader.
   stretched to the footprint, for doors and windows under the sashes (the group's mirroring is
   undone for it, the view is rendered mirrored already).
 
+### 4.22 Status after P8a (2026-11-08)
+
+- Commands: `wall_reverse` (start and end swap; side colors, shininess, textures and
+  baseboards change sides, heights at start and end swap, the arc extent changes its sign, so
+  the wall looks the same), `furniture_align` (left / right / front / back side in the leading
+  piece's orientation, top, bottom, side by side; the leading piece is `leader` or the last of
+  `ids`, i.e. the one selected last, like Sweet Home 3D), `furniture_distribute` (equal gaps
+  along x or y, the outer pieces stay), `edit_paste_style` (style of the first copied element
+  of the same kind: wall colors, textures, baseboards, pattern, thickness and heights; room
+  floor, ceiling and text styles; furniture color, texture and materials of the same model;
+  polyline, dimension and label styles; textures of the copied element are merged into the
+  home first, `Clipboard::merged_into`).
+- Context menu of the plan (`plan2d/ContextMenu.tsx`), only in the select mode; in drawing
+  tools the right click still finishes the drawing. A right click selects the element under
+  the pointer (empty space clears the selection); a selected room or line keeps the selection
+  near its outline, which often lies under a wall. Items depend on the selection: clipboard,
+  delete, flip, group / ungroup, align and distribute (two or three pieces and more), wall
+  operations (reverse, split here, join, detach), "Add point here" / "Delete point" for rooms
+  and polylines (`room_update` / `polyline_update` with the new points), select all, fit, lock
+  or unlock the base plan. The menu stays inside the plan and scrolls when the plan is low.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

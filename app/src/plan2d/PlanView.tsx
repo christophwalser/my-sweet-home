@@ -21,6 +21,7 @@ import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api"
 import { forEachPiece, type Piece, type Pt } from "../model";
 import { magnetismActive, usePreferences } from "../preferences";
 import { type Tool, useStore } from "../store";
+import ContextMenu, { type MenuItem } from "./ContextMenu";
 import {
   drawPlan,
   type PlanColors,
@@ -36,11 +37,17 @@ import {
   type HandleDrag,
   handleAt,
 } from "./handles";
-import { elementsInRect, hitTest, nearestWall } from "./interaction";
+import { distanceToSegment, elementsInRect, hitTest, nearestWall } from "./interaction";
 import { constrainMove, type Docked, dockToWall, movePreview, selectionJoints } from "./moving";
 import { type DraftKind, drawOverlay, type PlanOverlay } from "./overlay";
 import { drawRuler, type RulerColors } from "./rulers";
-import { type SnapPurpose, type Snapped, snapContext, snapDraw } from "./snapping";
+import {
+  projectOnSegment,
+  type SnapPurpose,
+  type Snapped,
+  snapContext,
+  snapDraw,
+} from "./snapping";
 import { topView } from "./topView";
 
 const LIGHT: PlanColors = {
@@ -190,6 +197,8 @@ export default function PlanView() {
   const [icons, setIcons] = useState(() => new Map<string, HTMLImageElement>());
   const [, setRedraw] = useState(0);
   const [hint, setHint] = useState("");
+  /** Open context menu: position in CSS pixels in the plan area and its items */
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const dark = useDarkMode();
   const colors = dark ? DARK : LIGHT;
   const rulerColors = dark ? DARK_RULER : LIGHT_RULER;
@@ -807,15 +816,17 @@ export default function PlanView() {
     }
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
     const g = gesture.current;
     gesture.current = null;
     if (!g || !input) return;
     const sel = useStore.getState().selection;
     if (g.kind === "pan") {
-      // A right click without dragging finishes the drawing (or leaves the tool)
+      // A right click without dragging opens the context menu (select mode), finishes the
+      // drawing, or leaves the tool
       if (!g.moved) {
-        if (isPathTool(tool) && draft.current.length > 0) void finishDraft();
+        if (tool === "select" && e.button === 2) openMenu(e.clientX, e.clientY);
+        else if (isPathTool(tool) && draft.current.length > 0) void finishDraft();
         else if (tool === "measure" && measure.current) {
           measure.current = null;
           draw();
@@ -890,6 +901,272 @@ export default function PlanView() {
     } else if (tool === "select" && useStore.getState().selection.length === 0) {
       refit();
     }
+  };
+
+  // ---------------------------------------------------------------- context menu
+
+  /** Opens the context menu for the element under the pointer (selecting it first). */
+  const openMenu = (clientX: number, clientY: number) => {
+    if (!input) return;
+    const p = toWorld(clientX, clientY);
+    let sel = useStore.getState().selection;
+    // A selected room or line keeps the selection near its outline, which often lies under
+    // a wall, so its points can be added or deleted
+    const tol = pxToCm(PICK_PX + 4);
+    const outline = (pts: { x: number; y: number }[], closed: boolean) =>
+      pts.some((q, i) => {
+        const next = pts[(i + 1) % pts.length];
+        return (
+          (closed || i + 1 < pts.length) &&
+          distanceToSegment(p, [q.x, q.y], [next.x, next.y]) <= tol
+        );
+      });
+    const room = sel.length === 1 ? input.home.rooms.find((r) => r.attrs.id === sel[0]) : undefined;
+    const line =
+      sel.length === 1 ? input.home.polylines.find((l) => l.attrs.id === sel[0]) : undefined;
+    const keep =
+      (room && outline(room.points, true)) ||
+      (line && outline(line.points, !!line.attrs.closed_path));
+    if (!keep) {
+      const hit = hitTest(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+      if (hit && !sel.includes(hit.id)) sel = [hit.id];
+      else if (!hit) sel = [];
+    }
+    setSelection(sel);
+    const rect = canvasRef.current?.getBoundingClientRect();
+    setMenu({
+      x: clientX - (rect?.left ?? 0),
+      y: clientY - (rect?.top ?? 0),
+      items: menuItems(p, sel),
+    });
+  };
+
+  /** "Add point here" / "Delete point" for the outline of a room or a polyline. */
+  const pointItems = (
+    p: Pt,
+    pts: Pt[],
+    closed: boolean,
+    minPoints: number,
+    apply: (pts: Pt[]) => void,
+  ): MenuItem[] => {
+    const tol = pxToCm(PICK_PX + 4);
+    const near = pts.findIndex((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) <= tol);
+    if (near >= 0) {
+      return [
+        {
+          label: "Delete point",
+          disabled: pts.length <= minPoints,
+          action: () => apply(pts.filter((_, i) => i !== near)),
+        },
+      ];
+    }
+    const edges = closed ? pts.length : pts.length - 1;
+    let best = -1;
+    let bestDist = tol;
+    for (let k = 0; k < edges; k++) {
+      const d = distanceToSegment(p, pts[k], pts[(k + 1) % pts.length]);
+      if (d <= bestDist) {
+        best = k;
+        bestDist = d;
+      }
+    }
+    if (best < 0) return [];
+    const q = projectOnSegment(p, [pts[best], pts[(best + 1) % pts.length]]);
+    const r = (v: number) => Math.round(v * 10) / 10;
+    return [
+      {
+        label: "Add point here",
+        action: () => {
+          const next = [...pts];
+          next.splice(best + 1, 0, [r(q[0]), r(q[1])]);
+          apply(next);
+        },
+      },
+    ];
+  };
+
+  /** Items of the context menu for the selection `sel` at the plan point `p`. */
+  const menuItems = (p: Pt, sel: string[]): MenuItem[] => {
+    if (!input) return [];
+    const home = input.home;
+    const has = (id: string | null | undefined) => !!id && sel.includes(id);
+    const walls = home.walls.filter((w) => has(w.attrs.id));
+    const furniture = home.furniture.filter((f) => has(f.attrs.id));
+    const groups = furniture.filter((f) => f.type === "group");
+    const rooms = home.rooms.filter((r) => has(r.attrs.id));
+    const lines = home.polylines.filter((l) => has(l.attrs.id));
+    const furnitureIds = furniture.map((f) => f.attrs.id as string);
+    const selectNew = (r: unknown) => {
+      const ids = (r as { ids?: string[] } | undefined)?.ids;
+      if (ids) setSelection(ids);
+    };
+    const items: MenuItem[] = [];
+    if (sel.length > 0) {
+      items.push(
+        {
+          label: "Cut",
+          shortcut: "Ctrl+X",
+          action: () =>
+            void run("edit_copy", { ids: sel }).then((r) => {
+              if (r) void run("edit_delete", { ids: sel });
+            }),
+        },
+        { label: "Copy", shortcut: "Ctrl+C", action: () => void run("edit_copy", { ids: sel }) },
+      );
+    }
+    items.push({
+      label: "Paste",
+      shortcut: "Ctrl+V",
+      action: () => void run("edit_paste", levelParam()).then(selectNew),
+    });
+    if (sel.length > 0) {
+      items.push(
+        {
+          label: "Paste style",
+          action: () => void run("edit_paste_style", { ids: sel }),
+        },
+        {
+          label: "Duplicate",
+          shortcut: "Ctrl+D",
+          action: () => void run("edit_duplicate", { ids: sel }).then(selectNew),
+        },
+        { label: "Delete", shortcut: "Del", action: () => void run("edit_delete", { ids: sel }) },
+        { separator: true },
+        {
+          label: "Flip horizontally",
+          action: () => void run("edit_flip", { ids: sel, axis: "horizontal" }),
+        },
+        {
+          label: "Flip vertically",
+          action: () => void run("edit_flip", { ids: sel, axis: "vertical" }),
+        },
+      );
+    }
+    if (furniture.length > 1 || groups.length > 0) {
+      items.push({ separator: true });
+      if (furniture.length > 1) {
+        items.push({
+          label: "Group",
+          shortcut: "Ctrl+G",
+          action: () =>
+            void run("furniture_group", { ids: furnitureIds }).then((r) => {
+              const id = (r as { id?: string } | undefined)?.id;
+              if (id) setSelection([id]);
+            }),
+        });
+      }
+      if (groups.length > 0) {
+        items.push({
+          label: "Ungroup",
+          shortcut: "Ctrl+Shift+G",
+          action: () =>
+            void run("furniture_ungroup", { ids: groups.map((g) => g.attrs.id) }).then(selectNew),
+        });
+      }
+    }
+    if (furniture.length > 1) {
+      // The piece selected last leads, like in Sweet Home 3D
+      const leader = [...sel].reverse().find((id) => furnitureIds.includes(id));
+      const align = (how: string) => () =>
+        void run("furniture_align", { ids: furnitureIds, how, leader });
+      items.push(
+        { heading: "Align to the piece selected last" },
+        { label: "Left sides", action: align("left") },
+        { label: "Right sides", action: align("right") },
+        { label: "Front sides", action: align("front") },
+        { label: "Back sides", action: align("back") },
+        { label: "Tops", action: align("top") },
+        { label: "Bottoms (elevation)", action: align("bottom") },
+        { label: "Side by side", action: align("side_by_side") },
+      );
+      if (furniture.length > 2) {
+        items.push(
+          {
+            label: "Distribute horizontally",
+            action: () =>
+              void run("furniture_distribute", { ids: furnitureIds, axis: "horizontal" }),
+          },
+          {
+            label: "Distribute vertically",
+            action: () => void run("furniture_distribute", { ids: furnitureIds, axis: "vertical" }),
+          },
+        );
+      }
+    }
+    if (walls.length > 0) {
+      const wallIds = walls.map((w) => w.attrs.id);
+      items.push({ separator: true });
+      items.push({
+        label: walls.length > 1 ? "Reverse wall directions" : "Reverse wall direction",
+        action: () => void run("wall_reverse", { ids: wallIds }),
+      });
+      if (walls.length === 1) {
+        items.push({
+          label: "Split wall here",
+          action: () =>
+            void run("wall_split", {
+              id: wallIds[0],
+              at: [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10],
+            }).then(selectNew),
+        });
+      }
+      if (walls.length === 2) {
+        items.push({
+          label: "Join walls",
+          shortcut: "J",
+          action: () => void run("wall_join", { ids: wallIds }),
+        });
+      }
+      if (walls.some((w) => w.attrs.wall_at_start || w.attrs.wall_at_end)) {
+        items.push({ label: "Detach", action: () => void run("wall_detach", { ids: wallIds }) });
+      }
+    }
+    if (rooms.length === 1 && sel.length === 1) {
+      const room = rooms[0];
+      const pts: Pt[] = room.points.map((q) => [q.x, q.y]);
+      const extra = pointItems(
+        p,
+        pts,
+        true,
+        3,
+        (next) => void run("room_update", { id: room.attrs.id, points: next }),
+      );
+      if (extra.length) items.push({ separator: true }, ...extra);
+    }
+    if (lines.length === 1 && sel.length === 1) {
+      const line = lines[0];
+      const pts: Pt[] = line.points.map((q) => [q.x, q.y]);
+      const closed = !!line.attrs.closed_path;
+      const extra = pointItems(
+        p,
+        pts,
+        closed,
+        closed ? 3 : 2,
+        (next) => void run("polyline_update", { id: line.attrs.id, points: next }),
+      );
+      if (extra.length) items.push({ separator: true }, ...extra);
+    }
+    items.push({ separator: true });
+    if (sel.length === 0) {
+      items.push(
+        {
+          label: "Select all",
+          shortcut: "Ctrl+A",
+          action: () =>
+            setSelection(elementsInRect(home, effectiveLevel, [-1e9, -1e9], [1e9, 1e9])),
+        },
+        { label: "Fit plan to window", action: () => refit() },
+      );
+    }
+    const locked = home.attrs.base_plan_locked === true;
+    items.push({
+      label: locked ? "Unlock base plan" : "Lock base plan",
+      action: () => {
+        void run("home_set", { base_plan_locked: !locked });
+        if (!locked) setSelection([]);
+      },
+    });
+    return items;
   };
 
   // ---------------------------------------------------------------- keyboard
@@ -1092,6 +1369,9 @@ export default function PlanView() {
           onDrop={(e) => void onDrop(e)}
         />
         {opened && hint && <div className="plan-hint">{hint}</div>}
+        {menu && (
+          <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+        )}
         {opened && (
           <button
             type="button"
