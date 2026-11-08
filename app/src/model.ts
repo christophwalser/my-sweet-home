@@ -23,6 +23,31 @@ export type Texture = {
   scale: number | null;
 };
 
+/**
+ * Background image of a level or of the home: scale marker in image pixels with its real
+ * length in cm, origin of the plan on the image in cm from its top-left corner.
+ */
+export type BackgroundImage = {
+  image: string;
+  scale_distance: number;
+  scale_distance_x_start: number;
+  scale_distance_y_start: number;
+  scale_distance_x_end: number;
+  scale_distance_y_end: number;
+  x_origin: number | null;
+  y_origin: number | null;
+  visible: boolean | null;
+};
+
+/** Scale of a background image in cm per image pixel. */
+export function backgroundScale(b: BackgroundImage): number {
+  const px = Math.hypot(
+    b.scale_distance_x_end - b.scale_distance_x_start,
+    b.scale_distance_y_end - b.scale_distance_y_start,
+  );
+  return px > 0 ? b.scale_distance / px : 1;
+}
+
 export type Level = {
   attrs: {
     id: string;
@@ -34,6 +59,7 @@ export type Level = {
     visible: boolean | null;
     viewable: boolean | null;
   };
+  background_image: BackgroundImage | null;
 };
 
 export type Camera = {
@@ -287,6 +313,7 @@ export type Home = {
       visible: boolean | null;
     };
   } | null;
+  background_image: BackgroundImage | null;
   cameras: Camera[];
   levels: Level[];
   furniture: Furniture[];

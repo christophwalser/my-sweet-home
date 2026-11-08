@@ -168,6 +168,9 @@ export default function PlanView() {
   const tool = useStore((s) => s.tool);
   const wallThickness = useStore((s) => s.wallThickness);
   const highlightSide = useStore((s) => s.highlightSide);
+  const fitRequest = useStore((s) => s.fitRequest);
+  /** A fit was requested; repeated once the images of the home have loaded */
+  const pendingFit = useRef(false);
   const showRulers = usePreferences((s) => s.rulers);
   const showGrid = usePreferences((s) => s.grid);
   const magnetism = usePreferences((s) => s.magnetism);
@@ -222,7 +225,13 @@ export default function PlanView() {
       pending++;
       img.onload = img.onerror = () => {
         pending--;
-        if (pending === 0) setRedraw((n) => n + 1);
+        if (pending === 0) {
+          setRedraw((n) => n + 1);
+          if (pendingFit.current) {
+            pendingFit.current = false;
+            setTimeout(() => refitRef.current(), 0);
+          }
+        }
       };
       img.src = docResourceUrl(opened.id, key);
       map.set(key, img);
@@ -234,6 +243,13 @@ export default function PlanView() {
     for (const room of opened.home.rooms) {
       const key = room.textures?.find((t) => t.role === "floorTexture")?.image;
       if (key) load(key);
+    }
+    // Background images of the home and its levels
+    for (const b of [
+      opened.home.background_image,
+      ...opened.home.levels.map((l) => l.background_image),
+    ]) {
+      if (b) load(b.image);
     }
     setIcons(map);
   }, [opened]);
@@ -291,7 +307,6 @@ export default function PlanView() {
   };
 
   /** Rulers along the plan; also redrawn on every mouse move for the position mark. */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reads refs only
   const drawRulers = useCallback(() => {
     const mouse = mouseWorld.current;
     if (topRulerRef.current)
@@ -404,6 +419,14 @@ export default function PlanView() {
     userMoved.current = false;
     fit();
   };
+  const refitRef = useRef(refit);
+  refitRef.current = refit;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when a fit is requested
+  useEffect(() => {
+    if (fitRequest === 0) return;
+    pendingFit.current = true;
+    refit();
+  }, [fitRequest]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: fit only on home/level change
   useEffect(() => {
     const key = `${opened?.id ?? ""}:${levelId ?? ""}`;

@@ -69,6 +69,9 @@ bar at the bottom of the plan explains the next step.
   home, as in Sweet Home 3D.
 - Plan: rulers along the edges, "Measure" tool for distances, "Lock base plan" (only movable
   furniture stays selectable), "Preferences…" to switch rulers, grid and magnetism.
+- Background image per level: import an image or a page of a PDF (e.g. the architect's plan),
+  set its scale with a marker on a known distance and its origin, then draw walls and rooms
+  on top of it (level properties: Import…, Modify…, Hide, Delete).
 - Window layout: drag the borders of the side panels and between plan and 3D view; plan and 3D
   view can be maximized or minimized, the 3D view can open in its own window.
 - Drag furniture from the catalog onto the plan (doors and windows snap into walls); properties
@@ -165,6 +168,7 @@ msh export-obj house.obj                          # 3D view as OBJ + MTL + textu
 msh photo --quality good --width 1600 --height 1000 --out photo.png   # photo of the 3D view
 msh --live camera path-add --stored Kitchen      # key point of the video (or --x --y --yaw)
 msh video render --out tour.mp4                   # video along the camera path (MP4, H.264)
+msh --live background image-set --path plan.png --scale-distance 873 --x-start 120 --y-start 80 --x-end 1150 --y-end 80
 msh --live export document --path house.pdf       # printed home incl. the 3D view
 msh mcp --live                                    # MCP server controlling the app (+ tools view_3d_image, render_photo, render_video, export_obj)
 ```

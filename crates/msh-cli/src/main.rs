@@ -363,6 +363,7 @@ fn group_about(group: &str) -> &'static str {
         "library" => "Furniture and texture libraries",
         "texture" => "Textures",
         "camera" => "Camera path of the video",
+        "background" => "Background image of the plan (per level)",
         "video" => "Video settings and rendering along the camera path",
         _ => "Commands",
     }

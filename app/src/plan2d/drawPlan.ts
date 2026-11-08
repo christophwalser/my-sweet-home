@@ -4,6 +4,8 @@
 // in Sweet Home 3D. The view transform maps them to device pixels.
 
 import {
+  type BackgroundImage,
+  backgroundScale,
   cssColor,
   forEachPiece,
   type Home,
@@ -92,12 +94,38 @@ export function planBounds(input: PlanInput): [number, number, number, number] |
   for (const l of home.labels) {
     if (sameLevel(l.attrs.level, levelId)) add(l.attrs.x, l.attrs.y);
   }
+  const hasElements = Number.isFinite(minX);
   const c = home.compass?.attrs;
   if (c && c.visible !== false) {
     add(c.x - c.diameter / 2, c.y - c.diameter);
     add(c.x + c.diameter / 2, c.y + c.diameter / 2);
   }
+  // A level that only has its background image yet fits to the image
+  const bg = backgroundImageOf(home, levelId);
+  const bb = bg && bg.visible !== false ? backgroundBounds(bg, input.icons.get(bg.image)) : null;
+  if (bb && !hasElements) {
+    add(bb[0], bb[1]);
+    add(bb[2], bb[3]);
+  }
   return Number.isFinite(minX) ? [minX, minY, maxX, maxY] : null;
+}
+
+/** Background image shown with the plan of a level (the home's own one without levels). */
+export function backgroundImageOf(home: Home, levelId: string | null): BackgroundImage | null {
+  if (home.levels.length === 0) return home.background_image ?? null;
+  return home.levels.find((l) => l.attrs.id === levelId)?.background_image ?? null;
+}
+
+/** Extent of a background image in the plan (cm), if its size is known. */
+export function backgroundBounds(
+  b: BackgroundImage,
+  img: HTMLImageElement | undefined,
+): [number, number, number, number] | null {
+  if (!img?.naturalWidth) return null;
+  const s = backgroundScale(b);
+  const x0 = -(b.x_origin ?? 0);
+  const y0 = -(b.y_origin ?? 0);
+  return [x0, y0, x0 + img.naturalWidth * s, y0 + img.naturalHeight * s];
 }
 
 /** The level directly below `levelId` (lower elevation, or same elevation and lower index). */
@@ -135,9 +163,23 @@ export function drawPlan(
   ctx.setTransform(view.scale, 0, 0, view.scale, view.offsetX, view.offsetY);
   const px = 1 / view.scale; // one device pixel in world units
 
+  // The grid shows faintly through the background image
   if (options.grid !== false) drawGrid(ctx, width, height, view, colors);
 
   const { home, wallShapes, levelId } = input;
+
+  // Background image under the plan, at 70 % opacity like Sweet Home 3D
+  const bg = backgroundImageOf(home, levelId);
+  const bgImage = bg && bg.visible !== false ? input.icons.get(bg.image) : undefined;
+  if (bg && bgImage?.complete && bgImage.naturalWidth > 0) {
+    const s = backgroundScale(bg);
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.translate(-(bg.x_origin ?? 0), -(bg.y_origin ?? 0));
+    ctx.scale(s, s);
+    ctx.drawImage(bgImage, 0, 0);
+    ctx.restore();
+  }
 
   // The level below as a faded background (like Sweet Home 3D), to align walls and rooms
   const below = levelBelow(home, levelId);

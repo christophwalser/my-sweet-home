@@ -109,6 +109,14 @@ pub fn save_image(path: String, data_url: String) -> Result<(), String> {
     std::fs::write(&path, bytes).map_err(|e| format!("cannot write {path}: {e}"))
 }
 
+/// Reads a file chosen by the user (e.g. a background image or PDF) as raw bytes.
+#[tauri::command]
+pub fn read_file(path: String) -> Result<tauri::ipc::Response, String> {
+    std::fs::read(&path)
+        .map(tauri::ipc::Response::new)
+        .map_err(|e| format!("cannot read {path}: {e}"))
+}
+
 /// Writes binary data sent as raw request body (e.g. a video) to the file named by the
 /// percent-encoded `path` header.
 #[tauri::command]

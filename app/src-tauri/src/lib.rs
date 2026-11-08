@@ -40,6 +40,7 @@ pub fn run() {
             commands::capture_3d_image,
             commands::save_image,
             commands::save_file,
+            commands::read_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Tauri application");

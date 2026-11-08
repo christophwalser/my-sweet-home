@@ -7,6 +7,7 @@ import { forEachPiece, type Home, type Piece, type Wall } from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { useStore } from "../store";
 import { modelMaterialNames } from "../view3d/models";
+import BackgroundImageSection from "./BackgroundImageSection";
 import {
   ARROW_STYLES,
   byRole,
@@ -533,6 +534,21 @@ export default function PropertiesPanel() {
               </button>
             </div>
           </>
+        )}
+        {level ? (
+          <BackgroundImageSection
+            levelId={level.attrs.id}
+            title={level.attrs.name}
+            background={level.background_image ?? null}
+          />
+        ) : (
+          home.levels.length === 0 && (
+            <BackgroundImageSection
+              levelId={null}
+              title="Home"
+              background={home.background_image ?? null}
+            />
+          )
         )}
         <CompassSection home={home} run={run} />
         <p className="muted">Click an element in the plan to edit it.</p>

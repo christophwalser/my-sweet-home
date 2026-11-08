@@ -490,6 +490,33 @@ furniture is read by its home reader.
   plan elements unlocks the plan, like Sweet Home 3D. Checkbox in the plan toolbar of the select
   tool.
 
+### 4.20 Status after P7b (2026-11-08)
+
+- Background image per level (the home's own one without levels), stored like Sweet Home 3D's
+  `backgroundImage`: image resource, scale marker in image pixels with its real length
+  (`scaleDistance*`), origin of the plan on the image in cm (`xOrigin`, `yOrigin`), `visible`
+  only written when hidden. Commands `background_image_set` (file path or base64 image),
+  `background_image_update` (marker, origin, visibility) and `background_image_remove`; the
+  first `level_add` moves the home's image to "Level 0", as Sweet Home 3D does. Verified with
+  the Sweet Home 3D reader (scale, marker, origin, image bytes; home and level images).
+- Plan: the image of the shown level is drawn at `scale` cm per pixel shifted by the origin,
+  at 70 % opacity (like Sweet Home 3D) above the grid and under everything else. A level with
+  only its image yet fits the view to the image; after an import the plan fits again.
+- Wizard (level or home properties: Import… / Replace…, Modify…, Hide / Show, Delete):
+  1. image (PNG, JPEG, BMP, GIF) or a PDF page, rendered with `pdfjs-dist` 5.5.207 at up to
+     300 dpi and 4000 px (white paper behind transparent content) and imported as PNG;
+  2. scale: the marker ends are dragged onto two points of known distance (Shift: horizontal or
+     vertical), with a magnifier (4x) while dragging; the length is typed in cm, the resulting
+     cm per pixel and the real size of the image are shown;
+  3. origin: click or drag the point that becomes (0, 0), or type it in cm.
+  Zoom with the wheel, move by dragging, double-click to fit; zoom and position are kept
+  between the steps. Files are read through the Tauri command `read_file` (raw bytes).
+- Checked with a 1:100 PDF exported by `export_plan`: 0.848 cm per pixel at 300 dpi (exact:
+  0.8467), the A4 sheet comes out as 29.7 x 21 m, and a dimension of 873 cm from the origin
+  ends on the image's corner within about 1 cm.
+- Not yet: rotating the image, the background image in the 3D view
+  (`backgroundImageVisibleOnGround3D`), in exports and in the printed plan.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

@@ -61,6 +61,12 @@ pub(super) fn register(r: &mut Registry) {
                     0,
                 ));
                 assign_level(home, &id);
+                // The home's background image becomes the one of the first level, as in
+                // Sweet Home 3D, so it stays visible under the elements it was drawn on
+                let background = home.background_image.take();
+                if let Some(first) = home.levels.last_mut() {
+                    first.background_image = background;
+                }
             }
             let top = home
                 .levels

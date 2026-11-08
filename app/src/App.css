@@ -554,6 +554,97 @@ input[type="search"]:focus {
   width: auto;
 }
 
+/* ---- Background image wizard ---- */
+
+.bg-wizard {
+  width: min(1100px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+}
+
+.bg-steps {
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--muted, #888);
+}
+
+.bg-steps li.active {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.bg-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.bg-step-body p {
+  margin: 0;
+}
+
+.bg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.bg-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.bg-inline input {
+  width: 90px;
+}
+
+.bg-stage {
+  height: min(62vh, 640px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.bg-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.bg-stage canvas.bg-stage-origin {
+  cursor: crosshair;
+}
+
+.bg-preview {
+  display: flex;
+  justify-content: center;
+  height: min(52vh, 540px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #3a3d42;
+}
+
+.bg-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.bg-error {
+  margin: 0;
+  color: #e5534b;
+  font-size: 13px;
+}
+
 .prefs-dialog {
   width: min(520px, calc(100vw - 32px));
 }

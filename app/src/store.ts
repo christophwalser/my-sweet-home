@@ -19,6 +19,9 @@ type State = {
   tool: Tool;
   /** Thickness of new walls drawn in the plan (cm) */
   wallThickness: number;
+  /** Incremented to ask the plan to fit the view (e.g. after importing a background image) */
+  fitRequest: number;
+  requestFit: () => void;
   /** Wall side emphasized in the plan while its properties are hovered */
   highlightSide: "left" | "right" | null;
   setHighlightSide: (side: "left" | "right" | null) => void;
@@ -63,6 +66,8 @@ export const useStore = create<State>((set, get) => ({
   tool: "select",
   wallThickness: 10,
   highlightSide: null,
+  fitRequest: 0,
+  requestFit: () => set((s) => ({ fitRequest: s.fitRequest + 1 })),
   setHighlightSide: (highlightSide) => set({ highlightSide }),
   setSelection: (selection) => set({ selection }),
   setTool: (tool) => set({ tool }),
