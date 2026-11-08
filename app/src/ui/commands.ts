@@ -387,25 +387,25 @@ const LIST: Command[] = [
     "Esc",
   ),
   toolCommand("pan", "Pan", "pan", "Drag to move the plan (also with the right mouse button)"),
-  toolCommand("wall", "Straight walls", "wall", "Click to add points, double-click to finish"),
+  toolCommand("wall", "Straight walls", "wall", "Click to add points, double-click to finish", "1"),
   toolCommand("arcwall", "Round walls", "arcwall", "Walls drawn as quarter circle arcs"),
-  toolCommand("room", "Room by corners", "room", "Click the corners, double-click to finish"),
+  toolCommand("room", "Room by corners", "room", "Click the corners, double-click to finish", "2"),
   toolCommand(
     "roomauto",
     "Room from walls",
     "roomauto",
     "Click inside walls to create the room of that area",
   ),
-  toolCommand("polyline", "Lines", "polyline", "Click to add points, double-click to finish"),
-  toolCommand("dimension", "Dimension", "dimension", "Click start and end point"),
+  toolCommand("polyline", "Lines", "polyline", "Click to add points, double-click to finish", "5"),
+  toolCommand("dimension", "Dimension", "dimension", "Click start and end point", "3"),
   toolCommand(
     "heightdim",
     "Height dimension",
     "heightdim",
     "Click where the height of the level is measured",
   ),
-  toolCommand("label", "Text", "text", "Click to place a text"),
-  toolCommand("measure", "Measure", "measure", "Measure a distance without adding anything"),
+  toolCommand("label", "Text", "text", "Click to place a text", "6"),
+  toolCommand("measure", "Measure", "measure", "Measure a distance without adding anything", "4"),
   // Plan: walls
   {
     id: "wall.join",
@@ -646,7 +646,7 @@ const LIST: Command[] = [
   {
     id: "edit.flipV",
     label: "Flip vertically",
-    icon: "flip",
+    icon: "flipv",
     enabled: hasSelection,
     run: () => void run("edit_flip", { ids: selected(), axis: "vertical" }),
   },
@@ -1057,8 +1057,11 @@ export function handleGlobalShortcut(e: KeyboardEvent): void {
   const shortcut = SHORTCUT_ALIASES[typed] ?? typed;
   // While typing only function keys and the command search apply
   if (typing && !/^F\d+$/.test(shortcut) && shortcut !== "Ctrl+K") return;
+  // Digits choose plan tools, except while a drawing takes a typed length
+  const digit = /^\d$/.test(shortcut);
+  if (digit && (planActions()?.isDrawing() ?? true)) return;
   // Plain letters and Del belong to the plan view (rotate, join, delete, ...)
-  if (!shortcut.includes("Ctrl+") && !/^F\d+$/.test(shortcut)) return;
+  if (!digit && !shortcut.includes("Ctrl+") && !/^F\d+$/.test(shortcut)) return;
   for (const c of COMMANDS.values()) {
     if (c.shortcut === shortcut && !c.shortcutElsewhere) {
       e.preventDefault();

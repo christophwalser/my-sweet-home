@@ -71,10 +71,12 @@ function SplitButton({ button, variants }: { button: string; variants: string[] 
   const remembered = useUi((s) => s.variants[button]);
   const setVariant = useUi((s) => s.setVariant);
   const [open, setOpen, ref] = useDropdown();
+  // The active variant (also when chosen by shortcut or menu), else the one chosen last
+  const active = variants.find((id) => command(id).checked?.());
   const current = command(
-    variants.includes(remembered ?? "") ? (remembered as string) : variants[0],
+    active ?? (variants.includes(remembered ?? "") ? (remembered as string) : variants[0]),
   );
-  const checked = variants.some((id) => command(id).checked?.());
+  const checked = active !== undefined;
   const entries: MenuEntry[] = variants.map((id) => {
     const c = command(id);
     return {

@@ -345,6 +345,12 @@ const PATHS = {
       <path d="M9 7 4 17h5zM15 7l5 10h-5z" />
     </>
   ),
+  flipv: (
+    <>
+      <path d="M3 12h18" />
+      <path d="M7 9 17 4v5zM7 15l10 5v-5z" />
+    </>
+  ),
   rotate: (
     <>
       <path d="M20 12a8 8 0 1 1-2.3-5.7" />

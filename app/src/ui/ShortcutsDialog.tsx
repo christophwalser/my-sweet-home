@@ -9,7 +9,7 @@ const VIEW_KEYS: [string, string][] = [
   ["Shift+R", "Rotate the selected furniture by -15°"],
   ["Enter / double-click", "Finish the drawing"],
   ["Backspace", "Remove the last point while drawing"],
-  ["Digits + Enter", "Length of the next wall or line segment"],
+  ["Digits + Enter (while drawing)", "Length of the next wall or line segment"],
   ["Alt (held)", "Invert magnetism"],
   ["Shift (held)", "Angles in 1° steps; add to the selection"],
   ["Right mouse button", "Pan the plan; context menu"],

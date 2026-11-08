@@ -1635,6 +1635,7 @@ export default function PlanView() {
         },
         selectAll: () => void onShortcut("a", useStore.getState().selection),
         paste: () => void onShortcut("v", useStore.getState().selection),
+        isDrawing: () => draft.current.length > 0,
       }),
     [input, effectiveLevel],
   );
