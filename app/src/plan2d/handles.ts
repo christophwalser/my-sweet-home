@@ -7,6 +7,7 @@
 // position into a preview outline and the registry command that applies it.
 
 import { forEachPiece, type Home, type Piece, type Pt, type WallShape } from "../model";
+import { formatArea, formatLength, formatPrecise } from "../units";
 import { boundsCenter, DEFAULT_ROOM_FONT, labelCenter, roomLabelPositions } from "./drawPlan";
 import { editedWallJoints, type Joint } from "./moving";
 import {
@@ -312,7 +313,7 @@ export function handleAt(handles: Handle[], p: Pt, radius: number): Handle | nul
 }
 
 export function lengthText(cm: number): string {
-  return cm >= 100 ? `${(cm / 100).toFixed(2)} m` : `${cm.toFixed(0)} cm`;
+  return formatLength(cm);
 }
 
 /** Direction of a segment in degrees, clockwise from the x axis (0..360). */
@@ -394,7 +395,7 @@ export function dragHandle(
       return {
         preview: [{ pts: wallOutline(start, end, thickness, a.arc_extent), closed: true }],
         ...none,
-        info: `Thickness ${thickness} cm`,
+        info: `Thickness ${formatPrecise(thickness)}`,
         command: "wall_update",
         params: { id, thickness },
       };
@@ -470,7 +471,7 @@ export function dragHandle(
         const [x1, y1] = pts[(i + 1) % pts.length];
         area += x0 * y1 - x1 * y0;
       }
-      const text = isName ? (room.attrs.name ?? "") : `${(Math.abs(area) / 20000).toFixed(2)} m²`;
+      const text = isName ? (room.attrs.name ?? "") : formatArea(area / 2);
       const round = (v: number) => Math.round(v * 10) / 10;
       const dx = round(at[0] - bbox[0]);
       const dy = round(at[1] - bbox[1]);
@@ -634,7 +635,7 @@ export function dragHandle(
       return {
         preview: [{ pts: ring(diameter / 2), closed: true }],
         ...none,
-        info: `Diameter ${diameter} cm`,
+        info: `Diameter ${formatPrecise(diameter)}`,
         command: "compass_update",
         params: { diameter },
       };
@@ -666,20 +667,20 @@ export function dragHandle(
         return {
           preview: [outline],
           ...none,
-          info: `Elevation ${elevation} cm${on}`,
+          info: `Elevation ${formatPrecise(elevation)}${on}`,
           command: "furniture_update",
           params: { id, elevation },
         };
       }
       const height = Math.max(1, Math.round((a.height + delta) * 10) / 10);
       const params: Record<string, unknown> = { id, height };
-      let info = `Height ${height} cm`;
+      let info = `Height ${formatPrecise(height)}`;
       if (a.deformable === false) {
         // Proportional pieces grow in all directions, around their center
         const f = height / a.height;
         params.width = Math.round(a.width * f * 10) / 10;
         params.depth = Math.round(a.depth * f * 10) / 10;
-        info += ` · ${params.width} × ${params.depth} cm`;
+        info += ` · ${formatPrecise(params.width as number)} × ${formatPrecise(params.depth as number)}`;
       }
       return { preview: [outline], ...none, info, command: "furniture_update", params };
     }
@@ -719,7 +720,7 @@ export function dragHandle(
       return {
         preview: [{ pts: pieceCorners(cx, cy, w, d, angle), closed: true }],
         ...none,
-        info: `${w.toFixed(0)} × ${d.toFixed(0)} cm`,
+        info: `${formatLength(w)} × ${formatLength(d)}`,
         command: "furniture_update",
         params,
       };

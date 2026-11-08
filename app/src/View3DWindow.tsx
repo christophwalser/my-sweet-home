@@ -9,6 +9,7 @@ import { enableDialogDragging } from "./ui/dialogDragging";
 import { initTheme, useUi } from "./ui/uiStore";
 import View3D from "./view3d/View3D";
 import "./App.css";
+import { followPreferences } from "./preferences";
 
 export default function View3DWindow() {
   const opened = useStore((s) => s.opened);
@@ -19,6 +20,7 @@ export default function View3DWindow() {
   // Theme, movable dialogs and the actions of the main window's menus
   useEffect(() => {
     const stopTheme = initTheme();
+    const stopPreferences = followPreferences();
     const stopDragging = enableDialogDragging();
     const stopActions = listenView3DActions((action) => {
       const ui = useUi.getState();
@@ -27,6 +29,7 @@ export default function View3DWindow() {
     });
     return () => {
       stopTheme();
+      stopPreferences();
       stopDragging();
       stopActions();
     };

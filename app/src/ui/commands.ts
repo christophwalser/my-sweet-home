@@ -12,7 +12,7 @@ import {
   type View3DAction,
 } from "../layout/view3dWindow";
 import { forEachPiece } from "../model";
-import { usePreferences } from "../preferences";
+import { newHomeParams, prefs, usePreferences } from "../preferences";
 import { type Tool, useStore, VISITOR_ID } from "../store";
 import type { IconName } from "./Icon";
 import { planActions } from "./planBridge";
@@ -118,7 +118,7 @@ export async function chooseFile(): Promise<void> {
 }
 
 export function newHome(): void {
-  if (isUntouched()) void run("home_new");
+  if (isUntouched()) void run("home_new", newHomeParams());
   else void api.newWindow();
 }
 
@@ -155,7 +155,10 @@ export function detach3D(): void {
 async function addLevel(sameElevation: boolean): Promise<void> {
   const levels = sortedLevels();
   const current = currentLevel();
-  const params: Record<string, unknown> = { name: `Level ${levels.length || 1}` };
+  const params: Record<string, unknown> = {
+    name: `Level ${levels.length || 1}`,
+    floor_thickness: prefs().newFloorThickness,
+  };
   if (sameElevation && current) {
     params.elevation = current.attrs.elevation;
     params.height = current.attrs.height;

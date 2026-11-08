@@ -10,6 +10,8 @@ use state::AppState;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Size, position and maximized state of the windows are remembered
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(AppState::default())
         .register_asynchronous_uri_scheme_protocol("msh", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
@@ -79,6 +81,7 @@ pub fn run() {
             commands::startup_recovery,
             commands::recovery_open,
             commands::recovery_discard,
+            commands::set_autosave_interval,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Tauri application");

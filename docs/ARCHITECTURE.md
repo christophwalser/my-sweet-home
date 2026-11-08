@@ -744,6 +744,29 @@ furniture is read by its home reader.
   (`app/src/ui/uiStore.ts`); dialogs of the 3D view open in the separate 3D window when the
   view is shown there.
 
+### 4.31 Status after P12c (2026-11-08)
+
+- Preferences dialog on tabs (Plan, New elements, 3D view, General); changes apply at once,
+  are kept in the WebView's local storage (`app/src/preferences.ts`) and reach all windows
+  of the app. "Reset all" restores the defaults.
+- Units cm, mm, m and inch / foot (`app/src/units.ts`). Homes, commands, CLI and MCP stay in
+  cm; the UI converts what it shows and what is typed: input fields with unit "cm", plan
+  dimensions, lengths while drawing (typed lengths too), rulers (feet and inches for the
+  inch unit), areas (m² or ft²), catalog sizes. Fields also accept an explicit unit, e.g.
+  "12 mm", "1.5 m" or 5'3".
+- Defaults of new elements: wall thickness, wall height of new homes, wall pattern and side
+  colors, room floor color, floor thickness of new levels, text size. `wall_add_path`
+  accepts `pattern`, `left_side_color` and `right_side_color`, so a new wall gets them in
+  the same undo step.
+- Plan: angle steps of the magnetism (1°, 5°, 15°, 45°), room rendering (floor color or
+  texture, or one color), colors of the wall side marks; rulers, grid, furniture seen from
+  above and magnetism as before.
+- 3D view: quality (resolution and shadow map size) and walking speed of the virtual visit.
+- General: theme (like Windows, light, dark) and autosave interval (off to 30 minutes; the
+  backend gets it through `set_autosave_interval`). Size, position and maximized state of
+  the windows are remembered (`tauri-plugin-window-state`).
+- The language setting comes with the German translation (P12d).
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
@@ -836,7 +859,7 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
   drop-down menus), consistent icons throughout (own icons where no common symbol exists),
   light and dark mode (default: the system setting), all dialogs movable.
 - P12b Implementing that design in the app (done, see 4.30).
-- P12c Preferences: units (cm, mm, m, inch/foot; internally cm), defaults for new elements
+- P12c (done, see 4.31) Preferences: units (cm, mm, m, inch/foot; internally cm), defaults for new elements
   (wall thickness / height / pattern, floor thickness, text sizes, room and wall colors),
   magnetism steps, wall side marking colors, plan room rendering, 3D quality and walking
   speed, autosave interval, language, theme. Window size and position remembered.

@@ -45,6 +45,11 @@ struct PathParams {
     height: Option<f32>,
     /// Arc extent in degrees of every wall of the path, for round walls
     arc_extent_deg: Option<f32>,
+    /// Plan pattern (default hatchUp), see wall_update
+    pattern: Option<String>,
+    /// Colors of the sides as #RRGGBB
+    left_side_color: Option<String>,
+    right_side_color: Option<String>,
     level: Option<String>,
 }
 
@@ -149,6 +154,16 @@ pub(super) fn register(r: &mut Registry) {
             } else {
                 p.points.len() - 1
             };
+            let left_color = p
+                .left_side_color
+                .as_deref()
+                .map(optional_color)
+                .transpose()?;
+            let right_color = p
+                .right_side_color
+                .as_deref()
+                .map(optional_color)
+                .transpose()?;
             let ids: Vec<String> = (0..n).map(|_| new_id("wall")).collect();
             let home = doc.home_mut();
             for i in 0..n {
@@ -156,6 +171,11 @@ pub(super) fn register(r: &mut Registry) {
                 let end = p.points[(i + 1) % p.points.len()];
                 let mut w = new_wall(&ids[i], start, end, p.thickness, p.height, level.clone());
                 w.attrs.arc_extent = p.arc_extent_deg.filter(|v| *v != 0.0).map(rad);
+                if let Some(pattern) = &p.pattern {
+                    w.attrs.pattern = Some(pattern.clone());
+                }
+                w.attrs.left_side_color = left_color.flatten();
+                w.attrs.right_side_color = right_color.flatten();
                 if i > 0 || closed {
                     w.attrs.wall_at_start = Some(ids[(i + n - 1) % n].clone());
                 }

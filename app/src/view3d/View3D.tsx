@@ -13,6 +13,7 @@ import {
 } from "../api";
 import { VIEW3D_PREFIX } from "../layout/view3dWindow";
 import { forEachPiece, type Home } from "../model";
+import { usePreferences } from "../preferences";
 import { poseParams, useStore, type ViewMode } from "../store";
 import { useUi } from "../ui/uiStore";
 import { buildAnnotations } from "./annotations";
@@ -95,6 +96,15 @@ function homeLens(): Lens {
   return lens === "fisheye" || lens === "spherical" || lens === "normal" ? lens : "pinhole";
 }
 
+/** Resolution of the 3D view relative to CSS pixels for a quality preference. */
+function pixelRatio(quality: "low" | "medium" | "high"): number {
+  const dpr = window.devicePixelRatio;
+  return quality === "low" ? 1 : quality === "medium" ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
+}
+
+/** Size of the sun's shadow map for a quality preference. */
+const SHADOW_MAP_SIZE = { low: 1024, medium: 2048, high: 4096 } as const;
+
 /** The view is shown in the separate 3D window (which has no tool bar). */
 const IN_OWN_WINDOW = getCurrentWebviewWindow().label.startsWith(VIEW3D_PREFIX);
 
@@ -103,6 +113,7 @@ export default function View3D() {
   const levelId = useStore((s) => s.selectedLevel);
   const viewMode = useStore((s) => s.viewMode);
   const shadows = useUi((s) => s.shadows);
+  const quality = usePreferences((s) => s.quality3d);
   const setShadows = useUi((s) => s.setShadows);
   const dialog = useUi((s) => s.dialog);
   const openDialog = useUi((s) => s.openDialog);
@@ -130,7 +141,7 @@ export default function View3D() {
     const container = containerRef.current;
     if (!container) return;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(pixelRatio(usePreferences.getState().quality3d));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
@@ -144,7 +155,8 @@ export default function View3D() {
     const lamps = new THREE.Group();
     const sun = new THREE.DirectionalLight(0xffffff, SUN_INTENSITY);
     sun.position.copy(DEFAULT_SUN_DIRECTION).multiplyScalar(3000);
-    sun.shadow.mapSize.set(4096, 4096);
+    const shadowSize = SHADOW_MAP_SIZE[usePreferences.getState().quality3d];
+    sun.shadow.mapSize.set(shadowSize, shadowSize);
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 1;
     scene.add(content, lamps, sun, sun.target);
@@ -369,6 +381,22 @@ export default function View3D() {
     });
     c.requestRender();
   }, [shadows, opened, levelId, sun]);
+
+  // Quality of the preferences: resolution and shadow detail
+  useEffect(() => {
+    const c = ctx.current;
+    if (!c) return;
+    c.renderer.setPixelRatio(pixelRatio(quality));
+    const size = SHADOW_MAP_SIZE[quality];
+    if (c.sun.shadow.mapSize.x !== size) {
+      c.sun.shadow.mapSize.set(size, size);
+      c.sun.shadow.map?.dispose();
+      c.sun.shadow.map = null;
+    }
+    const canvas = c.renderer.domElement;
+    c.renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+    c.requestRender();
+  }, [quality]);
 
   // Lamps light the virtual visit; only the ones nearest to the visitor are used
   useEffect(() => {

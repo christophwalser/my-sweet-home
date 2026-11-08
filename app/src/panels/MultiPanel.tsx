@@ -3,6 +3,7 @@
 // selected elements of that kind in one command (one undo step).
 
 import { forEachPiece, type Home, type Piece, type Room, type Texture, type Wall } from "../model";
+import { formatArea, formatLength } from "../units";
 import { byRole, Field, SelectField, SideSection, toHex, WALL_PATTERNS } from "./fields";
 import TextureField from "./TextureField";
 
@@ -40,7 +41,7 @@ function WallsSection({ walls, home, run }: { walls: Wall[]; home: Home; run: Ru
   return (
     <>
       <h2>{walls.length} walls</h2>
-      <p className="muted small">Total length: {(totalLength / 100).toFixed(2)} m</p>
+      <p className="muted small">Total length: {formatLength(totalLength)}</p>
       <Field
         label="Thickness"
         type="number"
@@ -201,7 +202,7 @@ function RoomsSection({ rooms, run }: { rooms: Room[]; run: Run }) {
   return (
     <>
       <h2>{rooms.length} rooms</h2>
-      <p className="muted small">Total area: {(area / 10000).toFixed(2)} m²</p>
+      <p className="muted small">Total area: {formatArea(area)}</p>
       <Field
         label="Show area"
         type="checkbox"

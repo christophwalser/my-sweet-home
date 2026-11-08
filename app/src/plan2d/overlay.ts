@@ -4,14 +4,13 @@
 // length, rubber band selection and snap marker.
 
 import type { Home, Pt, WallShape } from "../model";
+import { usePreferences } from "../preferences";
+import { formatPrecise, unitSymbol } from "../units";
 import type { ViewTransform } from "./drawPlan";
 import { HANDLE_SHAPE, type Handle, type HandleDrag, lengthText } from "./handles";
 import { elementOutlines } from "./interaction";
 import type { Joint, MovePreview } from "./moving";
 import { offsetOutline, type Segment } from "./snapping";
-
-/** Colors of the wall sides; the properties panel uses the same (App.css `.side-left/right`). */
-export const SIDE_COLORS = { left: "#e8913a", right: "#2bb3a3" } as const;
 
 export type DraftKind = "wall" | "room" | "dimension" | "polyline";
 
@@ -168,10 +167,12 @@ export function drawOverlay(
   // Left (orange) and right (teal) sides of the selected walls
   if (overlay.wallSides && !overlay.dragOffset && !overlay.handleDrag) {
     const { left, right, highlight } = overlay.wallSides;
+    // Colors of the preferences; the properties panel uses the same (CSS --side-left/right)
+    const { leftSideColor, rightSideColor } = usePreferences.getState();
     ctx.lineCap = "round";
     for (const [lines, color, side] of [
-      [left, SIDE_COLORS.left, "left"],
-      [right, SIDE_COLORS.right, "right"],
+      [left, leftSideColor, "left"],
+      [right, rightSideColor, "right"],
     ] as const) {
       ctx.strokeStyle = color;
       ctx.lineWidth = (highlight === side ? 6 : 3) * px;
@@ -293,7 +294,7 @@ export function drawOverlay(
       drawAngle(ctx, a, b, prev, overlay.accent, px);
       const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
       const typed = overlay.typedLength;
-      const text = typed !== null ? `Length: ${typed}▏cm` : lengthText(length);
+      const text = typed !== null ? `Length: ${typed}▏${unitSymbol()}` : lengthText(length);
       drawCenteredTag(ctx, text, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);
     }
   }
@@ -476,7 +477,7 @@ function drawGap(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, color: string, px:
       false,
     );
   }
-  drawCenteredTag(ctx, `${oneDecimal(len)} cm`, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);
+  drawCenteredTag(ctx, formatPrecise(len), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);
 }
 
 /** Number with at most one decimal. */
@@ -512,7 +513,7 @@ function drawMeasure(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, color: string,
   if (len < 0.05) return;
   // Rounded first, so that -0.01° shows as 0°, not 360°
   const angle = (((Math.round((Math.atan2(dy, dx) * 1800) / Math.PI) / 10) % 360) + 360) % 360;
-  let text = `${oneDecimal(len)} cm · ${oneDecimal(angle)}°`;
+  let text = `${formatPrecise(len)} · ${oneDecimal(angle)}°`;
   if (Math.abs(dx) >= 0.05 && Math.abs(dy) >= 0.05) {
     text += ` · Δx ${oneDecimal(Math.abs(dx))} · Δy ${oneDecimal(Math.abs(dy))}`;
   }

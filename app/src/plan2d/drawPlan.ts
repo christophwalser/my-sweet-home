@@ -19,6 +19,8 @@ import {
   wallAtLevel,
   wallPolygon,
 } from "../model";
+import { usePreferences } from "../preferences";
+import { formatArea, formatLength as formatUnitLength } from "../units";
 import { baseboardOf, baseboardPolygon } from "../view3d/wallSides";
 import { curveSegments, polylinePath } from "./curve";
 import { distanceToSegment, pointInPolygon } from "./interaction";
@@ -220,6 +222,7 @@ export function drawPlan(
 
   // Rooms: floor color or texture like Sweet Home 3D's default preference
   // "room rendering: floor color or texture", 75 % opaque
+  const monochrome = usePreferences.getState().roomRendering === "monochrome";
   for (const room of home.rooms) {
     if (!sameLevel(room.attrs.level, levelId) || room.points.length < 3) continue;
     ctx.beginPath();
@@ -229,12 +232,14 @@ export function drawPlan(
     );
     ctx.closePath();
     if (room.attrs.floor_visible !== false) {
-      const texture = room.textures?.find((t) => t.role === "floorTexture");
+      const texture = monochrome
+        ? undefined
+        : room.textures?.find((t) => t.role === "floorTexture");
       const img = texture ? input.icons.get(texture.image) : undefined;
       const pattern = texture && img ? texturePattern(ctx, img, texture) : null;
       ctx.fillStyle =
         pattern ??
-        (room.attrs.floor_color !== null
+        (room.attrs.floor_color !== null && !monochrome
           ? cssColor(room.attrs.floor_color, colors.roomFill)
           : colors.roomFill);
       ctx.globalAlpha = ROOM_ALPHA;
@@ -376,7 +381,7 @@ export function drawPlan(
       const area = polygonArea(room.points) / 10000;
       drawText(
         ctx,
-        `${area.toFixed(2)} m²`,
+        formatArea(area * 10000),
         labels.area[0],
         labels.area[1],
         room.attrs.area_angle ?? 0,
@@ -678,9 +683,9 @@ function fontOf(style: TextStyle | null, defaultSize: number): string {
   return `${style?.italic ? "italic " : ""}${style?.bold ? "bold " : ""}${size}px ${family}`;
 }
 
-/** Formats a length in centimeters like Sweet Home 3D's default unit. */
+/** Formats a length in centimeters in the unit of the preferences. */
 export function formatLength(cm: number): string {
-  return cm >= 100 ? `${(cm / 100).toFixed(2)} m` : `${cm.toFixed(1)} cm`;
+  return formatUnitLength(cm);
 }
 
 /** Arrow head of a polyline at `tip`, pointing from `from` to `tip` (shapes like Sweet Home 3D). */

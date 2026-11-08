@@ -400,3 +400,9 @@ pub async fn catalog_load(lang: String, state: State<'_, AppState>) -> CmdResult
     .await
     .map_err(err)
 }
+
+/// Sets the autosave interval (preference of the user) in seconds; 0 turns autosave off.
+#[tauri::command]
+pub fn set_autosave_interval(seconds: u64) {
+    crate::autosave::set_interval(seconds);
+}

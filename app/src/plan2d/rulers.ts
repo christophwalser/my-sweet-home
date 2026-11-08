@@ -1,17 +1,11 @@
-// Rulers along the top and left edge of the plan, like Sweet Home 3D's: centimeter marks
+// Rulers along the top and left edge of the plan, like Sweet Home 3D's: marks in the unit of the preferences
 // that follow zoom and scrolling, and a mark at the mouse position.
 
+import { usePreferences } from "../preferences";
+import { rulerLabel, rulerSteps } from "../units";
 import type { ViewTransform } from "./drawPlan";
 
 export type RulerColors = { background: string; text: string; tick: string; marker: string };
-
-/** Distances between labeled marks in cm; the first one at least ~70 CSS pixels apart wins. */
-const STEPS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
-
-/** Label of a mark in cm, without trailing zeros. */
-function label(cm: number): string {
-  return String(Math.round(cm * 100) / 100);
-}
 
 /**
  * Draws one ruler. `canvas` is resized to its CSS size; `horizontal` rulers measure x,
@@ -39,9 +33,14 @@ export function drawRuler(
   const depth = horizontal ? h : w;
   const offset = horizontal ? view.offsetX : view.offsetY;
   const toPx = (cm: number) => cm * view.scale + offset;
-  const step = STEPS.find((s) => s * view.scale >= 70 * dpr) ?? STEPS[STEPS.length - 1];
-  // Minor marks: tenths if they stay 5 px apart, otherwise halves
-  const minor = (step / 10) * view.scale >= 5 * dpr ? step / 10 : step / 2;
+  // Distances between labeled marks in the unit of the preferences: the first one at least
+  // ~70 CSS pixels apart wins
+  const unit = usePreferences.getState().unit;
+  const steps = rulerSteps(unit);
+  const step = steps.find((s) => s * view.scale >= 70 * dpr) ?? steps[steps.length - 1];
+  // Minor marks: tenths (inches of a foot) if they stay 5 px apart, otherwise halves
+  const parts = unit === "inch" ? (Math.round(step / 2.54) % 12 === 0 ? 12 : 2) : 10;
+  const minor = (step / parts) * view.scale >= 5 * dpr ? step / parts : step / 2;
   const first = Math.floor(-offset / view.scale / minor) * minor;
   const last = (length - offset) / view.scale;
 
@@ -52,7 +51,7 @@ export function drawRuler(
     const p = Math.round(toPx(cm)) + 0.5;
     const ratio = Math.round(cm / minor) % Math.round(step / minor);
     const major = ratio === 0;
-    const half = !major && step / minor === 10 && ratio === 5;
+    const half = !major && Math.round(step / minor) === parts && ratio * 2 === parts;
     const tick = depth * (major ? 0.6 : half ? 0.4 : 0.22);
     if (horizontal) {
       ctx.moveTo(p, h);
@@ -79,7 +78,7 @@ export function drawRuler(
   const firstMajor = Math.floor(-offset / view.scale / step) * step;
   for (let cm = firstMajor; cm <= last; cm += step) {
     const p = Math.round(toPx(cm));
-    const text = label(cm);
+    const text = rulerLabel(cm, unit);
     if (horizontal) {
       ctx.fillText(text, p + 3 * dpr, 2 * dpr);
     } else {

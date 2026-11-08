@@ -6,6 +6,7 @@ import { docResourceUrl } from "../api";
 import { forEachPiece, type Home, type Piece, type Wall } from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { currentVisitor, setVisitor, useStore, VISITOR_ID } from "../store";
+import { formatArea, formatLength } from "../units";
 import { spotAngle } from "../view3d/lights";
 import { modelMaterialNames } from "../view3d/models";
 import { levelOfEye } from "../view3d/visitor";
@@ -787,7 +788,7 @@ export default function PropertiesPanel() {
     return (
       <div className="props">
         <h2>Wall</h2>
-        <p className="muted small">Length: {(length / 100).toFixed(2)} m</p>
+        <p className="muted small">Length: {formatLength(length)}</p>
         <Field
           label="X start"
           type="number"
@@ -870,7 +871,7 @@ export default function PropertiesPanel() {
     return (
       <div className="props">
         <h2>Room</h2>
-        <p className="muted small">Area: {(Math.abs(area) / 20000).toFixed(2)} m²</p>
+        <p className="muted small">Area: {formatArea(area / 2)}</p>
         <Field label="Name" type="text" value={a.name} onCommit={set("name")} />
         <TextStyleFields
           title="Name"

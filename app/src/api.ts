@@ -50,6 +50,7 @@ export const api = {
   recoveryList: () => invoke<RecoveryInfo[]>("recovery_list"),
   recoveryOpen: (key: string) => invoke<OpenedHome>("recovery_open", { key }),
   recoveryDiscard: (keys: string[]) => invoke<void>("recovery_discard", { keys }),
+  setAutosaveInterval: (seconds: number) => invoke<void>("set_autosave_interval", { seconds }),
   currentHome: () => invoke<OpenedHome | null>("current_home"),
   openHome: (path: string) => invoke<OpenedHome>("open_home", { path }),
   /** Runs a command of the msh-core registry (same commands as CLI and MCP). */

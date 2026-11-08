@@ -11,14 +11,15 @@ import {
 } from "../api";
 import { useStore } from "../store";
 import { useUi } from "../ui/uiStore";
+import { formatPrecise } from "../units";
 import FurnitureList from "./FurnitureList";
 
 const MAX_RESULTS = 300;
 
 function formatSize(item: CatalogItem): string {
   return item.kind === "furniture"
-    ? `${Math.round(item.width)} × ${Math.round(item.depth)} × ${Math.round(item.height)} cm`
-    : `${item.width} × ${item.height} cm`;
+    ? `${formatPrecise(item.width)} × ${formatPrecise(item.depth)} × ${formatPrecise(item.height)}`
+    : `${formatPrecise(item.width)} × ${formatPrecise(item.height)}`;
 }
 
 function ItemRow({ item, libraryName }: { item: CatalogItem; libraryName: string }) {

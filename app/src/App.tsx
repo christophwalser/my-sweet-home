@@ -23,27 +23,30 @@ import MenuBar from "./ui/MenuBar";
 import ShortcutsDialog from "./ui/ShortcutsDialog";
 import ToolBar from "./ui/ToolBar";
 import { initTheme, useUi } from "./ui/uiStore";
+import { formatPrecise, fromUnit, toUnit, unitSymbol, useUnit } from "./units";
 import View3D from "./view3d/View3D";
 import "./App.css";
+import { followPreferences, newHomeParams, usePreferences } from "./preferences";
 
 /** Thickness of the walls drawn next, shown while the wall tool is active. */
 function WallThicknessInput() {
   const thickness = useStore((s) => s.wallThickness);
   const setThickness = useStore((s) => s.setWallThickness);
+  const unit = useUnit();
   return (
-    <label className="tool-option" title="Thickness of new walls">
+    <label className="tool-option" title="Thickness of new walls (default in the preferences)">
       Thickness
       <input
         type="number"
-        min={1}
-        step={1}
-        value={thickness}
+        min={0}
+        step="any"
+        value={toUnit(thickness, unit)}
         onChange={(e) => {
           const v = Number.parseFloat(e.currentTarget.value);
-          if (Number.isFinite(v) && v > 0) setThickness(v);
+          if (Number.isFinite(v) && v > 0) setThickness(fromUnit(v, unit));
         }}
       />
-      cm
+      {unitSymbol(unit)}
     </label>
   );
 }
@@ -116,6 +119,19 @@ export default function App() {
   const tool = useStore((s) => s.tool);
   const { openHome, run, selectLevel, clearError } = useStore.getState();
 
+  // Preferences: changes from other windows, autosave interval, wall side colors
+  const autosaveMinutes = usePreferences((s) => s.autosaveMinutes);
+  const leftSideColor = usePreferences((s) => s.leftSideColor);
+  const rightSideColor = usePreferences((s) => s.rightSideColor);
+  useEffect(() => followPreferences(), []);
+  useEffect(() => {
+    void api.setAutosaveInterval(Math.round(autosaveMinutes * 60)).catch(() => {});
+  }, [autosaveMinutes]);
+  useEffect(() => {
+    document.documentElement.style.setProperty("--side-left", leftSideColor);
+    document.documentElement.style.setProperty("--side-right", rightSideColor);
+  }, [leftSideColor, rightSideColor]);
+
   // Theme, movable dialogs and the shortcuts of the commands
   useEffect(() => {
     const stopTheme = initTheme();
@@ -153,7 +169,7 @@ export default function App() {
         // The first window offers the homes left unsaved by a crash; a new window gets an
         // empty home to work on
         if (getCurrentWebviewWindow().label === "main") await offerRecovery();
-        else if (!useStore.getState().opened) await run("home_new");
+        else if (!useStore.getState().opened) await run("home_new", newHomeParams());
       })
       .catch((e) => useStore.setState({ error: String(e) }));
     return () => {
@@ -340,7 +356,7 @@ export default function App() {
                       }`}
                       onClick={() => selectLevel(l.attrs.id)}
                       onDoubleClick={() => setEditingLevel(l.attrs.id)}
-                      title={`Elevation ${l.attrs.elevation} cm${
+                      title={`Elevation ${formatPrecise(l.attrs.elevation)}${
                         l.attrs.viewable === false ? " · hidden in 3D" : ""
                       } · double-click to rename · the level below is shown faded in the plan`}
                     >

@@ -6,6 +6,7 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
 import { forEachGroup, forEachPiece, type OpenedHome } from "./model";
+import { usePreferences } from "./preferences";
 import type { CameraPose } from "./view3d/camera";
 
 export type ViewMode = "aerial" | "observer";
@@ -84,7 +85,7 @@ export const useStore = create<State>((set, get) => ({
   selectedLevel: null,
   selection: [],
   tool: "select",
-  wallThickness: 10,
+  wallThickness: usePreferences.getState().newWallThickness,
   highlightSide: null,
   fitRequest: 0,
   requestFit: () => set((s) => ({ fitRequest: s.fitRequest + 1 })),

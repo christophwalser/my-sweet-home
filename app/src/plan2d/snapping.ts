@@ -16,6 +16,7 @@ import {
   type WallShape,
   wallAtLevel,
 } from "../model";
+import { usePreferences } from "../preferences";
 import { sameLevel } from "./drawPlan";
 
 export type Segment = [Pt, Pt];
@@ -69,8 +70,7 @@ const DEG = Math.PI / 180;
 /** Important directions (multiples of 45°) and how far they attract. */
 const MAJOR_STEP = 45 * DEG;
 const MAJOR_TOLERANCE_DEG = 5;
-/** Steps between the important directions: normal and fine (Shift). */
-const STEP_DEG = 5;
+/** Fine steps between the important directions (Shift); the normal ones are a preference. */
 const FINE_STEP_DEG = 1;
 /** Directions of nearby walls win over the small steps within this tolerance. */
 const WALL_DIRECTION_TOLERANCE = 4 * DEG;
@@ -84,7 +84,7 @@ export function snapAngleDeg(deg: number, fine: boolean): number {
   if (fine) return Math.round(deg / FINE_STEP_DEG) * FINE_STEP_DEG;
   const major = Math.round(deg / 45) * 45;
   if (Math.abs(deg - major) < MAJOR_TOLERANCE_DEG) return major;
-  const step = fine ? FINE_STEP_DEG : STEP_DEG;
+  const step = fine ? FINE_STEP_DEG : usePreferences.getState().angleStep;
   return Math.round(deg / step) * step;
 }
 

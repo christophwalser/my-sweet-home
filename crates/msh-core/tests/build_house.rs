@@ -700,3 +700,25 @@ fn wall_path_with_arc_extent_gives_round_walls() {
     r.execute(&mut doc, "edit_undo", json!({})).unwrap();
     assert!(doc.home().walls.is_empty());
 }
+
+#[test]
+fn wall_path_takes_pattern_and_side_colors() {
+    let r = Registry::standard();
+    let mut doc = Document::default();
+    r.execute(&mut doc, "home_new", json!({})).unwrap();
+    r.execute(
+        &mut doc,
+        "wall_add_path",
+        json!({
+            "points": [[0, 0], [400, 0]],
+            "pattern": "crossHatch",
+            "left_side_color": "#FF0000",
+            "right_side_color": ""
+        }),
+    )
+    .unwrap();
+    let w = &doc.home().walls[0].attrs;
+    assert_eq!(w.pattern.as_deref(), Some("crossHatch"));
+    assert_eq!(w.left_side_color.map(|c| c.0 & 0xFF_FFFF), Some(0xFF_0000));
+    assert_eq!(w.right_side_color, None);
+}

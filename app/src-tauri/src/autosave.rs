@@ -9,11 +9,18 @@ use crate::state::AppState;
 use msh_core::Document;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, Runtime};
 
 /// Time between two autosaves.
-const INTERVAL: Duration = Duration::from_secs(5 * 60);
+/// Seconds between autosaves (preference of the user, 0: off); 5 minutes by default.
+static INTERVAL_SECONDS: AtomicU64 = AtomicU64::new(5 * 60);
+
+/// Sets the autosave interval in seconds; 0 turns autosave off.
+pub fn set_interval(seconds: u64) {
+    INTERVAL_SECONDS.store(seconds, Ordering::Relaxed);
+}
 
 /// A recovered copy of an unsaved home.
 #[derive(Serialize, Deserialize, Clone)]
@@ -34,15 +41,19 @@ fn recovery_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 
 /// Writes copies of the homes changed since their last save or autosave.
 pub fn start<R: Runtime>(app: AppHandle<R>) {
-    // MSH_AUTOSAVE_SECONDS shortens the interval (for tests)
-    let interval = std::env::var("MSH_AUTOSAVE_SECONDS")
+    // MSH_AUTOSAVE_SECONDS sets a fixed interval (for tests)
+    let fixed: Option<u64> = std::env::var("MSH_AUTOSAVE_SECONDS")
         .ok()
-        .and_then(|v| v.parse().ok())
-        .map_or(INTERVAL, Duration::from_secs);
+        .and_then(|v| v.parse().ok());
     std::thread::spawn(move || {
+        let mut last = Instant::now();
         loop {
-            std::thread::sleep(interval);
-            save_all(&app);
+            std::thread::sleep(Duration::from_secs(1));
+            let seconds = fixed.unwrap_or_else(|| INTERVAL_SECONDS.load(Ordering::Relaxed));
+            if seconds > 0 && last.elapsed() >= Duration::from_secs(seconds) {
+                save_all(&app);
+                last = Instant::now();
+            }
         }
     });
 }

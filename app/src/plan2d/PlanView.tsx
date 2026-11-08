@@ -19,10 +19,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api";
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
-import { magnetismActive, usePreferences } from "../preferences";
+import {
+  magnetismActive,
+  newLabelParams,
+  newRoomParams,
+  newWallParams,
+  usePreferences,
+} from "../preferences";
 import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../store";
 import { registerPlanActions } from "../ui/planBridge";
 import { useDarkMode } from "../ui/uiStore";
+import { fromUnit, unitSymbol } from "../units";
 import { levelOfEye } from "../view3d/visitor";
 import { autoDimensions, dimensionLine } from "./autoDims";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
@@ -246,6 +253,10 @@ export default function PlanView() {
   const pendingFit = useRef(false);
   const showRulers = usePreferences((s) => s.rulers);
   const showGrid = usePreferences((s) => s.grid);
+  const unit = usePreferences((s) => s.unit);
+  const roomRendering = usePreferences((s) => s.roomRendering);
+  const leftSideColor = usePreferences((s) => s.leftSideColor);
+  const rightSideColor = usePreferences((s) => s.rightSideColor);
   const magnetism = usePreferences((s) => s.magnetism);
   const furnitureTopView = usePreferences((s) => s.furnitureTopView);
   /** Redraw once per frame when top views of furniture become ready */
@@ -646,11 +657,12 @@ export default function PlanView() {
         points,
         closed,
         thickness: wallThickness,
+        ...newWallParams(),
         ...(tool === "arcwall" && { arc_extent_deg: ARC_WALL_EXTENT_DEG }),
         ...levelParam(),
       });
     } else if (tool === "room") {
-      result = await run("room_add", { points, ...levelParam() });
+      result = await run("room_add", { points, ...newRoomParams(), ...levelParam() });
     } else if (tool === "polyline") {
       result = await run("polyline_add", { points, closed, ...levelParam() });
     } else if (tool === "dimension") {
@@ -673,6 +685,7 @@ export default function PlanView() {
     draw();
     userMoved.current = true;
     const result = (await run("room_add", {
+      ...newRoomParams(),
       inside_point: [Math.round(p[0]), Math.round(p[1])],
       ...levelParam(),
     })) as { id?: string } | undefined;
@@ -708,7 +721,7 @@ export default function PlanView() {
   /** Adds the point at the typed length in the direction of the cursor. */
   const addTypedPoint = () => {
     const pts = draft.current;
-    const length = Number.parseFloat((typed.current ?? "").replace(",", "."));
+    const length = fromUnit(Number.parseFloat((typed.current ?? "").replace(",", ".")));
     typed.current = null;
     if (pts.length === 0 || !Number.isFinite(length) || length <= 0) {
       draw();
@@ -855,6 +868,7 @@ export default function PlanView() {
       if (text?.trim()) {
         void run("label_add", {
           text,
+          ...newLabelParams(),
           x: Math.round(p[0]),
           y: Math.round(p[1]),
           ...levelParam(),
@@ -1624,6 +1638,13 @@ export default function PlanView() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tool, input, wallThickness]);
 
+  // Preferences read while drawing: redraw plan and rulers when they change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the values are read from the preferences store while drawing
+  useEffect(() => {
+    draw();
+    drawRulers();
+  }, [unit, roomRendering, leftSideColor, rightSideColor]);
+
   // Actions of the menus, the tool bar and the command search
   // biome-ignore lint/correctness/useExhaustiveDependencies: handlers read current state when called
   useEffect(
@@ -1681,8 +1702,8 @@ export default function PlanView() {
     <div className={`plan-view${showRulers && opened ? " with-rulers" : ""}`}>
       {showRulers && opened && (
         <>
-          <div className="ruler-corner" title="Rulers in centimeters">
-            cm
+          <div className="ruler-corner" title="Unit of the rulers (see the preferences)">
+            {unit === "inch" ? "ft" : unitSymbol(unit)}
           </div>
           <canvas ref={topRulerRef} className="ruler ruler-top" />
           <canvas ref={leftRulerRef} className="ruler ruler-left" />

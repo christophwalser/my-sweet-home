@@ -6,14 +6,15 @@
 
 import * as THREE from "three";
 import { forEachPiece, type Home, type Pt, type WallShape } from "../model";
+import { usePreferences } from "../preferences";
 import { applyPose, type CameraPose } from "./camera";
 
 /** Radius of the visitor's body in the plan (cm). */
 export const VISITOR_RADIUS = 20;
 /** Default eye elevation above the floor (cm). */
 export const EYE_HEIGHT = 170;
-/** Walking speed in cm/s (about 5 km/h), Shift: three times faster. */
-const WALK_SPEED = 140;
+/** Walking speed in cm/s from the preference in km/h; Shift: three times faster. */
+const walkSpeed = () => (usePreferences.getState().walkingSpeed * 100000) / 3600;
 const RUN_FACTOR = 3;
 /** Turning speed of the arrow keys in rad/s. */
 const TURN_SPEED = Math.PI / 2;
@@ -365,7 +366,7 @@ export class VisitorControls {
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     const k = this.keys;
-    const speed = WALK_SPEED * (k.has("Shift") ? RUN_FACTOR : 1) * dt;
+    const speed = walkSpeed() * (k.has("Shift") ? RUN_FACTOR : 1) * dt;
     let forward = 0;
     let side = 0;
     let up = 0;

@@ -5,6 +5,7 @@
 import { type ReactNode, useRef } from "react";
 import type { Texture } from "../model";
 import { useStore } from "../store";
+import { parseLength, toUnit, unitSymbol, useUnit } from "../units";
 
 /**
  * Properties of one wall side. Its color matches the marking of that side in the
@@ -56,6 +57,9 @@ export function toHex(argb: number | null | undefined): string {
 export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps) {
   // A mixed color field shows a placeholder color: only a real change may commit it
   const changed = useRef(false);
+  // Lengths are given in cm and shown in the unit of the preferences
+  const lengthUnit = useUnit();
+  const isLength = unit === "cm" && type === "number";
   if (type === "checkbox") {
     return (
       <label className="prop-row prop-check">
@@ -76,12 +80,17 @@ export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps)
     : type === "angle" && typeof value === "number"
       ? Math.round(((value * 180) / Math.PI) * 10) / 10
       : typeof value === "number"
-        ? Math.round(value * 10) / 10
+        ? isLength
+          ? toUnit(value, lengthUnit)
+          : Math.round(value * 10) / 10
         : (value ?? "");
   const commit = (raw: string) => {
     if (mixed && (raw === "" || (type === "color" && !changed.current))) return;
     changed.current = false;
-    if (type === "number" || type === "angle") {
+    if (isLength) {
+      const cm = parseLength(raw, lengthUnit);
+      if (cm !== null && toUnit(cm, lengthUnit) !== display) onCommit(cm);
+    } else if (type === "number" || type === "angle") {
       const n = Number.parseFloat(raw.replace(",", "."));
       if (Number.isFinite(n) && n !== display) onCommit(n);
     } else if (raw !== display) {
@@ -95,7 +104,7 @@ export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps)
         // Re-create the input when the value changes from outside (undo, CLI, MCP)
         key={String(display)}
         type={type === "color" ? "color" : "text"}
-        inputMode={type === "number" || type === "angle" ? "decimal" : undefined}
+        inputMode={(type === "number" || type === "angle") && !isLength ? "decimal" : undefined}
         defaultValue={type === "color" && mixed ? "#ffffff" : String(display)}
         placeholder={mixed ? "mixed" : undefined}
         // Also for colors: one command (and undo step) when leaving the field
@@ -108,7 +117,9 @@ export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps)
         }}
       />
       {(unit || (mixed && type === "color")) && (
-        <span className="prop-unit">{mixed && type === "color" ? "mixed" : unit}</span>
+        <span className="prop-unit">
+          {mixed && type === "color" ? "mixed" : isLength ? unitSymbol(lengthUnit) : unit}
+        </span>
       )}
     </label>
   );
