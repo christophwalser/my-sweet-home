@@ -14,7 +14,18 @@ export type ViewMode = "aerial" | "observer";
 export const VISITOR_ID = "observer";
 
 /** Tool of the 2D plan. */
-export type Tool = "select" | "wall" | "room" | "polyline" | "dimension" | "label" | "measure";
+export type Tool =
+  | "select"
+  | "pan"
+  | "wall"
+  | "arcwall"
+  | "room"
+  | "roomauto"
+  | "polyline"
+  | "dimension"
+  | "heightdim"
+  | "label"
+  | "measure";
 
 type State = {
   opened: OpenedHome | null;

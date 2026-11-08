@@ -43,6 +43,8 @@ struct PathParams {
     thickness: Option<f32>,
     /// Height in cm (default: home wall height)
     height: Option<f32>,
+    /// Arc extent in degrees of every wall of the path, for round walls
+    arc_extent_deg: Option<f32>,
     level: Option<String>,
 }
 
@@ -153,6 +155,7 @@ pub(super) fn register(r: &mut Registry) {
                 let start = p.points[i];
                 let end = p.points[(i + 1) % p.points.len()];
                 let mut w = new_wall(&ids[i], start, end, p.thickness, p.height, level.clone());
+                w.attrs.arc_extent = p.arc_extent_deg.filter(|v| *v != 0.0).map(rad);
                 if i > 0 || closed {
                     w.attrs.wall_at_start = Some(ids[(i + n - 1) % n].clone());
                 }

@@ -1,25 +1,21 @@
 // "Background image" section of the level (or home) properties: import, modify, show/hide,
-// delete. The wizard does the import and the adjustment of scale and origin.
+// delete. The wizard (opened as dialog of the window) does the import and the adjustment of
+// scale and origin.
 
-import { useState } from "react";
-import { docResourceUrl } from "../api";
 import { type BackgroundImage, backgroundScale } from "../model";
 import { useStore } from "../store";
-import BackgroundImageWizard from "./BackgroundImageWizard";
+import { useUi } from "../ui/uiStore";
 
 export default function BackgroundImageSection({
   levelId,
-  title,
   background,
 }: {
   /** Level of the image; null for the home without levels */
   levelId: string | null;
-  title: string;
   background: BackgroundImage | null;
 }) {
-  const opened = useStore((s) => s.opened);
   const run = useStore((s) => s.run);
-  const [wizard, setWizard] = useState<"import" | "modify" | null>(null);
+  const openDialog = useUi((s) => s.openDialog);
   const level = levelId ? { level: levelId } : {};
   const hidden = background?.visible === false;
 
@@ -40,7 +36,7 @@ export default function BackgroundImageSection({
       <div className="prop-actions">
         <button
           type="button"
-          onClick={() => setWizard("import")}
+          onClick={() => openDialog("backgroundImport")}
           title="Choose an image or PDF page, set its scale and origin"
         >
           {background ? "Replace…" : "Import…"}
@@ -49,7 +45,7 @@ export default function BackgroundImageSection({
           <>
             <button
               type="button"
-              onClick={() => setWizard("modify")}
+              onClick={() => openDialog("backgroundModify")}
               title="Change the scale marker and the origin"
             >
               Modify…
@@ -71,18 +67,6 @@ export default function BackgroundImageSection({
           </>
         )}
       </div>
-      {wizard && opened && (
-        <BackgroundImageWizard
-          levelId={levelId}
-          title={title}
-          existing={
-            wizard === "modify" && background
-              ? { bg: background, url: docResourceUrl(opened.id, background.image) }
-              : null
-          }
-          onClose={() => setWizard(null)}
-        />
-      )}
     </>
   );
 }

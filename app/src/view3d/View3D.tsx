@@ -11,8 +11,10 @@ import {
   RENDER_PHOTO_EVENT,
   RENDER_VIDEO_EVENT,
 } from "../api";
+import { VIEW3D_PREFIX } from "../layout/view3dWindow";
 import { forEachPiece, type Home } from "../model";
 import { poseParams, useStore, type ViewMode } from "../store";
+import { useUi } from "../ui/uiStore";
 import { buildAnnotations } from "./annotations";
 import {
   buildGround,
@@ -93,14 +95,21 @@ function homeLens(): Lens {
   return lens === "fisheye" || lens === "spherical" || lens === "normal" ? lens : "pinhole";
 }
 
+/** The view is shown in the separate 3D window (which has no tool bar). */
+const IN_OWN_WINDOW = getCurrentWebviewWindow().label.startsWith(VIEW3D_PREFIX);
+
 export default function View3D() {
   const opened = useStore((s) => s.opened);
   const levelId = useStore((s) => s.selectedLevel);
   const viewMode = useStore((s) => s.viewMode);
-  const [shadows, setShadows] = useState(false);
-  const [photoOpen, setPhotoOpen] = useState(false);
-  const [videoOpen, setVideoOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const shadows = useUi((s) => s.shadows);
+  const setShadows = useUi((s) => s.setShadows);
+  const dialog = useUi((s) => s.dialog);
+  const openDialog = useUi((s) => s.openDialog);
+  const closeDialog = useUi((s) => s.closeDialog);
+  const photoOpen = dialog === "photo";
+  const videoOpen = dialog === "video";
+  const settingsOpen = dialog === "settings3d";
   const containerRef = useRef<HTMLDivElement>(null);
   const ctx = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -804,7 +813,7 @@ export default function View3D() {
       )}
       {opened && (
         <ViewpointsMenu
-          onSettings={() => setSettingsOpen(!settingsOpen)}
+          onSettings={() => (settingsOpen ? closeDialog() : openDialog("settings3d"))}
           currentPose={() => {
             const c = ctx.current;
             if (!c) throw new Error("3D view not available");
@@ -826,29 +835,27 @@ export default function View3D() {
           Shadows
         </label>
       )}
-      {opened && (
+      {opened && IN_OWN_WINDOW && (
         <button
           type="button"
           className="view3d-photo"
-          onClick={() => setPhotoOpen(true)}
+          onClick={() => openDialog("photo")}
           title="Create a photo of the current view (draft or path traced)"
         >
           Photo…
         </button>
       )}
-      {opened && (
+      {opened && IN_OWN_WINDOW && (
         <button
           type="button"
           className="view3d-video"
-          onClick={() => setVideoOpen(true)}
+          onClick={() => openDialog("video")}
           title="Create a video along a camera path"
         >
           Video…
         </button>
       )}
-      {settingsOpen && opened && (
-        <View3DSettings sun={sun} onClose={() => setSettingsOpen(false)} />
-      )}
+      {settingsOpen && opened && <View3DSettings sun={sun} onClose={closeDialog} />}
       {videoOpen && opened && (
         <VideoDialog
           baseName={(opened.home.attrs.name ?? "Video").replace(/\.sh3d$/i, "")}
@@ -858,7 +865,7 @@ export default function View3D() {
             return cameraPose(c.camera, c.hfov);
           }}
           start={startVideo}
-          onClose={() => setVideoOpen(false)}
+          onClose={closeDialog}
         />
       )}
       {photoOpen && opened && (
@@ -868,7 +875,7 @@ export default function View3D() {
           sun={sun}
           lens={homeLens()}
           start={(w, h, q, lens, onProgress) => startPhoto(w, h, q, lens, onProgress)}
-          onClose={() => setPhotoOpen(false)}
+          onClose={closeDialog}
         />
       )}
     </>

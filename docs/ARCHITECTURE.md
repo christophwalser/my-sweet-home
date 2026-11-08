@@ -719,6 +719,31 @@ furniture is read by its home reader.
   its original path and is marked as changed. `MSH_AUTOSAVE_SECONDS` shortens the interval
   for tests.
 
+### 4.30 Status after P12b (2026-11-08)
+
+- The approved P12a design is in the app. All UI actions are defined once in
+  `app/src/ui/commands.ts` (label, icon, shortcut, enabled / checked state, action); the menu
+  bar, the tool bar, the keyboard shortcuts, the command search and the shortcut overview
+  are built from these definitions. The actions run registry commands of msh-core, so UI,
+  CLI and MCP stay equivalent.
+- Menu bar with eight categories (File, Edit, Plan, Levels, Furniture, 3D view, Extensions,
+  Help), submenus, check marks and shortcuts. Ctrl+K opens the command search over all menu
+  commands (name, menu path, keywords); F1 lists the keyboard shortcuts.
+- Tool bar in groups (file, history, selection, drawing, levels, arrangement, view; on the
+  right the view mode, photo, video, theme and preferences). Split buttons run the variant
+  chosen last with one click; only the small arrow lists the variants (straight / round
+  walls, room by corners / from walls, dimension / height dimension, flip horizontally /
+  vertically); the choice is remembered. New plan tools for the variants: pan, round walls
+  (`wall_add_path` with `arc_extent_deg`, one undo step), room from walls by one click,
+  height dimension by one click.
+- Icon set of 79 icons (24 px grid, 1.75 stroke) as React component (`app/src/ui/Icon.tsx`).
+- Light and dark theme with the colors of the design; the default follows Windows, the
+  tool bar switches it; the choice applies to all windows of the app (local storage).
+- All dialogs and panels move by dragging their header (`app/src/ui/dialogDragging.ts`,
+  no change to the dialogs needed). Dialogs opened by commands live in a small UI store
+  (`app/src/ui/uiStore.ts`); dialogs of the 3D view open in the separate 3D window when the
+  view is shown there.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
@@ -810,7 +835,7 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
   quick access), a reworked tool bar (most used functions one click away, related ones in
   drop-down menus), consistent icons throughout (own icons where no common symbol exists),
   light and dark mode (default: the system setting), all dialogs movable.
-- P12b Implementing that design in the app.
+- P12b Implementing that design in the app (done, see 4.30).
 - P12c Preferences: units (cm, mm, m, inch/foot; internally cm), defaults for new elements
   (wall thickness / height / pattern, floor thickness, text sizes, room and wall colors),
   magnetism steps, wall side marking colors, plan room rendering, 3D quality and walking
@@ -846,7 +871,7 @@ my-sweet-home/
 │  └─ msh-cli/                 # binary "msh" (CLI + "msh mcp")
 ├─ app/
 │  ├─ src-tauri/               # Tauri backend (uses the crates)
-│  └─ src/                     # React/TS frontend (plan2d/, view3d/, catalog/, panels/)
+│  └─ src/                     # React/TS frontend (ui/, plan2d/, view3d/, catalog/, panels/)
 ├─ tools/compat/               # Java test program using the original SH3D reader
 ├─ tests/corpus/               # test files (only own/free files in the repository)
 ├─ docs/

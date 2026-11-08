@@ -612,16 +612,11 @@ export default function PropertiesPanel() {
         {level ? (
           <BackgroundImageSection
             levelId={level.attrs.id}
-            title={level.attrs.name}
             background={level.background_image ?? null}
           />
         ) : (
           home.levels.length === 0 && (
-            <BackgroundImageSection
-              levelId={null}
-              title="Home"
-              background={home.background_image ?? null}
-            />
+            <BackgroundImageSection levelId={null} background={home.background_image ?? null} />
           )
         )}
         <CompassSection home={home} run={run} />

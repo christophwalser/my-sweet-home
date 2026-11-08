@@ -3,8 +3,10 @@
 import { useEffect } from "react";
 import { api } from "./api";
 import ErrorBoundary from "./ErrorBoundary";
-import { syncUiState } from "./layout/view3dWindow";
+import { listenView3DActions, syncUiState } from "./layout/view3dWindow";
 import { applyHome, subscribeToHomeChanges, useStore } from "./store";
+import { enableDialogDragging } from "./ui/dialogDragging";
+import { initTheme, useUi } from "./ui/uiStore";
 import View3D from "./view3d/View3D";
 import "./App.css";
 
@@ -13,6 +15,22 @@ export default function View3DWindow() {
   const viewMode = useStore((s) => s.viewMode);
   const selectedLevel = useStore((s) => s.selectedLevel);
   const { setViewMode, selectLevel } = useStore.getState();
+
+  // Theme, movable dialogs and the actions of the main window's menus
+  useEffect(() => {
+    const stopTheme = initTheme();
+    const stopDragging = enableDialogDragging();
+    const stopActions = listenView3DActions((action) => {
+      const ui = useUi.getState();
+      if (action === "shadows") ui.setShadows(!ui.shadows);
+      else ui.openDialog(action);
+    });
+    return () => {
+      stopTheme();
+      stopDragging();
+      stopActions();
+    };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeToHomeChanges();

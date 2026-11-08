@@ -113,3 +113,24 @@ export function syncUiState(requestInitial: boolean): () => void {
     void unlisten.then((off) => off());
   };
 }
+
+const VIEW3D_ACTION_EVENT = "view3d-action";
+
+/** Actions of the menus that the separate 3D window carries out. */
+export type View3DAction = "photo" | "video" | "settings3d" | "shadows";
+
+/** Asks the separate 3D window to open a dialog or toggle the shadows, and focuses it. */
+export async function sendView3DAction(action: View3DAction): Promise<void> {
+  await emitTo(view3dLabel(), VIEW3D_ACTION_EVENT, action);
+  await (await findView3DWindow())?.setFocus();
+}
+
+/** Runs the handler for the actions sent to this 3D window; returns a function that stops. */
+export function listenView3DActions(handler: (action: View3DAction) => void): () => void {
+  const unlisten = getCurrentWebviewWindow().listen<View3DAction>(VIEW3D_ACTION_EVENT, (e) =>
+    handler(e.payload),
+  );
+  return () => {
+    void unlisten.then((off) => off());
+  };
+}

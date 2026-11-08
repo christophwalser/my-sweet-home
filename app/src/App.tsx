@@ -1,83 +1,30 @@
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { message, open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useRef, useState } from "react";
-import { type AppInfo, api, TOP_VIEWS_EVENT } from "./api";
+import { message } from "@tauri-apps/plugin-dialog";
+import { useEffect, useRef } from "react";
+import { api, docResourceUrl, TOP_VIEWS_EVENT } from "./api";
 import CatalogPanel from "./catalog/CatalogPanel";
+import ImportFurnitureDialog from "./catalog/ImportFurnitureDialog";
+import LibraryDialog from "./catalog/LibraryDialog";
 import ErrorBoundary from "./ErrorBoundary";
 import ExportDialog from "./export/ExportDialog";
 import { clampSide, DEFAULT_LAYOUT, type Maximized, useLayout } from "./layout/layout";
 import Splitter from "./layout/Splitter";
-import {
-  closeView3DWindow,
-  findView3DWindow,
-  openView3DWindow,
-  syncUiState,
-} from "./layout/view3dWindow";
+import { closeView3DWindow, findView3DWindow, syncUiState } from "./layout/view3dWindow";
 import PreferencesDialog from "./PreferencesDialog";
+import BackgroundImageWizard from "./panels/BackgroundImageWizard";
 import PropertiesPanel from "./panels/PropertiesPanel";
 import PlanView from "./plan2d/PlanView";
 import { collectTopViews } from "./plan2d/topView";
-import { applyHome, subscribeToHomeChanges, type Tool, useStore } from "./store";
+import { applyHome, subscribeToHomeChanges, useStore } from "./store";
+import CommandPalette from "./ui/CommandPalette";
+import { chooseFile, detach3D, handleGlobalShortcut } from "./ui/commands";
+import { enableDialogDragging } from "./ui/dialogDragging";
+import MenuBar from "./ui/MenuBar";
+import ShortcutsDialog from "./ui/ShortcutsDialog";
+import ToolBar from "./ui/ToolBar";
+import { initTheme, useUi } from "./ui/uiStore";
 import View3D from "./view3d/View3D";
 import "./App.css";
-
-const PLAN_TOOLS: { tool: Tool; label: string; hint: string }[] = [
-  {
-    tool: "select",
-    label: "Select",
-    hint: "Select and move (Esc); drag the handles to resize or rotate. Del: delete, R: rotate, Ctrl+C/X/V: copy/cut/paste, Ctrl+D: duplicate, Ctrl+A: select all",
-  },
-  {
-    tool: "wall",
-    label: "Walls",
-    hint: "Click to add points, double-click or Enter to finish, Alt: no magnetism",
-  },
-  {
-    tool: "room",
-    label: "Room",
-    hint: "Double-click inside walls to create the room of that area, or click the corners and double-click / Enter to finish",
-  },
-  {
-    tool: "polyline",
-    label: "Line",
-    hint: "Click to add points, click the first point to close, double-click or Enter to finish",
-  },
-  { tool: "dimension", label: "Dimension", hint: "Click start and end point" },
-  { tool: "label", label: "Text", hint: "Click to place a text label" },
-  {
-    tool: "measure",
-    label: "Measure",
-    hint: "Click two points (or drag) to measure their distance; nothing is added to the plan",
-  },
-];
-
-/** Tools that create base plan elements: choosing one unlocks the base plan, as in Sweet Home 3D. */
-const BASE_PLAN_TOOLS: Tool[] = ["wall", "room", "polyline", "dimension", "label"];
-
-/** Lock of the base plan: walls, rooms, texts, doors, windows and fixed furniture. */
-function BasePlanLock() {
-  const opened = useStore((s) => s.opened);
-  const locked = opened?.home.attrs.base_plan_locked === true;
-  return (
-    <label
-      className="tool-option base-plan-lock"
-      title="Lock the base plan: walls, rooms, dimensions, texts, doors, windows and fixed furniture can no longer be selected in the plan, only movable furniture. Drawing walls, rooms, lines, dimensions or texts unlocks it."
-    >
-      <input
-        type="checkbox"
-        checked={locked}
-        onChange={async (e) => {
-          const lock = e.currentTarget.checked;
-          const { run, setSelection } = useStore.getState();
-          await run("home_set", { base_plan_locked: lock });
-          // Locked elements leave the selection, as in Sweet Home 3D
-          if (lock) setSelection([]);
-        }}
-      />
-      Lock base plan
-    </label>
-  );
-}
 
 /** Thickness of the walls drawn next, shown while the wall tool is active. */
 function WallThicknessInput() {
@@ -154,27 +101,34 @@ function LevelNameInput({ name, onDone }: { name: string; onDone: (name: string 
 }
 
 export default function App() {
-  const [info, setInfo] = useState<AppInfo | null>(null);
   const [layout, setLayout] = useLayout();
-  const [detached, setDetached] = useState(false);
-  const [editingLevel, setEditingLevel] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const detached = useUi((s) => s.detached);
+  const editingLevel = useUi((s) => s.editingLevel);
+  const setEditingLevel = useUi((s) => s.setEditingLevel);
+  const dialog = useUi((s) => s.dialog);
+  const closeDialog = useUi((s) => s.closeDialog);
+  const paletteOpen = useUi((s) => s.paletteOpen);
   const centerRef = useRef<HTMLDivElement>(null);
   const opened = useStore((s) => s.opened);
   const loading = useStore((s) => s.loading);
   const error = useStore((s) => s.error);
   const selectedLevel = useStore((s) => s.selectedLevel);
-  const viewMode = useStore((s) => s.viewMode);
   const tool = useStore((s) => s.tool);
-  const { openHome, run, undo, redo, save, selectLevel, setViewMode, setTool, clearError } =
-    useStore.getState();
+  const { openHome, run, selectLevel, clearError } = useStore.getState();
+
+  // Theme, movable dialogs and the shortcuts of the commands
+  useEffect(() => {
+    const stopTheme = initTheme();
+    const stopDragging = enableDialogDragging();
+    window.addEventListener("keydown", handleGlobalShortcut);
+    return () => {
+      stopTheme();
+      stopDragging();
+      window.removeEventListener("keydown", handleGlobalShortcut);
+    };
+  }, []);
 
   useEffect(() => {
-    api
-      .appInfo()
-      .then(setInfo)
-      .catch(() => setInfo(null));
     // Changes from the UI, the CLI (--live) and the MCP server arrive as events
     const unsubscribe = subscribeToHomeChanges();
     // After a reload the backend may already have a home open
@@ -231,15 +185,10 @@ export default function App() {
   useEffect(() => {
     const stopSync = syncUiState(false);
     void findView3DWindow().then((win) => {
-      if (win) void openView3DWindow(() => setDetached(false)).then(() => setDetached(true));
+      if (win) detach3D();
     });
     return stopSync;
   }, []);
-
-  const detach = () => {
-    setDetached(true);
-    void openView3DWindow(() => setDetached(false));
-  };
 
   /** Plan / 3D split from the pointer position on the splitter between them. */
   const dragSplit = (_x: number, y: number) => {
@@ -258,46 +207,6 @@ export default function App() {
   const planFlex = shown === "plan" ? "1 1 0" : shown === "3d" ? "0 0 0" : `${layout.split} 1 0`;
   const view3dFlex =
     shown === "3d" ? "1 1 0" : shown === "plan" ? "0 0 0" : `${1 - layout.split} 1 0`;
-
-  // Keyboard shortcuts
-  // biome-ignore lint/correctness/useExhaustiveDependencies: newHome and chooseFile read the store when called
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || (e.target as HTMLElement).tagName === "INPUT") return;
-      const key = e.key.toLowerCase();
-      if (key === "z" && !e.shiftKey) void undo();
-      else if (key === "y" || (key === "z" && e.shiftKey)) void redo();
-      else if (key === "s") void save(e.shiftKey);
-      else if (key === "n") newHome();
-      else if (key === "o") void chooseFile();
-      // Ctrl+P opens the print dialog of the home (not the WebView's print of the UI)
-      else if (key === "p") {
-        if (useStore.getState().opened) setExporting(true);
-      } else return;
-      e.preventDefault();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, save]);
-
-  const chooseFile = async () => {
-    const path = await open({
-      multiple: false,
-      filters: [
-        { name: "Sweet Home 3D", extensions: ["sh3d"] },
-        { name: "Home.xml", extensions: ["xml"] },
-      ],
-    });
-    if (typeof path !== "string") return;
-    // Like Sweet Home 3D: an untouched window takes the home, otherwise a new window opens
-    if (isUntouched()) await openHome(path);
-    else await api.newWindow(path);
-  };
-
-  const newHome = () => {
-    if (isUntouched()) void run("home_new");
-    else void api.newWindow();
-  };
 
   // Window title: name of the home, * while it has unsaved changes
   const windowTitle = opened
@@ -333,13 +242,6 @@ export default function App() {
     };
   }, []);
 
-  const chooseTool = (t: Tool) => {
-    setTool(t);
-    if (BASE_PLAN_TOOLS.includes(t) && useStore.getState().opened?.home.attrs.base_plan_locked) {
-      void run("home_set", { base_plan_locked: false });
-    }
-  };
-
   const levels = [...(opened?.home.levels ?? [])].sort(
     (a, b) =>
       a.attrs.elevation - b.attrs.elevation ||
@@ -348,6 +250,10 @@ export default function App() {
   const title = opened
     ? (opened.home.attrs.name ?? opened.path?.split(/[\\/]/).pop() ?? "Untitled")
     : null;
+  const currentLevel = levels.find((l) => l.attrs.id === selectedLevel) ?? null;
+  const background = currentLevel
+    ? (currentLevel.background_image ?? null)
+    : (opened?.home.background_image ?? null);
 
   return (
     <div
@@ -359,90 +265,35 @@ export default function App() {
         } as React.CSSProperties
       }
     >
-      <header className="toolbar">
-        <strong className="app-name">{info?.name ?? "My Sweet Home"}</strong>
-        <button type="button" onClick={newHome} title="New home (Ctrl+N)">
-          New
-        </button>
-        <button type="button" onClick={chooseFile} disabled={loading}>
-          {loading ? "Opening…" : "Open…"}
-        </button>
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={!opened}
-          title="Save (Ctrl+S), Save as (Ctrl+Shift+S)"
-        >
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={() => setExporting(true)}
-          disabled={!opened}
-          title="Print the home or save it as PDF (Ctrl+P); export the plan (PDF, SVG, PNG), the furniture list (CSV) or the 3D view (OBJ)"
-        >
-          Print / Export…
-        </button>
-        <button
-          type="button"
-          onClick={() => void undo()}
-          disabled={!opened?.canUndo}
-          title="Undo (Ctrl+Z)"
-        >
-          Undo
-        </button>
-        <button
-          type="button"
-          onClick={() => void redo()}
-          disabled={!opened?.canRedo}
-          title="Redo (Ctrl+Y)"
-        >
-          Redo
-        </button>
-        {title && (
-          <span className="doc-title" title={opened?.path ?? undefined}>
-            {title}
-            {opened?.modified ? " •" : ""}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={() => setPreferencesOpen(true)}
-          title="Rulers, grid and magnetism"
-        >
-          Preferences…
-        </button>
-        <span className="spacer" />
-        {opened && (
-          <fieldset className="segmented" aria-label="3D view">
-            <button
-              type="button"
-              className={viewMode === "aerial" ? "active" : ""}
-              onClick={() => setViewMode("aerial")}
-            >
-              Aerial view
-            </button>
-            <button
-              type="button"
-              className={viewMode === "observer" ? "active" : ""}
-              onClick={() => setViewMode("observer")}
-            >
-              Virtual visit
-            </button>
-          </fieldset>
-        )}
-        <span className="muted version">{info ? `v${info.version}` : ""}</span>
+      <header className="app-header">
+        <MenuBar />
+        <ToolBar />
       </header>
 
-      {preferencesOpen && <PreferencesDialog onClose={() => setPreferencesOpen(false)} />}
-
-      {exporting && opened && (
+      {dialog === "preferences" && <PreferencesDialog onClose={closeDialog} />}
+      {dialog === "export" && opened && (
         <ExportDialog
           baseName={(title ?? "Home").replace(/\.sh3d$/i, "")}
           hasLevels={levels.length > 0}
-          onClose={() => setExporting(false)}
+          onClose={closeDialog}
         />
       )}
+      {dialog === "importFurniture" && <ImportFurnitureDialog onClose={closeDialog} />}
+      {dialog === "libraries" && <LibraryDialog onClose={closeDialog} />}
+      {(dialog === "backgroundImport" || dialog === "backgroundModify") && opened && (
+        <BackgroundImageWizard
+          levelId={currentLevel?.attrs.id ?? null}
+          title={currentLevel?.attrs.name ?? "Home"}
+          existing={
+            dialog === "backgroundModify" && background
+              ? { bg: background, url: docResourceUrl(opened.id, background.image) }
+              : null
+          }
+          onClose={closeDialog}
+        />
+      )}
+      {dialog === "shortcuts" && <ShortcutsDialog onClose={closeDialog} />}
+      {paletteOpen && <CommandPalette />}
 
       {error && (
         <div className="error-bar" role="alert">
@@ -468,21 +319,7 @@ export default function App() {
         <main className="plan" style={{ flex: planFlex }}>
           {opened && (
             <div className="plan-toolbar">
-              <fieldset className="segmented" aria-label="Plan tools">
-                {PLAN_TOOLS.map((t) => (
-                  <button
-                    type="button"
-                    key={t.tool}
-                    className={tool === t.tool ? "active" : ""}
-                    onClick={() => chooseTool(t.tool)}
-                    title={t.hint}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </fieldset>
-              {tool === "wall" && <WallThicknessInput />}
-              {tool === "select" && <BasePlanLock />}
+              {(tool === "wall" || tool === "arcwall") && <WallThicknessInput />}
               <nav className="level-tabs" aria-label="Levels">
                 {levels.map((l) =>
                   editingLevel === l.attrs.id ? (
@@ -511,20 +348,6 @@ export default function App() {
                     </button>
                   ),
                 )}
-                <button
-                  type="button"
-                  className="add-level"
-                  onClick={async () => {
-                    const result = (await run("level_add", {
-                      name: `Level ${levels.length || 1}`,
-                    })) as { id?: string } | undefined;
-                    // Name the new level right away
-                    if (result?.id) setEditingLevel(result.id);
-                  }}
-                  title="Add a level above the highest one"
-                >
-                  + Level
-                </button>
               </nav>
               <span className="pane-buttons">
                 {shown !== "3d" && !detached && (
@@ -548,7 +371,7 @@ export default function App() {
           {!opened && !loading && (
             <div className="empty-hint">
               <p>Open a Sweet Home 3D project (.sh3d) to get started.</p>
-              <button type="button" onClick={chooseFile}>
+              <button type="button" onClick={() => void chooseFile()}>
                 Open…
               </button>
             </div>
@@ -604,7 +427,7 @@ export default function App() {
                 <PaneButton
                   label="Open the 3D view in a separate window"
                   icon={"⧉"}
-                  onClick={detach}
+                  onClick={detach3D}
                 />
               </span>
             </>
@@ -625,12 +448,6 @@ export default function App() {
       </aside>
     </div>
   );
-}
-
-/** The window shows no work yet: a new home without changes. */
-function isUntouched(): boolean {
-  const o = useStore.getState().opened;
-  return !o || (!o.path && !o.modified && !o.canUndo);
 }
 
 /** Name of a home for titles: its name, else its file name, else "Untitled". */

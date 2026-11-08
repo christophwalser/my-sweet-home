@@ -21,6 +21,8 @@ import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api"
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
 import { magnetismActive, usePreferences } from "../preferences";
 import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../store";
+import { registerPlanActions } from "../ui/planBridge";
+import { useDarkMode } from "../ui/uiStore";
 import { levelOfEye } from "../view3d/visitor";
 import { autoDimensions, dimensionLine } from "./autoDims";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
@@ -112,18 +114,6 @@ const SNAP_PX = 10;
 /** Pointer movement in screen pixels before a press becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
 
-function useDarkMode(): boolean {
-  const query = "(prefers-color-scheme: dark)";
-  const [dark, setDark] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const on = (e: MediaQueryListEvent) => setDark(e.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  return dark;
-}
-
 type Gesture =
   | { kind: "pan"; last: [number, number]; screen: [number, number]; moved: boolean }
   | { kind: "press"; start: Pt; screen: [number, number]; hitId: string | null; shift: boolean }
@@ -136,8 +126,12 @@ type Gesture =
   | { kind: "draw"; screen: [number, number]; dragged: boolean };
 
 /** Tools that draw a path of points. */
-const PATH_TOOLS: Tool[] = ["wall", "room", "dimension", "polyline"];
+const PATH_TOOLS: Tool[] = ["wall", "arcwall", "room", "dimension", "polyline"];
 const isPathTool = (t: Tool) => PATH_TOOLS.includes(t);
+/** Kind of drawing of a path tool: round walls are drawn like walls. */
+const draftKind = (t: Tool): DraftKind => (t === "arcwall" ? "wall" : (t as DraftKind));
+/** Arc of the walls drawn with the round wall tool, in degrees. */
+const ARC_WALL_EXTENT_DEG = 90;
 /** Tools whose clicks snap to the plan: drawing tools and the measuring tool. */
 const isSnapTool = (t: Tool) => isPathTool(t) || t === "measure";
 
@@ -208,7 +202,11 @@ function handleCursor(home: Home, h: Handle): string {
 
 const cursorStyle: Record<Tool, string> = {
   select: "default",
+  pan: "grab",
   wall: "crosshair",
+  arcwall: "crosshair",
+  roomauto: "cell",
+  heightdim: "crosshair",
   room: "crosshair",
   polyline: "crosshair",
   dimension: "crosshair",
@@ -374,6 +372,16 @@ export default function PlanView() {
         return drawing
           ? `Click the next point, or type a length + Enter · click the first point to close · ${FINISH}`
           : `Click the start point, or drag to draw a single wall · Shift: 1° steps · ${alt}`;
+      case "arcwall":
+        return drawing
+          ? `Click the next point · each wall becomes a ${ARC_WALL_EXTENT_DEG}° arc, changeable in its properties · ${FINISH}`
+          : `Click the start point of the round wall · Shift: 1° steps · ${alt}`;
+      case "pan":
+        return "Drag to move the plan · wheel: zoom";
+      case "roomauto":
+        return "Click inside walls to create the room of that area";
+      case "heightdim":
+        return "Click where the height dimension goes; it measures the height of the level";
       case "room":
         return drawing
           ? `Click the next corner · click the first corner, ${FINISH}`
@@ -448,7 +456,7 @@ export default function PlanView() {
       wallSides: tool === "select" ? selectedWallSides(input, sel, highlightSide) : null,
       draft:
         drawing && points.length > 0
-          ? { points, kind: tool as DraftKind, thickness: wallThickness }
+          ? { points, kind: draftKind(tool), thickness: wallThickness }
           : null,
       guides:
         g?.kind === "move" && g.slide
@@ -626,18 +634,19 @@ export default function PlanView() {
     const pts = draft.current;
     resetDraft();
     draw();
-    if (!isPathTool(tool) || pts.length < MIN_POINTS[tool as DraftKind]) return;
+    if (!isPathTool(tool) || pts.length < MIN_POINTS[draftKind(tool)]) return;
     userMoved.current = true;
     const first = pts[0];
     const last = pts[pts.length - 1];
     const closed = pts.length >= 4 && Math.hypot(first[0] - last[0], first[1] - last[1]) < 1;
     const points = closed ? pts.slice(0, -1) : pts;
     let result: unknown;
-    if (tool === "wall") {
+    if (tool === "wall" || tool === "arcwall") {
       result = await run("wall_add_path", {
         points,
         closed,
         thickness: wallThickness,
+        ...(tool === "arcwall" && { arc_extent_deg: ARC_WALL_EXTENT_DEG }),
         ...levelParam(),
       });
     } else if (tool === "room") {
@@ -682,7 +691,7 @@ export default function PlanView() {
         await finishDraft();
         return;
       }
-      if ((tool === "wall" || tool === "polyline") && pts.length >= 3) {
+      if ((tool === "wall" || tool === "arcwall" || tool === "polyline") && pts.length >= 3) {
         pts.push(p);
         await finishDraft();
         return;
@@ -716,11 +725,17 @@ export default function PlanView() {
   // ---------------------------------------------------------------- mouse
 
   const onWheel = (e: React.WheelEvent) => {
+    zoomAt(
+      e.nativeEvent.offsetX * devicePixelRatio,
+      e.nativeEvent.offsetY * devicePixelRatio,
+      Math.exp(-e.deltaY * 0.0015),
+    );
+  };
+
+  /** Zooms by `factor` around the canvas point (mx, my) in device pixels. */
+  const zoomAt = (mx: number, my: number, factor: number) => {
     userMoved.current = true;
     const v = viewRef.current;
-    const factor = Math.exp(-e.deltaY * 0.0015);
-    const mx = e.nativeEvent.offsetX * devicePixelRatio;
-    const my = e.nativeEvent.offsetY * devicePixelRatio;
     const scale = Math.min(Math.max(v.scale * factor, 0.01), 50);
     viewRef.current = {
       scale,
@@ -773,7 +788,7 @@ export default function PlanView() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     (e.target as Element).setPointerCapture(e.pointerId);
-    if (e.button === 1 || e.button === 2) {
+    if (e.button === 1 || e.button === 2 || (e.button === 0 && tool === "pan")) {
       gesture.current = {
         kind: "pan",
         last: [e.clientX, e.clientY],
@@ -821,6 +836,20 @@ export default function PlanView() {
         m.done = true;
       }
       draw();
+    } else if (tool === "roomauto") {
+      void addRoomAt(p);
+    } else if (tool === "heightdim") {
+      const s = snapped(p, e.altKey, e.shiftKey);
+      const level = input.home.levels.find((l) => l.attrs.id === effectiveLevel);
+      void run("dimension_add_height", {
+        x: Math.round(s[0] * 10) / 10,
+        y: Math.round(s[1] * 10) / 10,
+        elevation_end: level?.attrs.height ?? input.home.attrs.wall_height ?? 250,
+        ...levelParam(),
+      }).then((r) => {
+        const id = (r as { id?: string } | undefined)?.id;
+        if (id) setSelection([id]);
+      });
     } else if (tool === "label") {
       const text = window.prompt("Label text");
       if (text?.trim()) {
@@ -1463,7 +1492,7 @@ export default function PlanView() {
       void run("edit_copy", { ids: sel }).then((r) => {
         if (r) void run("edit_delete", { ids: sel });
       });
-    } else if (key === "v") {
+    } else if (key === "v" && !shift) {
       void run("edit_paste", levelParam()).then(selectNew);
     } else if (key === "d" && sel.length > 0) {
       void run("edit_duplicate", { ids: sel }).then(selectNew);
@@ -1594,6 +1623,21 @@ export default function PlanView() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [tool, input, wallThickness]);
+
+  // Actions of the menus, the tool bar and the command search
+  // biome-ignore lint/correctness/useExhaustiveDependencies: handlers read current state when called
+  useEffect(
+    () =>
+      registerPlanActions({
+        zoom: (factor) => {
+          const c = canvasRef.current;
+          if (c) zoomAt(c.width / 2, c.height / 2, factor);
+        },
+        selectAll: () => void onShortcut("a", useStore.getState().selection),
+        paste: () => void onShortcut("v", useStore.getState().selection),
+      }),
+    [input, effectiveLevel],
+  );
 
   // ---------------------------------------------------------------- drag & drop from the catalog
 

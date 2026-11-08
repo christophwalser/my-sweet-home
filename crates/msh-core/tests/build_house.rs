@@ -678,3 +678,25 @@ fn pasting_furniture_into_another_home_copies_its_resources() {
         "door and bed use separate resources: {refs:?}"
     );
 }
+
+#[test]
+fn wall_path_with_arc_extent_gives_round_walls() {
+    let r = Registry::standard();
+    let mut doc = Document::default();
+    r.execute(&mut doc, "home_new", json!({})).unwrap();
+    r.execute(
+        &mut doc,
+        "wall_add_path",
+        json!({ "points": [[0, 0], [400, 0], [400, 300]], "arc_extent_deg": 90 }),
+    )
+    .unwrap();
+    let walls = &doc.home().walls;
+    assert_eq!(walls.len(), 2);
+    for w in walls {
+        let arc = w.attrs.arc_extent.expect("round wall");
+        assert!((arc - std::f32::consts::FRAC_PI_2).abs() < 1e-5);
+    }
+    // One undo step removes the whole path
+    r.execute(&mut doc, "edit_undo", json!({})).unwrap();
+    assert!(doc.home().walls.is_empty());
+}
