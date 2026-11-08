@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
 import { formatFieldValue, parseLength, toUnit, unitSymbol, useUnit } from "../units";
+import CategoryField from "./CategoryField";
 import { extensionOf, TEXTURE_EXTENSIONS } from "./modelConvert";
 
 /** Images the WebView shows as preview (TIFF and ZIP have none). */
@@ -162,7 +163,7 @@ export default function ImportTextureDialog({
           </div>
           <div className="import-fields props">
             {text(t("Name"), name, setName)}
-            {text(t("Category"), category, setCategory)}
+            <CategoryField kind="textures" value={category} onChange={setCategory} />
             {text(t("Creator"), creator, setCreator)}
             {text(t("Tile width"), width, setWidth, unitSymbol(unit))}
             {text(t("Tile height"), height, setHeight, unitSymbol(unit))}

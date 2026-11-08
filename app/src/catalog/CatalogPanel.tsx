@@ -1,8 +1,10 @@
 // Catalog panel: furniture and textures of all installed libraries, grouped by
-// category, with full-text search over name, category, tags and creator.
+// category, with full-text search over name, category, tags and creator. Items can be
+// dragged onto another category (or a new one) to move them there.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  api,
   CATALOG_DRAG_TYPE,
   type CatalogDragData,
   type CatalogItem,
@@ -19,6 +21,22 @@ import { importDroppedFiles } from "./dropImport";
 import FurnitureList from "./FurnitureList";
 
 const MAX_RESULTS = 300;
+
+/** Drag data of a catalog item that may be moved to another category */
+const MOVE_TYPE = "application/x-msh-catalog-move";
+type MoveData = { id: string; kind: CatalogKind; category: string };
+
+/** Moves a catalog item to a category (the backend reloads the catalog afterwards). */
+async function moveToCategory(raw: string, category: string): Promise<void> {
+  const data = JSON.parse(raw) as MoveData;
+  const target = category.trim();
+  if (!target || target === data.category) return;
+  await api.execute("catalog_set_category", {
+    catalog_id: data.id,
+    kind: data.kind,
+    category: target,
+  });
+}
 
 function formatSize(item: CatalogItem): string {
   return item.kind === "furniture"
@@ -63,18 +81,22 @@ function ItemRow({
         onHover({ item, libraryName, top: r.top, bottom: r.bottom });
       }}
       onMouseLeave={() => onHover(null)}
-      // Furniture can be dragged onto the plan
-      draggable={item.kind === "furniture" && !!item.id}
+      // Furniture can be dragged onto the plan, all items onto another category
+      draggable={!!item.id}
       onDragStart={(e) => {
         onHover(null);
         if (!item.id) return;
-        const data: CatalogDragData = {
-          catalogId: item.id,
-          doorOrWindow: item.doorOrWindow,
-          name: item.name,
-        };
-        e.dataTransfer.setData(CATALOG_DRAG_TYPE, JSON.stringify(data));
-        e.dataTransfer.effectAllowed = "copy";
+        const move: MoveData = { id: item.id, kind: item.kind, category: item.category };
+        e.dataTransfer.setData(MOVE_TYPE, JSON.stringify(move));
+        if (item.kind === "furniture") {
+          const data: CatalogDragData = {
+            catalogId: item.id,
+            doorOrWindow: item.doorOrWindow,
+            name: item.name,
+          };
+          e.dataTransfer.setData(CATALOG_DRAG_TYPE, JSON.stringify(data));
+        }
+        e.dataTransfer.effectAllowed = "copyMove";
       }}
     >
       {item.icon ? (
@@ -197,6 +219,36 @@ export default function CatalogPanel() {
     setSplit(Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, (y - rect.top) / rect.height)));
   };
   const [open, setOpen] = useState<Set<string>>(new Set());
+  /** Category a catalog item is dragged over ("" = the "new category" zone) */
+  const [dropCategory, setDropCategory] = useState<string | null>(null);
+  /** A catalog item is being dragged (shows the "new category" zone) */
+  const [movingItem, setMovingItem] = useState(false);
+  const isMove = (e: React.DragEvent) => e.dataTransfer.types.includes(MOVE_TYPE);
+  const categoryDropProps = (category: string) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!isMove(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      setDropCategory(category);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node))
+        setDropCategory((c) => (c === category ? null : c));
+    },
+    onDrop: (e: React.DragEvent) => {
+      if (!isMove(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDropCategory(null);
+      setMovingItem(false);
+      const raw = e.dataTransfer.getData(MOVE_TYPE);
+      const target = category || window.prompt(t("Name of the new category"), "")?.trim() || "";
+      if (!target) return;
+      // The moved item stays visible: its new category opens
+      setOpen((prev) => new Set(prev).add(target));
+      moveToCategory(raw, target).catch((err) => setDropMessage(String(err)));
+    },
+  });
 
   useEffect(() => {
     // Catalog content is shown in the language of the user interface when translations exist
@@ -345,7 +397,18 @@ export default function CatalogPanel() {
                   })}
           </div>
         </div>
-        <div className="catalog-list" onScroll={() => onHover(null)}>
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: drag start/end of catalog items only show the drop zones */}
+        <div
+          className="catalog-list"
+          onScroll={() => onHover(null)}
+          onDragStart={(e) => {
+            if (isMove(e)) setMovingItem(true);
+          }}
+          onDragEnd={() => {
+            setMovingItem(false);
+            setDropCategory(null);
+          }}
+        >
           {results ? (
             <ul>
               {results.slice(0, MAX_RESULTS).map((i) => (
@@ -363,7 +426,11 @@ export default function CatalogPanel() {
             </ul>
           ) : (
             categories.map(([category, list]) => (
-              <section key={category}>
+              <section
+                key={category}
+                className={dropCategory === category ? "catalog-drop-target" : undefined}
+                {...categoryDropProps(category)}
+              >
                 <button
                   type="button"
                   className="catalog-category"
@@ -388,6 +455,14 @@ export default function CatalogPanel() {
                 )}
               </section>
             ))
+          )}
+          {!results && movingItem && (
+            <div
+              className={`catalog-new-category ${dropCategory === "" ? "catalog-drop-target" : ""}`}
+              {...categoryDropProps("")}
+            >
+              {t("Drop here to move into a new category…")}
+            </div>
           )}
         </div>
       </div>

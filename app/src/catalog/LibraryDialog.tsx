@@ -1,5 +1,6 @@
 // Library manager: the furniture and texture libraries found on this machine,
-// importing library files (.sh3f / .sh3t) and removing the user's own libraries.
+// importing library files (.sh3f / .sh3t), showing or hiding libraries in the catalog and
+// removing the user's own libraries.
 // Imported libraries go into Sweet Home 3D's user library folders, so both
 // applications share them.
 
@@ -16,6 +17,8 @@ type LibraryInfo = {
   textures: number;
   license: string | null;
   user: boolean;
+  /** Its items are not shown in the catalog */
+  hidden: boolean;
   error?: string;
 };
 
@@ -91,6 +94,15 @@ export default function LibraryDialog({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const setVisible = async (lib: LibraryInfo, visible: boolean) => {
+    try {
+      await api.execute("library_set_visible", { path: lib.path, visible });
+      await refresh();
+    } catch (e) {
+      setMessage(String(e));
+    }
+  };
+
   const remove = async (lib: LibraryInfo) => {
     if (
       !window.confirm(
@@ -121,7 +133,7 @@ export default function LibraryDialog({ onClose }: { onClose: () => void }) {
         </header>
         <p className="muted small">
           {t(
-            "Furniture and texture libraries of Sweet Home 3D. Imported libraries are stored in your Sweet Home 3D library folders, so both applications use them.",
+            "Furniture and texture libraries of Sweet Home 3D. Imported libraries and imported furniture and textures are stored in your Sweet Home 3D library folders, so they are available in every home and both applications use them. Hidden libraries stay installed but are not shown in the catalog.",
           )}
         </p>
         <div className="dialog-actions">
@@ -137,6 +149,7 @@ export default function LibraryDialog({ onClose }: { onClose: () => void }) {
             <table className="library-table">
               <thead>
                 <tr>
+                  <th title={t("Show the library's items in the catalog")}>{t("Shown")}</th>
                   <th>{t("Name")}</th>
                   <th>{t("Items")}</th>
                   <th>{t("Source")}</th>
@@ -146,7 +159,21 @@ export default function LibraryDialog({ onClose }: { onClose: () => void }) {
               </thead>
               <tbody>
                 {libraries.map((lib) => (
-                  <tr key={lib.path} title={lib.path}>
+                  <tr
+                    key={lib.path}
+                    title={lib.path}
+                    className={lib.hidden ? "library-hidden" : undefined}
+                  >
+                    <td className="library-shown">
+                      <input
+                        type="checkbox"
+                        checked={!lib.hidden}
+                        aria-label={t("Show {name} in the catalog", {
+                          name: lib.name ?? fileName(lib.path),
+                        })}
+                        onChange={(e) => void setVisible(lib, e.currentTarget.checked)}
+                      />
+                    </td>
                     <td>
                       {lib.name ?? fileName(lib.path)}
                       {lib.error && <span className="error-text"> ({lib.error})</span>}

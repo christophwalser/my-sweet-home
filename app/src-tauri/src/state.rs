@@ -363,7 +363,12 @@ pub fn execute<R: Runtime>(
     }
     if matches!(
         name,
-        "library_import" | "library_remove" | "texture_import" | "furniture_import"
+        "library_import"
+            | "library_remove"
+            | "library_set_visible"
+            | "catalog_set_category"
+            | "texture_import"
+            | "furniture_import"
     ) {
         state.reload_libraries();
         let _ = app.emit(CATALOG_CHANGED_EVENT, ());

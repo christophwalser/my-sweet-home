@@ -1,6 +1,7 @@
 //! Access to the installed furniture and texture catalogs, and embedding of
 //! catalog resources into a document.
 
+use crate::catalog_settings::{CatalogSettings, ItemKind};
 use crate::document::Document;
 use crate::registry::CommandError;
 use msh_catalog::{CatalogKind, FurnitureItem, TextureItem, find_all_libraries, open_library};
@@ -62,10 +63,28 @@ impl CatalogIndex {
         {
             let lang = catalog_lang();
             let mut index = CatalogIndex::default();
+            // Hidden libraries are left out; categories chosen by the user replace the
+            // library's own
+            let settings = CatalogSettings::load();
             for path in find_all_libraries(&[]) {
-                let Ok(catalogs) = open_library(&path, Some(&lang)) else {
+                if settings.is_hidden(&path) {
+                    continue;
+                }
+                let Ok(mut catalogs) = open_library(&path, Some(&lang)) else {
                     continue;
                 };
+                for c in &mut catalogs {
+                    for f in &mut c.furniture {
+                        if let Some(cat) = settings.category(ItemKind::Furniture, f.id.as_deref()) {
+                            f.category = cat.to_owned();
+                        }
+                    }
+                    for t in &mut c.textures {
+                        if let Some(cat) = settings.category(ItemKind::Textures, t.id.as_deref()) {
+                            t.category = cat.to_owned();
+                        }
+                    }
+                }
                 for c in catalogs {
                     match c.kind {
                         CatalogKind::Furniture => {

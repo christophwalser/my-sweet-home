@@ -835,6 +835,26 @@ furniture is read by its home reader.
   The import preview can be rotated with the mouse (drag), zoomed (wheel) and reset
   (double-click).
 
+### 4.35 Catalog management (2026-11-08)
+
+- Where catalog content lives: the default catalog comes with the installation (Sweet Home
+  3D's `Furniture.jar` / `Textures.jar` today, the bundled default catalog after P12f).
+  Everything the user adds — imported libraries, single imported models and textures, items
+  from online catalogs — is written to Sweet Home 3D's user library folders
+  (`%APPDATA%\eTeks\Sweet Home 3D\furniture` / `textures`, "My furniture.sh3f",
+  "My textures.sh3t"). The catalog is therefore global: every home, new or old, sees it,
+  and Sweet Home 3D shares it. Homes embed the models and textures they use, so they stay
+  portable.
+- My Sweet Home's own catalog settings (`catalog_settings.rs`,
+  `%APPDATA%\ch.mysweethome.app\catalog.json`) hold hidden libraries and categories the user
+  gave items. They work for read-only libraries too and leave the library files untouched.
+  Commands: `library_set_visible`, `catalog_set_category`; `library_list` reports `hidden`.
+  Both the core's catalog index and the app's `catalog_load` apply them.
+- UI: the Libraries dialog has a "Shown" checkbox per library (remove stays for the user's
+  own libraries). Catalog items are dragged onto another category, or onto the "new
+  category" zone shown while dragging, to move them. The furniture and texture import
+  dialogs pick the category from the existing ones or take a new one.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

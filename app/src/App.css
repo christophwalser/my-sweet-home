@@ -947,6 +947,33 @@ input[type="search"]:focus {
   background: var(--panel-2);
 }
 
+/* Category a catalog item is dragged onto */
+.catalog-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: var(--panel-2);
+}
+
+.library-hidden td:not(.library-shown) {
+  opacity: 0.5;
+}
+
+.catalog-new-category {
+  margin: 6px 10px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.category-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
 .catalog-item {
   display: flex;
   align-items: center;

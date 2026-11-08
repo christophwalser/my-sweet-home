@@ -291,7 +291,6 @@
   "from the top-left corner of the image": "von der oberen linken Ecke des Bildes",
   "Front sides": "Vorderseiten",
   "Furniture": "Möbel",
-  "Furniture and texture libraries of Sweet Home 3D. Imported libraries are stored in your Sweet Home 3D library folders, so both applications use them.": "Möbel- und Texturbibliotheken von Sweet Home 3D. Importierte Bibliotheken werden in deinen Sweet-Home-3D-Bibliotheksordnern abgelegt, damit beide Programme sie nutzen.",
   "Furniture and texture libraries…": "Möbel- und Texturbibliotheken…",
   "Furniture in plans": "Möbel in Plänen",
   "Furniture in the home": "Möbel im Haus",
@@ -726,5 +725,12 @@
   "{frames} frames rendered in {v1} s.": "{frames} Bilder gerendert in {v1} s.",
   "{items} items in {categories} categories": "{items} Einträge in {categories} Kategorien",
   "{n} items · sizes in {unit}": "{n} Einträge · Maße in {unit}",
-  "{v0} exists already. Replace it?": "{v0} existiert bereits. Ersetzen?"
+  "{v0} exists already. Replace it?": "{v0} existiert bereits. Ersetzen?",
+  "Furniture and texture libraries of Sweet Home 3D. Imported libraries and imported furniture and textures are stored in your Sweet Home 3D library folders, so they are available in every home and both applications use them. Hidden libraries stay installed but are not shown in the catalog.": "Möbel- und Texturbibliotheken von Sweet Home 3D. Importierte Bibliotheken, Möbel und Texturen werden in deinen Sweet-Home-3D-Bibliotheksordnern gespeichert. So stehen sie in jedem Projekt zur Verfügung, und beide Programme nutzen sie. Ausgeblendete Bibliotheken bleiben installiert, erscheinen aber nicht im Katalog.",
+  "New category…": "Neue Kategorie…",
+  "Name of the new category": "Name der neuen Kategorie",
+  "Drop here to move into a new category…": "Hier ablegen, um in eine neue Kategorie zu verschieben…",
+  "Show the library's items in the catalog": "Einträge der Bibliothek im Katalog anzeigen",
+  "Shown": "Sichtbar",
+  "Show {name} in the catalog": "{name} im Katalog anzeigen"
 }

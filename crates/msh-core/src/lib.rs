@@ -5,6 +5,7 @@
 //! commands, so all of them offer the same functionality.
 
 pub mod catalog;
+pub mod catalog_settings;
 pub mod clipboard;
 mod commands;
 pub mod document;

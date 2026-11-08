@@ -6,6 +6,7 @@
 use crate::autosave::{self, RecoveryInfo};
 use crate::state::{self, AppState, HOME_CHANGED_EVENT, HomeView};
 use msh_catalog::{CatalogKind, open_library};
+use msh_core::catalog_settings::{CatalogSettings, ItemKind};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -344,7 +345,12 @@ pub async fn catalog_load(lang: String, state: State<'_, AppState>) -> CmdResult
             items: Vec::new(),
             errors: Vec::new(),
         };
+        // Hidden libraries are left out; categories chosen by the user replace the library's own
+        let settings = CatalogSettings::load();
         for (index, path) in store.paths.iter().enumerate() {
+            if settings.is_hidden(path) {
+                continue;
+            }
             let catalogs = match open_library(path, Some(&lang)) {
                 Ok(c) => c,
                 Err(e) => {
@@ -363,13 +369,15 @@ pub async fn catalog_load(lang: String, state: State<'_, AppState>) -> CmdResult
                     kind: c.kind,
                     license: c.license.clone(),
                 });
-                dto.items
-                    .extend(c.furniture.into_iter().map(|f| CatalogItemDto {
+                dto.items.extend(c.furniture.into_iter().map(|f| {
+                    CatalogItemDto {
                         library: index,
                         kind: CatalogKind::Furniture,
+                        category: settings
+                            .category(ItemKind::Furniture, f.id.as_deref())
+                            .map_or(f.category, str::to_owned),
                         id: f.id,
                         name: f.name,
-                        category: f.category,
                         creator: f.creator,
                         license: f.license.or_else(|| c.license.clone()),
                         tags: f.tags,
@@ -379,14 +387,17 @@ pub async fn catalog_load(lang: String, state: State<'_, AppState>) -> CmdResult
                         depth: f.depth,
                         height: f.height,
                         door_or_window: f.door_or_window,
-                    }));
-                dto.items
-                    .extend(c.textures.into_iter().map(|t| CatalogItemDto {
+                    }
+                }));
+                dto.items.extend(c.textures.into_iter().map(|t| {
+                    CatalogItemDto {
                         library: index,
                         kind: CatalogKind::Textures,
+                        category: settings
+                            .category(ItemKind::Textures, t.id.as_deref())
+                            .map_or(t.category, str::to_owned),
                         id: t.id,
                         name: t.name,
-                        category: t.category,
                         creator: t.creator,
                         license: c.license.clone(),
                         tags: Vec::new(),
@@ -396,7 +407,8 @@ pub async fn catalog_load(lang: String, state: State<'_, AppState>) -> CmdResult
                         depth: 0.0,
                         height: t.height,
                         door_or_window: false,
-                    }));
+                    }
+                }));
             }
         }
         dto

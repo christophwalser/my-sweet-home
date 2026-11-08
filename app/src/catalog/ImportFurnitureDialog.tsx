@@ -12,6 +12,7 @@ import { t } from "../i18n";
 import { useStore } from "../store";
 import { useUi } from "../ui/uiStore";
 import { disposeObject, loadModelUncached } from "../view3d/models";
+import CategoryField from "./CategoryField";
 import { MODEL_EXTENSIONS, prepareModel } from "./modelConvert";
 
 type Staged = { id: number; main: string; sizeCm: [number, number, number] | null; path: string };
@@ -365,14 +366,7 @@ export default function ImportFurnitureDialog({
               <span className="prop-label">{t("Name")}</span>
               <input type="text" value={name} onChange={(e) => setName(e.currentTarget.value)} />
             </label>
-            <label className="prop-row">
-              <span className="prop-label">{t("Category")}</span>
-              <input
-                type="text"
-                value={category}
-                onChange={(e) => setCategory(e.currentTarget.value)}
-              />
-            </label>
+            <CategoryField kind="furniture" value={category} onChange={setCategory} />
             {(["width", "depth", "height"] as const).map((f) => (
               <label className="prop-row" key={f}>
                 <span className="prop-label">{SIZE_LABELS[f]()}</span>
