@@ -45,6 +45,17 @@ struct VideoRequest {
     path: String,
 }
 
+/// Event asking the main window for the views of the furniture from above (plan exports).
+pub const TOP_VIEWS_EVENT: &str = "render-top-views";
+/// How long a plan export waits for the views from above (models may still be loading).
+const TOP_VIEWS_TIMEOUT: Duration = Duration::from_secs(180);
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct TopViewsRequest {
+    request_id: u64,
+}
+
 /// Event asking the frontend to export the 3D view as OBJ.
 pub const EXPORT_OBJ_EVENT: &str = "export-obj";
 
@@ -134,6 +145,17 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
                 && let Some(obj) = params.as_object_mut()
             {
                 obj.insert("view_3d_image".into(), image["image_base64"].clone());
+            }
+            // Plans show the furniture from above, which only the frontend can render
+            let plan_wanted = command == "export_plan"
+                || (command == "export_document" && params["plan"] != Value::Bool(false));
+            if plan_wanted
+                && params["furniture_icons"] != "catalog"
+                && params["top_views"].is_null()
+                && let Ok(views) = top_views(app).await
+                && let Some(obj) = params.as_object_mut()
+            {
+                obj.insert("top_views".into(), views);
             }
             let a = app.clone();
             match tauri::async_runtime::spawn_blocking(move || state::execute(&a, &command, params))
@@ -261,6 +283,22 @@ async fn render_video(app: &AppHandle, params: &Value) -> Result<Value, String> 
         .await
         .map_err(|_| "the app did not finish the video in time".to_string())?
         .map_err(|_| "the video was cancelled".to_string())??;
+    serde_json::from_str(&result).map_err(|e| e.to_string())
+}
+
+/// Asks the main window for the views of the furniture from above.
+async fn top_views(app: &AppHandle) -> Result<Value, String> {
+    let state = app.state::<AppState>();
+    if state.current().is_none() {
+        return Err("no home is open in the app".into());
+    }
+    let (request_id, rx) = state.new_capture();
+    app.emit(TOP_VIEWS_EVENT, TopViewsRequest { request_id })
+        .map_err(|e| e.to_string())?;
+    let result = tokio::time::timeout(TOP_VIEWS_TIMEOUT, rx)
+        .await
+        .map_err(|_| "the app did not render the views from above in time".to_string())?
+        .map_err(|_| "rendering the views from above was cancelled".to_string())??;
     serde_json::from_str(&result).map_err(|e| e.to_string())
 }
 

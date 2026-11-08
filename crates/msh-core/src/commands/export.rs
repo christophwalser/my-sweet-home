@@ -5,6 +5,7 @@ use crate::registry::{CommandError, Registry};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 #[derive(Deserialize, JsonSchema, Clone, Copy, PartialEq)]
@@ -13,6 +14,26 @@ enum PlanFormat {
     Svg,
     Png,
     Pdf,
+}
+
+/// How furniture is drawn in exported and printed plans.
+#[derive(Deserialize, JsonSchema, Clone, Copy, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+enum FurnitureIcons {
+    /// Seen from above, rendered from the 3D models (needs `top_views`, which the running app
+    /// supplies; otherwise the catalog icons are used)
+    #[default]
+    TopView,
+    /// The catalog icons
+    Catalog,
+}
+
+/// Views of the furniture from above, rendered by the app: PNG images (base64) by key and
+/// the key of each piece (pieces that look the same share one image).
+#[derive(Deserialize, JsonSchema, Default)]
+struct TopViews {
+    images: HashMap<String, String>,
+    pieces: HashMap<String, String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -32,6 +53,10 @@ struct PlanParams {
     scale: Option<f32>,
     /// PNG: width in pixels (default 2000)
     width: Option<u32>,
+    /// Furniture "top_view" (default: seen from above) or "catalog" (icons)
+    furniture_icons: Option<FurnitureIcons>,
+    /// Views from above rendered by the app (supplied by the app in live mode)
+    top_views: Option<TopViews>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -58,6 +83,10 @@ struct DocumentParams {
     columns: Option<Vec<String>>,
     /// Image of the 3D view as PNG (base64 or data URL)
     view_3d_image: Option<String>,
+    /// Furniture in the plans "top_view" (default: seen from above) or "catalog" (icons)
+    furniture_icons: Option<FurnitureIcons>,
+    /// Views from above rendered by the app (supplied by the app in live mode)
+    top_views: Option<TopViews>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -74,9 +103,9 @@ struct CsvParams {
 pub(super) fn register(r: &mut Registry) {
     r.add(
         "export_plan",
-        "Exports the 2D plan as shown in the app (walls with patterns, rooms, furniture icons, \
-         doors and windows, dimensions, labels, compass) as SVG, PNG or PDF file. PDF pages can \
-         use a scale such as 1:100.",
+        "Exports the 2D plan as shown in the app (walls with patterns, rooms, furniture seen from \
+         above or as icons, doors and windows, dimensions, labels, compass) as SVG, PNG or PDF \
+         file. PDF pages can use a scale such as 1:100.",
         false,
         |doc, p: PlanParams| export_plan(doc, p),
     );
@@ -124,7 +153,9 @@ fn export_plan(doc: &Document, p: PlanParams) -> Result<serde_json::Value, Comma
 
     let selected = select_levels(home, p.level.as_deref())?;
     let home_name = home_title(doc);
-    let drawings = plan_drawings(doc, &selected);
+    let mut notes = Vec::new();
+    let top_views = top_views(p.furniture_icons, p.top_views, &mut notes)?;
+    let drawings = plan_drawings(doc, &selected, &top_views);
 
     match format {
         PlanFormat::Pdf => {
@@ -153,7 +184,7 @@ fn export_plan(doc: &Document, p: PlanParams) -> Result<serde_json::Value, Comma
                 .collect();
             let pdf = msh_export::pdf_from_svg_pages(&pages).map_err(CommandError::failed)?;
             write(&p.path, &pdf)?;
-            Ok(json!({ "path": p.path, "pages": pages.len(), "scales": scales }))
+            Ok(json!({ "path": p.path, "pages": pages.len(), "scales": scales, "notes": notes }))
         }
         PlanFormat::Svg | PlanFormat::Png => {
             let several = drawings.len() > 1;
@@ -177,7 +208,7 @@ fn export_plan(doc: &Document, p: PlanParams) -> Result<serde_json::Value, Comma
                 }
                 paths.push(path);
             }
-            Ok(json!({ "paths": paths }))
+            Ok(json!({ "paths": paths, "notes": notes }))
         }
     }
 }
@@ -237,10 +268,54 @@ fn home_title(doc: &Document) -> String {
     }
 }
 
-/// Plans of the levels as the app draws them, with icons and textures.
+/// Decoded views from above: images by name and the image name of each piece.
+#[derive(Default)]
+struct DecodedTopViews {
+    images: HashMap<String, Vec<u8>>,
+    pieces: HashMap<String, String>,
+}
+
+/// The views from above to draw: decoded from the app's images, or none for catalog icons
+/// (with a note when top views were wanted but not supplied).
+fn top_views(
+    icons: Option<FurnitureIcons>,
+    given: Option<TopViews>,
+    notes: &mut Vec<String>,
+) -> Result<DecodedTopViews, CommandError> {
+    use base64::Engine;
+    if icons.unwrap_or_default() == FurnitureIcons::Catalog {
+        return Ok(DecodedTopViews::default());
+    }
+    let Some(given) = given else {
+        notes.push(
+            "furniture drawn as catalog icons: the views from above are rendered by the running \
+             app (use --live or the app's export dialog)"
+                .into(),
+        );
+        return Ok(DecodedTopViews::default());
+    };
+    let mut images = HashMap::new();
+    for (key, data) in given.images {
+        let raw = data.split_once(',').map_or(data.as_str(), |(_, b)| b);
+        let png = base64::engine::general_purpose::STANDARD
+            .decode(raw.trim())
+            .map_err(|e| CommandError::failed(format!("invalid top view '{key}': {e}")))?;
+        images.insert(format!("top-view:{key}"), png);
+    }
+    let pieces = given
+        .pieces
+        .into_iter()
+        .map(|(id, key)| (id, format!("top-view:{key}")))
+        .filter(|(_, name)| images.contains_key(name))
+        .collect();
+    Ok(DecodedTopViews { images, pieces })
+}
+
+/// Plans of the levels as the app draws them, with icons (or views from above) and textures.
 fn plan_drawings<'a>(
     doc: &Document,
     levels: &[Option<&'a msh_model::Level>],
+    top_views: &DecodedTopViews,
 ) -> Vec<(Option<&'a msh_model::Level>, msh_export::PlanDrawing)> {
     let home = doc.home();
     let mut images = ImageSource::default();
@@ -253,6 +328,9 @@ fn plan_drawings<'a>(
                 .into_iter()
                 .filter_map(|name| images.get(doc, &name).map(|data| (name, data)))
                 .collect();
+            opts.images
+                .extend(top_views.images.iter().map(|(k, v)| (k.clone(), v.clone())));
+            opts.top_views = top_views.pieces.clone();
             (*level, msh_export::draw_plan(home, &opts))
         })
         .collect()
@@ -293,7 +371,8 @@ fn export_document(doc: &Document, p: DocumentParams) -> Result<serde_json::Valu
     }
     if p.plan.unwrap_or(true) {
         let levels = select_levels(home, Some(p.level.as_deref().unwrap_or("all")))?;
-        for (level, drawing) in plan_drawings(doc, &levels) {
+        let top_views = top_views(p.furniture_icons, p.top_views, &mut notes)?;
+        for (level, drawing) in plan_drawings(doc, &levels, &top_views) {
             let page_title = match level {
                 Some(l) => format!("{title} - {}", l.attrs.name),
                 None => format!("{title} - Plan"),

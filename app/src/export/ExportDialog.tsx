@@ -6,6 +6,8 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { collectTopViews } from "../plan2d/topView";
+import { useStore } from "../store";
 import { type PrintPages, printPages } from "./print";
 
 type PlanFormat = "pdf" | "svg" | "png";
@@ -35,6 +37,7 @@ export default function ExportDialog({
   const [width, setWidth] = useState(2000);
   const [separator, setSeparator] = useState(",");
   const [parts, setParts] = useState({ furniture: true, plan: true, view3d: true });
+  const [furnitureIcons, setFurnitureIcons] = useState<"top_view" | "catalog">("top_view");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -67,6 +70,17 @@ export default function ExportDialog({
     }
   };
 
+  /** How furniture is drawn in plans, with the views from above rendered here if wanted. */
+  const furnitureParams = async (): Promise<Record<string, unknown>> => {
+    const opened = useStore.getState().opened;
+    if (furnitureIcons === "catalog" || !opened) return { furniture_icons: "catalog" };
+    setMessage("Rendering the furniture from above…");
+    return {
+      furniture_icons: "top_view",
+      top_views: await collectTopViews(opened.home, opened.id),
+    };
+  };
+
   /** Parameters of export_document from the dialog settings, with the 3D image if wanted. */
   const documentParams = async (): Promise<Record<string, unknown>> => {
     const params: Record<string, unknown> = {
@@ -78,6 +92,7 @@ export default function ExportDialog({
     if (orientation !== "auto") params.landscape = orientation === "landscape";
     if (scale !== "fit") params.scale = Number(scale);
     if (parts.view3d) params.view_3d_image = await api.capture3d();
+    if (parts.plan) Object.assign(params, await furnitureParams());
     return params;
   };
   const nothingToPrint = !parts.furniture && !parts.plan && !parts.view3d;
@@ -115,6 +130,8 @@ export default function ExportDialog({
         if (scale !== "fit") params.scale = Number(scale);
       }
       if (format === "png") params.width = width;
+      Object.assign(params, await furnitureParams());
+      setMessage("Exporting…");
       const r = (await api.execute("export_plan", params)) as {
         path?: string;
         paths?: string[];
@@ -171,6 +188,16 @@ export default function ExportDialog({
                 <option value="auto">Automatic</option>
                 <option value="portrait">Portrait</option>
                 <option value="landscape">Landscape</option>
+              </select>
+            </label>
+            <label>
+              Furniture in plans
+              <select
+                value={furnitureIcons}
+                onChange={(e) => setFurnitureIcons(e.currentTarget.value as "top_view" | "catalog")}
+              >
+                <option value="top_view">Seen from above</option>
+                <option value="catalog">Catalog icons</option>
               </select>
             </label>
             <label>

@@ -532,8 +532,15 @@ furniture is read by its home reader.
   arrive. Models come from the 3D view's model cache; their geometry is not disposed.
 - Doors and windows: the frame seen from above is drawn in the opening, the sash arcs on top.
 - Preference "Furniture seen from above" (default on); off draws the catalog icons as before.
-- Not yet: top views in the plan export (SVG / PNG / PDF) and in the printed plan; they keep
-  the icons.
+- Exports and the printed plan draw the furniture from above by default too:
+  `export_plan` / `export_document` take `furniture_icons` ("top_view" default, "catalog") and
+  `top_views` ({images: key -> PNG base64, pieces: piece ID -> key}; pieces that look the same
+  share one image). The frontend renders them (`collectTopViews`): the export dialog itself
+  ("Furniture in plans" in the page setup), and for `--live` calls the pipe asks the main
+  window (event `render-top-views`) before running the command. Headless exports have no 3D
+  renderer and fall back to the icons with a note in `notes`. `msh-export` draws a top view
+  stretched to the footprint, for doors and windows under the sashes (the group's mirroring is
+  undone for it, the view is rendered mirrored already).
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

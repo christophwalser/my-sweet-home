@@ -1,6 +1,7 @@
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
-import { type AppInfo, api } from "./api";
+import { type AppInfo, api, TOP_VIEWS_EVENT } from "./api";
 import CatalogPanel from "./catalog/CatalogPanel";
 import ExportDialog from "./export/ExportDialog";
 import { clampSide, DEFAULT_LAYOUT, type Maximized, useLayout } from "./layout/layout";
@@ -14,6 +15,7 @@ import {
 import PreferencesDialog from "./PreferencesDialog";
 import PropertiesPanel from "./panels/PropertiesPanel";
 import PlanView from "./plan2d/PlanView";
+import { collectTopViews } from "./plan2d/topView";
 import { applyHome, subscribeToHomeChanges, type Tool, useStore } from "./store";
 import View3D from "./view3d/View3D";
 import "./App.css";
@@ -191,6 +193,23 @@ export default function App() {
       void unsubscribe.then((off) => off());
     };
   }, [openHome]);
+
+  // Views of the furniture from above for exports from the CLI or MCP server (live control)
+  useEffect(() => {
+    const unlisten = listen<{ requestId: number }>(TOP_VIEWS_EVENT, async (e) => {
+      try {
+        const opened = useStore.getState().opened;
+        if (!opened) throw new Error("no home is open");
+        const views = await collectTopViews(opened.home, opened.id);
+        await api.captureResult(e.payload.requestId, JSON.stringify(views), null);
+      } catch (err) {
+        await api.captureResult(e.payload.requestId, null, String(err));
+      }
+    });
+    return () => {
+      void unlisten.then((off) => off());
+    };
+  }, []);
 
   // The 3D window may still be open after a reload of the main window
   useEffect(() => {

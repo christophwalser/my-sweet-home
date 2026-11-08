@@ -27,6 +27,10 @@ pub struct PlanOptions {
     /// Images of icons and floor textures by resource name (see [`plan_images`]);
     /// missing images are drawn as plain shapes
     pub images: HashMap<String, Vec<u8>>,
+    /// Views from above by piece ID: names of images in `images` that replace the icon
+    /// (rendered from the 3D model by the app; they fill the footprint and already show
+    /// the model's mirroring)
+    pub top_views: HashMap<String, String>,
 }
 
 impl Default for PlanOptions {
@@ -40,6 +44,7 @@ impl Default for PlanOptions {
             scale_bar: true,
             margin: 60.0,
             images: HashMap::new(),
+            top_views: HashMap::new(),
         }
     }
 }
@@ -55,6 +60,7 @@ impl PlanOptions {
             scale_bar: false,
             margin: 30.0,
             images: HashMap::new(),
+            top_views: HashMap::new(),
         }
     }
 }
@@ -262,7 +268,7 @@ pub fn draw_plan(home: &Home, opts: &PlanOptions) -> PlanDrawing {
 
     // Furniture except doors and windows (below the walls)
     for p in pieces.iter().filter(|p| p.kind != PieceKind::DoorOrWindow) {
-        draw_piece(&mut s, &mut defs, p, &opts.images, thin);
+        draw_piece(&mut s, &mut defs, p, opts, thin);
     }
 
     // Walls as one area: all outlines with double width first, then all fills, so
@@ -294,7 +300,7 @@ pub fn draw_plan(home: &Home, opts: &PlanOptions) -> PlanDrawing {
 
     // Doors and windows on top of the walls
     for p in pieces.iter().filter(|p| p.kind == PieceKind::DoorOrWindow) {
-        draw_door_or_window(&mut s, &mut defs, p, &opts.images, thin);
+        draw_door_or_window(&mut s, &mut defs, p, opts, thin);
     }
 
     // Room names and areas
@@ -434,13 +440,14 @@ pub fn draw_plan(home: &Home, opts: &PlanOptions) -> PlanDrawing {
 
 // ---------------------------------------------------------------- elements
 
-fn draw_piece(
-    s: &mut String,
-    defs: &mut Defs,
-    p: &Piece,
-    images: &HashMap<String, Vec<u8>>,
-    thin: f32,
-) {
+/// Data URI of the view from above of a piece, if the options have one.
+fn top_view(defs: &mut Defs, p: &Piece, opts: &PlanOptions) -> Option<String> {
+    let name = opts.top_views.get(p.attrs.id.as_deref()?)?;
+    defs.image(name, &opts.images)
+}
+
+fn draw_piece(s: &mut String, defs: &mut Defs, p: &Piece, opts: &PlanOptions, thin: f32) {
+    let images = &opts.images;
     let a = &p.attrs;
     // Footprint after pitch / roll (e.g. tilted roof panels)
     let w = a.width_in_plan.unwrap_or(a.width);
@@ -453,33 +460,43 @@ fn draw_piece(
         a.angle_or_default().to_degrees()
     );
     let icon = a.plan_icon.as_ref().or(a.icon.as_ref());
-    match icon.and_then(|i| defs.image(i, images)) {
-        Some(href) => {
-            let mirror = if a.model_mirrored == Some(true) {
-                r#" transform="scale(-1 1)""#
-            } else {
-                ""
-            };
-            // The icon keeps its aspect ratio inside the piece rectangle
-            let _ = write!(
-                s,
-                r#"<image x="{}" y="{}" width="{w}" height="{d}" preserveAspectRatio="xMidYMid meet" xlink:href="{href}"{mirror}/>"#,
-                -w / 2.0,
-                -d / 2.0
-            );
-        }
-        None => {
-            let fill = if p.kind == PieceKind::Light {
-                "#fff6d5"
-            } else {
-                "#ffffff"
-            };
-            let _ = write!(
-                s,
-                r#"<rect x="{}" y="{}" width="{w}" height="{d}" fill="{fill}" fill-opacity="0.6"/>"#,
-                -w / 2.0,
-                -d / 2.0
-            );
+    if let Some(href) = top_view(defs, p, opts) {
+        // Fills the footprint; the model's mirroring is already rendered
+        let _ = write!(
+            s,
+            r#"<image x="{}" y="{}" width="{w}" height="{d}" preserveAspectRatio="none" xlink:href="{href}"/>"#,
+            -w / 2.0,
+            -d / 2.0
+        );
+    } else {
+        match icon.and_then(|i| defs.image(i, images)) {
+            Some(href) => {
+                let mirror = if a.model_mirrored == Some(true) {
+                    r#" transform="scale(-1 1)""#
+                } else {
+                    ""
+                };
+                // The icon keeps its aspect ratio inside the piece rectangle
+                let _ = write!(
+                    s,
+                    r#"<image x="{}" y="{}" width="{w}" height="{d}" preserveAspectRatio="xMidYMid meet" xlink:href="{href}"{mirror}/>"#,
+                    -w / 2.0,
+                    -d / 2.0
+                );
+            }
+            None => {
+                let fill = if p.kind == PieceKind::Light {
+                    "#fff6d5"
+                } else {
+                    "#ffffff"
+                };
+                let _ = write!(
+                    s,
+                    r#"<rect x="{}" y="{}" width="{w}" height="{d}" fill="{fill}" fill-opacity="0.6"/>"#,
+                    -w / 2.0,
+                    -d / 2.0
+                );
+            }
         }
     }
     let _ = write!(
@@ -490,13 +507,8 @@ fn draw_piece(
     );
 }
 
-fn draw_door_or_window(
-    s: &mut String,
-    defs: &mut Defs,
-    p: &Piece,
-    images: &HashMap<String, Vec<u8>>,
-    thin: f32,
-) {
+fn draw_door_or_window(s: &mut String, defs: &mut Defs, p: &Piece, opts: &PlanOptions, thin: f32) {
+    let images = &opts.images;
     let a = &p.attrs;
     let (w, d) = (a.width, a.depth);
     let mirror = if a.model_mirrored == Some(true) {
@@ -513,6 +525,22 @@ fn draw_door_or_window(
         -w / 2.0,
         -d / 2.0
     );
+    // The frame seen from above under the sashes; it is rendered mirrored already, so the
+    // group's mirroring is undone for it
+    let top = top_view(defs, p, opts);
+    if let Some(href) = &top {
+        let unmirror = if a.model_mirrored == Some(true) {
+            r#" transform="scale(-1 1)""#
+        } else {
+            ""
+        };
+        let _ = write!(
+            s,
+            r#"<image x="{}" y="{}" width="{w}" height="{d}" preserveAspectRatio="none" xlink:href="{href}"{unmirror}/>"#,
+            -w / 2.0,
+            -d / 2.0
+        );
+    }
     for sash in &p.sashes {
         let ax = -w / 2.0 + sash.x_axis * w;
         let ay = -d / 2.0 + sash.y_axis * d;
@@ -542,6 +570,7 @@ fn draw_door_or_window(
         );
     }
     if p.sashes.is_empty()
+        && top.is_none()
         && let Some(href) = a.icon.as_ref().and_then(|i| defs.image(i, images))
     {
         let _ = write!(

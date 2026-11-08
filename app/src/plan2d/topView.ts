@@ -5,7 +5,7 @@
 // until a view is ready.
 
 import * as THREE from "three";
-import type { Piece } from "../model";
+import { forEachPiece, type Home, type Piece } from "../model";
 import { createPieceObject } from "../view3d/models";
 
 /** Longest side of a top view in pixels. */
@@ -78,6 +78,51 @@ export function topView(p: Piece, docId: number, onReady: () => void): HTMLCanva
   });
   void work();
   return null;
+}
+
+/** The top view of a piece once it is rendered (null: no model, failed or timed out). */
+export async function topViewAsync(
+  p: Piece,
+  docId: number,
+  timeoutMs = 30000,
+): Promise<HTMLCanvasElement | null> {
+  const end = performance.now() + timeoutMs;
+  for (;;) {
+    const view = topView(p, docId, () => {});
+    if (view) return view;
+    if (!p.attrs.model || cache.get(key(p, docId)) === "failed") return null;
+    if (performance.now() > end) return null;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
+/**
+ * Views from above of all visible pieces of a home, for exports: PNG images (base64) by key
+ * and the key of each piece. Pieces that look the same share one image.
+ */
+export async function collectTopViews(
+  home: Home,
+  docId: number,
+): Promise<{ images: Record<string, string>; pieces: Record<string, string> }> {
+  const pieces: Piece[] = [];
+  forEachPiece(home.furniture, (p) => {
+    if (p.attrs.id && p.attrs.model && p.attrs.visible !== false) pieces.push(p);
+  });
+  const images: Record<string, string> = {};
+  const byCanvas = new Map<HTMLCanvasElement, string>();
+  const result: Record<string, string> = {};
+  for (const p of pieces) {
+    const view = await topViewAsync(p, docId);
+    if (!view || !p.attrs.id) continue;
+    let k = byCanvas.get(view);
+    if (!k) {
+      k = `v${byCanvas.size}`;
+      byCanvas.set(view, k);
+      images[k] = view.toDataURL("image/png").split(",")[1] ?? "";
+    }
+    result[p.attrs.id] = k;
+  }
+  return { images, pieces: result };
 }
 
 async function work(): Promise<void> {

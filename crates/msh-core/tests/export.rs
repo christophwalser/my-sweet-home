@@ -239,7 +239,8 @@ fn printed_home_has_furniture_plan_and_3d_pages() {
         json!({ "path": pdf, "furniture": false, "scale": 100 }),
     );
     assert_eq!(result["pages"], 3);
-    assert_eq!(result["notes"].as_array().unwrap().len(), 1);
+    // Neither the 3D view nor the views from above are available without the app
+    assert_eq!(result["notes"].as_array().unwrap().len(), 2);
     assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF"));
 
     assert!(
@@ -251,4 +252,52 @@ fn printed_home_has_furniture_plan_and_3d_pages() {
         .is_err()
     );
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn plan_export_draws_furniture_from_above_or_as_icons() {
+    use base64::Engine;
+    let r = Registry::standard();
+    let mut doc = small_house(&r);
+    let dir = out_dir("top-view");
+    let mut piece = None;
+    doc.home()
+        .for_each_piece(|p| piece = Some((p.attrs.id.clone().unwrap(), p.attrs.level.clone())));
+    let (piece_id, ground) = piece.unwrap();
+    // A 1 x 1 PNG standing for the view from above, rendered by the app
+    let png = base64::engine::general_purpose::STANDARD.decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    ).unwrap();
+    let marker = base64::engine::general_purpose::STANDARD.encode(&png);
+    let svg = dir.join("top.svg");
+    let top_views = json!({ "images": { "v0": marker }, "pieces": { piece_id.clone(): "v0" } });
+
+    // Default: the view from above replaces the icon
+    let result = run(
+        &r,
+        &mut doc,
+        "export_plan",
+        json!({ "path": svg, "level": ground, "top_views": top_views }),
+    );
+    assert!(result["notes"].as_array().unwrap().is_empty());
+    let text = std::fs::read_to_string(&svg).unwrap();
+    assert!(text.contains(&marker), "the top view is embedded");
+
+    // Catalog icons on request: the top view is ignored
+    run(
+        &r,
+        &mut doc,
+        "export_plan",
+        json!({ "path": svg, "level": ground, "top_views": top_views, "furniture_icons": "catalog" }),
+    );
+    assert!(!std::fs::read_to_string(&svg).unwrap().contains(&marker));
+
+    // Without the app's views (headless): icons and a note
+    let result = run(
+        &r,
+        &mut doc,
+        "export_plan",
+        json!({ "path": svg, "level": ground }),
+    );
+    assert_eq!(result["notes"].as_array().unwrap().len(), 1);
 }

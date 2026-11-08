@@ -81,6 +81,8 @@ export const CAPTURE_EVENT = "capture-3d";
 export const EXPORT_OBJ_EVENT = "export-obj";
 /** Event of the live control asking for a photo ({ requestId, width, height, quality, path }). */
 export const RENDER_PHOTO_EVENT = "render-photo";
+/** Event of the live control asking for the views of the furniture from above ({ requestId }). */
+export const TOP_VIEWS_EVENT = "render-top-views";
 /**
  * Event of the live control asking for a video along the camera path
  * ({ requestId, width, height, frameRate, quality, path }; null sizes use the home's settings).
