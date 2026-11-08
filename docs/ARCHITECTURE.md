@@ -496,9 +496,71 @@ Deliberately **not** adopted: SH3D Java plugins (not compatible; replaced by CLI
 | **P4 Editing** | All drawing tools in the 2D plan, property dialogs, levels, magnetism, copy/paste | A real floor plan can be drawn entirely in the app |
 | **P5 Libraries & import** | Library import wizard, furniture and texture import (OBJ/DAE/3DS/glTF), material editor | All installed libraries usable, own models importable |
 | **P6 Rendering & export** | Photo rendering (path tracer), video, PDF/SVG/OBJ/CSV, printing | Exports match the original |
-| **P7 Polish** | Preferences (incl. colors of the left/right wall side markings, angle snap steps, default wall thickness), i18n, accessibility, performance benchmarks, installer (MSI via Tauri), optional auto-update | Release candidate 1.0 |
+| **P7 Plan essentials** | Rulers, background image per level (wizard for images and PDF pages), furniture top view in the plan, grid and magnetism switches (first version of the preferences dialog), measuring tool, lock base plan | A scanned or PDF floor plan can be traced at the right scale; furniture looks like in Sweet Home 3D's top view |
+| **P8 Editing** | Context menu, clear handles and cursors, align/distribute, paste style, room points, reverse wall direction, door/window snapping and depth, dimension improvements, text styles, curved polylines, draggable compass | Editing matches or beats Sweet Home 3D's plan editor |
+| **P9 3D and environment** | Virtual visit with WASD + mouse and collisions, points of view, all levels switch, 3D view settings, sun from location / date / time with address search, lights and light power, tilting furniture, photo date / time / lens | The 3D view is fully editable and walkable |
+| **P10 Building** | Staircase cut-outs, walls across levels, shelves | Multi-storey homes with stairs look right |
+| **P11 Files** | One window per home, autosave and recovery | Several homes open; no work lost after a crash |
+| **P12 Polish** | Preferences (incl. units, defaults for new elements, colors of the wall side markings, angle snap steps), i18n (German), accessibility, performance benchmarks, installer (MSI via Tauri), optional auto-update | Release candidate 1.0 |
 
 Realistic assessment: P0–P3 quickly produce an AI-controllable foundation. Full parity (P4–P7) is a project of **several months**. The phases are cut so that each one delivers something usable.
+
+### 6.1 Feature decisions (2026-11-08)
+
+Result of the feature comparison with Sweet Home 3D 7.x (73 features, decided by the user in
+the feature matrix). Features marked "no" stay as they are. Agreed details:
+
+**P7 Plan essentials**
+- Rulers along the top and left edge of the plan (cm scale, cursor position), as in Sweet Home 3D.
+- Background image per level (and for the home): import wizard for PNG / JPEG / BMP and a chosen
+  page of a PDF. In the wizard the image can be zoomed; the length marker is placed, moved and
+  aligned precisely, its real length typed in, then the origin (0 point) is set. The image is
+  placed in the plan under walls and rooms, which are drawn on top of it; it can be hidden per
+  level, modified and deleted. Stored like Sweet Home 3D's `backgroundImage`.
+- Furniture in the plan as a colored top view rendered from the 3D model by default; the catalog
+  icon stays available as a preference (Sweet Home 3D's "furniture icons in plan").
+- Grid and magnetism can be switched off permanently; measuring tool (distance between two
+  points without creating a dimension line); lock base plan.
+
+**P8 Editing**
+- Context menu on right click, only in the select mode; in drawing tools the right click keeps
+  finishing the drawing.
+- Handles and mouse cursors that make each action clear (move, rotate, resize, elevation and
+  height of furniture).
+- Align and distribute furniture, paste style, add / delete room points, reverse wall direction.
+- Doors and windows: depth follows the wall thickness when placed and when the wall thickness
+  changes later. Snapping while placing: distances to the wall corners or the next opening are
+  shown and can be typed; the opening snaps to the middle of the wall section; it aligns with
+  openings in other walls and on other levels (same axis or edge).
+- Dimension lines: elevation dimensions and automatic dimensions of the selected wall or piece;
+  while placing a dimension, guide lines to nearby walls and objects are shown.
+- Text styles (font family, bold, italic, size) for labels, room texts, dimensions and furniture
+  names; curved polylines; compass draggable and rotatable in the plan.
+
+**P9 3D and environment**
+- Virtual visit: WASD to walk, mouse to look around, Q / E up and down, Shift faster; collision
+  with walls, open doors can be walked through; field of view / zoom with the mouse wheel.
+  Visitor shown in the plan.
+- Store, go to and delete points of view; switch "display all levels".
+- 3D view settings: ground and sky color or texture, light brightness, wall transparency.
+- Sun: the location is found by address search (online geocoding, e.g. OpenStreetMap Nominatim)
+  or typed as latitude / longitude; it sets the compass. The sun position is computed offline
+  from location, date and time (default: summer, noon). Date and time can follow the current
+  time automatically or be set to fixed values.
+- Lights: more lamps, spot cones, glowing light sources; light power editable.
+- Tilting furniture (pitch / roll) editable; photo with date / time, lens (normal, fisheye,
+  spherical) and ceiling lights option.
+
+**P10 Building**: staircase cut-outs in the floor above, walls spanning levels, shelves.
+
+**P11 Files**: one window per home (as in Sweet Home 3D), autosave and recovery.
+
+**P12 Polish**: preferences dialog completed with units and defaults for new elements, German
+user interface, installer, benchmarks (as planned before).
+
+**Later** (after P12): matt / glossy wall sides, rest of the furniture modify dialog (texture of
+the whole piece, matt / glossy, description, price), prices and VAT in the list, print header and
+footer, recent homes, help, poses of human figures.
 
 ## 7. Repository layout
 
