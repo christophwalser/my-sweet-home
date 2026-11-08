@@ -642,6 +642,15 @@ const LIST: Command[] = [
     run: () => useUi.getState().openDialog("importTexture"),
   },
   {
+    id: "furniture.online",
+    label: t("Online catalogs…"),
+    icon: "search",
+    hint: t("Search and import free libraries, textures and models from the internet"),
+    keywords: "internet download ambientcg poly haven sweet home 3d library",
+    enabled: () => usePreferences.getState().onlineSources,
+    run: () => useUi.getState().openDialog("online"),
+  },
+  {
     id: "furniture.libraries",
     label: t("Furniture and texture libraries…"),
     icon: "library",
@@ -1007,6 +1016,7 @@ export const MENUS: Menu[] = [
     entries: () => [
       cmd("furniture.import"),
       cmd("furniture.importTexture"),
+      cmd("furniture.online"),
       cmd("furniture.libraries"),
       sep,
       cmd("furniture.group"),

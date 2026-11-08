@@ -803,6 +803,27 @@ furniture is read by its home reader.
   furniture import with it (MTL and textures dropped along lie next to it), images and
   material packages become textures of "My textures"; a ZIP is tried as model first.
 
+### 4.34 Status after P12e-c (2026-11-08)
+
+- Online sources in msh-core (`commands/online.rs`): `online_search` lists the free
+  libraries of Sweet Home 3D (newest version folder of the SourceForge RSS listing), the CC0
+  materials of ambientCG (API v3, with preview, real tile size and package size) and the
+  CC0 textures and models of Poly Haven (most downloaded first, filtered by the search
+  words). `online_download` fetches one item into a temporary folder: a library is
+  unpacked from its ZIP, an ambientCG material is its JPG package (ZIP), a Poly Haven
+  texture its color map, a Poly Haven model its glTF with all included files. Only the
+  search text is sent; downloads are limited to 500 MB.
+- The app's "Online catalogs" dialog (Furniture menu, catalog link "Online…", command
+  search) shows the results with previews and imports with one click: libraries with
+  `library_import`, textures with `texture_import` (name, creator and tile size of the
+  source, category = source name), models through the furniture import dialog (icon,
+  upright position, size). Resolution 1K / 2K / 4K for textures and models. Poly Haven's
+  required credit ("Powered by Poly Haven") is shown on its tab.
+- Preference "Online catalogs" (General, on by default) hides the dialog and its entries.
+  The CSP allows preview images from cdn.polyhaven.com and ambientCG's media server.
+- Parsers are tested offline with sample answers; a live search test is marked
+  `#[ignore]` (`cargo test -p msh-core online -- --ignored`).
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
@@ -911,7 +932,7 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
     .skp and Blender .blend (no free reader; export to DAE, FBX or glTF instead).
   - P12e-b Library editor: moved after version 1.0 (decided 2026-11-08); a UI draft is on
     the design canvas.
-  - P12e-c Online sources: search and import the free libraries of sweethome3d.com (whole
+  - P12e-c (done, see 4.34) Online sources: search and import the free libraries of sweethome3d.com (whole
     .sh3f / .sh3t files), CC0 textures and models of ambientCG and Poly Haven (their public
     APIs, no account). License and source are kept with each item; network access can be
     turned off in the preferences.

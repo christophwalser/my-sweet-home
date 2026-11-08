@@ -343,6 +343,14 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                   onChange={setLanguage}
                 />
                 <Check
+                  label={t("Online catalogs")}
+                  hint={t(
+                    "Search and import free libraries, textures and models from the internet",
+                  )}
+                  checked={p.onlineSources}
+                  onChange={(onlineSources) => set({ onlineSources })}
+                />
+                <Check
                   label={t("Catalog preview")}
                   hint={t("Larger picture and details while pointing at furniture or textures")}
                   checked={p.catalogPreview}

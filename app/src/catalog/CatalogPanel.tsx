@@ -150,6 +150,7 @@ export default function CatalogPanel() {
   const [kind, setKind] = useState<CatalogKind>("furniture");
   const openDialog = useUi((s) => s.openDialog);
   const previewOn = usePreferences((s) => s.catalogPreview);
+  const onlineOn = usePreferences((s) => s.onlineSources);
   const [hovered, setHovered] = useState<Hovered | null>(null);
   const hoverTimer = useRef(0);
   /** Opens the preview after a short delay; closes it at once */
@@ -314,6 +315,16 @@ export default function CatalogPanel() {
             >
               {t("Libraries…")}
             </button>
+            {onlineOn && (
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => openDialog("online")}
+                title={t("Search and import free libraries, textures and models from the internet")}
+              >
+                {t("Online…")}
+              </button>
+            )}
           </div>
           {dropMessage && (
             <div className="catalog-drop-message" role="status">

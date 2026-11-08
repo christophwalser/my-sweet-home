@@ -21,6 +21,8 @@ export type Preferences = {
   /** Colors of the marks of the left and right wall sides */
   leftSideColor: string;
   rightSideColor: string;
+  /** Online catalogs (Sweet Home 3D libraries, ambientCG, Poly Haven) may be searched */
+  onlineSources: boolean;
   /** Larger preview of catalog items while the mouse points at them */
   catalogPreview: boolean;
   /** Unit of lengths shown and typed (internally always cm) */
@@ -62,6 +64,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   leftSideColor: "#e8913a",
   rightSideColor: "#2bb3a3",
   catalogPreview: true,
+  onlineSources: true,
   unit: "cm",
   newWallThickness: 10,
   newWallHeight: 250,

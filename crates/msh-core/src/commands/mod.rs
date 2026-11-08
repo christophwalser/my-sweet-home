@@ -20,6 +20,7 @@ mod home;
 mod import;
 mod level;
 mod library;
+mod online;
 mod room;
 mod sun;
 mod text;
@@ -38,6 +39,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     import::register(r);
     level::register(r);
     library::register(r);
+    online::register(r);
     wall::register(r);
     wall_ops::register(r);
     room::register(r);

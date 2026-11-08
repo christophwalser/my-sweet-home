@@ -6,6 +6,7 @@ import CatalogPanel from "./catalog/CatalogPanel";
 import ImportFurnitureDialog from "./catalog/ImportFurnitureDialog";
 import ImportTextureDialog from "./catalog/ImportTextureDialog";
 import LibraryDialog from "./catalog/LibraryDialog";
+import OnlineDialog from "./catalog/OnlineDialog";
 import ErrorBoundary from "./ErrorBoundary";
 import ExportDialog from "./export/ExportDialog";
 import { clampSide, DEFAULT_LAYOUT, type Maximized, useLayout } from "./layout/layout";
@@ -307,6 +308,7 @@ export default function App() {
         <ImportTextureDialog initialPath={dialogArg ?? undefined} onClose={closeDialog} />
       )}
       {dialog === "libraries" && <LibraryDialog onClose={closeDialog} />}
+      {dialog === "online" && <OnlineDialog onClose={closeDialog} />}
       {(dialog === "backgroundImport" || dialog === "backgroundModify") && opened && (
         <BackgroundImageWizard
           levelId={currentLevel?.attrs.id ?? null}

@@ -10,6 +10,7 @@ export type DialogName =
   | "export"
   | "importFurniture"
   | "importTexture"
+  | "online"
   | "libraries"
   | "backgroundImport"
   | "backgroundModify"
