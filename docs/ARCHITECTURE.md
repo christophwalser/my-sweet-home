@@ -909,16 +909,8 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
     through the three.js loaders. Textures: JPG, PNG, BMP, GIF (as before), plus WebP, TIFF,
     SVG and PBR material packages (ZIP; the color map becomes the texture). Drag and drop of files onto the catalog. Not possible: SketchUp
     .skp and Blender .blend (no free reader; export to DAE, FBX or glTF instead).
-  - P12e-b Library editor in the app with the scope of Sweet Home 3D's Furniture Library
-    Editor and Textures Library Editor: create and open .sh3f / .sh3t libraries, add pieces
-    or textures one by one or in batches (folder or ZIP), edit every property (name,
-    category, tags, description, information, creator, license, price and VAT, size,
-    elevation, door or window, staircase cut-out, light sources, shelves, movable /
-    deformable / resizable / texturable, model rotation, back faces, ...), save and export.
-    Pieces of the open home can be exported as a library. Commands in msh-core
-    (`library_create`, `library_add_items`, `library_update_item`, `library_remove_item`,
-    `library_save`), so CLI and MCP can build libraries too. Checked with the original
-    Sweet Home 3D reader.
+  - P12e-b Library editor: moved after version 1.0 (decided 2026-11-08); a UI draft is on
+    the design canvas.
   - P12e-c Online sources: search and import the free libraries of sweethome3d.com (whole
     .sh3f / .sh3t files), CC0 textures and models of ambientCG and Poly Haven (their public
     APIs, no account). License and source are kept with each item; network access can be
@@ -936,7 +928,7 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
   contrast). Small open points of P7–P11 (time zone suggestion from the address search,
   automatic dimensions while the context menu is open, brighter spots in draft photos).
 
-**Later** (after P12): matt / glossy wall sides, rest of the furniture modify dialog (texture of
+**Later** (after P12): Library editor in the app with the scope of Sweet Home 3D's Furniture Library Editor and Textures Library Editor: create and open .sh3f / .sh3t libraries, add pieces or textures one by one or in batches (folder or ZIP), edit every property (name, category, tags, description, information, creator, license, price and VAT, size, elevation, door or window, staircase cut-out, light sources, shelves, movable / deformable / resizable / texturable, model rotation, back faces, ...), save and export. Pieces of the open home can be exported as a library. Commands in msh-core (`library_create`, `library_add_items`, `library_update_item`, `library_remove_item`, `library_save`), so CLI and MCP can build libraries too. Checked with the original Sweet Home 3D reader. matt / glossy wall sides, rest of the furniture modify dialog (texture of
 the whole piece, matt / glossy, description, price), prices and VAT in the list, print header and
 footer, recent homes, help, poses of human figures.
 
