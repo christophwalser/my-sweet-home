@@ -3,7 +3,16 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { useStore } from "../store";
+import type { Lens } from "./lens";
 import { PHOTO_SAMPLES, type PhotoJob, type PhotoQuality } from "./photo";
+import type { SunInfo } from "./View3D";
+
+const LENSES: { value: Lens; label: string; hint: string }[] = [
+  { value: "pinhole", label: "Normal", hint: "Like the 3D view" },
+  { value: "fisheye", label: "Fisheye", hint: "180° in a circle" },
+  { value: "spherical", label: "Spherical", hint: "360° panorama, twice as wide as high" },
+];
 
 const QUALITIES: { value: PhotoQuality; label: string; hint: string }[] = [
   { value: "draft", label: "Draft", hint: "Like the 3D view with sun shadows, in seconds" },
@@ -18,9 +27,15 @@ const QUALITIES: { value: PhotoQuality; label: string; hint: string }[] = [
 export default function PhotoDialog({
   viewAspect,
   baseName,
+  sun,
+  lens: initialLens,
   start,
   onClose,
 }: {
+  /** Sun of the home: date and time of the photo */
+  sun: SunInfo | null;
+  /** Lens stored in the home */
+  lens: Lens;
   /** Width / height of the 3D view, proposed for the photo */
   viewAspect: number;
   /** File name without extension proposed when saving */
@@ -29,6 +44,7 @@ export default function PhotoDialog({
     width: number,
     height: number,
     quality: PhotoQuality,
+    lens: Lens,
     onProgress: (p: number) => void,
   ) => PhotoJob;
   onClose: () => void;
@@ -37,6 +53,14 @@ export default function PhotoDialog({
   const [height, setHeight] = useState(Math.round(1600 / viewAspect));
   const [keepAspect, setKeepAspect] = useState(true);
   const [quality, setQuality] = useState<PhotoQuality>("good");
+  const [lens, setLens] = useState<Lens>(initialLens === "normal" ? "pinhole" : initialLens);
+  const run = useStore((s) => s.run);
+  const ceilingLights = useStore((s) => {
+    const c = s.opened?.home.environment?.attrs.ceiling_light_color;
+    return c != null && (c & 0xffffff) !== 0;
+  });
+  /** Width / height the lens needs, or null when any size fits */
+  const lensAspect = lens === "spherical" ? 2 : lens === "fisheye" ? 1 : null;
   const [progress, setProgress] = useState<number | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -58,7 +82,15 @@ export default function PhotoDialog({
 
   const changeWidth = (w: number) => {
     setWidth(w);
-    if (keepAspect) setHeight(Math.max(16, Math.round(w / viewAspect)));
+    if (lensAspect) setHeight(Math.max(16, Math.round(w / lensAspect)));
+    else if (keepAspect) setHeight(Math.max(16, Math.round(w / viewAspect)));
+  };
+
+  const changeLens = (l: Lens) => {
+    setLens(l);
+    const aspect = l === "spherical" ? 2 : l === "fisheye" ? 1 : keepAspect ? viewAspect : null;
+    if (aspect) setHeight(Math.max(16, Math.round(width / aspect)));
+    void run("render_settings_update", { lens: l });
   };
 
   const render = () => {
@@ -66,7 +98,7 @@ export default function PhotoDialog({
     setMessage(null);
     setProgress(0);
     started.current = performance.now();
-    const j = start(width, height, quality, setProgress);
+    const j = start(width, height, quality, lens, setProgress);
     job.current = j;
     const box = preview.current;
     if (box) {
@@ -74,6 +106,11 @@ export default function PhotoDialog({
     }
     j.done.then(
       (url) => {
+        // Fisheye and spherical photos render a panorama first: show the finished photo
+        const img = new Image();
+        img.src = url;
+        img.alt = "Photo";
+        preview.current?.replaceChildren(img);
         setPhoto(url);
         setProgress(1);
         const seconds = (performance.now() - started.current) / 1000;
@@ -143,7 +180,7 @@ export default function PhotoDialog({
                 max={8000}
                 step={10}
                 value={height}
-                disabled={rendering || keepAspect}
+                disabled={rendering || keepAspect || lensAspect !== null}
                 onChange={(e) => setHeight(Number(e.currentTarget.value) || 16)}
               />
               px
@@ -164,6 +201,64 @@ export default function PhotoDialog({
             </span>
           </label>
         </div>
+        <fieldset className="photo-quality" disabled={rendering}>
+          <legend>Lens</legend>
+          {LENSES.map((l) => (
+            <label key={l.value} title={l.hint}>
+              <input
+                type="radio"
+                name="photo-lens"
+                checked={lens === l.value}
+                onChange={() => changeLens(l.value)}
+              />
+              <span>
+                {l.label}
+                <span className="muted small"> {l.hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="photo-quality" disabled={rendering}>
+          <legend>Light</legend>
+          <label className="photo-sun">
+            <span>Date and time of the sun</span>
+            <input
+              key={`date-${sun?.date}`}
+              type="date"
+              defaultValue={sun?.date}
+              disabled={sun?.follow_clock}
+              onBlur={(e) => {
+                if (e.currentTarget.value && e.currentTarget.value !== sun?.date) {
+                  void run("sun_update", { date: e.currentTarget.value });
+                }
+              }}
+            />
+            <input
+              key={`time-${sun?.time}`}
+              type="time"
+              defaultValue={sun?.time}
+              disabled={sun?.follow_clock}
+              onBlur={(e) => {
+                if (e.currentTarget.value && e.currentTarget.value !== sun?.time) {
+                  void run("sun_update", { time: e.currentTarget.value });
+                }
+              }}
+            />
+          </label>
+          {sun?.follow_clock && (
+            <p className="muted small">The sun follows the current time (3D settings).</p>
+          )}
+          <label title="A light under the ceiling of each room, so interiors are bright enough">
+            <input
+              type="checkbox"
+              checked={ceilingLights}
+              onChange={(e) =>
+                void run("render_settings_update", { ceiling_lights: e.currentTarget.checked })
+              }
+            />
+            <span>Ceiling lights in the rooms</span>
+          </label>
+        </fieldset>
         <fieldset className="photo-quality" disabled={rendering}>
           <legend>Quality</legend>
           {QUALITIES.map((q) => (

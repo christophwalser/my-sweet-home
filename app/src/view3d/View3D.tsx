@@ -25,7 +25,8 @@ import {
   visibleLevels,
 } from "./buildScene";
 import { applyPose, type CameraPose, cameraDirection, cameraPose, verticalFov } from "./camera";
-import { buildLampLights, lampLights } from "./lights";
+import type { Lens } from "./lens";
+import { buildCeilingLights, buildLampLights, lampLights, MAX_PHOTO_LIGHTS } from "./lights";
 import { clearModelCache, createPieceObject, disposeObject, waitForModels } from "./models";
 import { buildObj } from "./objExport";
 import PhotoDialog from "./PhotoDialog";
@@ -82,6 +83,14 @@ function brightness(home: Home): number {
 function daylight(elevation: number): number {
   const t = THREE.MathUtils.clamp((elevation + 1) / 11, 0, 1);
   return t * t * (3 - 2 * t);
+}
+
+/** Lens of the active camera of the home (photo settings). */
+function homeLens(): Lens {
+  const home = useStore.getState().opened?.home;
+  const role = home?.attrs.camera === "observerCamera" ? "observerCamera" : "topCamera";
+  const lens = home?.cameras.find((c) => c.attrs.role === role)?.attrs.lens?.toLowerCase();
+  return lens === "fisheye" || lens === "spherical" || lens === "normal" ? lens : "pinhole";
 }
 
 export default function View3D() {
@@ -303,6 +312,14 @@ export default function View3D() {
     const ambient = c.content.getObjectByName("ambient") as THREE.HemisphereLight | undefined;
     // At night the interior stays visible, only darker
     if (ambient) ambient.intensity = AMBIENT_INTENSITY * light * (0.45 + 0.55 * day);
+    // The sky darkens at night (also seen through windows and in photos)
+    const skyLight = 0.12 + 0.88 * day;
+    if (c.scene.background instanceof THREE.Color) {
+      c.scene.background.copy(skyColor(opened.home)).multiplyScalar(skyLight);
+    }
+    const dome = c.sky as THREE.Mesh | null;
+    const domeMaterial = dome?.material as THREE.MeshBasicMaterial | undefined;
+    domeMaterial?.color.setScalar(skyLight);
     c.requestRender();
   }, [sun, opened, levelId]);
 
@@ -417,7 +434,17 @@ export default function View3D() {
 
     const role = observer ? "observerCamera" : "topCamera";
     const stored = opened.home.cameras.find((cam) => cam.attrs.role === role);
-    const storedKey = stored ? JSON.stringify(stored.attrs) : "";
+    // Only the pose counts: the time (sun) and the lens (photo) do not move the view
+    const storedKey = stored
+      ? JSON.stringify([
+          stored.attrs.x,
+          stored.attrs.y,
+          stored.attrs.z,
+          stored.attrs.yaw,
+          stored.attrs.pitch,
+          stored.attrs.field_of_view,
+        ])
+      : "";
     // The stored camera was moved by a command (point of view, CLI, MCP), maybe to the
     // same place again, or changed when another home state was loaded
     const moved = opened.cameraMoves !== P.moves;
@@ -589,7 +616,20 @@ export default function View3D() {
     const groundColor =
       (ground?.material as THREE.MeshLambertMaterial | undefined)?.color?.clone() ??
       new THREE.Color(0xa8a8a8);
+    // Photos use all lamps of the shown levels (also in the aerial view) and the ceiling
+    // lights; the 3D view only the lamps near the visitor
+    const photoLights = new THREE.Group();
+    const home = useStore.getState().opened?.home;
+    if (home) {
+      const levels = levelInfos(home);
+      const shown = visibleLevels(home, useStore.getState().selectedLevel);
+      photoLights.add(
+        buildLampLights(lampLights(home, levels, shown), c.camera.position, MAX_PHOTO_LIGHTS),
+        buildCeilingLights(home, levels, shown),
+      );
+    }
     return {
+      photoLights,
       scene: c.scene,
       content: c.content,
       lamps: c.lamps,
@@ -606,8 +646,9 @@ export default function View3D() {
     width: number,
     height: number,
     quality: PhotoQuality,
+    lens: Lens,
     onProgress?: (p: number) => void,
-  ): PhotoJob => renderPhoto(photoSource(), { width, height, quality, onProgress });
+  ): PhotoJob => renderPhoto(photoSource(), { width, height, quality, lens, onProgress });
   const startPhotoRef = useRef(startPhoto);
   startPhotoRef.current = startPhoto;
 
@@ -690,7 +731,7 @@ export default function View3D() {
       const { requestId, width, height, quality, path } = e.payload;
       try {
         await waitForModels(60000);
-        const url = await startPhotoRef.current(width, height, quality).done;
+        const url = await startPhotoRef.current(width, height, quality, homeLens()).done;
         if (path) {
           await api.saveImage(path, url);
           await api.captureResult(requestId, JSON.stringify({ path }), null);
@@ -803,7 +844,9 @@ export default function View3D() {
         <PhotoDialog
           viewAspect={ctx.current?.camera.aspect ?? 4 / 3}
           baseName={(opened.home.attrs.name ?? "Photo").replace(/\.sh3d$/i, "")}
-          start={(w, h, q, onProgress) => startPhoto(w, h, q, onProgress)}
+          sun={sun}
+          lens={homeLens()}
+          start={(w, h, q, lens, onProgress) => startPhoto(w, h, q, lens, onProgress)}
           onClose={() => setPhotoOpen(false)}
         />
       )}

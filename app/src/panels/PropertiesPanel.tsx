@@ -6,6 +6,7 @@ import { docResourceUrl } from "../api";
 import { forEachPiece, type Home, type Piece, type Wall } from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { currentVisitor, setVisitor, useStore, VISITOR_ID } from "../store";
+import { spotAngle } from "../view3d/lights";
 import { modelMaterialNames } from "../view3d/models";
 import { levelOfEye } from "../view3d/visitor";
 import BackgroundImageSection from "./BackgroundImageSection";
@@ -698,10 +699,50 @@ export default function PropertiesPanel() {
           value={a.angle ?? 0}
           onCommit={set("angle_deg")}
         />
+        {p.kind !== "DoorOrWindow" && a.horizontally_rotatable !== false && (
+          <>
+            <Field
+              label="Tilt forward"
+              type="angle"
+              unit="°"
+              value={a.pitch ?? 0}
+              onCommit={set("pitch_deg")}
+            />
+            <Field
+              label="Tilt sideways"
+              type="angle"
+              unit="°"
+              value={a.roll ?? 0}
+              onCommit={set("roll_deg")}
+            />
+          </>
+        )}
         {p.kind === "DoorOrWindow" && <OpeningDistances piece={p} />}
         <Field label="Width" type="number" unit="cm" value={a.width} onCommit={set("width")} />
         <Field label="Depth" type="number" unit="cm" value={a.depth} onCommit={set("depth")} />
         <Field label="Height" type="number" unit="cm" value={a.height} onCommit={set("height")} />
+        {p.kind === "Light" && (
+          <>
+            <Field
+              label="Light power"
+              type="number"
+              unit="%"
+              value={Math.round((a.power ?? 0.5) * 100)}
+              onCommit={set("power")}
+            />
+            <Field
+              label="Light cone"
+              type="number"
+              unit="°"
+              value={spotAngle(p) ?? 0}
+              onCommit={set("spot_angle_deg")}
+            />
+            <p className="muted small">
+              Light cone 0: the lamp lights in all directions; otherwise downwards through its
+              bottom (tilt the lamp to aim it).
+            </p>
+          </>
+        )}
         <Field label="Color" type="color" value={toHex(a.color)} onCommit={set("color")} />
         {a.color !== null && (
           <button type="button" className="link-button" onClick={() => set("color")("")}>

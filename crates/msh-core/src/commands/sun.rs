@@ -60,6 +60,33 @@ struct LocationParams {
 }
 
 #[derive(Deserialize, JsonSchema)]
+struct NoParams {}
+
+#[derive(Deserialize, JsonSchema, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+enum Lens {
+    /// Like the eye (Sweet Home 3D: "normal")
+    Normal,
+    /// Ideal camera without depth of field
+    Pinhole,
+    /// 180° circular image
+    Fisheye,
+    /// 360° panorama (equirectangular, width = 2 × height)
+    Spherical,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct PhotoParams {
+    /// Lens of the photo: "normal", "pinhole", "fisheye" or "spherical"
+    lens: Option<Lens>,
+    /// Add a light under the ceiling of each room in photos
+    ceiling_lights: Option<bool>,
+    /// Photo size in pixels
+    width: Option<i64>,
+    height: Option<i64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct View3dParams {
     /// Show all levels in the 3D view (otherwise the selected level and the ones below)
     all_levels_visible: Option<bool>,
@@ -187,6 +214,46 @@ pub(super) fn register(r: &mut Registry) {
             };
             Ok(sun_json(doc.home(), at))
         },
+    );
+    r.add(
+        "render_settings_update",
+        "Changes the photo settings stored in the home: lens (normal, pinhole, fisheye, \
+         spherical), lights under the ceilings of the rooms, and the size in pixels. The date and \
+         time of the photo are those of the sun (sun_update).",
+        true,
+        |doc, p: PhotoParams| {
+            let home = doc.home_mut();
+            if let Some(lens) = p.lens {
+                let value = match lens {
+                    Lens::Normal => "NORMAL",
+                    Lens::Pinhole => "PINHOLE",
+                    Lens::Fisheye => "FISHEYE",
+                    Lens::Spherical => "SPHERICAL",
+                };
+                for mode in [Mode::Aerial, Mode::Observer] {
+                    camera_mut(home, mode).attrs.lens = Some(value.into());
+                }
+            }
+            let env = home.environment.get_or_insert_with(Environment::default);
+            if let Some(on) = p.ceiling_lights {
+                // Sweet Home 3D's ceiling light color: gray 0xD0 when on, black when off
+                env.attrs.ceiling_light_color =
+                    Some(msh_model::Color(if on { 0xFFD0_D0D0 } else { 0xFF00_0000 }));
+            }
+            if let Some(w) = p.width {
+                env.attrs.photo_width = Some(w.clamp(16, 8192));
+            }
+            if let Some(h) = p.height {
+                env.attrs.photo_height = Some(h.clamp(16, 8192));
+            }
+            Ok(photo_json(doc.home()))
+        },
+    );
+    r.add(
+        "render_settings_get",
+        "Returns the photo settings of the home: lens, ceiling lights and size.",
+        false,
+        |doc, _: NoParams| Ok(photo_json(doc.home())),
     );
     r.add(
         "view3d_update",
@@ -383,6 +450,31 @@ fn sun_json(home: &Home, at: Option<DateTime<Utc>>) -> Value {
             (-e.cos() * a.cos() * 10_000.0).round() / 10_000.0,
             (e.sin() * 10_000.0).round() / 10_000.0,
         ],
+    })
+}
+
+fn photo_json(home: &Home) -> Value {
+    let active = if home.attrs.camera.as_deref() == Some("observerCamera") {
+        "observerCamera"
+    } else {
+        "topCamera"
+    };
+    let lens = home
+        .cameras
+        .iter()
+        .find(|c| c.attrs.role == active)
+        .and_then(|c| c.attrs.lens.as_deref())
+        .unwrap_or("PINHOLE")
+        .to_lowercase();
+    let a = home.environment.as_ref().map(|e| &e.attrs);
+    let ceiling = a
+        .and_then(|a| a.ceiling_light_color)
+        .is_some_and(|c| c.0 & 0x00FF_FFFF != 0);
+    json!({
+        "lens": lens,
+        "ceiling_lights": ceiling,
+        "width": a.and_then(|a| a.photo_width),
+        "height": a.and_then(|a| a.photo_height),
     })
 }
 

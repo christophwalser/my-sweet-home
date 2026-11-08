@@ -199,7 +199,7 @@ function rotationMatrix(s: string | null): THREE.Matrix4 | null {
  * Height of a piece's bounding box after pitch and roll. Uses `heightInPlan`
  * when Sweet Home 3D stored it, otherwise computes it from the rotated box.
  */
-function heightInPlan(a: Piece["attrs"], pitch: number, roll: number): number {
+export function heightInPlan(a: Piece["attrs"], pitch: number, roll: number): number {
   if (a.height_in_plan !== null && a.height_in_plan !== undefined) return a.height_in_plan;
   if (pitch === 0 && roll === 0) return a.height;
   // Euler order "ZXY" gives Rz(−roll) · Rx(−pitch), as in Sweet Home 3D
@@ -276,6 +276,7 @@ export function createPieceObject(
       if (a.model_mirrored) scale.x = -scale.x;
       rotated.scale.copy(scale);
       applyPieceMaterials(inner, piece, docId, onLoaded);
+      applyLightGlow(inner, piece);
       inner.traverse((o) => {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
@@ -289,6 +290,44 @@ export function createPieceObject(
     })
     .catch((e) => console.warn(String(e)));
   return outer;
+}
+
+/**
+ * Materials of a lamp's model that are light sources (Sweet Home 3D 7) glow in the color
+ * of its light while it is on, brighter with more power. In path traced photos they also
+ * emit light.
+ */
+function applyLightGlow(obj: THREE.Object3D, piece: Piece): void {
+  const names = new Set((piece.light_source_materials ?? []).map((m) => m.name));
+  const power = piece.attrs.power ?? 0.5;
+  const source = piece.light_sources?.[0];
+  if (names.size === 0 || power <= 0 || !source) return;
+  const color = new THREE.Color(source.color & 0xffffff);
+  const max = Math.max(color.r, color.g, color.b);
+  if (max > 0) color.multiplyScalar(1 / max);
+  else color.setRGB(1, 1, 1);
+  const glowing = new Map<string, THREE.Material>();
+  obj.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const convert = (m: THREE.Material): THREE.Material => {
+      if (!names.has(m.name)) return m;
+      let g = glowing.get(m.uuid);
+      if (!g) {
+        const c = m.clone() as THREE.MeshPhongMaterial;
+        if (c.emissive) {
+          c.emissive.copy(color);
+          c.emissiveIntensity = 0.4 + 1.6 * power;
+        }
+        g = c;
+        glowing.set(m.uuid, g);
+      }
+      return g;
+    };
+    mesh.material = Array.isArray(mesh.material)
+      ? mesh.material.map(convert)
+      : convert(mesh.material);
+  });
 }
 
 /** Group name prefix of window panes; Sweet Home 3D renders them 50 % transparent. */

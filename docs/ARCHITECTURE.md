@@ -657,6 +657,29 @@ furniture is read by its home reader.
 - Verified with Sweet Home 3D's reader: compass time zone and position, camera time, colors,
   light, walls alpha and the property.
 
+### 4.27 Status after P9c (2026-11-08)
+
+- Tilting: `furniture_update pitch_deg / roll_deg` (not doors, windows or pieces that are not
+  horizontally rotatable) stores `widthInPlan`, `depthInPlan`, `heightInPlan` like Sweet Home
+  3D (box rotated with Rz(−roll) · Rx(−pitch); identical values to its own computation), so
+  plan, dimensions and 3D use the tilted size. Properties: "Tilt forward / sideways".
+- Lights: `furniture_update power` (percent) and `spot_angle_deg` (our piece property
+  `mySweetHome.spotAngle`; the cone lights downwards through the bottom of the piece and
+  follows its tilt; narrow cones are brighter). The 3D view lights the 16 lamps nearest to
+  the visitor; photos use up to 48 lamps of the shown levels, also in the aerial view. Lamp
+  light positions now use exactly the piece's transform.
+- Glowing light sources: model materials listed as light source materials (Sweet Home 3D 7)
+  are emissive in the light's color while the lamp is on; path traced photos let them emit.
+- Photos: `render_settings_update` stores the lens (camera `lens`) and the ceiling lights
+  (`ceillingLightColor`). Fisheye (180°, circular, equidistant) and spherical (360°
+  panorama) photos render a panorama first (path traced with three-gpu-pathtracer's
+  EquirectCamera, drafts from a cube map) and convert it (`view3d/lens.ts`). Ceiling lights
+  are point lights under the ceiling of each room, brighter for larger rooms. The photo
+  dialog also sets the date and time of the sun.
+- At night the sky darkens with the daylight (background, sky texture, photos).
+- Fixed: changing the sun time or the lens moved the 3D view back to the stored camera (only
+  the pose of a stored camera counts now).
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

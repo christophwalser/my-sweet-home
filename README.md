@@ -89,6 +89,9 @@ bar at the bottom of the plan explains the next step.
 - "3D settings…": ground and sky color or texture, light brightness, walls transparency, the
   location of the home (address search with OpenStreetMap) and the date and time of the sun
   (or the current time); the sun position is computed offline and lights the 3D view.
+- Furniture can be tilted (forward and sideways); lamps have an editable light power and an
+  optional light cone. Photos offer normal, fisheye and spherical (360°) lenses, ceiling
+  lights in the rooms and the date and time of the sun.
 - Furniture in the plan is drawn as seen from above, rendered from its 3D model with its
   colors and materials (Preferences: off shows the catalog icons); exports and prints use
   the view from above too, or the icons ("Furniture in plans" in the export dialog).

@@ -88,6 +88,16 @@ struct UpdateParams {
     color: Option<String>,
     mirrored: Option<bool>,
     visible: Option<bool>,
+    /// Tilt forward / backward in degrees (rotation around the width axis); not for doors,
+    /// windows and pieces that cannot be rotated horizontally
+    pitch_deg: Option<f32>,
+    /// Tilt sideways in degrees (rotation around the depth axis)
+    roll_deg: Option<f32>,
+    /// Power of a light in percent (0..100)
+    power: Option<f32>,
+    /// Opening angle of the light cone of a lamp in degrees (lights downwards, through the
+    /// bottom of the piece, tilted with it); 0 lights in all directions
+    spot_angle_deg: Option<f32>,
     /// Show the name of the piece in the plan
     name_visible: Option<bool>,
     /// Text style of the name in the plan: size in cm, font family ("" = default), bold,
@@ -367,6 +377,49 @@ pub(super) fn register(r: &mut Registry) {
                     a.elevation = Some(v);
                 }
                 apply_size(a, p.width, p.depth, p.height);
+                if p.pitch_deg.is_some() || p.roll_deg.is_some() {
+                    if piece.kind == PieceKind::DoorOrWindow
+                        || a.horizontally_rotatable == Some(false)
+                    {
+                        return Err(CommandError::failed(format!(
+                            "'{}' cannot be tilted",
+                            a.name
+                        )));
+                    }
+                    if let Some(v) = p.pitch_deg {
+                        a.pitch = Some(rad(v.clamp(-180.0, 180.0))).filter(|v| *v != 0.0);
+                    }
+                    if let Some(v) = p.roll_deg {
+                        a.roll = Some(rad(v.clamp(-180.0, 180.0))).filter(|v| *v != 0.0);
+                    }
+                }
+                update_size_in_plan(a);
+                if (p.power.is_some() || p.spot_angle_deg.is_some())
+                    && piece.kind != PieceKind::Light
+                {
+                    return Err(CommandError::failed(format!("'{}' is not a light", a.name)));
+                }
+                if let Some(v) = p.power {
+                    if !v.is_finite() {
+                        return Err(CommandError::failed("power must be a number"));
+                    }
+                    a.power = Some((v.clamp(0.0, 100.0) / 100.0 * 1000.0).round() / 1000.0);
+                }
+                if let Some(v) = p.spot_angle_deg {
+                    if !v.is_finite() {
+                        return Err(CommandError::failed("spot_angle_deg must be a number"));
+                    }
+                    piece.properties.retain(|pr| pr.name != SPOT_ANGLE_PROPERTY);
+                    if v > 0.0 {
+                        piece.properties.push(msh_model::Property {
+                            name: SPOT_ANGLE_PROPERTY.into(),
+                            value: format!("{}", v.clamp(5.0, 170.0).round()),
+                            kind: None,
+                            ..Default::default()
+                        });
+                    }
+                }
+                let a = &mut piece.attrs;
                 if let Some(v) = &p.name {
                     a.name = v.clone();
                 }
@@ -429,6 +482,43 @@ fn a_x(doc: &Document, id: &str) -> f32 {
 
 fn normalize_angle(a: f32) -> f32 {
     a.rem_euclid(std::f32::consts::TAU)
+}
+
+/// Piece property with the opening angle of a lamp's light cone in degrees (our own; Sweet
+/// Home 3D keeps it and lights in all directions).
+pub const SPOT_ANGLE_PROPERTY: &str = "mySweetHome.spotAngle";
+
+/// Size of the box around a tilted piece, as Sweet Home 3D stores it in `widthInPlan`,
+/// `depthInPlan` and `heightInPlan`: the box rotated with Rz(−roll) · Rx(−pitch).
+fn update_size_in_plan(a: &mut PieceAttrs) {
+    let pitch = a.pitch.unwrap_or(0.0);
+    let roll = a.roll.unwrap_or(0.0);
+    if pitch == 0.0 && roll == 0.0 {
+        a.width_in_plan = None;
+        a.depth_in_plan = None;
+        a.height_in_plan = None;
+        return;
+    }
+    let (sp, cp) = (-pitch).sin_cos();
+    let (sr, cr) = (-roll).sin_cos();
+    let (mut min, mut max) = ([f32::MAX; 3], [f32::MIN; 3]);
+    for &x in &[-a.width / 2.0, a.width / 2.0] {
+        for &y in &[-a.height / 2.0, a.height / 2.0] {
+            for &z in &[-a.depth / 2.0, a.depth / 2.0] {
+                // Rx(−pitch), then Rz(−roll)
+                let (y1, z1) = (y * cp - z * sp, y * sp + z * cp);
+                let (x2, y2) = (x * cr - y1 * sr, x * sr + y1 * cr);
+                for (i, v) in [x2, y2, z1].into_iter().enumerate() {
+                    min[i] = min[i].min(v);
+                    max[i] = max[i].max(v);
+                }
+            }
+        }
+    }
+    let round = |v: f32| (v * 100.0).round() / 100.0;
+    a.width_in_plan = Some(round(max[0] - min[0]));
+    a.height_in_plan = Some(round(max[1] - min[1]));
+    a.depth_in_plan = Some(round(max[2] - min[2]));
 }
 
 fn apply_size(a: &mut PieceAttrs, width: Option<f32>, depth: Option<f32>, height: Option<f32>) {

@@ -73,6 +73,8 @@ export type Camera = {
     yaw: number;
     pitch: number;
     field_of_view: number;
+    /** PINHOLE, NORMAL, FISHEYE or SPHERICAL */
+    lens?: string | null;
   };
 };
 
@@ -117,6 +119,8 @@ export type Piece = {
     angle: number | null;
     pitch: number | null;
     roll: number | null;
+    /** `false`: the piece cannot be tilted */
+    horizontally_rotatable?: boolean | null;
     /** Size of the bounding box after pitch/roll (plan footprint and height) */
     width_in_plan: number | null;
     depth_in_plan: number | null;
@@ -152,6 +156,10 @@ export type Piece = {
   };
   sashes?: Sash[];
   light_sources?: LightSource[];
+  /** Materials of the model that glow when the light is on (Sweet Home 3D 7) */
+  light_source_materials?: { name: string }[];
+  /** Free properties (e.g. `mySweetHome.spotAngle`) */
+  properties?: { name: string; value: string }[];
   texture: Texture | null;
   materials?: Material[];
   text_style: TextStyle | null;
@@ -303,6 +311,8 @@ export type Home = {
       light_color: number | null;
       walls_alpha: number | null;
       all_levels_visible: boolean | null;
+      /** Gray light under the ceilings of rooms in photos (black or none: off) */
+      ceiling_light_color: number | null;
     };
     textures: Texture[];
   } | null;

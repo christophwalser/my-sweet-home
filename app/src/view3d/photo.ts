@@ -5,7 +5,8 @@
 // The photo uses its own renderer and canvas, so the 3D view stays usable.
 
 import * as THREE from "three";
-import { GradientEquirectTexture, WebGLPathTracer } from "three-gpu-pathtracer";
+import { EquirectCamera, GradientEquirectTexture, WebGLPathTracer } from "three-gpu-pathtracer";
+import { isWideLens, type Lens, panoramaSize, panoramaToLens, renderDraftPanorama } from "./lens";
 
 export type PhotoQuality = "draft" | "good" | "best";
 
@@ -20,6 +21,8 @@ export interface PhotoSource {
   /** Groups of the scene: rendered content and lamps */
   content: THREE.Object3D;
   lamps: THREE.Object3D;
+  /** Lights of photos: all lamps of the shown levels and the ceiling lights */
+  photoLights: THREE.Object3D;
   sun: THREE.DirectionalLight;
   sky: THREE.Object3D | null;
   camera: THREE.PerspectiveCamera;
@@ -33,6 +36,8 @@ export interface PhotoOptions {
   width: number;
   height: number;
   quality: PhotoQuality;
+  /** Lens (default: normal) */
+  lens?: Lens;
   /** Called with the progress (0..1) after each pass */
   onProgress?: (progress: number) => void;
 }
@@ -103,7 +108,10 @@ export function createPathTracer(
 }
 
 export function renderPhoto(src: PhotoSource, opts: PhotoOptions): PhotoJob {
-  const renderer = offscreenRenderer(opts.width, opts.height);
+  // Fisheye and spherical photos are made from a panorama (see lens.ts)
+  const wide = isWideLens(opts.lens) ? opts.lens : null;
+  const pano = wide ? panoramaSize(wide, opts.width, opts.height) : null;
+  const renderer = offscreenRenderer(pano?.width ?? opts.width, pano?.height ?? opts.height);
   const canvas = renderer.domElement;
   const camera = photoCamera(src, opts.width, opts.height);
 
@@ -118,24 +126,39 @@ export function renderPhoto(src: PhotoSource, opts: PhotoOptions): PhotoJob {
   const done = new Promise<string>((resolve, reject) => {
     rejectJob = reject;
     const finishWith = () => {
-      const url = canvas.toDataURL("image/png");
+      const url = wide
+        ? panoramaToLens(canvas, wide, opts.width, opts.height)
+        : canvas.toDataURL("image/png");
       cleanup();
       resolve(url);
     };
     try {
       if (opts.quality === "draft") {
-        renderDraft(src, renderer, camera);
+        if (wide && pano) {
+          withPhotoScene(src, camera, () => renderDraftPanorama(renderer, src.scene, camera, pano));
+        } else {
+          renderDraft(src, renderer, camera);
+        }
         opts.onProgress?.(1);
         finishWith();
         return;
       }
       const target = PHOTO_SAMPLES[opts.quality];
-      const { scene, dispose } = pathTracingScene(src, camera);
+      // A panorama is traced with an equirectangular camera in the view's orientation
+      let tracedCamera: THREE.Camera = camera;
+      if (wide) {
+        const eq = new EquirectCamera();
+        eq.position.copy(camera.position);
+        eq.quaternion.copy(camera.quaternion);
+        eq.updateMatrixWorld(true);
+        tracedCamera = eq;
+      }
+      const { scene, dispose } = pathTracingScene(src, tracedCamera);
       cleanups.push(dispose);
       const tracer = createPathTracer(
         renderer,
-        opts.width,
-        opts.height,
+        pano?.width ?? opts.width,
+        pano?.height ?? opts.height,
         opts.quality === "best" ? 8 : 5,
       );
       cleanups.unshift(() => tracer.dispose());
@@ -143,7 +166,7 @@ export function renderPhoto(src: PhotoSource, opts: PhotoOptions): PhotoJob {
       setTimeout(() => {
         try {
           if (stopped) return;
-          tracer.setScene(scene, camera);
+          tracer.setScene(scene, tracedCamera);
         } catch (e) {
           cleanup();
           reject(e instanceof Error ? e : new Error(String(e)));
@@ -194,14 +217,28 @@ export function renderDraft(
 ): void {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  withPhotoScene(src, camera, () => renderer.render(src.scene, camera));
+}
+
+/**
+ * Runs `render` with the scene of the 3D view set up for a photo: sun shadows, the
+ * lights of photos instead of the view's lamps, the sky around the camera, labels and
+ * dimensions hidden.
+ */
+function withPhotoScene(src: PhotoSource, camera: THREE.Camera, render: () => void): void {
   const castShadow = src.sun.castShadow;
   const skyPosition = src.sky?.position.clone();
   const hidden = hideLeftOut(src.content);
-  src.sun.castShadow = true;
+  const lampsVisible = src.lamps.visible;
+  src.sun.castShadow = src.sun.intensity > 0;
   src.sky?.position.copy(camera.position);
+  src.lamps.visible = false;
+  src.scene.add(src.photoLights);
   try {
-    renderer.render(src.scene, camera);
+    render();
   } finally {
+    src.scene.remove(src.photoLights);
+    src.lamps.visible = lampsVisible;
     src.sun.castShadow = castShadow;
     if (skyPosition) src.sky?.position.copy(skyPosition);
     for (const o of hidden) o.visible = true;
@@ -226,7 +263,7 @@ function hideLeftOut(content: THREE.Object3D): THREE.Object3D[] {
  */
 export function pathTracingScene(
   src: PhotoSource,
-  camera: THREE.PerspectiveCamera,
+  camera: THREE.Camera,
 ): { scene: THREE.Scene; dispose: () => void } {
   const scene = new THREE.Scene();
   const sky =
@@ -238,8 +275,9 @@ export function pathTracingScene(
   environment.bottomColor.copy(src.groundColor);
   environment.update();
   scene.environment = environment;
-  // Same brightness as the hemisphere light of the 3D view
-  scene.environmentIntensity = 1.6;
+  // Same brightness as the hemisphere light of the 3D view (lower at night)
+  const ambient = src.content.getObjectByName("ambient") as THREE.HemisphereLight | undefined;
+  scene.environmentIntensity = ambient?.intensity ?? 1.6;
   scene.background = sky;
 
   const converted = new Map<string, THREE.Material>();
@@ -286,7 +324,9 @@ export function pathTracingScene(
     }
     scene.add(copy);
   }
-  scene.add(src.lamps.clone());
+  // Spot lights keep their targets: the copies point at the original target objects
+  src.photoLights.updateMatrixWorld(true);
+  scene.add(src.photoLights.clone());
   const sun = src.sun.clone();
   sun.castShadow = false;
   const target = new THREE.Object3D();
@@ -353,6 +393,7 @@ function physicalMaterial(m: THREE.Material): THREE.Material {
     metalness: 0,
   });
   if (src.emissive) p.emissive.copy(src.emissive);
+  if (typeof src.emissiveIntensity === "number") p.emissiveIntensity = src.emissiveIntensity;
   if (src.emissiveMap) p.emissiveMap = src.emissiveMap;
   // Phong shininess (0..~128) becomes roughness; Lambert surfaces are matt
   const shininess = typeof src.shininess === "number" ? src.shininess : 0;
