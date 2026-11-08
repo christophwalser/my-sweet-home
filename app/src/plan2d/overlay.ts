@@ -53,10 +53,51 @@ export type PlanOverlay = {
   autoDims: [Pt, Pt][];
   /** Point the cursor snapped to */
   snap: Pt | null;
+  /** Virtual visitor in the plan (position in cm, yaw and field of view in radians) */
+  visitor: { x: number; y: number; yaw: number; fov: number } | null;
   accent: string;
   /** Color of guides */
   guide: string;
 };
+
+/** Body of the visitor with the field of view it sees in the 3D view. */
+function drawVisitor(
+  ctx: CanvasRenderingContext2D,
+  v: { x: number; y: number; yaw: number; fov: number },
+  color: string,
+  px: number,
+): void {
+  const reach = Math.max(150, 60 * px);
+  const dir = Math.atan2(Math.cos(v.yaw), -Math.sin(v.yaw));
+  ctx.save();
+  ctx.globalAlpha = 0.18;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(v.x, v.y);
+  ctx.arc(v.x, v.y, reach, dir - v.fov / 2, dir + v.fov / 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5 * px;
+  ctx.setLineDash([4 * px, 3 * px]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Shoulders across the view direction and the head in front of them
+  const r = 20;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.ellipse(v.x, v.y, r * 0.45, r, dir, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(v.x, v.y, r * 0.38, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2 * px;
+  ctx.stroke();
+  ctx.restore();
+}
 
 export function drawOverlay(
   ctx: CanvasRenderingContext2D,
@@ -68,6 +109,8 @@ export function drawOverlay(
   ctx.setTransform(view.scale, 0, 0, view.scale, view.offsetX, view.offsetY);
   const px = 1 / view.scale;
   ctx.lineJoin = "round";
+
+  if (overlay.visitor) drawVisitor(ctx, overlay.visitor, overlay.accent, px);
 
   // Selection outlines
   ctx.strokeStyle = overlay.accent;

@@ -21,6 +21,7 @@ import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api"
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
 import { magnetismActive, usePreferences } from "../preferences";
 import { type Tool, useStore } from "../store";
+import { levelOfEye } from "../view3d/visitor";
 import { autoDimensions, dimensionLine } from "./autoDims";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
 import {
@@ -231,6 +232,8 @@ export default function PlanView() {
   const wallThickness = useStore((s) => s.wallThickness);
   const highlightSide = useStore((s) => s.highlightSide);
   const fitRequest = useStore((s) => s.fitRequest);
+  const viewMode = useStore((s) => s.viewMode);
+  const visitorPose = useStore((s) => s.visitorPose);
   /** A fit was requested; repeated once the images of the home have loaded */
   const pendingFit = useRef(false);
   const showRulers = usePreferences((s) => s.rulers);
@@ -450,6 +453,7 @@ export default function PlanView() {
       rubberBand: g?.kind === "band" ? [g.start, g.end] : null,
       measure: m ? [m.a, m.b ?? m.a] : null,
       snap: snap?.marker ?? null,
+      visitor: viewMode === "observer" ? visitorInPlan(input, visitorPose) : null,
       accent,
       guide: guideColor,
     };
@@ -467,6 +471,8 @@ export default function PlanView() {
     showRulers,
     magnetism,
     drawRulers,
+    viewMode,
+    visitorPose,
   ]);
 
   drawRef.current = draw;
@@ -1400,6 +1406,8 @@ export default function PlanView() {
         target.tagName === "SELECT"
       )
         return;
+      // Keys typed in the 3D view (walking in the virtual visit) are not for the plan
+      if (target.closest?.(".view3d-canvas") && !e.ctrlKey && !e.metaKey) return;
       const state = useStore.getState();
       const sel = state.selection;
       if (e.ctrlKey || e.metaKey) {
@@ -1537,4 +1545,23 @@ export default function PlanView() {
       </div>
     </div>
   );
+}
+
+/** The visitor drawn in the plan: its live position, else the camera stored in the home. */
+function visitorInPlan(
+  input: PlanInput,
+  live: { x: number; y: number; z: number; yaw: number; fov: number } | null,
+): { x: number; y: number; yaw: number; fov: number } | null {
+  const levels = input.home.levels;
+  let pose = live;
+  if (!pose) {
+    const c = input.home.cameras.find((cam) => cam.attrs.role === "observerCamera")?.attrs;
+    if (!c) return null;
+    pose = { x: c.x, y: c.y, z: c.z, yaw: c.yaw, fov: c.field_of_view };
+  }
+  // Only on the level the visitor stands on
+  if (levels.length > 1 && input.levelId && levelOfEye(input.home, pose.z) !== input.levelId) {
+    return null;
+  }
+  return pose;
 }

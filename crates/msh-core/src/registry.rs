@@ -36,8 +36,10 @@ pub struct CommandSpec {
     /// Name in the form `group_action`, e.g. `wall_add`
     pub name: &'static str,
     pub description: &'static str,
-    /// `true` if the command changes the home (creates an undo step)
+    /// `true` if the command changes the home (creates an undo step, unless `undo` is false)
     pub modifies: bool,
+    /// `false` for changes of the view stored in the home (cameras) that are not undone
+    pub undo: bool,
     /// JSON Schema of the parameters (always an object schema)
     pub params_schema: Value,
     handler: Handler,
@@ -70,6 +72,31 @@ impl Registry {
         P: DeserializeOwned + JsonSchema,
         F: Fn(&mut Document, P) -> CommandResult + Send + Sync + 'static,
     {
+        self.add_spec(name, description, modifies, modifies, f);
+    }
+
+    /// Registers a command that changes only the view stored in the home (e.g. the
+    /// cameras): the home is saved and the UI updated, but no undo step is created and
+    /// the home is not marked as modified. The handler must validate before changing.
+    pub fn add_view<P, F>(&mut self, name: &'static str, description: &'static str, f: F)
+    where
+        P: DeserializeOwned + JsonSchema,
+        F: Fn(&mut Document, P) -> CommandResult + Send + Sync + 'static,
+    {
+        self.add_spec(name, description, true, false, f);
+    }
+
+    fn add_spec<P, F>(
+        &mut self,
+        name: &'static str,
+        description: &'static str,
+        modifies: bool,
+        undo: bool,
+        f: F,
+    ) where
+        P: DeserializeOwned + JsonSchema,
+        F: Fn(&mut Document, P) -> CommandResult + Send + Sync + 'static,
+    {
         let schema = serde_json::to_value(schemars::schema_for!(P)).unwrap_or_default();
         let handler: Handler = Box::new(move |doc, params| {
             let params = if params.is_null() {
@@ -87,6 +114,7 @@ impl Registry {
             name,
             description,
             modifies,
+            undo,
             params_schema: schema,
             handler,
         });
@@ -106,7 +134,7 @@ impl Registry {
         let spec = self
             .get(name)
             .ok_or_else(|| CommandError::Unknown(name.to_owned()))?;
-        if !spec.modifies {
+        if !spec.modifies || !spec.undo {
             return (spec.handler)(doc, params);
         }
         doc.checkpoint(name);

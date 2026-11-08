@@ -23,6 +23,7 @@ mod library;
 mod room;
 mod text;
 mod view;
+mod visit;
 mod wall;
 mod wall_ops;
 
@@ -45,6 +46,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     edit::register(r);
     flip::register(r);
     view::register(r);
+    visit::register(r);
     export::register(r);
     camera::register(r);
     background::register(r);

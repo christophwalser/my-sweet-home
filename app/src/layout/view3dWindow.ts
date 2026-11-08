@@ -3,6 +3,7 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow, WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useStore, type ViewMode } from "../store";
+import type { CameraPose } from "../view3d/camera";
 
 export const VIEW3D_WINDOW = "view3d";
 /** Hash of the page URL that shows only the 3D view */
@@ -15,6 +16,7 @@ interface UiState {
   request?: boolean;
   selectedLevel?: string | null;
   viewMode?: ViewMode;
+  visitorPose?: CameraPose | null;
 }
 
 /** The 3D window if it is open. */
@@ -60,10 +62,16 @@ export function syncUiState(requestInitial: boolean): () => void {
       from: self,
       selectedLevel: s.selectedLevel,
       viewMode: s.viewMode,
+      visitorPose: s.visitorPose,
     } satisfies UiState);
   };
   const unsubscribe = useStore.subscribe((s, prev) => {
-    if (!applying && (s.selectedLevel !== prev.selectedLevel || s.viewMode !== prev.viewMode)) {
+    if (
+      !applying &&
+      (s.selectedLevel !== prev.selectedLevel ||
+        s.viewMode !== prev.viewMode ||
+        s.visitorPose !== prev.visitorPose)
+    ) {
       send();
     }
   });
@@ -78,6 +86,7 @@ export function syncUiState(requestInitial: boolean): () => void {
     useStore.setState({
       ...(p.selectedLevel !== undefined && { selectedLevel: p.selectedLevel }),
       ...(p.viewMode && { viewMode: p.viewMode }),
+      ...(p.visitorPose !== undefined && { visitorPose: p.visitorPose }),
     });
     applying = false;
   });

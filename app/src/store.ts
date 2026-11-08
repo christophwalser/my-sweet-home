@@ -5,6 +5,7 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
 import { forEachGroup, forEachPiece, type OpenedHome } from "./model";
+import type { CameraPose } from "./view3d/camera";
 
 export type ViewMode = "aerial" | "observer";
 
@@ -31,6 +32,10 @@ type State = {
   error: string | null;
   loading: boolean;
   viewMode: ViewMode;
+  /** Live position of the virtual visitor (shown in the plan while walking) */
+  visitorPose: CameraPose | null;
+  /** Writes the cameras of the 3D view into the home (set by the 3D view, used before saving) */
+  cameraSync: (() => Promise<void>) | null;
   catalog: CatalogData | null;
   catalogLoading: boolean;
   openHome: (path: string) => Promise<void>;
@@ -75,6 +80,8 @@ export const useStore = create<State>((set, get) => ({
   error: null,
   loading: false,
   viewMode: "aerial",
+  visitorPose: null,
+  cameraSync: null,
   catalog: null,
   catalogLoading: false,
 
@@ -119,6 +126,8 @@ export const useStore = create<State>((set, get) => ({
       if (!chosen) return;
       path = chosen;
     }
+    // The camera moves are kept in the 3D view until now (they are no undo steps)
+    await syncCameras();
     await get().run("home_save", { path });
   },
 
@@ -150,12 +159,48 @@ export function applyHome(next: OpenedHome): void {
     opened: next,
     selection: selection.filter((id) => ids.has(id)),
     selectedLevel: levelAfterChange(next, newHome ? null : prev, newHome ? null : selectedLevel),
-    viewMode: newHome
-      ? next.home.attrs.camera === "observerCamera"
-        ? "observer"
-        : "aerial"
-      : viewMode,
+    // A command may switch the camera (e.g. viewpoint_go): follow it
+    viewMode:
+      newHome || next.home.attrs.camera !== prev?.home.attrs.camera
+        ? next.home.attrs.camera === "observerCamera"
+          ? "observer"
+          : "aerial"
+        : viewMode,
+    visitorPose: newHome ? null : useStore.getState().visitorPose,
   });
+}
+
+/** Stores the current cameras of the 3D view in the home (before saving). */
+async function syncCameras(): Promise<void> {
+  const { cameraSync, visitorPose, viewMode, opened } = useStore.getState();
+  try {
+    if (cameraSync) {
+      await cameraSync();
+    } else if (visitorPose && opened) {
+      // The 3D view is in its own window: the visitor's position is known from there
+      await api.execute("camera_set", {
+        mode: "observer",
+        ...poseParams(visitorPose),
+        activate: viewMode === "observer",
+      });
+    }
+  } catch (e) {
+    useStore.setState({ error: String(e) });
+  }
+}
+
+/** Parameters of `camera_set` / `viewpoint_store` for a camera pose. */
+export function poseParams(p: CameraPose): Record<string, number> {
+  const deg = (r: number) => Math.round(((r * 180) / Math.PI) * 100) / 100;
+  const cm = (v: number) => Math.round(v * 10) / 10;
+  return {
+    x: cm(p.x),
+    y: cm(p.y),
+    z: cm(p.z),
+    yaw: deg(p.yaw),
+    pitch: Math.max(-90, Math.min(90, deg(p.pitch))),
+    field_of_view: Math.max(2, Math.min(170, deg(p.fov))),
+  };
 }
 
 /** IDs of all elements of a home. */

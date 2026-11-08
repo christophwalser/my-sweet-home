@@ -12,7 +12,7 @@ import {
   RENDER_VIDEO_EVENT,
 } from "../api";
 import { forEachPiece } from "../model";
-import { useStore, type ViewMode } from "../store";
+import { poseParams, useStore, type ViewMode } from "../store";
 import { buildAnnotations } from "./annotations";
 import {
   buildGround,
@@ -24,13 +24,14 @@ import {
   skyColor,
   visibleLevels,
 } from "./buildScene";
-import { cameraDirection, cameraPose, verticalFov } from "./camera";
+import { applyPose, type CameraPose, cameraDirection, cameraPose, verticalFov } from "./camera";
 import { buildLampLights, lampLights } from "./lights";
 import { clearModelCache, createPieceObject, disposeObject, waitForModels } from "./models";
 import { buildObj } from "./objExport";
 import PhotoDialog from "./PhotoDialog";
 import { type PhotoJob, type PhotoQuality, type PhotoSource, renderPhoto } from "./photo";
 import VideoDialog from "./VideoDialog";
+import ViewpointsMenu from "./ViewpointsMenu";
 import {
   type CameraPathInfo,
   type CameraPoint,
@@ -40,6 +41,7 @@ import {
   type VideoJob,
   type VideoQuality,
 } from "./video";
+import { buildColliders, EYE_HEIGHT, levelOfEye, VisitorControls } from "./visitor";
 
 /**
  * Highest pitch used for the aerial view. A camera looking straight down sits on
@@ -62,6 +64,7 @@ export default function View3D() {
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     controls: OrbitControls;
+    visitor: VisitorControls;
     content: THREE.Group;
     lamps: THREE.Group;
     sun: THREE.DirectionalLight;
@@ -84,6 +87,7 @@ export default function View3D() {
     const camera = new THREE.PerspectiveCamera(45, 1, 5, 200000);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = false;
+    const visitor = new VisitorControls(camera, renderer.domElement);
     const content = new THREE.Group();
     const lamps = new THREE.Group();
     const sun = new THREE.DirectionalLight(0xffffff, 1.4);
@@ -115,6 +119,7 @@ export default function View3D() {
       scene,
       camera,
       controls,
+      visitor,
       content,
       lamps,
       sun,
@@ -123,6 +128,11 @@ export default function View3D() {
       requestRender,
     };
     ctx.current = state;
+    visitor.onChange = (pose) => {
+      state.hfov = pose.fov;
+      requestRender();
+      useStore.setState({ visitorPose: { ...pose } });
+    };
     // Debug handle for inspecting the scene from the WebView devtools
     if (import.meta.env.DEV) (window as unknown as { __msh3d: typeof state }).__msh3d = state;
 
@@ -143,6 +153,7 @@ export default function View3D() {
       ro.disconnect();
       cancelAnimationFrame(frame);
       controls.dispose();
+      visitor.dispose();
       disposeObject(content);
       disposeObject(lamps);
       clearModelCache();
@@ -205,6 +216,12 @@ export default function View3D() {
       furniture.add(createPieceObject(p, opened.id, base, c.requestRender));
     });
     c.content.add(furniture);
+    // Walls and doors for the virtual visitor (all levels: the visitor may change level)
+    c.visitor.colliders = buildColliders(
+      home,
+      opened.wallShapes,
+      (level) => (levels.get(level) ?? levels.get(null))?.elevation ?? 0,
+    );
     c.requestRender();
   }, [opened, levelId]);
 
@@ -251,9 +268,12 @@ export default function View3D() {
     if (opened && viewMode === "observer") {
       const home = opened.home;
       const observer = home.cameras.find((cam) => cam.attrs.role === "observerCamera");
-      const viewer = observer
-        ? new THREE.Vector3(observer.attrs.x, observer.attrs.z, observer.attrs.y)
-        : c.camera.position.clone();
+      const pose = poses.current.observer ?? useStore.getState().visitorPose;
+      const viewer = pose
+        ? new THREE.Vector3(pose.x, pose.z, pose.y)
+        : observer
+          ? new THREE.Vector3(observer.attrs.x, observer.attrs.z, observer.attrs.y)
+          : c.camera.position.clone();
       const lights = lampLights(home, levelInfos(home), visibleLevels(home, levelId));
       c.lamps.add(buildLampLights(lights, viewer));
     }
@@ -265,7 +285,16 @@ export default function View3D() {
   // Homes without stored camera (e.g. built by an AI agent) are re-fitted after each
   // change until the user moves the camera.
   const userMoved = useRef(false);
-  const cameraKey = useRef<string | null>(null);
+  /** Views of both modes kept while the home is open, and the stored cameras last seen */
+  const poses = useRef<{
+    home: number | null;
+    observer: CameraPose | null;
+    aerial: { pose: CameraPose; target: THREE.Vector3 } | null;
+    seen: Record<string, string>;
+  }>({ home: null, observer: null, aerial: null, seen: {} });
+  const modeRef = useRef<ViewMode | null>(null);
+  /** Level the visitor was on, to move it along when another level is selected */
+  const lastLevel = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const c = ctx.current;
     if (!c) return;
@@ -278,23 +307,87 @@ export default function View3D() {
   useEffect(() => {
     const c = ctx.current;
     if (!c || !opened) return;
-    const role = viewMode === "observer" ? "observerCamera" : "topCamera";
+    const P = poses.current;
+    const observer = viewMode === "observer";
+    let modeChanged = modeRef.current !== viewMode;
+    if (P.home !== opened.id) {
+      P.home = opened.id;
+      P.observer = null;
+      P.aerial = null;
+      P.seen = {};
+      userMoved.current = false;
+      modeChanged = true;
+    } else if (modeChanged && modeRef.current) {
+      // Keep the view of the mode that is left, to come back to it
+      if (modeRef.current === "observer") P.observer = { ...c.visitor.pose };
+      else P.aerial = { pose: cameraPose(c.camera, c.hfov), target: c.controls.target.clone() };
+    }
+    modeRef.current = viewMode;
+    c.controls.enabled = !observer;
+    c.visitor.enabled = observer;
+    if (!observer) useStore.setState({ visitorPose: null });
+
+    const role = observer ? "observerCamera" : "topCamera";
     const stored = opened.home.cameras.find((cam) => cam.attrs.role === role);
-    const key = `${opened.id}:${viewMode}`;
-    const keyChanged = cameraKey.current !== key;
-    if (keyChanged) userMoved.current = false;
-    if (!keyChanged && (stored || userMoved.current)) return;
-    cameraKey.current = key;
-    if (stored) {
+    const storedKey = stored ? JSON.stringify(stored.attrs) : "";
+    // The stored camera changed: moved by a command (point of view, CLI, MCP)
+    const external = stored !== undefined && P.seen[role] !== storedKey;
+    P.seen[role] = storedKey;
+    const local = observer ? P.observer : P.aerial;
+
+    if (observer) {
+      let pose: CameraPose | null = null;
+      if (external && stored) {
+        const a = stored.attrs;
+        pose = { x: a.x, y: a.y, z: a.z, yaw: a.yaw, pitch: a.pitch, fov: a.field_of_view };
+      } else if (modeChanged) {
+        pose = local as CameraPose | null;
+        if (!pose) {
+          // No camera stored: stand in the middle of the home on the selected level
+          const box = new THREE.Box3();
+          const walls = c.content.getObjectByName("walls");
+          if (walls) box.expandByObject(walls);
+          const center = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+          const level = opened.home.levels.find((l) => l.attrs.id === levelId);
+          pose = {
+            x: center.x,
+            y: center.z,
+            z: (level?.attrs.elevation ?? 0) + EYE_HEIGHT,
+            yaw: 0,
+            pitch: 0,
+            fov: 1.1,
+          };
+        }
+      }
+      if (!pose) return;
+      if (external && opened.home.levels.length > 1) {
+        // Show the level of the point of view in the plan (without moving the visitor)
+        const level = levelOfEye(opened.home, pose.z);
+        if (level && level !== levelId) {
+          lastLevel.current = level;
+          useStore.getState().selectLevel(level);
+        }
+      }
+      c.visitor.setPose(pose);
+      c.hfov = pose.fov;
+      useStore.setState({ visitorPose: { ...c.visitor.pose } });
+      c.requestRender();
+      return;
+    }
+
+    if (!external && !modeChanged && (stored || userMoved.current)) return;
+    if (modeChanged && !external && P.aerial) {
+      applyPose(c.camera, P.aerial.pose);
+      c.controls.target.copy(P.aerial.target);
+      c.hfov = P.aerial.pose.fov;
+    } else if (stored) {
       const a = stored.attrs;
       c.camera.position.set(a.x, a.z, a.y);
-      const pitch = viewMode === "observer" ? a.pitch : Math.min(a.pitch, MAX_AERIAL_PITCH);
+      const pitch = Math.min(a.pitch, MAX_AERIAL_PITCH);
       const dir = cameraDirection(a.yaw, pitch);
       // Orbit around the point where the view hits the ground (or a point in front)
       const distance = dir.y < -0.05 ? Math.min(a.z / -dir.y, 5000) : 300;
-      c.controls.target
-        .copy(c.camera.position)
-        .addScaledVector(dir, viewMode === "observer" ? 100 : distance);
+      c.controls.target.copy(c.camera.position).addScaledVector(dir, distance);
       c.hfov = a.field_of_view;
     } else {
       // Fit to walls and rooms (the ground plane is huge and must not count)
@@ -313,7 +406,58 @@ export default function View3D() {
     c.camera.updateProjectionMatrix();
     c.controls.update();
     c.requestRender();
-  }, [opened, viewMode]);
+  }, [opened, viewMode, levelId]);
+
+  // The visitor goes with the selected level (Sweet Home 3D's "adjust elevation to level")
+  useEffect(() => {
+    const c = ctx.current;
+    const previous = lastLevel.current;
+    lastLevel.current = levelId;
+    if (
+      !c ||
+      !opened ||
+      viewMode !== "observer" ||
+      previous === undefined ||
+      previous === levelId
+    ) {
+      return;
+    }
+    const elevation = (id: string | null) =>
+      opened.home.levels.find((l) => l.attrs.id === id)?.attrs.elevation ?? 0;
+    const pose = { ...c.visitor.pose };
+    pose.z += elevation(levelId) - elevation(previous);
+    c.visitor.setPose(pose);
+    useStore.setState({ visitorPose: { ...c.visitor.pose } });
+    c.requestRender();
+  }, [levelId, opened, viewMode]);
+
+  // Before saving, the cameras of the 3D view are written into the home
+  useEffect(() => {
+    const sync = async () => {
+      const c = ctx.current;
+      const { opened: current, viewMode: mode, run } = useStore.getState();
+      if (!c || !current) return;
+      const P = poses.current;
+      const observerPose = mode === "observer" ? c.visitor.pose : P.observer;
+      const aerialPose = mode === "aerial" ? cameraPose(c.camera, c.hfov) : P.aerial?.pose;
+      if (observerPose) {
+        await run("camera_set", {
+          mode: "observer",
+          ...poseParams(observerPose),
+          activate: mode === "observer",
+        });
+      }
+      if (aerialPose) {
+        await run("camera_set", {
+          mode: "aerial",
+          ...poseParams(aerialPose),
+          activate: mode === "aerial",
+        });
+      }
+    };
+    useStore.setState({ cameraSync: sync });
+    return () => useStore.setState({ cameraSync: null });
+  }, []);
 
   // 3D screenshots requested by the CLI or MCP server (live control)
   useEffect(() => {
@@ -500,6 +644,24 @@ export default function View3D() {
   return (
     <>
       <div className="view3d-canvas" ref={containerRef} />
+      {opened && viewMode === "observer" && (
+        <div className="view3d-hint">
+          Drag to look around · W A S D: walk · Q / E: down / up · Shift: faster · wheel: zoom
+        </div>
+      )}
+      {opened && (
+        <ViewpointsMenu
+          currentPose={() => {
+            const c = ctx.current;
+            if (!c) throw new Error("3D view not available");
+            const mode = useStore.getState().viewMode;
+            return {
+              mode,
+              pose: mode === "observer" ? { ...c.visitor.pose } : cameraPose(c.camera, c.hfov),
+            };
+          }}
+        />
+      )}
       {opened && (
         <label className="view3d-option">
           <input

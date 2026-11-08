@@ -82,6 +82,10 @@ bar at the bottom of the plan explains the next step.
 - Text styles (font, bold, italic, size) for labels, dimensions, room names and areas, and
   furniture names ("Name in plan"); polylines can be curved; the compass can be dragged,
   turned and resized in the plan.
+- Virtual visit like in games: drag to look around, W A S D to walk, Q / E down and up, Shift
+  faster, mouse wheel to zoom. Walls stop the visitor, doors can be walked through; the
+  visitor is shown in the plan. "Points of view" stores views and goes back to them; "All
+  levels" shows every level in 3D.
 - Furniture in the plan is drawn as seen from above, rendered from its 3D model with its
   colors and materials (Preferences: off shows the catalog icons); exports and prints use
   the view from above too, or the icons ("Furniture in plans" in the export dialog).
