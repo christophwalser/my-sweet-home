@@ -804,8 +804,31 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
 
 **P11 Files**: one window per home (as in Sweet Home 3D), autosave and recovery.
 
-**P12 Polish**: preferences dialog completed with units and defaults for new elements, German
-user interface, installer, benchmarks (as planned before).
+**P12 Polish** (scope extended 2026-11-08), in steps:
+- P12a User interface design, shown as a clickable mock-up before it is built: menu bar with
+  categories whose entries open as menus (like Sweet Home 3D, but grouped for overview and
+  quick access), a reworked tool bar (most used functions one click away, related ones in
+  drop-down menus), consistent icons throughout (own icons where no common symbol exists),
+  light and dark mode (default: the system setting), all dialogs movable.
+- P12b Implementing that design in the app.
+- P12c Preferences: units (cm, mm, m, inch/foot; internally cm), defaults for new elements
+  (wall thickness / height / pattern, floor thickness, text sizes, room and wall colors),
+  magnetism steps, wall side marking colors, plan room rendering, 3D quality and walking
+  speed, autosave interval, language, theme. Window size and position remembered.
+- P12d German user interface through translation files (English stays in the code); number
+  and date formats.
+- P12e Stand-alone installer without dependencies on other programs: MSI via Tauri with the
+  WebView2 runtime, `.sh3d` file association, the CLI `msh`, and the freely licensed Sweet
+  Home 3D default catalog (furniture GPL / CC-BY, textures CC-BY, with attribution; taken
+  from a Sweet Home 3D installation at build time, never committed). Installed Sweet Home 3D
+  libraries are still found. Auto-update prepared (Tauri updater, signing keys), the update
+  source is decided later.
+- P12f Plugins: TypeScript plugins inside the app (folder with manifest and permissions; use
+  the command registry like CLI / MCP, add menu entries, tools and panels, run isolated) and
+  external programs that control the app through CLI / MCP and appear as menu entries.
+- P12g Performance benchmarks with large homes and accessibility (keyboard, screen readers,
+  contrast). Small open points of P7–P11 (time zone suggestion from the address search,
+  automatic dimensions while the context menu is open, brighter spots in draft photos).
 
 **Later** (after P12): matt / glossy wall sides, rest of the furniture modify dialog (texture of
 the whole piece, matt / glossy, description, price), prices and VAT in the list, print header and
