@@ -1,16 +1,18 @@
-// Online catalogs: search the free libraries of Sweet Home 3D and the CC0 textures and models
-// of ambientCG and Poly Haven, and import an item with one click. msh-core does the search
-// and the download (online_search, online_download); the import commands add the item to
-// the user's libraries, a model opens the furniture import to set its icon and size.
+// Online catalogs: search the free libraries of Sweet Home 3D, the CC0 textures and models of
+// ambientCG and Poly Haven and the user's own catalog servers (feeds), and import an item
+// with one click. msh-core does the search and the download (online_search,
+// online_download); the import commands add the item to the user's libraries. A model opens
+// the furniture import, and closing that comes back here, to the same list and position:
+// the dialog's state lives in a store, not in the component.
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
+import { create } from "zustand";
 import { api } from "../api";
 import { formatNumber, t } from "../i18n";
-import { usePreferences } from "../preferences";
+import { type CatalogFeed, usePreferences } from "../preferences";
 import Icon from "../ui/Icon";
 import { useUi } from "../ui/uiStore";
 
-type Source = "sh3d" | "ambientcg" | "polyhaven";
 type Kind = "furniture" | "textures";
 
 type Found = {
@@ -29,27 +31,65 @@ type Downloaded = {
   type: "library" | "texture" | "model";
   name: string;
   creator?: string;
+  category?: string;
   width_cm?: number | null;
   height_cm?: number | null;
 };
 
+/** A source of the dialog: a built-in one or a feed of the preferences. */
+type SourceTab = { key: string; label: string; kinds: Kind[]; feed?: CatalogFeed };
+
 const PAGE = 40;
 
-const SOURCES: { id: Source; label: string; kinds: Kind[] }[] = [
-  { id: "sh3d", label: "Sweet Home 3D", kinds: ["furniture", "textures"] },
-  { id: "ambientcg", label: "ambientCG", kinds: ["textures"] },
-  { id: "polyhaven", label: "Poly Haven", kinds: ["furniture", "textures"] },
+const BUILT_IN: SourceTab[] = [
+  { key: "sh3d", label: "Sweet Home 3D", kinds: ["furniture", "textures"] },
+  { key: "ambientcg", label: "ambientCG", kinds: ["textures"] },
+  { key: "polyhaven", label: "Poly Haven", kinds: ["furniture", "textures"] },
 ];
 
+type OnlineState = {
+  source: string;
+  kind: Kind;
+  query: string;
+  resolution: string;
+  items: Found[];
+  total: number;
+  /** Source, kind and query of the shown list (a new one lists again) */
+  listed: string | null;
+  scrollTop: number;
+  /** Import state per item id: running, done or an error text */
+  states: Record<string, string>;
+  /** A model handed to the furniture import, and the import count at that time */
+  pending: { id: string; count: number } | null;
+};
+
+const useOnline = create<OnlineState>(() => ({
+  source: "sh3d",
+  kind: "furniture",
+  query: "",
+  resolution: "1k",
+  items: [],
+  total: 0,
+  listed: null,
+  scrollTop: 0,
+  states: {},
+  pending: null,
+}));
+
+const setItemState = (id: string, state: string) =>
+  useOnline.setState((s) => ({ states: { ...s.states, [id]: state } }));
+
 /** Note about each source, shown below the results (Poly Haven asks for its credit). */
-function sourceNote(source: Source): string {
+function sourceNote(source: string): string {
   if (source === "sh3d") {
     return t(
       "Free libraries of sweethome3d.com, downloaded from SourceForge; each lists its own licenses.",
     );
   }
   if (source === "ambientcg") return t("CC0 materials of ambientCG.com: free for any use.");
-  return t("Powered by Poly Haven – CC0 assets of polyhaven.com: free for any use.");
+  if (source === "polyhaven")
+    return t("Powered by Poly Haven – CC0 assets of polyhaven.com: free for any use.");
+  return t("Catalog of your organization; see its license details for each item.");
 }
 
 /** License of a search result; msh-core names libraries without a stated license so. */
@@ -63,47 +103,78 @@ function megabytes(bytes: number | null): string {
 
 export default function OnlineDialog({ onClose }: { onClose: () => void }) {
   const enabled = usePreferences((s) => s.onlineSources);
+  const feeds = usePreferences((s) => s.catalogs);
   const openDialog = useUi((s) => s.openDialog);
-  const [source, setSource] = useState<Source>("sh3d");
-  const [kind, setKind] = useState<Kind>("furniture");
-  const [query, setQuery] = useState("");
-  const [resolution, setResolution] = useState("1k");
-  const [items, setItems] = useState<Found[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  /** Import state per item id: running, done or an error text */
-  const [states, setStates] = useState<Record<string, string>>({});
+  const st = useOnline();
+  const loading = useRef(false);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const [busy, setBusy] = useBusy();
+  const [error, setError] = useError();
 
-  const search = useCallback(
-    async (offset: number) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const r = (await api.execute("online_search", {
-          source,
-          kind,
-          query,
-          offset,
-          limit: PAGE,
-        })) as { items: Found[]; total: number };
-        setItems((old) => (offset === 0 ? r.items : [...old, ...r.items]));
-        setTotal(r.total);
-      } catch (e) {
-        setError(String(e));
-        if (offset === 0) setItems([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [source, kind, query],
-  );
+  const sources: SourceTab[] = [
+    ...BUILT_IN,
+    ...feeds.map((f) => ({
+      key: `feed:${f.id}`,
+      label: f.name || t("Catalog"),
+      kinds: ["furniture", "textures"] as Kind[],
+      feed: f,
+    })),
+  ];
+  const current = sources.find((s) => s.key === st.source) ?? sources[0];
+  const sourceParams = (s: SourceTab) =>
+    s.feed
+      ? { source: "feed", url: s.feed.url, token: s.feed.token || undefined }
+      : { source: s.key };
 
-  // A new source or kind lists its items right away
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only source and kind trigger a new list
+  const search = async (offset: number) => {
+    if (loading.current) return;
+    loading.current = true;
+    setBusy(true);
+    setError(null);
+    const { kind, query } = useOnline.getState();
+    try {
+      const r = (await api.execute("online_search", {
+        ...sourceParams(current),
+        kind,
+        query,
+        offset,
+        limit: PAGE,
+      })) as { items: Found[]; total: number };
+      useOnline.setState((s) => ({
+        items: offset === 0 ? r.items : [...s.items, ...r.items],
+        total: r.total,
+        listed: `${current.key}|${kind}|${query}`,
+        scrollTop: offset === 0 ? 0 : s.scrollTop,
+      }));
+      if (offset === 0 && resultsRef.current) resultsRef.current.scrollTop = 0;
+    } catch (e) {
+      setError(String(e));
+      if (offset === 0) useOnline.setState({ items: [], total: 0, listed: null });
+    } finally {
+      loading.current = false;
+      setBusy(false);
+    }
+  };
+
+  // Back from the furniture import: mark the model and restore the scroll position. A new
+  // source or kind lists its items.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when source or kind change
   useEffect(() => {
-    if (enabled) void search(0);
-  }, [source, kind, enabled]);
+    const s = useOnline.getState();
+    if (s.pending) {
+      const done = useUi.getState().importCount > s.pending.count;
+      setItemState(s.pending.id, done ? "done" : "");
+      useOnline.setState({ pending: null });
+    }
+    if (!enabled) return;
+    if (s.listed?.startsWith(`${current.key}|${s.kind}|`) && s.items.length > 0) {
+      requestAnimationFrame(() => {
+        if (resultsRef.current) resultsRef.current.scrollTop = useOnline.getState().scrollTop;
+      });
+    } else {
+      void search(0);
+    }
+  }, [st.source, st.kind, enabled]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -113,20 +184,19 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const chooseSource = (s: Source) => {
-    setSource(s);
-    const kinds = SOURCES.find((x) => x.id === s)?.kinds ?? ["textures"];
-    if (!kinds.includes(kind)) setKind(kinds[0]);
+  const chooseSource = (s: SourceTab) => {
+    const kind = s.kinds.includes(st.kind) ? st.kind : s.kinds[0];
+    useOnline.setState({ source: s.key, kind, listed: null, items: [], total: 0 });
   };
 
   const importItem = async (item: Found) => {
-    setStates((s) => ({ ...s, [item.id]: "running" }));
+    setItemState(item.id, "running");
     try {
       const d = (await api.execute("online_download", {
-        source,
-        kind,
+        ...sourceParams(current),
+        kind: st.kind,
         id: item.id,
-        resolution,
+        resolution: st.resolution,
       })) as Downloaded;
       if (d.type === "library") {
         try {
@@ -134,7 +204,7 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
         } catch (e) {
           if (!String(e).includes("exists already")) throw e;
           if (!window.confirm(t("{v0} exists already. Replace it?", { v0: d.name }))) {
-            setStates((s) => ({ ...s, [item.id]: "" }));
+            setItemState(item.id, "");
             return;
           }
           await api.execute("library_import", { path: d.path, replace: true });
@@ -144,23 +214,28 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
         await api.execute("texture_import", {
           path: d.path,
           name: d.name,
-          category: SOURCES.find((x) => x.id === source)?.label,
+          category: d.category ?? current.label,
           creator: d.creator,
           width,
           height: d.height_cm ?? width,
         });
       } else {
-        // Models: the furniture import sets icon, upright position and size
-        openDialog("importFurniture", d.path);
+        // Models: the furniture import sets icon, upright position and size, then comes back
+        useOnline.setState({
+          pending: { id: item.id, count: useUi.getState().importCount },
+          scrollTop: resultsRef.current?.scrollTop ?? 0,
+        });
+        const extra: Record<string, string> = {};
+        if (d.category) extra.category = d.category;
+        if (d.creator) extra.creator = d.creator;
+        openDialog("importFurniture", d.path, "online", extra);
         return;
       }
-      setStates((s) => ({ ...s, [item.id]: "done" }));
+      setItemState(item.id, "done");
     } catch (e) {
-      setStates((s) => ({ ...s, [item.id]: String(e) }));
+      setItemState(item.id, String(e));
     }
   };
-
-  const kinds = SOURCES.find((x) => x.id === source)?.kinds ?? [];
 
   return (
     <div className="dialog-backdrop">
@@ -184,28 +259,38 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
           <>
             <div className="online-bar">
               <div className="segmented" role="tablist" aria-label={t("Source")}>
-                {SOURCES.map((s) => (
+                {sources.map((s) => (
                   <button
                     type="button"
                     role="tab"
-                    key={s.id}
-                    aria-selected={source === s.id}
-                    className={source === s.id ? "active" : ""}
-                    onClick={() => chooseSource(s.id)}
+                    key={s.key}
+                    aria-selected={current.key === s.key}
+                    className={current.key === s.key ? "active" : ""}
+                    onClick={() => chooseSource(s)}
                   >
                     {s.label}
                   </button>
                 ))}
               </div>
+              <button
+                type="button"
+                className="link-button online-add"
+                onClick={() => openDialog("preferences", "catalogs", "online")}
+                title={t("Add the catalog server of your organization")}
+              >
+                {t("Add catalog…")}
+              </button>
+            </div>
+            <div className="online-bar">
               <div className="segmented" role="tablist" aria-label={t("Kind")}>
-                {kinds.map((k) => (
+                {current.kinds.map((k) => (
                   <button
                     type="button"
                     role="tab"
                     key={k}
-                    aria-selected={kind === k}
-                    className={kind === k ? "active" : ""}
-                    onClick={() => setKind(k)}
+                    aria-selected={st.kind === k}
+                    className={st.kind === k ? "active" : ""}
+                    onClick={() => useOnline.setState({ kind: k })}
                   >
                     {k === "furniture" ? t("Furniture") : t("Textures")}
                   </button>
@@ -221,19 +306,22 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
                 <input
                   type="search"
                   className="online-search-input"
-                  value={query}
+                  value={st.query}
                   placeholder={t("Search, e.g. wood, chair, tiles")}
                   aria-label={t("Search")}
-                  onChange={(e) => setQuery(e.currentTarget.value)}
+                  onChange={(e) => useOnline.setState({ query: e.currentTarget.value })}
                 />
-                <button type="submit" disabled={loading}>
+                <button type="submit" disabled={busy}>
                   {t("Search")}
                 </button>
               </form>
-              {source !== "sh3d" && (
+              {(current.key === "ambientcg" || current.key === "polyhaven") && (
                 <label className="online-resolution">
                   {t("Resolution")}
-                  <select value={resolution} onChange={(e) => setResolution(e.currentTarget.value)}>
+                  <select
+                    value={st.resolution}
+                    onChange={(e) => useOnline.setState({ resolution: e.currentTarget.value })}
+                  >
                     <option value="1k">1K</option>
                     <option value="2k">2K</option>
                     <option value="4k">4K</option>
@@ -241,14 +329,18 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
                 </label>
               )}
             </div>
-            <div className="online-results">
+            <div
+              className="online-results"
+              ref={resultsRef}
+              onScroll={(e) => useOnline.setState({ scrollTop: e.currentTarget.scrollTop })}
+            >
               {error && <p className="small error-text">{error}</p>}
-              {!loading && !error && items.length === 0 && (
+              {!busy && !error && st.items.length === 0 && (
                 <p className="muted">{t("Nothing found.")}</p>
               )}
               <div className="online-grid">
-                {items.map((item) => {
-                  const state = states[item.id] ?? "";
+                {st.items.map((item) => {
+                  const state = st.states[item.id] ?? "";
                   return (
                     <div className="online-card" key={item.id}>
                       <div className="online-thumb">
@@ -297,21 +389,37 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
                   );
                 })}
               </div>
-              {loading && <p className="muted">{t("Loading…")}</p>}
-              {!loading && items.length < total && (
+              {busy && <p className="muted">{t("Loading…")}</p>}
+              {!busy && st.items.length < st.total && (
                 <button
                   type="button"
                   className="online-more"
-                  onClick={() => void search(items.length)}
+                  onClick={() => void search(st.items.length)}
                 >
-                  {t("Load more ({shown} of {total})", { shown: items.length, total })}
+                  {t("Load more ({shown} of {total})", { shown: st.items.length, total: st.total })}
                 </button>
               )}
             </div>
-            <p className="muted small">{sourceNote(source)}</p>
+            <p className="muted small">{sourceNote(current.feed ? "feed" : current.key)}</p>
           </>
         )}
       </div>
     </div>
   );
 }
+
+/** Loading flag of the dialog (kept in the store's neighbour, not across closing). */
+function useBusy(): [boolean, (b: boolean) => void] {
+  const busy = useOnlineUi((s) => s.busy);
+  return [busy, (b) => useOnlineUi.setState({ busy: b })];
+}
+
+function useError(): [string | null, (e: string | null) => void] {
+  const error = useOnlineUi((s) => s.error);
+  return [error, (e) => useOnlineUi.setState({ error: e })];
+}
+
+const useOnlineUi = create<{ busy: boolean; error: string | null }>(() => ({
+  busy: false,
+  error: null,
+}));

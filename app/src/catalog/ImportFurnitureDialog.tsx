@@ -10,6 +10,7 @@ import * as THREE from "three";
 import { api, stageResourceUrl } from "../api";
 import { t } from "../i18n";
 import { useStore } from "../store";
+import { useUi } from "../ui/uiStore";
 import { disposeObject, loadModelUncached } from "../view3d/models";
 import { MODEL_EXTENSIONS, prepareModel } from "./modelConvert";
 
@@ -19,6 +20,15 @@ type Staged = { id: number; main: string; sizeCm: [number, number, number] | nul
 const SIZE_LABELS = { width: () => t("Width"), depth: () => t("Depth"), height: () => t("Height") };
 
 const PREVIEW_PX = 260;
+/** View of the preview like catalog icons: from the front, slightly from above and the right. */
+const DEFAULT_ORBIT = { yaw: 0.4636, pitch: 0.373, distance: 3.84 };
+
+/** Puts the camera on its orbit around the model (at the origin). */
+function placeCamera(camera: THREE.PerspectiveCamera, o: typeof DEFAULT_ORBIT): void {
+  const r = o.distance * Math.cos(o.pitch);
+  camera.position.set(r * Math.sin(o.yaw), o.distance * Math.sin(o.pitch), r * Math.cos(o.yaw));
+  camera.lookAt(0, 0, 0);
+}
 const ICON_PX = 128;
 
 function fileStem(path: string): string {
@@ -57,7 +67,10 @@ export default function ImportFurnitureDialog({
   /** cm per model unit, from the backend size or guessed */
   const [unitCm, setUnitCm] = useState(1);
   const [name, setName] = useState("");
-  const [category, setCategory] = useState("My furniture");
+  // Category and creator of a catalog item the model comes from
+  const extra = useUi.getState().dialogExtra;
+  const [category, setCategory] = useState(extra?.category ?? "My furniture");
+  const creator = extra?.creator;
   const [size, setSize] = useState({ width: "", depth: "", height: "" });
   const [keepRatio, setKeepRatio] = useState(true);
   const [elevation, setElevation] = useState("0");
@@ -66,6 +79,15 @@ export default function ImportFurnitureDialog({
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const opened = useStore((s) => s.opened);
+  /** View of the preview: dragging turns it, the wheel zooms, a double-click resets it */
+  const orbit = useRef({ ...DEFAULT_ORBIT });
+  const drag = useRef<{ x: number; y: number } | null>(null);
+  const redraw = () => {
+    const t = three.current;
+    if (!t) return;
+    placeCamera(t.camera, orbit.current);
+    t.renderer.render(t.scene, t.camera);
+  };
 
   // Preview renderer
   useEffect(() => {
@@ -85,9 +107,7 @@ export default function ImportFurnitureDialog({
     sun.position.set(2, 3, 4);
     scene.add(sun);
     const camera = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
-    // Like catalog icons: from the front, slightly from above and from the right
-    camera.position.set(1.6, 1.4, 3.2);
-    camera.lookAt(0, 0, 0);
+    placeCamera(camera, orbit.current);
     const holder = new THREE.Group();
     scene.add(holder);
     three.current = { renderer, scene, camera, holder, model: null };
@@ -232,6 +252,7 @@ export default function ImportFurnitureDialog({
         model_path: staged.path,
         name: name.trim() || fileStem(staged.path),
         category: category.trim() || "My furniture",
+        ...(creator && { creator }),
         width: w,
         depth: d,
         height: h,
@@ -251,6 +272,7 @@ export default function ImportFurnitureDialog({
         })) as { id?: string };
         if (added.id) useStore.getState().setSelection([added.id]);
       }
+      useUi.getState().noteImport();
       onClose();
     } catch (e) {
       setStatus(String(e));
@@ -284,7 +306,38 @@ export default function ImportFurnitureDialog({
         </p>
         <div className="import-layout">
           <div className="import-preview">
-            <canvas ref={canvasRef} width={PREVIEW_PX} height={PREVIEW_PX} />
+            <canvas
+              ref={canvasRef}
+              width={PREVIEW_PX}
+              height={PREVIEW_PX}
+              className="import-canvas"
+              title={t("Drag to turn the view, wheel to zoom, double-click for the default view")}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                drag.current = { x: e.clientX, y: e.clientY };
+              }}
+              onPointerMove={(e) => {
+                const d = drag.current;
+                if (!d) return;
+                const o = orbit.current;
+                o.yaw -= (e.clientX - d.x) * 0.01;
+                o.pitch = Math.max(-1.45, Math.min(1.45, o.pitch + (e.clientY - d.y) * 0.01));
+                drag.current = { x: e.clientX, y: e.clientY };
+                redraw();
+              }}
+              onPointerUp={() => {
+                drag.current = null;
+              }}
+              onWheel={(e) => {
+                const o = orbit.current;
+                o.distance = Math.max(1.5, Math.min(12, o.distance * Math.exp(e.deltaY * 0.001)));
+                redraw();
+              }}
+              onDoubleClick={() => {
+                orbit.current = { ...DEFAULT_ORBIT };
+                redraw();
+              }}
+            />
             <div className="prop-actions">
               <button type="button" onClick={() => void chooseModel()} disabled={busy}>
                 {staged ? t("Other model…") : t("Choose model…")}

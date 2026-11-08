@@ -30,6 +30,8 @@ chrono-tz = "0.10"
 iana-time-zone = "0.1"
 # Address search (OpenStreetMap Nominatim) for the location of the home
 ureq = "2.12"
+# Addresses of catalog feeds
+url = "2"
 
 [dev-dependencies]
 serde_json.workspace = true

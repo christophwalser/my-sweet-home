@@ -5,6 +5,11 @@
 //! temporary folder and returns its local path; the import commands (`library_import`,
 //! `texture_import`, `furniture_import`) then add it to the user's libraries. Nothing is
 //! sent to the sources except the search text.
+//!
+//! Users can add their own catalog servers as feeds (`source: "feed"`, see `feed` and
+//! docs/CATALOG_FEED.md).
+
+mod feed;
 
 use crate::registry::{CommandError, Registry};
 use schemars::JsonSchema;
@@ -30,6 +35,8 @@ enum Source {
     Ambientcg,
     /// CC0 textures and models of polyhaven.com
     Polyhaven,
+    /// A catalog feed of the user's own catalog server (msh-catalog format): give `url`
+    Feed,
 }
 
 #[derive(Deserialize, JsonSchema, Clone, Copy, PartialEq, Debug)]
@@ -50,6 +57,10 @@ struct SearchParams {
     offset: Option<usize>,
     /// Number of results (default 40, at most 200)
     limit: Option<usize>,
+    /// Feeds: address of the feed (https://…, a file or a file share)
+    url: Option<String>,
+    /// Feeds: access token, sent as bearer token to the feed's host only
+    token: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -60,6 +71,10 @@ struct DownloadParams {
     id: String,
     /// Resolution of textures and models: 1k (default), 2k or 4k
     resolution: Option<String>,
+    /// Feeds: address of the feed
+    url: Option<String>,
+    /// Feeds: access token
+    token: Option<String>,
 }
 
 /// One item a source offers.
@@ -278,6 +293,11 @@ fn download_sh3d(id: &str) -> Result<Value, CommandError> {
     }
     let data = get_bytes(&format!("{SOURCEFORGE_FILES}{id}/download"))?;
     let dir = download_dir(Source::Sh3d, id.rsplit('/').next().unwrap_or(id))?;
+    extract_library(data, &dir)
+}
+
+/// Unpacks the .sh3f / .sh3t file of a library ZIP into `dir`.
+fn extract_library(data: Vec<u8>, dir: &std::path::Path) -> Result<Value, CommandError> {
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data))
         .map_err(|e| failed("the download is no ZIP file", e))?;
     for i in 0..archive.len() {
@@ -542,8 +562,9 @@ pub(super) fn register(r: &mut Registry) {
     r.add(
         "online_search",
         "Searches an online source: 'sh3d' (the free furniture and texture libraries of Sweet \
-         Home 3D), 'ambientcg' (CC0 textures) or 'polyhaven' (CC0 textures and furniture \
-         models). Returns items with id, name, preview image, author, license and, for \
+         Home 3D), 'ambientcg' (CC0 textures), 'polyhaven' (CC0 textures and furniture \
+         models) or 'feed' (a catalog server of the user, msh-catalog format; give url and, if \
+         needed, token). Returns items with id, name, preview image, author, license and, for \
          textures, the real size of one tile. Download one with online_download.",
         false,
         |_doc, p: SearchParams| {
@@ -567,6 +588,11 @@ pub(super) fn register(r: &mut Registry) {
                     let total = all.len();
                     (all.into_iter().skip(offset).take(limit).collect(), total)
                 }
+                (Source::Feed, kind) => {
+                    let url = p.url.as_deref().ok_or_else(|| CommandError::failed("give the url of the feed"))?;
+                    let (items, total, name) = feed::search(url, p.token.as_deref(), kind, &w, offset, limit)?;
+                    return Ok(json!({ "items": items, "total": total, "offset": offset, "catalog": name }));
+                }
             };
             Ok(json!({ "items": items, "total": total, "offset": offset }))
         },
@@ -587,6 +613,13 @@ pub(super) fn register(r: &mut Registry) {
                 Source::Sh3d => download_sh3d(&p.id),
                 Source::Ambientcg => download_ambientcg(&p.id, &resolution),
                 Source::Polyhaven => download_polyhaven(p.kind, &p.id, &resolution),
+                Source::Feed => feed::download(
+                    p.url
+                        .as_deref()
+                        .ok_or_else(|| CommandError::failed("give the url of the feed"))?,
+                    p.token.as_deref(),
+                    &p.id,
+                ),
             }
         },
     );

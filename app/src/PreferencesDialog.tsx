@@ -2,6 +2,7 @@
 // settings, on tabs. Changes apply at once and are kept for all windows of the app.
 
 import { type ReactNode, useEffect, useState } from "react";
+import CatalogFeedsPage from "./CatalogFeedsPage";
 import { LANGUAGES, type LanguageChoice, languageChoice, setLanguage, t } from "./i18n";
 import { Field, WALL_PATTERNS } from "./panels/fields";
 import { type Preferences, usePreferences } from "./preferences";
@@ -9,12 +10,13 @@ import { useStore } from "./store";
 import { type ThemeChoice, useUi } from "./ui/uiStore";
 import { UNITS } from "./units";
 
-type Tab = "plan" | "new" | "view3d" | "general";
+type Tab = "plan" | "new" | "view3d" | "general" | "catalogs";
 const TABS: { id: Tab; label: string }[] = [
   { id: "general", label: t("General") },
   { id: "plan", label: t("Plan") },
   { id: "new", label: t("New elements") },
   { id: "view3d", label: t("3D view") },
+  { id: "catalogs", label: t("Catalogs") },
 ];
 
 function Check({
@@ -136,9 +138,18 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export default function PreferencesDialog({ onClose }: { onClose: () => void }) {
+export default function PreferencesDialog({
+  initialTab,
+  onClose,
+}: {
+  /** Page to open (e.g. "catalogs" from the online catalogs) */
+  initialTab?: string;
+  onClose: () => void;
+}) {
   const p = usePreferences();
-  const [tab, setTab] = useState<Tab>("general");
+  const [tab, setTab] = useState<Tab>(
+    TABS.some((x) => x.id === initialTab) ? (initialTab as Tab) : "general",
+  );
   const theme = useUi((s) => s.theme);
   const setTheme = useUi((s) => s.setTheme);
   const set = (changes: Partial<Preferences>) => p.update(changes);
@@ -324,6 +335,7 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                 </label>
               </Group>
             )}
+            {tab === "catalogs" && <CatalogFeedsPage />}
             {tab === "general" && (
               <Group title={t("General")}>
                 <Choice<ThemeChoice>

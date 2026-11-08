@@ -28,8 +28,20 @@ type UiState = {
   dialog: DialogName | null;
   /** Argument of the open dialog, e.g. the file to import */
   dialogArg: string | null;
-  openDialog: (dialog: DialogName, arg?: string) => void;
+  /** Further values for the open dialog, e.g. category and creator of a catalog item */
+  dialogExtra: Record<string, string> | null;
+  /** Dialog to show again when the open one closes (e.g. the online catalogs) */
+  returnTo: DialogName | null;
+  openDialog: (
+    dialog: DialogName,
+    arg?: string,
+    returnTo?: DialogName,
+    extra?: Record<string, string>,
+  ) => void;
   closeDialog: () => void;
+  /** Counts finished furniture imports, so a dialog that opened one learns it succeeded */
+  importCount: number;
+  noteImport: () => void;
   theme: ThemeChoice;
   setTheme: (theme: ThemeChoice) => void;
   /** Sun shadows in the 3D view (they cost a second render pass) */
@@ -72,8 +84,14 @@ function saveJson(key: string, value: unknown): void {
 export const useUi = create<UiState>((set, get) => ({
   dialog: null,
   dialogArg: null,
-  openDialog: (dialog, arg) => set({ dialog, dialogArg: arg ?? null }),
-  closeDialog: () => set({ dialog: null }),
+  dialogExtra: null,
+  returnTo: null,
+  openDialog: (dialog, arg, returnTo, extra) =>
+    set({ dialog, dialogArg: arg ?? null, returnTo: returnTo ?? null, dialogExtra: extra ?? null }),
+  closeDialog: () =>
+    set({ dialog: get().returnTo, dialogArg: null, returnTo: null, dialogExtra: null }),
+  importCount: 0,
+  noteImport: () => set({ importCount: get().importCount + 1 }),
   theme: loadJson<ThemeChoice>(THEME_KEY, "system"),
   setTheme: (theme) => {
     set({ theme });

@@ -4,6 +4,9 @@
 import { create } from "zustand";
 import type { LengthUnit } from "./units";
 
+/** A catalog server of the user (msh-catalog feed, see docs/CATALOG_FEED.md). */
+export type CatalogFeed = { id: string; name: string; url: string; token: string };
+
 export type Preferences = {
   // Plan
   /** Rulers along the top and left edge of the plan */
@@ -23,6 +26,8 @@ export type Preferences = {
   rightSideColor: string;
   /** Online catalogs (Sweet Home 3D libraries, ambientCG, Poly Haven) may be searched */
   onlineSources: boolean;
+  /** The user's own catalog servers */
+  catalogs: CatalogFeed[];
   /** Larger preview of catalog items while the mouse points at them */
   catalogPreview: boolean;
   /** Unit of lengths shown and typed (internally always cm) */
@@ -65,6 +70,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   rightSideColor: "#2bb3a3",
   catalogPreview: true,
   onlineSources: true,
+  catalogs: [],
   unit: "cm",
   newWallThickness: 10,
   newWallHeight: 250,
@@ -113,7 +119,8 @@ export const usePreferences = create<Store>((set, get) => ({
       // Storage unavailable: the preference applies until the app is closed
     }
   },
-  reset: () => get().update({ ...DEFAULT_PREFERENCES }),
+  // The catalogs the user added stay
+  reset: () => get().update({ ...DEFAULT_PREFERENCES, catalogs: get().catalogs }),
 }));
 
 /** Follows changes of the preferences made in other windows; returns a function that stops. */

@@ -2324,3 +2324,20 @@ body.moving-dialog * {
 .online-more {
   align-self: center;
 }
+
+.import-canvas {
+  cursor: grab;
+  touch-action: none;
+}
+
+.import-canvas:active {
+  cursor: grabbing;
+}
+
+.online-add {
+  margin-left: auto;
+}
+
+.online-add-catalog {
+  align-self: flex-start;
+}

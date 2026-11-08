@@ -823,6 +823,17 @@ furniture is read by its home reader.
   The CSP allows preview images from cdn.polyhaven.com and ambientCG's media server.
 - Parsers are tested offline with sample answers; a live search test is marked
   `#[ignore]` (`cargo test -p msh-core online -- --ignored`).
+- Own catalog servers: the format "msh-catalog" (one JSON feed listing models, textures and
+  libraries, see `docs/CATALOG_FEED.md`) is read from HTTPS, a file share or a local folder
+  (`online_search` / `online_download` with `source: "feed"`, `url`, optional `token`; the
+  token is sent as Bearer only to the feed's own host). Catalogs are added in Preferences ›
+  Catalogs (or "Add catalog…" in the online dialog) with Test button; each appears as an own
+  tab. Downloaded models and textures are named after the item; category and creator are
+  passed to the import.
+- The online dialog keeps its state (source, search, results, scroll position): after the
+  furniture import dialog closes (import or cancel), the user returns to the same place.
+  The import preview can be rotated with the mouse (drag), zoomed (wheel) and reset
+  (double-click).
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

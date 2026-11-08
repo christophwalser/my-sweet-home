@@ -293,7 +293,9 @@ export default function App() {
         <ToolBar />
       </header>
 
-      {dialog === "preferences" && <PreferencesDialog onClose={closeDialog} />}
+      {dialog === "preferences" && (
+        <PreferencesDialog initialTab={dialogArg ?? undefined} onClose={closeDialog} />
+      )}
       {dialog === "export" && opened && (
         <ExportDialog
           baseName={(title ?? t("Home")).replace(/\.sh3d$/i, "")}
