@@ -20,6 +20,7 @@ try {
     try {
         Step 'biome'      { pnpm lint }
         Step 'typescript' { pnpm typecheck }
+        Step 'i18n'       { node scripts/i18n-check.mjs }
     } finally { Pop-Location }
     Write-Host 'All checks passed.' -ForegroundColor Green
 } finally { Pop-Location }

@@ -9,6 +9,7 @@ import {
   type CatalogKind,
   libResourceUrl,
 } from "../api";
+import { language, t } from "../i18n";
 import { useStore } from "../store";
 import { useUi } from "../ui/uiStore";
 import { formatPrecise } from "../units";
@@ -74,8 +75,8 @@ export default function CatalogPanel() {
   const [open, setOpen] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    // Catalog content is shown in the system language when translations exist
-    void loadCatalog(navigator.language.split("-")[0] || "en");
+    // Catalog content is shown in the language of the user interface when translations exist
+    void loadCatalog(language());
   }, [loadCatalog]);
 
   const libraryNames = useMemo(() => {
@@ -132,7 +133,7 @@ export default function CatalogPanel() {
               setKind("furniture");
             }}
           >
-            Furniture
+            {t("Furniture")}
           </button>
           <button
             type="button"
@@ -142,48 +143,51 @@ export default function CatalogPanel() {
               setKind("textures");
             }}
           >
-            Textures
+            {t("Textures")}
           </button>
           <button
             type="button"
             className={showHome ? "active" : ""}
             onClick={() => setShowHome(true)}
-            title="Furniture of the open home"
+            title={t("Furniture of the open home")}
           >
-            In home
+            {t("In home")}
           </button>
         </div>
         <input
           type="search"
-          placeholder={showHome ? "Search furniture in the home…" : "Search catalog…"}
+          placeholder={showHome ? t("Search furniture in the home…") : t("Search catalog…")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search catalog"
+          aria-label={t("Search catalog")}
         />
         <div className="catalog-tools">
           <button
             type="button"
             className="link-button"
             onClick={() => openDialog("importFurniture")}
-            title="Import a 3D model (OBJ, DAE, 3DS, glTF, GLB) as piece of furniture"
+            title={t("Import a 3D model (OBJ, DAE, 3DS, glTF, GLB) as piece of furniture")}
           >
-            Import furniture…
+            {t("Import furniture…")}
           </button>
           <button
             type="button"
             className="link-button"
             onClick={() => openDialog("libraries")}
-            title="Import and manage furniture and texture libraries"
+            title={t("Import and manage furniture and texture libraries")}
           >
-            Libraries…
+            {t("Libraries…")}
           </button>
         </div>
         <div className="catalog-count muted" hidden={showHome}>
           {loading
-            ? "Loading libraries…"
+            ? t("Loading libraries…")
             : results
-              ? `${results.length} of ${items.length} items`
-              : `${items.length} items in ${categories.length} categories`}
+              ? t("{found} of {total} items", { found: results.length, total: items.length })
+              : t("{items} items in {categories} categories", {
+                  items: items.length,
+                  categories: categories.length,
+                })}
         </div>
       </div>
       <div className="catalog-list">
@@ -199,7 +203,7 @@ export default function CatalogPanel() {
               />
             ))}
             {results.length > MAX_RESULTS && (
-              <li className="muted catalog-more">Refine the search to see more…</li>
+              <li className="muted catalog-more">{t("Refine the search to see more…")}</li>
             )}
           </ul>
         ) : (

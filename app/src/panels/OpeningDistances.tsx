@@ -1,6 +1,7 @@
 // Distances of a door or window to its neighbors in the wall (wall corners or other openings),
 // shown and edited in the properties panel.
 
+import { t } from "../i18n";
 import type { Piece } from "../model";
 import { centerInWall, wallSlot } from "../plan2d/moving";
 import { useStore } from "../store";
@@ -48,7 +49,7 @@ export default function OpeningDistances({ piece }: { piece: Piece }) {
       {fields.map((f) => (
         <Field
           key={f.name}
-          label={`Space ${f.name}`}
+          label={t("Space {name}", { name: f.name })}
           type="number"
           unit="cm"
           value={Math.round(f.value * 10) / 10}

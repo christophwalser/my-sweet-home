@@ -767,6 +767,25 @@ furniture is read by its home reader.
   the windows are remembered (`tauri-plugin-window-state`).
 - The language setting comes with the German translation (P12d).
 
+### 4.32 Status after P12d (2026-11-08)
+
+- German user interface. UI strings stay English in the code and are wrapped in `t()` from
+  `app/src/i18n` (the English text is the key, like gettext; placeholders `{name}`);
+  `app/src/i18n/de.json` holds the German texts, a missing entry shows English. Menus,
+  tool bar, panels, dialogs, plan hints, context menus and native dialogs are translated;
+  shortcuts show German key names (Strg, Umschalt, Entf).
+- Language preference (like Windows, English, Deutsch) in the General tab; changing it
+  reloads all windows, so texts built when a module loads are translated too. The catalog
+  shows its furniture names and categories in the same language where the libraries have
+  translations.
+- Number and date formats follow the language with the region of Windows when it speaks
+  that language (decimal comma for de-DE, point for de-CH), in fields, plan dimensions,
+  areas and rulers; typed numbers accept comma and point.
+- `scripts/check.ps1` runs `app/scripts/i18n-check.mjs`: it fails on entries no longer
+  used in the code and on placeholders that differ, and reports untranslated texts
+  (`--missing` lists them).
+- Error messages of msh-core (also used by CLI and MCP) stay English.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
@@ -863,7 +882,7 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
   (wall thickness / height / pattern, floor thickness, text sizes, room and wall colors),
   magnetism steps, wall side marking colors, plan room rendering, 3D quality and walking
   speed, autosave interval, language, theme. Window size and position remembered.
-- P12d German user interface through translation files (English stays in the code); number
+- P12d (done, see 4.32) German user interface through translation files (English stays in the code); number
   and date formats.
 - P12e Stand-alone installer without dependencies on other programs: MSI via Tauri with the
   WebView2 runtime, `.sh3d` file association, the CLI `msh`, and the freely licensed Sweet

@@ -3,6 +3,7 @@
 // shows or hides it. Groups are listed as one row.
 
 import { useMemo, useState } from "react";
+import { t } from "../i18n";
 import type { Furniture, Home } from "../model";
 import { useStore } from "../store";
 
@@ -91,7 +92,7 @@ export default function FurnitureList({ query }: { query: string }) {
     return list;
   }, [home, query, sort]);
 
-  if (!home) return <p className="muted small catalog-empty">No home open</p>;
+  if (!home) return <p className="muted small catalog-empty">{t("No home open")}</p>;
   const hasLevels = home.levels.length > 0;
   const hasPrices = rows.some((r) => r.price !== null);
   const total = rows.reduce((sum, r) => sum + (r.price ?? 0), 0);
@@ -101,7 +102,7 @@ export default function FurnitureList({ query }: { query: string }) {
       <button
         type="button"
         onClick={() => setSort((s) => ({ column, desc: s.column === column ? !s.desc : false }))}
-        title="Sort"
+        title={t("Sort")}
       >
         {label}
         {sort.column === column ? (sort.desc ? " ▾" : " ▴") : ""}
@@ -126,14 +127,14 @@ export default function FurnitureList({ query }: { query: string }) {
       <table>
         <thead>
           <tr>
-            <th className="check" title="Visible" />
-            {header("name", "Name", false)}
+            <th className="check" title={t("Visible")} />
+            {header("name", t("Name"), false)}
             {header("width", "W")}
             {header("depth", "D")}
             {header("height", "H")}
-            {header("elevation", "Elev.")}
-            {hasLevels && header("level", "Level", false)}
-            {hasPrices && header("price", "Price")}
+            {header("elevation", t("Elev."))}
+            {hasLevels && header("level", t("Level"), false)}
+            {hasPrices && header("price", t("Price"))}
           </tr>
         </thead>
         <tbody>
@@ -147,7 +148,7 @@ export default function FurnitureList({ query }: { query: string }) {
                 <input
                   type="checkbox"
                   checked={r.visible}
-                  title="Visible"
+                  title={t("Visible")}
                   disabled={r.group !== null}
                   onClick={(e) => e.stopPropagation()}
                   onChange={(e) =>
@@ -170,7 +171,8 @@ export default function FurnitureList({ query }: { query: string }) {
         </tbody>
       </table>
       <p className="muted small catalog-empty">
-        {rows.length} items · sizes in cm{hasPrices ? ` · total ${total.toFixed(2)}` : ""}
+        {rows.length} {t("items · sizes in cm")}
+        {hasPrices ? ` · total ${total.toFixed(2)}` : ""}
       </p>
     </div>
   );

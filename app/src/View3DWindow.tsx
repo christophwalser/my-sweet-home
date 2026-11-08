@@ -9,6 +9,7 @@ import { enableDialogDragging } from "./ui/dialogDragging";
 import { initTheme, useUi } from "./ui/uiStore";
 import View3D from "./view3d/View3D";
 import "./App.css";
+import { followLanguage, t } from "./i18n";
 import { followPreferences } from "./preferences";
 
 export default function View3DWindow() {
@@ -21,6 +22,7 @@ export default function View3DWindow() {
   useEffect(() => {
     const stopTheme = initTheme();
     const stopPreferences = followPreferences();
+    const stopLanguage = followLanguage();
     const stopDragging = enableDialogDragging();
     const stopActions = listenView3DActions((action) => {
       const ui = useUi.getState();
@@ -30,6 +32,7 @@ export default function View3DWindow() {
     return () => {
       stopTheme();
       stopPreferences();
+      stopLanguage();
       stopDragging();
       stopActions();
     };
@@ -65,25 +68,25 @@ export default function View3DWindow() {
   return (
     <div className="view3d-window">
       <header className="toolbar">
-        <fieldset className="segmented" aria-label="3D view">
+        <fieldset className="segmented" aria-label={t("3D view")}>
           <button
             type="button"
             className={viewMode === "aerial" ? "active" : ""}
             onClick={() => setViewMode("aerial")}
           >
-            Aerial view
+            {t("Aerial view")}
           </button>
           <button
             type="button"
             className={viewMode === "observer" ? "active" : ""}
             onClick={() => setViewMode("observer")}
           >
-            Virtual visit
+            {t("Virtual visit")}
           </button>
         </fieldset>
         {levels.length > 1 && (
           <label className="tool-option">
-            Level
+            {t("Level")}
             <select
               value={selectedLevel ?? ""}
               onChange={(e) => selectLevel(e.currentTarget.value)}
@@ -97,7 +100,7 @@ export default function View3DWindow() {
           </label>
         )}
         <span className="spacer" />
-        {!opened && <span className="muted">No home open</span>}
+        {!opened && <span className="muted">{t("No home open")}</span>}
       </header>
       <section className="view3d">
         <ErrorBoundary name="3D view" resetKey={opened}>

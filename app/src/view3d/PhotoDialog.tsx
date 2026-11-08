@@ -3,25 +3,32 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { t } from "../i18n";
 import { useStore } from "../store";
 import type { Lens } from "./lens";
 import { PHOTO_SAMPLES, type PhotoJob, type PhotoQuality } from "./photo";
 import type { SunInfo } from "./View3D";
 
 const LENSES: { value: Lens; label: string; hint: string }[] = [
-  { value: "pinhole", label: "Normal", hint: "Like the 3D view" },
-  { value: "fisheye", label: "Fisheye", hint: "180° in a circle" },
-  { value: "spherical", label: "Spherical", hint: "360° panorama, twice as wide as high" },
+  { value: "pinhole", label: t("Normal"), hint: t("Like the 3D view") },
+  { value: "fisheye", label: t("Fisheye"), hint: t("180° in a circle") },
+  { value: "spherical", label: t("Spherical"), hint: t("360° panorama, twice as wide as high") },
 ];
 
 const QUALITIES: { value: PhotoQuality; label: string; hint: string }[] = [
-  { value: "draft", label: "Draft", hint: "Like the 3D view with sun shadows, in seconds" },
+  { value: "draft", label: t("Draft"), hint: t("Like the 3D view with sun shadows, in seconds") },
   {
     value: "good",
-    label: "Good",
-    hint: `Path traced, ${PHOTO_SAMPLES.good} samples: soft shadows, indirect light, glass`,
+    label: t("Good"),
+    hint: t("Path traced, {good} samples: soft shadows, indirect light, glass", {
+      good: PHOTO_SAMPLES.good,
+    }),
   },
-  { value: "best", label: "Best", hint: `Path traced, ${PHOTO_SAMPLES.best} samples` },
+  {
+    value: "best",
+    label: t("Best"),
+    hint: t("Path traced, {best} samples", { best: PHOTO_SAMPLES.best }),
+  },
 ];
 
 export default function PhotoDialog({
@@ -114,13 +121,13 @@ export default function PhotoDialog({
         setPhoto(url);
         setProgress(1);
         const seconds = (performance.now() - started.current) / 1000;
-        setMessage(`Rendered in ${seconds.toFixed(1)} s.`);
+        setMessage(t("Rendered in {v0} s.", { v0: seconds.toFixed(1) }));
         job.current = null;
       },
       (e) => {
         setProgress(null);
-        if (String(e).includes("cancelled")) setMessage("Cancelled.");
-        else setMessage(`Rendering failed: ${String(e)}`);
+        if (String(e).includes("cancelled")) setMessage(t("Cancelled."));
+        else setMessage(t("Rendering failed: {v0}", { v0: String(e) }));
         job.current = null;
       },
     );
@@ -135,9 +142,9 @@ export default function PhotoDialog({
     if (!path) return;
     try {
       await api.saveImage(path, photo);
-      setMessage(`Saved to ${path}.`);
+      setMessage(t("Saved to {path}.", { path }));
     } catch (e) {
-      setMessage(`Saving failed: ${String(e)}`);
+      setMessage(t("Saving failed: {v0}", { v0: String(e) }));
     }
   };
 
@@ -147,17 +154,17 @@ export default function PhotoDialog({
         className="dialog photo-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Create photo"
+        aria-label={t("Create photo")}
       >
         <header className="dialog-header">
-          <h2>Create photo</h2>
-          <button type="button" onClick={onClose} aria-label="Close" disabled={rendering}>
+          <h2>{t("Create photo")}</h2>
+          <button type="button" onClick={onClose} aria-label={t("Close")} disabled={rendering}>
             {"✕"}
           </button>
         </header>
         <div className="export-grid">
           <label>
-            Width
+            {t("Width")}
             <span className="export-unit">
               <input
                 type="number"
@@ -168,11 +175,11 @@ export default function PhotoDialog({
                 disabled={rendering}
                 onChange={(e) => changeWidth(Number(e.currentTarget.value) || 16)}
               />
-              px
+              {t("px")}
             </span>
           </label>
           <label>
-            Height
+            {t("Height")}
             <span className="export-unit">
               <input
                 type="number"
@@ -183,7 +190,7 @@ export default function PhotoDialog({
                 disabled={rendering || keepAspect || lensAspect !== null}
                 onChange={(e) => setHeight(Number(e.currentTarget.value) || 16)}
               />
-              px
+              {t("px")}
             </span>
           </label>
           <label className="photo-check">
@@ -197,12 +204,12 @@ export default function PhotoDialog({
                   if (e.currentTarget.checked) setHeight(Math.round(width / viewAspect));
                 }}
               />{" "}
-              Proportions of the 3D view
+              {t("Proportions of the 3D view")}
             </span>
           </label>
         </div>
         <fieldset className="photo-quality" disabled={rendering}>
-          <legend>Lens</legend>
+          <legend>{t("Lens")}</legend>
           {LENSES.map((l) => (
             <label key={l.value} title={l.hint}>
               <input
@@ -219,9 +226,9 @@ export default function PhotoDialog({
           ))}
         </fieldset>
         <fieldset className="photo-quality" disabled={rendering}>
-          <legend>Light</legend>
+          <legend>{t("Light")}</legend>
           <label className="photo-sun">
-            <span>Date and time of the sun</span>
+            <span>{t("Date and time of the sun")}</span>
             <input
               key={`date-${sun?.date}`}
               type="date"
@@ -246,9 +253,11 @@ export default function PhotoDialog({
             />
           </label>
           {sun?.follow_clock && (
-            <p className="muted small">The sun follows the current time (3D settings).</p>
+            <p className="muted small">{t("The sun follows the current time (3D settings).")}</p>
           )}
-          <label title="A light under the ceiling of each room, so interiors are bright enough">
+          <label
+            title={t("A light under the ceiling of each room, so interiors are bright enough")}
+          >
             <input
               type="checkbox"
               checked={ceilingLights}
@@ -256,11 +265,11 @@ export default function PhotoDialog({
                 void run("render_settings_update", { ceiling_lights: e.currentTarget.checked })
               }
             />
-            <span>Ceiling lights in the rooms</span>
+            <span>{t("Ceiling lights in the rooms")}</span>
           </label>
         </fieldset>
         <fieldset className="photo-quality" disabled={rendering}>
-          <legend>Quality</legend>
+          <legend>{t("Quality")}</legend>
           {QUALITIES.map((q) => (
             <label key={q.value} title={q.hint}>
               <input
@@ -277,7 +286,7 @@ export default function PhotoDialog({
           ))}
         </fieldset>
         <p className="muted small">
-          The photo shows the current view of the 3D view (aerial view or virtual visit).
+          {t("The photo shows the current view of the 3D view (aerial view or virtual visit).")}
         </p>
         <div className="photo-preview" ref={preview} />
         {progress !== null && (
@@ -286,31 +295,31 @@ export default function PhotoDialog({
           </progress>
         )}
         {rendering && progress === 0 && quality !== "draft" && (
-          <p className="muted small">Preparing the scene for path tracing…</p>
+          <p className="muted small">{t("Preparing the scene for path tracing…")}</p>
         )}
         <div className="dialog-actions">
           {!rendering && (
             <button type="button" onClick={render}>
-              {photo ? "Render again" : "Render"}
+              {photo ? t("Render again") : t("Render")}
             </button>
           )}
           {rendering && quality !== "draft" && (
             <button
               type="button"
               onClick={() => job.current?.finish()}
-              title="Use the samples rendered so far"
+              title={t("Use the samples rendered so far")}
             >
-              Finish now
+              {t("Finish now")}
             </button>
           )}
           {rendering && (
             <button type="button" onClick={() => job.current?.cancel()}>
-              Cancel
+              {t("Cancel")}
             </button>
           )}
           {photo && (
             <button type="button" onClick={() => void savePhoto()}>
-              Save…
+              {t("Save…")}
             </button>
           )}
           {message && <span className="small">{message}</span>}

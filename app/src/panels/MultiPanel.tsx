@@ -2,6 +2,7 @@
 // furniture). A field shows the common value or "mixed"; a change applies to all
 // selected elements of that kind in one command (one undo step).
 
+import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Room, type Texture, type Wall } from "../model";
 import { formatArea, formatLength } from "../units";
 import { byRole, Field, SelectField, SideSection, toHex, WALL_PATTERNS } from "./fields";
@@ -40,10 +41,14 @@ function WallsSection({ walls, home, run }: { walls: Wall[]; home: Home; run: Ru
   );
   return (
     <>
-      <h2>{walls.length} walls</h2>
-      <p className="muted small">Total length: {formatLength(totalLength)}</p>
+      <h2>
+        {walls.length} {t("walls")}
+      </h2>
+      <p className="muted small">
+        {t("Total length:")} {formatLength(totalLength)}
+      </p>
       <Field
-        label="Thickness"
+        label={t("Thickness")}
         type="number"
         unit="cm"
         value={thickness.value}
@@ -51,7 +56,7 @@ function WallsSection({ walls, home, run }: { walls: Wall[]; home: Home; run: Ru
         onCommit={set("thickness")}
       />
       <Field
-        label="Height"
+        label={t("Height")}
         type="number"
         unit="cm"
         value={height.value}
@@ -59,7 +64,7 @@ function WallsSection({ walls, home, run }: { walls: Wall[]; home: Home; run: Ru
         onCommit={set("height")}
       />
       <Field
-        label="Height at end"
+        label={t("Height at end")}
         type="number"
         unit="cm"
         value={heightAtEnd.value}
@@ -67,7 +72,7 @@ function WallsSection({ walls, home, run }: { walls: Wall[]; home: Home; run: Ru
         onCommit={set("height_at_end")}
       />
       <SelectField
-        label="Pattern"
+        label={t("Pattern")}
         value={pattern.value ?? ""}
         mixed={pattern.mixed}
         options={WALL_PATTERNS}
@@ -107,9 +112,9 @@ function WallsSide({
   const updateBaseboard = (values: Record<string, unknown>) =>
     update({ [field("baseboard")]: values });
   return (
-    <SideSection side={side} title={side === "left" ? "Left sides" : "Right sides"}>
+    <SideSection side={side} title={side === "left" ? t("Left sides") : t("Right sides")}>
       <Field
-        label="Color"
+        label={t("Color")}
         type="color"
         value={toHex(color.value)}
         mixed={color.mixed}
@@ -121,17 +126,17 @@ function WallsSide({
           className="link-button"
           onClick={() => update({ [field("color")]: "" })}
         >
-          Default color
+          {t("Default color")}
         </button>
       )}
       <TextureField
-        label="Texture"
+        label={t("Texture")}
         current={texture.value}
         mixed={texture.mixed}
         onCommit={(v) => update({ [field("texture")]: v })}
       />
       <Field
-        label="Baseboard"
+        label={t("Baseboard")}
         type="checkbox"
         value={hasBaseboard.value}
         mixed={hasBaseboard.mixed}
@@ -143,7 +148,7 @@ function WallsSide({
       {present.length > 0 && (
         <>
           <Field
-            label="Height"
+            label={t("Height")}
             type="number"
             unit="cm"
             value={bbHeight.value}
@@ -151,7 +156,7 @@ function WallsSide({
             onCommit={(v) => updateBaseboard({ height: v })}
           />
           <Field
-            label="Thickness"
+            label={t("Thickness")}
             type="number"
             unit="cm"
             value={bbThickness.value}
@@ -159,14 +164,14 @@ function WallsSide({
             onCommit={(v) => updateBaseboard({ thickness: v })}
           />
           <Field
-            label="Color"
+            label={t("Color")}
             type="color"
             value={toHex(bbColor.value)}
             mixed={bbColor.mixed}
             onCommit={(v) => updateBaseboard({ color: v })}
           />
           <TextureField
-            label="Texture"
+            label={t("Texture")}
             current={bbTexture.value}
             mixed={bbTexture.mixed}
             onCommit={(v) => updateBaseboard({ texture: v })}
@@ -201,53 +206,57 @@ function RoomsSection({ rooms, run }: { rooms: Room[]; run: Run }) {
   const area = rooms.reduce((sum, r) => sum + roomArea(r), 0);
   return (
     <>
-      <h2>{rooms.length} rooms</h2>
-      <p className="muted small">Total area: {formatArea(area)}</p>
+      <h2>
+        {rooms.length} {t("rooms")}
+      </h2>
+      <p className="muted small">
+        {t("Total area:")} {formatArea(area)}
+      </p>
       <Field
-        label="Show area"
+        label={t("Show area")}
         type="checkbox"
         value={areaVisible.value}
         mixed={areaVisible.mixed}
         onCommit={set("area_visible")}
       />
       <Field
-        label="Floor visible"
+        label={t("Floor visible")}
         type="checkbox"
         value={floorVisible.value}
         mixed={floorVisible.mixed}
         onCommit={set("floor_visible")}
       />
       <Field
-        label="Ceiling visible"
+        label={t("Ceiling visible")}
         type="checkbox"
         value={ceilingVisible.value}
         mixed={ceilingVisible.mixed}
         onCommit={set("ceiling_visible")}
       />
-      <h3>Floors</h3>
+      <h3>{t("Floors")}</h3>
       <Field
-        label="Color"
+        label={t("Color")}
         type="color"
         value={toHex(floorColor.value)}
         mixed={floorColor.mixed}
         onCommit={set("floor_color")}
       />
       <TextureField
-        label="Texture"
+        label={t("Texture")}
         current={floorTexture.value}
         mixed={floorTexture.mixed}
         onCommit={set("floor_texture")}
       />
-      <h3>Ceilings</h3>
+      <h3>{t("Ceilings")}</h3>
       <Field
-        label="Color"
+        label={t("Color")}
         type="color"
         value={toHex(ceilingColor.value)}
         mixed={ceilingColor.mixed}
         onCommit={set("ceiling_color")}
       />
       <TextureField
-        label="Texture"
+        label={t("Texture")}
         current={ceilingTexture.value}
         mixed={ceilingTexture.mixed}
         onCommit={set("ceiling_texture")}
@@ -270,9 +279,11 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
   const mirrored = common(pieces.map((p) => !!p.attrs.model_mirrored));
   return (
     <>
-      <h2>{pieces.length} pieces of furniture</h2>
+      <h2>
+        {pieces.length} {t("pieces of furniture")}
+      </h2>
       <Field
-        label="Elevation"
+        label={t("Elevation")}
         type="number"
         unit="cm"
         value={elevation.value}
@@ -280,7 +291,7 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
         onCommit={set("elevation")}
       />
       <Field
-        label="Angle"
+        label={t("Angle")}
         type="number"
         unit="°"
         value={angle.value}
@@ -288,7 +299,7 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
         onCommit={set("angle_deg")}
       />
       <Field
-        label="Width"
+        label={t("Width")}
         type="number"
         unit="cm"
         value={width.value}
@@ -296,7 +307,7 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
         onCommit={set("width")}
       />
       <Field
-        label="Depth"
+        label={t("Depth")}
         type="number"
         unit="cm"
         value={depth.value}
@@ -304,7 +315,7 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
         onCommit={set("depth")}
       />
       <Field
-        label="Height"
+        label={t("Height")}
         type="number"
         unit="cm"
         value={height.value}
@@ -312,7 +323,7 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
         onCommit={set("height")}
       />
       <Field
-        label="Color"
+        label={t("Color")}
         type="color"
         value={toHex(color.value)}
         mixed={color.mixed}
@@ -320,18 +331,18 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
       />
       {(color.mixed || color.value !== null) && (
         <button type="button" className="link-button" onClick={() => set("color")("")}>
-          Restore model colors
+          {t("Restore model colors")}
         </button>
       )}
       <Field
-        label="Mirrored"
+        label={t("Mirrored")}
         type="checkbox"
         value={mirrored.value}
         mixed={mirrored.mixed}
         onCommit={set("mirrored")}
       />
       <Field
-        label="Visible"
+        label={t("Visible")}
         type="checkbox"
         value={visible.value}
         mixed={visible.mixed}

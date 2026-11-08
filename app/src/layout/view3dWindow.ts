@@ -2,6 +2,7 @@
 
 import { emitTo } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow, WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { t } from "../i18n";
 import { useStore, type ViewMode } from "../store";
 import type { CameraPose } from "../view3d/camera";
 
@@ -47,7 +48,7 @@ export async function openView3DWindow(onClosed: () => void): Promise<void> {
   }
   const win = new WebviewWindow(view3dLabel(), {
     url: `index.html${VIEW3D_HASH}`,
-    title: "3D view - My Sweet Home",
+    title: t("3D view - My Sweet Home"),
     width: 960,
     height: 680,
     minWidth: 320,

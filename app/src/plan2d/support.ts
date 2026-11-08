@@ -2,6 +2,7 @@
 // lands on its top (Sweet Home 3D's `dropOnTopElevation`) or, for shelf units, on the
 // shelf nearest to its elevation. The elevation handle snaps to these surfaces.
 
+import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
 
 /** A surface a piece can stand on, as elevation above the floor of its level (cm). */
@@ -32,12 +33,18 @@ function surfacesOf(q: Piece, p: Pt): Surface[] {
   const base = a.elevation ?? 0;
   const height = a.height_in_plan ?? a.height;
   const result: Surface[] = [
-    { elevation: base + height * (a.drop_on_top_elevation ?? 1), label: `on ${a.name}` },
+    {
+      elevation: base + height * (a.drop_on_top_elevation ?? 1),
+      label: t("on {name}", { name: a.name }),
+    },
   ];
   const [x, y] = local(q, p);
   for (const shelf of q.shelves ?? []) {
     if (shelf.elevation != null) {
-      result.push({ elevation: base + shelf.elevation * a.height, label: `shelf of ${a.name}` });
+      result.push({
+        elevation: base + shelf.elevation * a.height,
+        label: t("shelf of {name}", { name: a.name }),
+      });
     } else if (shelf.z_lower != null) {
       const inside =
         x >= (shelf.x_lower ?? 0) * a.width &&
@@ -45,7 +52,10 @@ function surfacesOf(q: Piece, p: Pt): Surface[] {
         y >= (shelf.y_lower ?? 0) * a.depth &&
         y <= (shelf.y_upper ?? 1) * a.depth;
       if (inside) {
-        result.push({ elevation: base + shelf.z_lower * a.height, label: `shelf of ${a.name}` });
+        result.push({
+          elevation: base + shelf.z_lower * a.height,
+          label: t("shelf of {name}", { name: a.name }),
+        });
       }
     }
   }
@@ -105,7 +115,7 @@ export function dropElevation(home: Home, piece: Piece, to: Pt): Surface | null 
   // Moved off the piece it stood on: back on the floor
   const before = surfacesAt(home, piece, [a.x, a.y]);
   if (current > 0 && before.some((s) => Math.abs(s.elevation - current) < 0.5)) {
-    return { elevation: 0, label: "on the floor" };
+    return { elevation: 0, label: t("on the floor") };
   }
   return null;
 }

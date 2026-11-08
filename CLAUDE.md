@@ -11,8 +11,11 @@ Guidance for Claude Code (and other AI agents) working in this repository.
   and issue texts.
 - **Do not translate programming terms.** Use the established English term
   (e.g. "Exception", "Commit", "Branch", "Build", "Pull Request") even in the German chat.
-- UI strings are English in code. A German translation is provided later through the
-  i18n layer (translation files), never by hard-coding German strings.
+- UI strings are English in code and wrapped in `t()` from `app/src/i18n`
+  (`t("Delete level")`, placeholders `t("Saved {pages} pages", { pages })`). German texts go
+  into `app/src/i18n/de.json`, never hard-coded. `check.ps1` runs the i18n check, which fails
+  on unused entries and mismatched placeholders; `node scripts/i18n-check.mjs --missing`
+  (in `app/`) lists untranslated texts.
 - Exceptions: test data and user content in their original language (e.g. German
   furniture names from catalog translations, `tests/corpus/private/*`).
 

@@ -7,6 +7,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { api, stageResourceUrl } from "../api";
+import { t } from "../i18n";
 import { useStore } from "../store";
 import { disposeObject, loadModelUncached } from "../view3d/models";
 
@@ -128,7 +129,7 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
     });
     if (typeof chosen !== "string") return;
     setBusy(true);
-    setStatus("Loading model…");
+    setStatus(t("Loading model…"));
     try {
       const s = await api.modelStage(chosen);
       const model = await loadModelUncached(stageResourceUrl(s.id, s.main));
@@ -199,11 +200,11 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
     const num = (v: string) => Number.parseFloat(v.replace(",", "."));
     const [w, d, h] = [num(size.width), num(size.depth), num(size.height)];
     if (!(w > 0 && d > 0 && h > 0)) {
-      setStatus("Width, depth and height must be positive.");
+      setStatus(t("Width, depth and height must be positive."));
       return;
     }
     setBusy(true);
-    setStatus("Importing…");
+    setStatus(t("Importing…"));
     try {
       const r = (await api.execute("furniture_import", {
         model_path: staged.path,
@@ -247,29 +248,30 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
 
   return (
     <div className="dialog-backdrop">
-      <div className="dialog" role="dialog" aria-modal="true" aria-label="Import furniture">
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={t("Import furniture")}>
         <header className="dialog-header">
-          <h2>Import furniture</h2>
-          <button type="button" onClick={onClose} aria-label="Close">
+          <h2>{t("Import furniture")}</h2>
+          <button type="button" onClick={onClose} aria-label={t("Close")}>
             ✕
           </button>
         </header>
         <p className="muted small">
-          OBJ (with its MTL and texture files), DAE, 3DS, glTF or GLB. The piece is added to your
-          library "My furniture", which Sweet Home 3D uses too. glTF models are converted to OBJ.
+          {t(
+            'OBJ (with its MTL and texture files), DAE, 3DS, glTF or GLB. The piece is added to your library "My furniture", which Sweet Home 3D uses too. glTF models are converted to OBJ.',
+          )}
         </p>
         <div className="import-layout">
           <div className="import-preview">
             <canvas ref={canvasRef} width={PREVIEW_PX} height={PREVIEW_PX} />
             <div className="prop-actions">
               <button type="button" onClick={() => void chooseModel()} disabled={busy}>
-                {staged ? "Other model…" : "Choose model…"}
+                {staged ? t("Other model…") : t("Choose model…")}
               </button>
             </div>
             {staged && (
               <div
                 className="prop-actions"
-                title="Turn the model until it stands upright and faces you"
+                title={t("Turn the model until it stands upright and faces you")}
               >
                 <button type="button" onClick={() => rotate("x")}>
                   ⟳ X
@@ -285,11 +287,11 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
           </div>
           <div className="import-fields props">
             <label className="prop-row">
-              <span className="prop-label">Name</span>
+              <span className="prop-label">{t("Name")}</span>
               <input type="text" value={name} onChange={(e) => setName(e.currentTarget.value)} />
             </label>
             <label className="prop-row">
-              <span className="prop-label">Category</span>
+              <span className="prop-label">{t("Category")}</span>
               <input
                 type="text"
                 value={category}
@@ -305,7 +307,7 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
                   value={size[f]}
                   onChange={(e) => changeSize(f, e.currentTarget.value)}
                 />
-                <span className="prop-unit">cm</span>
+                <span className="prop-unit">{t("cm")}</span>
               </label>
             ))}
             <label className="prop-row prop-check">
@@ -314,17 +316,17 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
                 checked={keepRatio}
                 onChange={(e) => setKeepRatio(e.currentTarget.checked)}
               />
-              <span>Keep proportions</span>
+              <span>{t("Keep proportions")}</span>
             </label>
             <label className="prop-row">
-              <span className="prop-label">Elevation</span>
+              <span className="prop-label">{t("Elevation")}</span>
               <input
                 type="text"
                 inputMode="decimal"
                 value={elevation}
                 onChange={(e) => setElevation(e.currentTarget.value)}
               />
-              <span className="prop-unit">cm</span>
+              <span className="prop-unit">{t("cm")}</span>
             </label>
             <label className="prop-row prop-check">
               <input
@@ -332,7 +334,7 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
                 checked={doorOrWindow}
                 onChange={(e) => setDoorOrWindow(e.currentTarget.checked)}
               />
-              <span>Door or window (cuts an opening into walls)</span>
+              <span>{t("Door or window (cuts an opening into walls)")}</span>
             </label>
             <label className="prop-row prop-check">
               <input
@@ -341,14 +343,14 @@ export default function ImportFurnitureDialog({ onClose }: { onClose: () => void
                 disabled={!opened}
                 onChange={(e) => setAddToHome(e.currentTarget.checked)}
               />
-              <span>Place it in the home after the import</span>
+              <span>{t("Place it in the home after the import")}</span>
             </label>
             <div className="prop-actions">
               <button type="button" onClick={() => void doImport()} disabled={!staged || busy}>
-                Import
+                {t("Import")}
               </button>
               <button type="button" onClick={onClose}>
-                Cancel
+                {t("Cancel")}
               </button>
             </div>
             {status && <p className="small">{status}</p>}

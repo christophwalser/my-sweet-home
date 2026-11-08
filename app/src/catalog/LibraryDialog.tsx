@@ -6,6 +6,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
+import { t } from "../i18n";
 
 type LibraryInfo = {
   path: string;
@@ -24,9 +25,9 @@ function fileName(path: string): string {
 
 /** Where a library comes from, derived from its path. */
 function origin(lib: LibraryInfo): string {
-  if (lib.user) return "Your libraries";
-  if (/WindowsApps|eTeks\.SweetHome3D/i.test(lib.path)) return "Sweet Home 3D (Store)";
-  return "Sweet Home 3D";
+  if (lib.user) return t("Your libraries");
+  if (/WindowsApps|eTeks\.SweetHome3D/i.test(lib.path)) return t("Sweet Home 3D (Store)");
+  return t("Sweet Home 3D");
 }
 
 export default function LibraryDialog({ onClose }: { onClose: () => void }) {
@@ -59,7 +60,7 @@ export default function LibraryDialog({ onClose }: { onClose: () => void }) {
   const importLibrary = async () => {
     const chosen = await open({
       multiple: false,
-      filters: [{ name: "Sweet Home 3D libraries", extensions: ["sh3f", "sh3t"] }],
+      filters: [{ name: t("Sweet Home 3D libraries"), extensions: ["sh3f", "sh3t"] }],
     });
     if (typeof chosen !== "string") return;
     setBusy(true);
@@ -70,14 +71,17 @@ export default function LibraryDialog({ onClose }: { onClose: () => void }) {
         result = await api.execute("library_import", { path: chosen });
       } catch (e) {
         if (!String(e).includes("exists already")) throw e;
-        if (!window.confirm(`${fileName(chosen)} exists already. Replace it?`)) return;
+        if (!window.confirm(t("{v0} exists already. Replace it?", { v0: fileName(chosen) })))
+          return;
         result = await api.execute("library_import", { path: chosen, replace: true });
       }
       const r = result as LibraryInfo;
       setMessage(
-        `Imported ${r.name ?? fileName(chosen)}: ${r.furniture || r.textures} ${
-          r.kind === "textures" ? "textures" : "pieces of furniture"
-        }.`,
+        t("Imported {v0}: {v1} {v2}.", {
+          v0: r.name ?? fileName(chosen),
+          v1: r.furniture || r.textures,
+          v2: r.kind === "textures" ? "textures" : "pieces of furniture",
+        }),
       );
       await refresh();
     } catch (e) {
@@ -90,13 +94,16 @@ export default function LibraryDialog({ onClose }: { onClose: () => void }) {
   const remove = async (lib: LibraryInfo) => {
     if (
       !window.confirm(
-        `Remove ${lib.name ?? fileName(lib.path)}? The file is moved to the "removed" folder next to your libraries and can be restored from there.`,
+        t(
+          'Remove {v0}? The file is moved to the "removed" folder next to your libraries and can be restored from there.',
+          { v0: lib.name ?? fileName(lib.path) },
+        ),
       )
     )
       return;
     try {
       await api.execute("library_remove", { path: lib.path });
-      setMessage(`Removed ${lib.name ?? fileName(lib.path)}.`);
+      setMessage(t("Removed {v0}.", { v0: lib.name ?? fileName(lib.path) }));
       await refresh();
     } catch (e) {
       setMessage(String(e));
@@ -105,34 +112,35 @@ export default function LibraryDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="dialog-backdrop">
-      <div className="dialog" role="dialog" aria-modal="true" aria-label="Libraries">
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={t("Libraries")}>
         <header className="dialog-header">
-          <h2>Libraries</h2>
-          <button type="button" onClick={onClose} aria-label="Close">
+          <h2>{t("Libraries")}</h2>
+          <button type="button" onClick={onClose} aria-label={t("Close")}>
             ✕
           </button>
         </header>
         <p className="muted small">
-          Furniture and texture libraries of Sweet Home 3D. Imported libraries are stored in your
-          Sweet Home 3D library folders, so both applications use them.
+          {t(
+            "Furniture and texture libraries of Sweet Home 3D. Imported libraries are stored in your Sweet Home 3D library folders, so both applications use them.",
+          )}
         </p>
         <div className="dialog-actions">
           <button type="button" onClick={() => void importLibrary()} disabled={busy}>
-            Import library…
+            {t("Import library…")}
           </button>
           {message && <span className="small">{message}</span>}
         </div>
         <div className="dialog-body">
           {!libraries ? (
-            <p className="muted small">Loading…</p>
+            <p className="muted small">{t("Loading…")}</p>
           ) : (
             <table className="library-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Items</th>
-                  <th>Source</th>
-                  <th>License</th>
+                  <th>{t("Name")}</th>
+                  <th>{t("Items")}</th>
+                  <th>{t("Source")}</th>
+                  <th>{t("License")}</th>
                   <th />
                 </tr>
               </thead>
@@ -153,7 +161,7 @@ export default function LibraryDialog({ onClose }: { onClose: () => void }) {
                     <td>
                       {lib.user && (
                         <button type="button" onClick={() => void remove(lib)}>
-                          Remove
+                          {t("Remove")}
                         </button>
                       )}
                     </td>

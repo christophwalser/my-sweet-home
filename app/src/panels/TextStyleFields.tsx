@@ -2,12 +2,13 @@
 // size, font family, bold, italic. `prefix` selects the command parameters
 // ("" → font_size, font_name, bold, italic; "name_" → name_font_size, ...).
 
+import { t } from "../i18n";
 import type { TextStyle } from "../model";
 import { Field, SelectField } from "./fields";
 
 /** Fonts offered in addition to the default font (common Windows fonts). */
 const FONTS: [string, string][] = [
-  ["", "Default"],
+  ["", t("Default")],
   ["Arial", "Arial"],
   ["Calibri", "Calibri"],
   ["Cambria", "Cambria"],
@@ -45,26 +46,26 @@ export default function TextStyleFields({
   return (
     <>
       <Field
-        label={label("Size")}
+        label={label(t("Size"))}
         type="number"
         unit="cm"
         value={style?.font_size ?? defaultSize}
         onCommit={(v) => onChange({ [`${prefix}font_size`]: v })}
       />
       <SelectField
-        label={label("Font")}
+        label={label(t("Font"))}
         value={font}
         options={fonts}
         onCommit={(v) => onChange({ [`${prefix}font_name`]: v })}
       />
       <Field
-        label={label("Bold")}
+        label={label(t("Bold"))}
         type="checkbox"
         value={style?.bold === true}
         onCommit={(v) => onChange({ [`${prefix}bold`]: v })}
       />
       <Field
-        label={label("Italic")}
+        label={label(t("Italic"))}
         type="checkbox"
         value={style?.italic === true}
         onCommit={(v) => onChange({ [`${prefix}italic`]: v })}

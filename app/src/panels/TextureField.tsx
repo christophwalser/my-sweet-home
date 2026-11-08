@@ -5,6 +5,7 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useMemo, useState } from "react";
 import { api, docResourceUrl, libResourceUrl } from "../api";
+import { t } from "../i18n";
 import type { Texture } from "../model";
 import { useStore } from "../store";
 
@@ -53,7 +54,7 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
   const chooseImage = async () => {
     const chosen = await openDialog({
       multiple: false,
-      filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "bmp", "gif"] }],
+      filters: [{ name: t("Images"), extensions: ["jpg", "jpeg", "png", "bmp", "gif"] }],
     });
     if (typeof chosen !== "string") return;
     setError(null);
@@ -65,7 +66,7 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
     const width = Number.parseFloat(pending.width.replace(",", "."));
     const height = Number.parseFloat(pending.height.replace(",", "."));
     if (!(width > 0) || !(height > 0)) {
-      setError("Width and height must be positive numbers.");
+      setError(t("Width and height must be positive numbers."));
       return;
     }
     try {
@@ -95,7 +96,7 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
           {!mixed && current && docId !== undefined && (
             <img src={docResourceUrl(docId, current.image)} alt="" />
           )}
-          <span>{mixed ? "mixed" : (current?.name ?? "None")}</span>
+          <span>{mixed ? "mixed" : (current?.name ?? t("None"))}</span>
         </button>
       </div>
       {open && (
@@ -103,25 +104,25 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
           <div className="texture-picker-bar">
             <input
               type="search"
-              placeholder="Search textures"
+              placeholder={t("Search textures")}
               value={query}
               onChange={(e) => setQuery(e.currentTarget.value)}
             />
             <button type="button" onClick={() => pick("")} disabled={!current && !mixed}>
-              None
+              {t("None")}
             </button>
             <button
               type="button"
               onClick={() => void chooseImage()}
-              title="Import an image as texture (added to your library 'My textures')"
+              title={t("Import an image as texture (added to your library 'My textures')")}
             >
-              Import…
+              {t("Import…")}
             </button>
           </div>
           {pending && (
             <div className="texture-import">
               <label className="prop-row">
-                <span className="prop-label">Name</span>
+                <span className="prop-label">{t("Name")}</span>
                 <input
                   type="text"
                   value={pending.name}
@@ -129,37 +130,37 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
                 />
               </label>
               <label className="prop-row">
-                <span className="prop-label">Tile width</span>
+                <span className="prop-label">{t("Tile width")}</span>
                 <input
                   type="text"
                   inputMode="decimal"
                   value={pending.width}
                   onChange={(e) => setPending({ ...pending, width: e.currentTarget.value })}
                 />
-                <span className="prop-unit">cm</span>
+                <span className="prop-unit">{t("cm")}</span>
               </label>
               <label className="prop-row">
-                <span className="prop-label">Tile height</span>
+                <span className="prop-label">{t("Tile height")}</span>
                 <input
                   type="text"
                   inputMode="decimal"
                   value={pending.height}
                   onChange={(e) => setPending({ ...pending, height: e.currentTarget.value })}
                 />
-                <span className="prop-unit">cm</span>
+                <span className="prop-unit">{t("cm")}</span>
               </label>
               <div className="prop-actions">
                 <button type="button" onClick={() => void importTexture()}>
-                  Import and apply
+                  {t("Import and apply")}
                 </button>
                 <button type="button" onClick={() => setPending(null)}>
-                  Cancel
+                  {t("Cancel")}
                 </button>
               </div>
             </div>
           )}
           {error && <p className="small error-text">{error}</p>}
-          {!catalog && <p className="muted small">Loading catalog…</p>}
+          {!catalog && <p className="muted small">{t("Loading catalog…")}</p>}
           <div className="texture-grid">
             {textures.slice(0, MAX_SHOWN).map((item) => (
               <button
@@ -178,7 +179,7 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
           </div>
           {textures.length > MAX_SHOWN && (
             <p className="muted small">
-              {textures.length - MAX_SHOWN} more; refine the search to see them.
+              {textures.length - MAX_SHOWN} {t("more; refine the search to see them.")}
             </p>
           )}
         </div>

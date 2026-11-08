@@ -2,6 +2,7 @@
 // delete. The wizard (opened as dialog of the window) does the import and the adjustment of
 // scale and origin.
 
+import { t } from "../i18n";
 import { type BackgroundImage, backgroundScale } from "../model";
 import { useStore } from "../store";
 import { useUi } from "../ui/uiStore";
@@ -21,48 +22,49 @@ export default function BackgroundImageSection({
 
   return (
     <>
-      <h2>Background image</h2>
+      <h2>{t("Background image")}</h2>
       {background ? (
         <p className="muted small">
-          {Math.round(backgroundScale(background) * 1000) / 1000} cm per pixel · origin at{" "}
-          {Math.round(background.x_origin ?? 0)}, {Math.round(background.y_origin ?? 0)} cm on the
-          image{hidden ? " · hidden" : ""}
+          {Math.round(backgroundScale(background) * 1000) / 1000} {t("cm per pixel · origin at")}{" "}
+          {Math.round(background.x_origin ?? 0)}, {Math.round(background.y_origin ?? 0)}{" "}
+          {t("cm on the image")}
+          {hidden ? " · hidden" : ""}
         </p>
       ) : (
         <p className="muted small">
-          A floor plan (image or PDF) to draw walls and rooms on, scaled to real size.
+          {t("A floor plan (image or PDF) to draw walls and rooms on, scaled to real size.")}
         </p>
       )}
       <div className="prop-actions">
         <button
           type="button"
           onClick={() => openDialog("backgroundImport")}
-          title="Choose an image or PDF page, set its scale and origin"
+          title={t("Choose an image or PDF page, set its scale and origin")}
         >
-          {background ? "Replace…" : "Import…"}
+          {background ? t("Replace…") : t("Import…")}
         </button>
         {background && (
           <>
             <button
               type="button"
               onClick={() => openDialog("backgroundModify")}
-              title="Change the scale marker and the origin"
+              title={t("Change the scale marker and the origin")}
             >
-              Modify…
+              {t("Modify…")}
             </button>
             <button
               type="button"
               onClick={() => void run("background_image_update", { ...level, visible: hidden })}
-              title={hidden ? "Show the image in the plan" : "Hide the image in the plan"}
+              title={hidden ? t("Show the image in the plan") : t("Hide the image in the plan")}
             >
-              {hidden ? "Show" : "Hide"}
+              {hidden ? t("Show") : t("Hide")}
             </button>
             <button
               type="button"
               onClick={() => void run("background_image_remove", level)}
-              title="Remove the background image (Ctrl+Z restores it)"
+              title={t("Remove the background image (Ctrl+Z restores it)")}
             >
-              Delete
+              {t("Delete")}
             </button>
           </>
         )}

@@ -5,6 +5,7 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { t } from "../i18n";
 import { useStore } from "../store";
 import type { CameraPose } from "./camera";
 import {
@@ -18,16 +19,16 @@ import {
 } from "./video";
 
 const QUALITIES: { value: VideoQuality; label: string; hint: string }[] = [
-  { value: "draft", label: "Draft", hint: "Like the 3D view with sun shadows, fast" },
+  { value: "draft", label: t("Draft"), hint: t("Like the 3D view with sun shadows, fast") },
   {
     value: "good",
-    label: "Good",
-    hint: `Path traced, ${VIDEO_SAMPLES.good} samples per frame (slow)`,
+    label: t("Good"),
+    hint: t("Path traced, {good} samples per frame (slow)", { good: VIDEO_SAMPLES.good }),
   },
   {
     value: "best",
-    label: "Best",
-    hint: `Path traced, ${VIDEO_SAMPLES.best} samples per frame (very slow)`,
+    label: t("Best"),
+    hint: t("Path traced, {best} samples per frame (very slow)", { best: VIDEO_SAMPLES.best }),
   },
 ];
 
@@ -126,13 +127,15 @@ export default function VideoDialog({
       (v) => {
         setVideo(v);
         const seconds = (performance.now() - started.current) / 1000;
-        setMessage(`${v.frames} frames rendered in ${seconds.toFixed(1)} s.`);
+        setMessage(
+          t("{frames} frames rendered in {v1} s.", { frames: v.frames, v1: seconds.toFixed(1) }),
+        );
         job.current = null;
       },
       (e) => {
         setProgress(null);
-        if (String(e).includes("cancelled")) setMessage("Cancelled.");
-        else setMessage(`Rendering failed: ${String(e)}`);
+        if (String(e).includes("cancelled")) setMessage(t("Cancelled."));
+        else setMessage(t("Rendering failed: {v0}", { v0: String(e) }));
         job.current = null;
       },
     );
@@ -147,9 +150,9 @@ export default function VideoDialog({
     if (!path) return;
     try {
       await api.saveFile(path, video.data);
-      setMessage(`Saved to ${path}.`);
+      setMessage(t("Saved to {path}.", { path }));
     } catch (e) {
-      setMessage(`Saving failed: ${String(e)}`);
+      setMessage(t("Saving failed: {v0}", { v0: String(e) }));
     }
   };
 
@@ -158,42 +161,43 @@ export default function VideoDialog({
   const v = info?.video;
 
   return (
-    <div className="video-panel" role="dialog" aria-label="Create video">
+    <div className="video-panel" role="dialog" aria-label={t("Create video")}>
       <header className="dialog-header">
-        <h2>Create video</h2>
-        <button type="button" onClick={onClose} aria-label="Close" disabled={rendering}>
+        <h2>{t("Create video")}</h2>
+        <button type="button" onClick={onClose} aria-label={t("Close")} disabled={rendering}>
           {"✕"}
         </button>
       </header>
       <p className="muted small">
-        Move the 3D view to each place the video passes through and add it to the camera path. The
-        video moves from point to point at the chosen speed.
+        {t(
+          "Move the 3D view to each place the video passes through and add it to the camera path. The video moves from point to point at the chosen speed.",
+        )}
       </p>
       <ol className="video-points">
         {points.map((p, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: key points have no ID
           <li key={i}>
             <span>
-              x {Math.round(p.x)}, y {Math.round(p.y)}, z {Math.round(p.z)} cm · {Math.round(p.yaw)}
-              °
+              x {Math.round(p.x)}, y {Math.round(p.y)}, z {Math.round(p.z)} {t("cm ·")}{" "}
+              {Math.round(p.yaw)}°
             </span>
             <button
               type="button"
               className="video-point-remove"
               disabled={rendering}
               onClick={() => void run("camera_path_remove", { index: i })}
-              aria-label={`Remove point ${i + 1}`}
-              title="Remove this point"
+              aria-label={t("Remove point {v0}", { v0: i + 1 })}
+              title={t("Remove this point")}
             >
               {"✕"}
             </button>
           </li>
         ))}
-        {points.length === 0 && <li className="muted small">No points yet.</li>}
+        {points.length === 0 && <li className="muted small">{t("No points yet.")}</li>}
       </ol>
       <div className="video-path-actions">
         <button type="button" onClick={addCurrent} disabled={rendering}>
-          Add current view
+          {t("Add current view")}
         </button>
         {stored.length > 0 && (
           <select
@@ -203,9 +207,9 @@ export default function VideoDialog({
               if (e.currentTarget.value)
                 void run("camera_path_add", { stored: e.currentTarget.value });
             }}
-            aria-label="Add a stored point of view"
+            aria-label={t("Add a stored point of view")}
           >
-            <option value="">Add stored point of view…</option>
+            <option value="">{t("Add stored point of view…")}</option>
             {stored.map((s) => (
               <option key={s.name} value={s.name ?? ""}>
                 {s.name}
@@ -218,13 +222,13 @@ export default function VideoDialog({
           onClick={() => void run("camera_path_clear")}
           disabled={rendering || points.length === 0}
         >
-          Clear
+          {t("Clear")}
         </button>
       </div>
       {v && (
         <div className="export-grid video-settings">
           <label>
-            Width
+            {t("Width")}
             <select
               value={v.width}
               disabled={rendering}
@@ -234,13 +238,13 @@ export default function VideoDialog({
                 .sort((a, b) => a - b)
                 .map((w) => (
                   <option key={w} value={w}>
-                    {w} px
+                    {w} {t("px")}
                   </option>
                 ))}
             </select>
           </label>
           <label>
-            Aspect ratio
+            {t("Aspect ratio")}
             <select
               value={v.aspect_ratio}
               disabled={rendering}
@@ -254,7 +258,7 @@ export default function VideoDialog({
             </select>
           </label>
           <label>
-            Frame rate
+            {t("Frame rate")}
             <select
               value={v.frame_rate}
               disabled={rendering}
@@ -264,13 +268,13 @@ export default function VideoDialog({
                 .sort((a, b) => a - b)
                 .map((f) => (
                   <option key={f} value={f}>
-                    {f} fps
+                    {f} {t("fps")}
                   </option>
                 ))}
             </select>
           </label>
           <label>
-            Speed
+            {t("Speed")}
             <span className="export-unit">
               <input
                 key={v.speed}
@@ -286,13 +290,13 @@ export default function VideoDialog({
                     settings({ speed: kmh / 3.6 });
                 }}
               />
-              km/h
+              {t("km/h")}
             </span>
           </label>
         </div>
       )}
       <fieldset className="photo-quality" disabled={rendering}>
-        <legend>Quality</legend>
+        <legend>{t("Quality")}</legend>
         {QUALITIES.map((q) => (
           <label key={q.value} title={q.hint}>
             <input
@@ -310,7 +314,8 @@ export default function VideoDialog({
       </fieldset>
       {v && (
         <p className="small">
-          {v.width} × {v.height} px · {v.frames} frames · {v.duration_seconds.toFixed(1)} s
+          {v.width} × {v.height} {t("px ·")} {v.frames} {t("frames ·")}{" "}
+          {v.duration_seconds.toFixed(1)} s
         </p>
       )}
       <div className="photo-preview" ref={preview} />
@@ -322,29 +327,29 @@ export default function VideoDialog({
       {rendering && progress && (
         <p className="muted small">
           {progress.frame === 0 && quality !== "draft"
-            ? "Preparing the scene for path tracing…"
-            : `Frame ${progress.frame} of ${progress.frames}`}
+            ? t("Preparing the scene for path tracing…")
+            : t("Frame {frame} of {frames}", { frame: progress.frame, frames: progress.frames })}
         </p>
       )}
       <div className="dialog-actions">
         {!rendering && (
           <button type="button" onClick={render} disabled={points.length < 2}>
-            {video ? "Create again" : "Create"}
+            {video ? t("Create again") : t("Create")}
           </button>
         )}
         {rendering && (
           <button type="button" onClick={() => job.current?.cancel()}>
-            Cancel
+            {t("Cancel")}
           </button>
         )}
         {video && (
           <button type="button" onClick={() => void saveVideo()}>
-            Save…
+            {t("Save…")}
           </button>
         )}
         {message && <span className="small">{message}</span>}
         {!rendering && points.length < 2 && (
-          <span className="muted small">At least two points are needed.</span>
+          <span className="muted small">{t("At least two points are needed.")}</span>
         )}
       </div>
     </div>

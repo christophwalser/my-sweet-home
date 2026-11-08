@@ -5,6 +5,7 @@
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { ask, message, open } from "@tauri-apps/plugin-dialog";
 import { api } from "../api";
+import { t } from "../i18n";
 import {
   closeView3DWindow,
   openView3DWindow,
@@ -156,7 +157,7 @@ async function addLevel(sameElevation: boolean): Promise<void> {
   const levels = sortedLevels();
   const current = currentLevel();
   const params: Record<string, unknown> = {
-    name: `Level ${levels.length || 1}`,
+    name: t("Level {n}", { n: levels.length || 1 }),
     floor_thickness: prefs().newFloorThickness,
   };
   if (sameElevation && current) {
@@ -173,8 +174,11 @@ async function deleteLevel(): Promise<void> {
   const level = currentLevel();
   if (!level) return;
   const yes = await ask(
-    `Delete the level "${level.attrs.name}" with all walls, rooms, furniture and other elements on it? Undo restores it.`,
-    { title: "Delete level", kind: "warning", okLabel: "Delete", cancelLabel: "Cancel" },
+    t(
+      'Delete the level "{name}" with all walls, rooms, furniture and other elements on it? Undo restores it.',
+      { name: level.attrs.name },
+    ),
+    { title: t("Delete level"), kind: "warning", okLabel: t("Delete"), cancelLabel: t("Cancel") },
   );
   if (yes) await run("edit_delete", { ids: [level.attrs.id] });
 }
@@ -200,8 +204,11 @@ function align(how: string): void {
 async function about(): Promise<void> {
   const info = await api.appInfo().catch(() => null);
   await message(
-    `My Sweet Home ${info ? `v${info.version}` : ""}\n\nA home design app compatible with Sweet Home 3D files (.sh3d, .sh3f, .sh3t). Controllable through the UI, the msh CLI and an MCP server.`,
-    { title: "About My Sweet Home", kind: "info" },
+    t(
+      "My Sweet Home {v0}\n\nA home design app compatible with Sweet Home 3D files (.sh3d, .sh3f, .sh3t). Controllable through the UI, the msh CLI and an MCP server.",
+      { v0: info ? `v${info.version}` : "" },
+    ),
+    { title: t("About My Sweet Home"), kind: "info" },
   );
 }
 
@@ -217,7 +224,7 @@ const alignCommand = (how: string, label: string, icon: IconName = "align"): Com
   id: `furniture.align.${how}`,
   label,
   icon,
-  hint: "Align the selected furniture to the piece selected last",
+  hint: t("Align the selected furniture to the piece selected last"),
   enabled: multipleFurniture,
   run: () => align(how),
 });
@@ -240,11 +247,11 @@ const toolCommand = (
 
 const LIST: Command[] = [
   // File
-  { id: "file.new", label: "New window", icon: "new", shortcut: "Ctrl+N", run: newHome },
-  { id: "file.open", label: "Open…", icon: "open", shortcut: "Ctrl+O", run: chooseFile },
+  { id: "file.new", label: t("New window"), icon: "new", shortcut: "Ctrl+N", run: newHome },
+  { id: "file.open", label: t("Open…"), icon: "open", shortcut: "Ctrl+O", run: chooseFile },
   {
     id: "file.save",
-    label: "Save",
+    label: t("Save"),
     icon: "save",
     shortcut: "Ctrl+S",
     enabled: hasHome,
@@ -252,7 +259,7 @@ const LIST: Command[] = [
   },
   {
     id: "file.saveAs",
-    label: "Save as…",
+    label: t("Save as…"),
     icon: "save",
     shortcut: "Ctrl+Shift+S",
     enabled: hasHome,
@@ -260,17 +267,19 @@ const LIST: Command[] = [
   },
   {
     id: "file.print",
-    label: "Print / export…",
+    label: t("Print / export…"),
     icon: "print",
     shortcut: "Ctrl+P",
-    hint: "Print the home or save it as PDF; export the plan (PDF, SVG, PNG), the furniture list (CSV) or the 3D view (OBJ)",
+    hint: t(
+      "Print the home or save it as PDF; export the plan (PDF, SVG, PNG), the furniture list (CSV) or the 3D view (OBJ)",
+    ),
     keywords: "pdf svg png csv obj export",
     enabled: hasHome,
     run: () => useUi.getState().openDialog("export"),
   },
   {
     id: "file.preferences",
-    label: "Preferences…",
+    label: t("Preferences…"),
     icon: "settings",
     shortcut: "Ctrl+,",
     keywords: "settings options rulers grid magnetism",
@@ -278,16 +287,16 @@ const LIST: Command[] = [
   },
   {
     id: "file.close",
-    label: "Close window",
+    label: t("Close window"),
     icon: "close",
     shortcut: "Ctrl+W",
     run: () => getCurrentWebviewWindow().close(),
   },
-  { id: "file.exit", label: "Exit", icon: "exit", keywords: "quit", run: exitApp },
+  { id: "file.exit", label: t("Exit"), icon: "exit", keywords: "quit", run: exitApp },
   // Edit
   {
     id: "edit.undo",
-    label: "Undo",
+    label: t("Undo"),
     icon: "undo",
     shortcut: "Ctrl+Z",
     enabled: () => !!store().opened?.canUndo,
@@ -295,7 +304,7 @@ const LIST: Command[] = [
   },
   {
     id: "edit.redo",
-    label: "Redo",
+    label: t("Redo"),
     icon: "redo",
     shortcut: "Ctrl+Y",
     enabled: () => !!store().opened?.canRedo,
@@ -303,7 +312,7 @@ const LIST: Command[] = [
   },
   {
     id: "edit.cut",
-    label: "Cut",
+    label: t("Cut"),
     icon: "cut",
     shortcut: "Ctrl+X",
     shortcutElsewhere: true,
@@ -315,7 +324,7 @@ const LIST: Command[] = [
   },
   {
     id: "edit.copy",
-    label: "Copy",
+    label: t("Copy"),
     icon: "copy",
     shortcut: "Ctrl+C",
     shortcutElsewhere: true,
@@ -324,7 +333,7 @@ const LIST: Command[] = [
   },
   {
     id: "edit.paste",
-    label: "Paste",
+    label: t("Paste"),
     icon: "paste",
     shortcut: "Ctrl+V",
     shortcutElsewhere: true,
@@ -333,16 +342,16 @@ const LIST: Command[] = [
   },
   {
     id: "edit.pasteStyle",
-    label: "Paste style",
+    label: t("Paste style"),
     icon: "pastestyle",
     shortcut: "Ctrl+Shift+V",
-    hint: "Apply the colors, textures and text style of the copied element to the selection",
+    hint: t("Apply the colors, textures and text style of the copied element to the selection"),
     enabled: hasSelection,
     run: () => void run("edit_paste_style", { ids: selected() }),
   },
   {
     id: "edit.duplicate",
-    label: "Duplicate",
+    label: t("Duplicate"),
     icon: "duplicate",
     shortcut: "Ctrl+D",
     shortcutElsewhere: true,
@@ -351,7 +360,7 @@ const LIST: Command[] = [
   },
   {
     id: "edit.delete",
-    label: "Delete",
+    label: t("Delete"),
     icon: "delete",
     shortcut: "Del",
     shortcutElsewhere: true,
@@ -360,7 +369,7 @@ const LIST: Command[] = [
   },
   {
     id: "edit.selectAll",
-    label: "Select all",
+    label: t("Select all"),
     icon: "selectall",
     shortcut: "Ctrl+A",
     shortcutElsewhere: true,
@@ -369,9 +378,11 @@ const LIST: Command[] = [
   },
   {
     id: "edit.lockBasePlan",
-    label: "Lock base plan",
+    label: t("Lock base plan"),
     icon: "lock",
-    hint: "Walls, rooms, dimensions, texts, doors, windows and fixed furniture can no longer be selected in the plan, only movable furniture. Drawing unlocks it.",
+    hint: t(
+      "Walls, rooms, dimensions, texts, doors, windows and fixed furniture can no longer be selected in the plan, only movable furniture. Drawing unlocks it.",
+    ),
     enabled: hasHome,
     checked: () => store().opened?.home.attrs.base_plan_locked === true,
     run: async () => {
@@ -384,35 +395,64 @@ const LIST: Command[] = [
   // Plan tools
   toolCommand(
     "select",
-    "Select",
+    t("Select"),
     "select",
-    "Select and move; drag the handles to resize or rotate",
+    t("Select and move; drag the handles to resize or rotate"),
     "Esc",
   ),
-  toolCommand("pan", "Pan", "pan", "Drag to move the plan (also with the right mouse button)"),
-  toolCommand("wall", "Straight walls", "wall", "Click to add points, double-click to finish", "1"),
-  toolCommand("arcwall", "Round walls", "arcwall", "Walls drawn as quarter circle arcs"),
-  toolCommand("room", "Room by corners", "room", "Click the corners, double-click to finish", "2"),
+  toolCommand(
+    "pan",
+    t("Pan"),
+    "pan",
+    t("Drag to move the plan (also with the right mouse button)"),
+  ),
+  toolCommand(
+    "wall",
+    t("Straight walls"),
+    "wall",
+    t("Click to add points, double-click to finish"),
+    "1",
+  ),
+  toolCommand("arcwall", t("Round walls"), "arcwall", t("Walls drawn as quarter circle arcs")),
+  toolCommand(
+    "room",
+    t("Room by corners"),
+    "room",
+    t("Click the corners, double-click to finish"),
+    "2",
+  ),
   toolCommand(
     "roomauto",
-    "Room from walls",
+    t("Room from walls"),
     "roomauto",
-    "Click inside walls to create the room of that area",
+    t("Click inside walls to create the room of that area"),
   ),
-  toolCommand("polyline", "Lines", "polyline", "Click to add points, double-click to finish", "5"),
-  toolCommand("dimension", "Dimension", "dimension", "Click start and end point", "3"),
+  toolCommand(
+    "polyline",
+    t("Lines"),
+    "polyline",
+    t("Click to add points, double-click to finish"),
+    "5",
+  ),
+  toolCommand("dimension", t("Dimension"), "dimension", t("Click start and end point"), "3"),
   toolCommand(
     "heightdim",
-    "Height dimension",
+    t("Height dimension"),
     "heightdim",
-    "Click where the height of the level is measured",
+    t("Click where the height of the level is measured"),
   ),
-  toolCommand("label", "Text", "text", "Click to place a text", "6"),
-  toolCommand("measure", "Measure", "measure", "Measure a distance without adding anything", "4"),
+  toolCommand("label", t("Text"), "text", t("Click to place a text"), "6"),
+  toolCommand(
+    "measure",
+    t("Measure"),
+    "measure",
+    t("Measure a distance without adding anything"),
+    "4",
+  ),
   // Plan: walls
   {
     id: "wall.join",
-    label: "Join walls",
+    label: t("Join walls"),
     icon: "joinwalls",
     shortcut: "J",
     shortcutElsewhere: true,
@@ -421,7 +461,7 @@ const LIST: Command[] = [
   },
   {
     id: "wall.split",
-    label: "Split wall in the middle",
+    label: t("Split wall in the middle"),
     icon: "splitwall",
     enabled: () => selectedWalls().length === 1,
     run: () => {
@@ -437,14 +477,14 @@ const LIST: Command[] = [
   },
   {
     id: "wall.reverse",
-    label: "Reverse wall direction",
+    label: t("Reverse wall direction"),
     icon: "reverse",
     enabled: () => selectedWalls().length > 0,
     run: () => void run("wall_reverse", { ids: selectedWalls() }),
   },
   {
     id: "wall.detach",
-    label: "Detach walls",
+    label: t("Detach walls"),
     icon: "splitwall",
     enabled: () => selectedWalls().length > 0,
     run: () => void run("wall_detach", { ids: selectedWalls() }),
@@ -452,7 +492,7 @@ const LIST: Command[] = [
   // Plan: view
   {
     id: "plan.zoomIn",
-    label: "Zoom in",
+    label: t("Zoom in"),
     icon: "zoomin",
     shortcut: "Ctrl++",
     enabled: hasHome,
@@ -460,7 +500,7 @@ const LIST: Command[] = [
   },
   {
     id: "plan.zoomOut",
-    label: "Zoom out",
+    label: t("Zoom out"),
     icon: "zoomout",
     shortcut: "Ctrl+-",
     enabled: hasHome,
@@ -468,7 +508,7 @@ const LIST: Command[] = [
   },
   {
     id: "plan.fit",
-    label: "Fit plan to window",
+    label: t("Fit plan to window"),
     icon: "zoomfit",
     shortcut: "Ctrl+0",
     enabled: hasHome,
@@ -476,30 +516,30 @@ const LIST: Command[] = [
   },
   {
     id: "plan.rulers",
-    label: "Rulers",
+    label: t("Rulers"),
     icon: "rulers",
     checked: () => usePreferences.getState().rulers,
     run: () => usePreferences.getState().update({ rulers: !usePreferences.getState().rulers }),
   },
   {
     id: "plan.grid",
-    label: "Grid",
+    label: t("Grid"),
     icon: "grid",
     checked: () => usePreferences.getState().grid,
     run: () => usePreferences.getState().update({ grid: !usePreferences.getState().grid }),
   },
   {
     id: "plan.magnetism",
-    label: "Magnetism",
+    label: t("Magnetism"),
     icon: "grid",
-    hint: "Snap to walls, angles and lengths while drawing and moving; Alt inverts it",
+    hint: t("Snap to walls, angles and lengths while drawing and moving; Alt inverts it"),
     checked: () => usePreferences.getState().magnetism,
     run: () =>
       usePreferences.getState().update({ magnetism: !usePreferences.getState().magnetism }),
   },
   {
     id: "plan.backgroundImport",
-    label: "Import background image…",
+    label: t("Import background image…"),
     icon: "background",
     keywords: "floor plan pdf scan",
     enabled: hasHome,
@@ -507,14 +547,14 @@ const LIST: Command[] = [
   },
   {
     id: "plan.backgroundModify",
-    label: "Modify background image…",
+    label: t("Modify background image…"),
     icon: "background",
     enabled: () => !!currentBackground(),
     run: () => useUi.getState().openDialog("backgroundModify"),
   },
   {
     id: "plan.backgroundToggle",
-    label: "Show background image",
+    label: t("Show background image"),
     icon: "background",
     enabled: () => !!currentBackground(),
     checked: () => currentBackground()?.visible !== false,
@@ -526,7 +566,7 @@ const LIST: Command[] = [
   },
   {
     id: "plan.backgroundDelete",
-    label: "Delete background image",
+    label: t("Delete background image"),
     icon: "delete",
     enabled: () => !!currentBackground(),
     run: () => void run("background_image_remove", levelParam()),
@@ -534,30 +574,30 @@ const LIST: Command[] = [
   // Levels
   {
     id: "level.add",
-    label: "Add level",
+    label: t("Add level"),
     icon: "leveladd",
-    hint: "Add a level above the highest one",
+    hint: t("Add a level above the highest one"),
     enabled: hasHome,
     run: () => addLevel(false),
   },
   {
     id: "level.addSame",
-    label: "Add level at same elevation",
+    label: t("Add level at same elevation"),
     icon: "leveladd",
-    hint: "Add a level at the elevation of the selected one, e.g. for a split level",
+    hint: t("Add a level at the elevation of the selected one, e.g. for a split level"),
     enabled: () => !!currentLevel(),
     run: () => addLevel(true),
   },
   {
     id: "level.rename",
-    label: "Rename level",
+    label: t("Rename level"),
     icon: "level",
     enabled: () => !!currentLevel(),
     run: () => useUi.getState().setEditingLevel(currentLevel()?.attrs.id ?? null),
   },
   {
     id: "level.viewable",
-    label: "Show level in 3D",
+    label: t("Show level in 3D"),
     icon: "level",
     enabled: () => !!currentLevel(),
     checked: () => currentLevel()?.attrs.viewable !== false,
@@ -568,16 +608,16 @@ const LIST: Command[] = [
   },
   {
     id: "level.delete",
-    label: "Delete level…",
+    label: t("Delete level…"),
     icon: "delete",
     enabled: () => !!currentLevel(),
     run: deleteLevel,
   },
   {
     id: "level.allIn3D",
-    label: "Show all levels in 3D",
+    label: t("Show all levels in 3D"),
     icon: "alllevels",
-    hint: "Show all levels, not only the selected one and the ones below",
+    hint: t("Show all levels, not only the selected one and the ones below"),
     enabled: () => (store().opened?.home.levels.length ?? 0) > 1,
     checked: () => store().opened?.home.environment?.attrs.all_levels_visible === true,
     run: () =>
@@ -588,21 +628,21 @@ const LIST: Command[] = [
   // Furniture
   {
     id: "furniture.import",
-    label: "Import furniture…",
+    label: t("Import furniture…"),
     icon: "import",
-    hint: "Import a 3D model (OBJ, DAE, 3DS, glTF, ...) into the catalog",
+    hint: t("Import a 3D model (OBJ, DAE, 3DS, glTF, ...) into the catalog"),
     run: () => useUi.getState().openDialog("importFurniture"),
   },
   {
     id: "furniture.libraries",
-    label: "Furniture and texture libraries…",
+    label: t("Furniture and texture libraries…"),
     icon: "library",
     keywords: "sh3f sh3t catalog",
     run: () => useUi.getState().openDialog("libraries"),
   },
   {
     id: "furniture.group",
-    label: "Group",
+    label: t("Group"),
     icon: "group",
     shortcut: "Ctrl+G",
     shortcutElsewhere: true,
@@ -611,51 +651,51 @@ const LIST: Command[] = [
   },
   {
     id: "furniture.ungroup",
-    label: "Ungroup",
+    label: t("Ungroup"),
     icon: "ungroup",
     shortcut: "Ctrl+Shift+G",
     shortcutElsewhere: true,
     enabled: () => selectedGroups().length > 0,
     run: () => void run("furniture_ungroup", { ids: selectedGroups() }).then(selectResult),
   },
-  alignCommand("left", "Align left sides"),
-  alignCommand("right", "Align right sides"),
-  alignCommand("front", "Align front sides"),
-  alignCommand("back", "Align back sides"),
-  alignCommand("top", "Align tops"),
-  alignCommand("bottom", "Align bottoms (elevation)"),
-  alignCommand("side_by_side", "Place side by side", "distribute"),
+  alignCommand("left", t("Align left sides")),
+  alignCommand("right", t("Align right sides")),
+  alignCommand("front", t("Align front sides")),
+  alignCommand("back", t("Align back sides")),
+  alignCommand("top", t("Align tops")),
+  alignCommand("bottom", t("Align bottoms (elevation)")),
+  alignCommand("side_by_side", t("Place side by side"), "distribute"),
   {
     id: "furniture.distributeH",
-    label: "Distribute horizontally",
+    label: t("Distribute horizontally"),
     icon: "distribute",
     enabled: () => selectedFurniture().length > 2,
     run: () => void run("furniture_distribute", { ids: selectedFurniture(), axis: "horizontal" }),
   },
   {
     id: "furniture.distributeV",
-    label: "Distribute vertically",
+    label: t("Distribute vertically"),
     icon: "distribute",
     enabled: () => selectedFurniture().length > 2,
     run: () => void run("furniture_distribute", { ids: selectedFurniture(), axis: "vertical" }),
   },
   {
     id: "edit.flipH",
-    label: "Flip horizontally",
+    label: t("Flip horizontally"),
     icon: "flip",
     enabled: hasSelection,
     run: () => void run("edit_flip", { ids: selected(), axis: "horizontal" }),
   },
   {
     id: "edit.flipV",
-    label: "Flip vertically",
+    label: t("Flip vertically"),
     icon: "flipv",
     enabled: hasSelection,
     run: () => void run("edit_flip", { ids: selected(), axis: "vertical" }),
   },
   {
     id: "furniture.rotate",
-    label: "Rotate by 15°",
+    label: t("Rotate by 15°"),
     icon: "rotate",
     shortcut: "R",
     shortcutElsewhere: true,
@@ -665,7 +705,7 @@ const LIST: Command[] = [
   // 3D view
   {
     id: "view3d.aerial",
-    label: "Aerial view",
+    label: t("Aerial view"),
     icon: "aerial",
     shortcut: "F7",
     enabled: hasHome,
@@ -674,7 +714,7 @@ const LIST: Command[] = [
   },
   {
     id: "view3d.visit",
-    label: "Virtual visit",
+    label: t("Virtual visit"),
     icon: "visit",
     shortcut: "F8",
     enabled: hasHome,
@@ -683,7 +723,7 @@ const LIST: Command[] = [
   },
   {
     id: "view3d.shadows",
-    label: "Shadows",
+    label: t("Shadows"),
     icon: "shadows",
     enabled: hasHome,
     checked: () => useUi.getState().shadows,
@@ -694,15 +734,15 @@ const LIST: Command[] = [
   },
   {
     id: "view3d.settings",
-    label: "3D settings…",
+    label: t("3D settings…"),
     icon: "settings",
-    hint: "Ground, sky, light, walls transparency",
+    hint: t("Ground, sky, light, walls transparency"),
     enabled: hasHome,
     run: () => open3DDialog("settings3d"),
   },
   {
     id: "view3d.location",
-    label: "Location and sun…",
+    label: t("Location and sun…"),
     icon: "location",
     keywords: "compass time date city",
     enabled: hasHome,
@@ -710,7 +750,7 @@ const LIST: Command[] = [
   },
   {
     id: "view3d.photo",
-    label: "Create photo…",
+    label: t("Create photo…"),
     icon: "photo",
     keywords: "render image picture",
     enabled: hasHome,
@@ -718,7 +758,7 @@ const LIST: Command[] = [
   },
   {
     id: "view3d.video",
-    label: "Create video…",
+    label: t("Create video…"),
     icon: "video",
     keywords: "movie animation",
     enabled: hasHome,
@@ -726,7 +766,7 @@ const LIST: Command[] = [
   },
   {
     id: "view3d.detach",
-    label: "Open 3D view in own window",
+    label: t("Open 3D view in own window"),
     icon: "detach",
     enabled: hasHome,
     checked: () => useUi.getState().detached,
@@ -738,16 +778,16 @@ const LIST: Command[] = [
   // Window
   {
     id: "window.theme",
-    label: "Dark mode",
+    label: t("Dark mode"),
     icon: "moon",
-    hint: "Switch between light and dark mode (the default follows Windows)",
+    hint: t("Switch between light and dark mode (the default follows Windows)"),
     keywords: "theme light dark colors",
     checked: isDark,
     run: () => useUi.getState().setTheme(isDark() ? "light" : "dark"),
   },
   {
     id: "window.themeSystem",
-    label: "Follow Windows theme",
+    label: t("Follow Windows theme"),
     icon: "sun",
     keywords: "theme light dark colors system",
     checked: () => useUi.getState().theme === "system",
@@ -755,7 +795,7 @@ const LIST: Command[] = [
   },
   {
     id: "window.search",
-    label: "Search commands…",
+    label: t("Search commands…"),
     icon: "search",
     shortcut: "Ctrl+K",
     run: () => useUi.getState().setPaletteOpen(true),
@@ -763,21 +803,21 @@ const LIST: Command[] = [
   // Extensions (plugins follow in a later version)
   {
     id: "plugins.manage",
-    label: "Manage plugins…",
+    label: t("Manage plugins…"),
     icon: "plugin",
-    hint: "Plugins follow in a later version",
+    hint: t("Plugins follow in a later version"),
     enabled: () => false,
     run: () => {},
   },
   // Help
   {
     id: "help.shortcuts",
-    label: "Keyboard shortcuts",
+    label: t("Keyboard shortcuts"),
     icon: "keyboard",
     shortcut: "F1",
     run: () => useUi.getState().openDialog("shortcuts"),
   },
-  { id: "help.about", label: "About My Sweet Home", icon: "info", run: about },
+  { id: "help.about", label: t("About My Sweet Home"), icon: "info", run: about },
 ];
 
 function currentBackground() {
@@ -820,7 +860,7 @@ const sep: MenuEntry = { kind: "separator" };
 
 function viewpointEntries(): MenuEntry[] {
   const cameras = store().opened?.home.cameras.filter((c) => c.attrs.role === "storedCamera");
-  if (!cameras?.length) return [{ kind: "heading", label: "No stored points of view" }];
+  if (!cameras?.length) return [{ kind: "heading", label: t("No stored points of view") }];
   return cameras.map((c) => {
     const name = c.attrs.name ?? "";
     return {
@@ -850,7 +890,7 @@ function levelEntries(): MenuEntry[] {
 
 export const MENUS: Menu[] = [
   {
-    label: "File",
+    label: t("File"),
     entries: () => [
       cmd("file.new"),
       cmd("file.open"),
@@ -860,7 +900,7 @@ export const MENUS: Menu[] = [
       sep,
       {
         kind: "submenu",
-        label: "Import",
+        label: t("Import"),
         icon: "import",
         entries: () => [cmd("furniture.import"), cmd("plan.backgroundImport")],
       },
@@ -873,7 +913,7 @@ export const MENUS: Menu[] = [
     ],
   },
   {
-    label: "Edit",
+    label: t("Edit"),
     entries: () => [
       cmd("edit.undo"),
       cmd("edit.redo"),
@@ -890,7 +930,7 @@ export const MENUS: Menu[] = [
     ],
   },
   {
-    label: "Plan",
+    label: t("Plan"),
     entries: () => [
       cmd("tool.select"),
       cmd("tool.pan"),
@@ -906,7 +946,7 @@ export const MENUS: Menu[] = [
       sep,
       {
         kind: "submenu",
-        label: "Walls",
+        label: t("Walls"),
         icon: "wall",
         entries: () => [
           cmd("wall.join"),
@@ -917,7 +957,7 @@ export const MENUS: Menu[] = [
       },
       {
         kind: "submenu",
-        label: "Background image",
+        label: t("Background image"),
         icon: "background",
         entries: () => [
           cmd("plan.backgroundImport"),
@@ -937,7 +977,7 @@ export const MENUS: Menu[] = [
     ],
   },
   {
-    label: "Levels",
+    label: t("Levels"),
     entries: () => [
       ...levelEntries(),
       ...(sortedLevels().length > 0 ? [sep] : []),
@@ -951,7 +991,7 @@ export const MENUS: Menu[] = [
     ],
   },
   {
-    label: "Furniture",
+    label: t("Furniture"),
     entries: () => [
       cmd("furniture.import"),
       cmd("furniture.libraries"),
@@ -961,7 +1001,7 @@ export const MENUS: Menu[] = [
       sep,
       {
         kind: "submenu",
-        label: "Align",
+        label: t("Align"),
         icon: "align",
         entries: () => [
           cmd("furniture.align.left"),
@@ -977,7 +1017,7 @@ export const MENUS: Menu[] = [
       cmd("furniture.distributeV"),
       {
         kind: "submenu",
-        label: "Flip",
+        label: t("Flip"),
         icon: "flip",
         entries: () => [cmd("edit.flipH"), cmd("edit.flipV")],
       },
@@ -985,14 +1025,14 @@ export const MENUS: Menu[] = [
     ],
   },
   {
-    label: "3D view",
+    label: t("3D view"),
     entries: () => [
       cmd("view3d.aerial"),
       cmd("view3d.visit"),
       sep,
       {
         kind: "submenu",
-        label: "Points of view",
+        label: t("Points of view"),
         icon: "viewpoint",
         entries: viewpointEntries,
       },
@@ -1009,11 +1049,11 @@ export const MENUS: Menu[] = [
     ],
   },
   {
-    label: "Extensions",
+    label: t("Extensions"),
     entries: () => [cmd("plugins.manage")],
   },
   {
-    label: "Help",
+    label: t("Help"),
     entries: () => [
       cmd("window.search"),
       cmd("help.shortcuts"),

@@ -2,6 +2,7 @@
 // later or delete it. Also the "All levels" switch of the 3D view.
 
 import { useEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 import { poseParams, useStore, type ViewMode } from "../store";
 import type { CameraPose } from "./camera";
 
@@ -48,14 +49,14 @@ export default function ViewpointsMenu({ currentPose, onSettings }: Props) {
         type="button"
         className="view3d-button"
         onClick={() => setOpen(!open)}
-        title="Store the current view or go to a stored point of view"
+        title={t("Store the current view or go to a stored point of view")}
       >
-        Points of view ▾
+        {t("Points of view ▾")}
       </button>
       {hasLevels && (
         <label
           className="view3d-button"
-          title="Show all levels, not only the selected one and the ones below"
+          title={t("Show all levels, not only the selected one and the ones below")}
         >
           <input
             type="checkbox"
@@ -64,16 +65,16 @@ export default function ViewpointsMenu({ currentPose, onSettings }: Props) {
               void run("view3d_update", { all_levels_visible: e.currentTarget.checked })
             }
           />
-          All levels
+          {t("All levels")}
         </label>
       )}
       <button
         type="button"
         className="view3d-button"
         onClick={onSettings}
-        title="Ground, sky, light, walls transparency, location of the home and the sun"
+        title={t("Ground, sky, light, walls transparency, location of the home and the sun")}
       >
-        3D settings…
+        {t("3D settings…")}
       </button>
       {open && (
         <div className="viewpoints-menu">
@@ -86,15 +87,15 @@ export default function ViewpointsMenu({ currentPose, onSettings }: Props) {
           >
             <input
               value={name}
-              placeholder="Name of the current view"
+              placeholder={t("Name of the current view")}
               onChange={(e) => setName(e.currentTarget.value)}
               onKeyDown={(e) => e.stopPropagation()}
             />
             <button type="submit" disabled={!name.trim()}>
-              Store
+              {t("Store")}
             </button>
           </form>
-          {stored.length === 0 && <p className="muted">No stored points of view</p>}
+          {stored.length === 0 && <p className="muted">{t("No stored points of view")}</p>}
           {stored.map((c) => {
             const n = c.attrs.name ?? "";
             return (
@@ -106,15 +107,15 @@ export default function ViewpointsMenu({ currentPose, onSettings }: Props) {
                     void run("viewpoint_go", { name: n });
                     setOpen(false);
                   }}
-                  title={c.observer ? "Virtual visit" : "Aerial view"}
+                  title={c.observer ? t("Virtual visit") : t("Aerial view")}
                 >
-                  <span className="viewpoints-mode">{c.observer ? "Visit" : "Aerial"}</span>
+                  <span className="viewpoints-mode">{c.observer ? t("Visit") : t("Aerial")}</span>
                   {n}
                 </button>
                 <button
                   type="button"
                   className="viewpoints-delete"
-                  title="Delete this point of view"
+                  title={t("Delete this point of view")}
                   onClick={() => void run("viewpoint_delete", { name: n })}
                 >
                   ×

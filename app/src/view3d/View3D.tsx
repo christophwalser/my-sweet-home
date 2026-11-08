@@ -11,6 +11,7 @@ import {
   RENDER_PHOTO_EVENT,
   RENDER_VIDEO_EVENT,
 } from "../api";
+import { t } from "../i18n";
 import { VIEW3D_PREFIX } from "../layout/view3dWindow";
 import { forEachPiece, type Home } from "../model";
 import { usePreferences } from "../preferences";
@@ -836,7 +837,9 @@ export default function View3D() {
       <div className="view3d-canvas" ref={containerRef} />
       {opened && viewMode === "observer" && (
         <div className="view3d-hint">
-          Drag to look around · W A S D: walk · Q / E: down / up · Shift: faster · wheel: zoom
+          {t(
+            "Drag to look around · W A S D: walk · Q / E: down / up · Shift: faster · wheel: zoom",
+          )}
         </div>
       )}
       {opened && (
@@ -860,7 +863,7 @@ export default function View3D() {
             checked={shadows}
             onChange={(e) => setShadows(e.currentTarget.checked)}
           />
-          Shadows
+          {t("Shadows")}
         </label>
       )}
       {opened && IN_OWN_WINDOW && (
@@ -868,9 +871,9 @@ export default function View3D() {
           type="button"
           className="view3d-photo"
           onClick={() => openDialog("photo")}
-          title="Create a photo of the current view (draft or path traced)"
+          title={t("Create a photo of the current view (draft or path traced)")}
         >
-          Photo…
+          {t("Photo…")}
         </button>
       )}
       {opened && IN_OWN_WINDOW && (
@@ -878,9 +881,9 @@ export default function View3D() {
           type="button"
           className="view3d-video"
           onClick={() => openDialog("video")}
-          title="Create a video along a camera path"
+          title={t("Create a video along a camera path")}
         >
-          Video…
+          {t("Video…")}
         </button>
       )}
       {settingsOpen && opened && <View3DSettings sun={sun} onClose={closeDialog} />}

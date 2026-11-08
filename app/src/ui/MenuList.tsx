@@ -1,6 +1,7 @@
 // Drop-down list of menu entries (menu bar, tool bar drop-downs), with fly-out submenus.
 
 import { useState } from "react";
+import { formatShortcut } from "../i18n";
 import { type Command, isEnabled, type MenuEntry, runCommand } from "./commands";
 import Icon from "./Icon";
 
@@ -13,7 +14,7 @@ function CommandItem({ command, onDone }: { command: Command; onDone: () => void
       {command.icon ? <Icon name={command.icon} size={18} /> : <span className="icon-blank" />}
       <span className="menu-label">{command.label}</span>
       {checked && <Icon name="check" size={16} className="menu-check" />}
-      <span className="menu-shortcut">{command.shortcut}</span>
+      <span className="menu-shortcut">{command.shortcut && formatShortcut(command.shortcut)}</span>
     </>
   );
   const choose = () => {

@@ -1,15 +1,16 @@
 // Length units of the user interface. Homes, commands, the CLI and the MCP server always use
 // centimeters; only what the user sees and types is converted.
 
+import { formatNumber as num, t } from "./i18n";
 import { usePreferences } from "./preferences";
 
 export type LengthUnit = "cm" | "mm" | "m" | "inch";
 
 export const UNITS: { unit: LengthUnit; label: string }[] = [
-  { unit: "cm", label: "Centimeter" },
-  { unit: "mm", label: "Millimeter" },
-  { unit: "m", label: "Meter" },
-  { unit: "inch", label: "Inch / foot" },
+  { unit: "cm", label: t("Centimeter") },
+  { unit: "mm", label: t("Millimeter") },
+  { unit: "m", label: t("Meter") },
+  { unit: "inch", label: t("Inch / foot") },
 ];
 
 const CM_PER: Record<LengthUnit, number> = { cm: 1, mm: 0.1, m: 100, inch: 2.54 };
@@ -28,6 +29,11 @@ export function useUnit(): LengthUnit {
 /** Short symbol of a unit for input fields. */
 export function unitSymbol(unit: LengthUnit = currentUnit()): string {
   return unit === "inch" ? "in" : unit;
+}
+
+/** A value of an input field (in the unit) as text in the format of the language. */
+export function formatFieldValue(value: number, unit: LengthUnit = currentUnit()): string {
+  return num(value, DECIMALS[unit]);
 }
 
 /** Value in the unit, rounded for input fields. */
@@ -75,35 +81,35 @@ function feetInches(cm: number): string {
   const totalInches = Math.round((Math.abs(cm) / CM_PER.inch) * 8) / 8;
   const feet = Math.floor(totalInches / 12);
   const inches = Math.round((totalInches - feet * 12) * 8) / 8;
-  return feet > 0 ? `${sign}${feet}'${inches}"` : `${sign}${inches}"`;
+  return feet > 0 ? `${sign}${feet}'${num(inches, 3)}"` : `${sign}${num(inches, 3)}"`;
 }
 
 /** A length for display in the plan and in texts, e.g. "4.20 m", "42.5 cm" or 13'9". */
 export function formatLength(cm: number, unit: LengthUnit = currentUnit()): string {
   switch (unit) {
     case "mm":
-      return `${Math.round(cm * 10)} mm`;
+      return `${num(Math.round(cm * 10), 0)} mm`;
     case "m":
-      return `${(cm / 100).toFixed(2)} m`;
+      return `${num(cm / 100, 2, 2)} m`;
     case "inch":
       return feetInches(cm);
     default:
       // Like Sweet Home 3D's centimeter unit: meters from 1 m on
-      return Math.abs(cm) >= 100 ? `${(cm / 100).toFixed(2)} m` : `${cm.toFixed(1)} cm`;
+      return Math.abs(cm) >= 100 ? `${num(cm / 100, 2, 2)} m` : `${num(cm, 1, 1)} cm`;
   }
 }
 
 /** A length with the precision of input fields, e.g. "316.3 cm", "3.163 m" or 10'4.5". */
 export function formatPrecise(cm: number, unit: LengthUnit = currentUnit()): string {
-  return unit === "inch" ? feetInches(cm) : `${toUnit(cm, unit)} ${unitSymbol(unit)}`;
+  return unit === "inch"
+    ? feetInches(cm)
+    : `${num(toUnit(cm, unit), DECIMALS[unit])} ${unitSymbol(unit)}`;
 }
 
 /** An area given in cm² for display: m², or ft² with the inch unit. */
 export function formatArea(cm2: number, unit: LengthUnit = currentUnit()): string {
   const a = Math.abs(cm2);
-  return unit === "inch"
-    ? `${(a / (30.48 * 30.48)).toFixed(1)} ft²`
-    : `${(a / 10000).toFixed(2)} m²`;
+  return unit === "inch" ? `${num(a / (30.48 * 30.48), 1, 1)} ft²` : `${num(a / 10000, 2, 2)} m²`;
 }
 
 /** Distances between labeled ruler marks in cm for the unit, smallest first. */
@@ -122,5 +128,5 @@ export function rulerLabel(cm: number, unit: LengthUnit = currentUnit()): string
     const inches = Math.round(cm / CM_PER.inch);
     return inches % 12 === 0 ? `${inches / 12}'` : `${inches}"`;
   }
-  return String(Math.round((cm / CM_PER[unit]) * 1000) / 1000);
+  return num(cm / CM_PER[unit], 3);
 }

@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { docResourceUrl } from "../api";
+import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Wall } from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { currentVisitor, setVisitor, useStore, VISITOR_ID } from "../store";
@@ -88,7 +89,7 @@ function CornerAngleField({
         <button
           type="button"
           className="link-button"
-          title="Rotate this wall around the corner to a right angle (length stays)"
+          title={t("Rotate this wall around the corner to a right angle (length stays)")}
           onClick={() =>
             void run("wall_set_angle", {
               id: wall.attrs.id,
@@ -97,7 +98,7 @@ function CornerAngleField({
             })
           }
         >
-          Make 90°
+          {t("Make 90°")}
         </button>
       )}
     </>
@@ -115,7 +116,7 @@ function WallSide({
   run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
 }) {
   const id = wall.attrs.id;
-  const title = side === "left" ? "Left side" : "Right side";
+  const title = side === "left" ? t("Left side") : t("Right side");
   const color = side === "left" ? wall.attrs.left_side_color : wall.attrs.right_side_color;
   const baseboard = wall.baseboards?.find((b) => b.attrs.role === `${side}SideBaseboard`);
   const update = (field: string, value: unknown) =>
@@ -123,19 +124,24 @@ function WallSide({
   const updateBaseboard = (values: Record<string, unknown>) => update("baseboard", values);
   return (
     <SideSection side={side} title={title}>
-      <Field label="Color" type="color" value={toHex(color)} onCommit={(v) => update("color", v)} />
+      <Field
+        label={t("Color")}
+        type="color"
+        value={toHex(color)}
+        onCommit={(v) => update("color", v)}
+      />
       {color !== null && (
         <button type="button" className="link-button" onClick={() => update("color", "")}>
-          Default color
+          {t("Default color")}
         </button>
       )}
       <TextureField
-        label="Texture"
+        label={t("Texture")}
         current={byRole(wall.textures, `${side}SideTexture`)}
         onCommit={(v) => update("texture", v)}
       />
       <Field
-        label="Baseboard"
+        label={t("Baseboard")}
         type="checkbox"
         value={!!baseboard}
         onCommit={(v) => updateBaseboard({ height: v ? 7 : 0 })}
@@ -143,27 +149,27 @@ function WallSide({
       {baseboard && (
         <>
           <Field
-            label="Height"
+            label={t("Height")}
             type="number"
             unit="cm"
             value={baseboard.attrs.height}
             onCommit={(v) => updateBaseboard({ height: v })}
           />
           <Field
-            label="Thickness"
+            label={t("Thickness")}
             type="number"
             unit="cm"
             value={baseboard.attrs.thickness}
             onCommit={(v) => updateBaseboard({ thickness: v })}
           />
           <Field
-            label="Color"
+            label={t("Color")}
             type="color"
             value={toHex(baseboard.attrs.color ?? color)}
             onCommit={(v) => updateBaseboard({ color: v })}
           />
           <TextureField
-            label="Texture"
+            label={t("Texture")}
             current={baseboard.texture}
             onCommit={(v) => updateBaseboard({ texture: v })}
           />
@@ -180,7 +186,7 @@ function VisitorSection() {
   // Re-render while the visitor walks
   useStore((s) => s.visitorPose);
   const v = currentVisitor();
-  if (!opened || !v) return <p className="muted">The home has no visitor yet.</p>;
+  if (!opened || !v) return <p className="muted">{t("The home has no visitor yet.")}</p>;
   const levels = [...opened.home.levels].sort((a, b) => a.attrs.elevation - b.attrs.elevation);
   const level = levels.find((l) => l.attrs.id === levelOfEye(opened.home, v.z));
   const floor = level?.attrs.elevation ?? 0;
@@ -192,7 +198,7 @@ function VisitorSection() {
   };
   return (
     <div className="props">
-      <h2>Visitor</h2>
+      <h2>{t("Visitor")}</h2>
       <Field
         label="X"
         type="number"
@@ -208,37 +214,42 @@ function VisitorSection() {
         onCommit={num((y) => void setVisitor({ y }))}
       />
       <Field
-        label="Eye height"
+        label={t("Eye height")}
         type="number"
         unit="cm"
         value={Math.round((v.z - floor) * 10) / 10}
         onCommit={num((h) => void setVisitor({ z: floor + Math.max(10, h) }))}
       />
       <Field
-        label="Direction"
+        label={t("Direction")}
         type="number"
         unit="°"
         value={((deg(v.yaw) % 360) + 360) % 360}
         onCommit={num((d) => void setVisitor({ yaw: rad(d) }))}
       />
       <Field
-        label="Head tilt"
+        label={t("Head tilt")}
         type="number"
         unit="°"
         value={deg(v.pitch)}
         onCommit={num((d) => void setVisitor({ pitch: rad(Math.max(-85, Math.min(85, d))) }))}
       />
       <Field
-        label="Field of view"
+        label={t("Field of view")}
         type="number"
         unit="°"
         value={deg(v.fov)}
         onCommit={num((d) => void setVisitor({ fov: rad(Math.max(20, Math.min(120, d))) }))}
       />
-      {level && levels.length > 1 && <p className="muted small">On level {level.attrs.name}</p>}
+      {level && levels.length > 1 && (
+        <p className="muted small">
+          {t("On level")} {level.attrs.name}
+        </p>
+      )}
       <p className="muted small">
-        Drag the visitor to move it, the handle in front of it to turn it. Arrow keys move it, R
-        turns it by 15°.
+        {t(
+          "Drag the visitor to move it, the handle in front of it to turn it. Arrow keys move it, R turns it by 15°.",
+        )}
       </p>
     </div>
   );
@@ -258,9 +269,9 @@ function CompassSection({
     rad == null ? null : Math.round(((rad * 180) / Math.PI) * 100) / 100;
   return (
     <>
-      <h2>Compass</h2>
+      <h2>{t("Compass")}</h2>
       <Field
-        label="Visible"
+        label={t("Visible")}
         type="checkbox"
         value={c ? c.visible !== false : false}
         onCommit={set("visible")}
@@ -268,28 +279,28 @@ function CompassSection({
       <Field label="X" type="number" unit="cm" value={c?.x ?? -100} onCommit={set("x")} />
       <Field label="Y" type="number" unit="cm" value={c?.y ?? 50} onCommit={set("y")} />
       <Field
-        label="Diameter"
+        label={t("Diameter")}
         type="number"
         unit="cm"
         value={c?.diameter ?? 100}
         onCommit={set("diameter")}
       />
       <Field
-        label="North"
+        label={t("North")}
         type="number"
         unit="°"
         value={deg(c?.north_direction) ?? 0}
         onCommit={set("north_direction_deg")}
       />
       <Field
-        label="Latitude"
+        label={t("Latitude")}
         type="number"
         unit="°"
         value={deg(c?.latitude)}
         onCommit={set("latitude_deg")}
       />
       <Field
-        label="Longitude"
+        label={t("Longitude")}
         type="number"
         unit="°"
         value={deg(c?.longitude)}
@@ -335,11 +346,12 @@ function MaterialsSection({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
-        {open ? "▾" : "▸"} Materials{changed.length > 0 ? ` (${changed.length} changed)` : ""}
+        {open ? "▾" : "▸"} {t("Materials")}
+        {changed.length > 0 ? t(" ({length} changed)", { length: changed.length }) : ""}
       </button>
-      {open && names === null && <p className="muted small">Loading materials…</p>}
+      {open && names === null && <p className="muted small">{t("Loading materials…")}</p>}
       {open && names?.length === 0 && (
-        <p className="muted small">The model has no named materials.</p>
+        <p className="muted small">{t("The model has no named materials.")}</p>
       )}
       {open &&
         names?.map((name) => {
@@ -348,18 +360,18 @@ function MaterialsSection({
             <fieldset key={name} className="material-row">
               <legend>{name}</legend>
               <Field
-                label="Color"
+                label={t("Color")}
                 type="color"
                 value={toHex(m?.attrs.color ?? 0xffffff)}
                 onCommit={(v) => change(name, { color: v })}
               />
               <TextureField
-                label="Texture"
+                label={t("Texture")}
                 current={m?.texture ?? null}
                 onCommit={(v) => change(name, { texture: v })}
               />
               <Field
-                label="Shininess"
+                label={t("Shininess")}
                 type="number"
                 unit="0–1"
                 value={m?.attrs.shininess ?? null}
@@ -371,7 +383,7 @@ function MaterialsSection({
                   className="link-button"
                   onClick={() => change(name, { color: "", texture: "", shininess: -1 })}
                 >
-                  Model material
+                  {t("Model material")}
                 </button>
               )}
             </fieldset>
@@ -383,7 +395,7 @@ function MaterialsSection({
           className="link-button"
           onClick={() => void run("furniture_update", { id, reset_materials: true })}
         >
-          Reset all materials
+          {t("Reset all materials")}
         </button>
       )}
     </>
@@ -395,7 +407,7 @@ export default function PropertiesPanel() {
   const selection = useStore((s) => s.selection);
   const levelId = useStore((s) => s.selectedLevel);
   const run = useStore((s) => s.run);
-  if (!opened) return <div className="props muted">No home open</div>;
+  if (!opened) return <div className="props muted">{t("No home open")}</div>;
   const home = opened.home;
 
   const actions = (
@@ -403,27 +415,27 @@ export default function PropertiesPanel() {
       <button
         type="button"
         onClick={() => void run("edit_copy", { ids: selection })}
-        title="Ctrl+C"
+        title={t("Ctrl+C")}
       >
-        Copy
+        {t("Copy")}
       </button>
       <button
         type="button"
         onClick={() => void run("edit_flip", { ids: selection, axis: "horizontal" })}
-        title="Mirror left ↔ right (furniture gets a mirrored model)"
+        title={t("Mirror left ↔ right (furniture gets a mirrored model)")}
       >
-        Flip ↔
+        {t("Flip ↔")}
       </button>
       <button
         type="button"
         onClick={() => void run("edit_flip", { ids: selection, axis: "vertical" })}
-        title="Mirror top ↔ bottom (furniture gets a mirrored model)"
+        title={t("Mirror top ↔ bottom (furniture gets a mirrored model)")}
       >
-        Flip ↕
+        {t("Flip ↕")}
       </button>
       <button
         type="button"
-        title="Ctrl+D"
+        title={t("Ctrl+D")}
         onClick={() =>
           void run("edit_duplicate", { ids: selection }).then((r) => {
             const ids = (r as { ids?: string[] } | undefined)?.ids;
@@ -431,10 +443,14 @@ export default function PropertiesPanel() {
           })
         }
       >
-        Duplicate
+        {t("Duplicate")}
       </button>
-      <button type="button" onClick={() => void run("edit_delete", { ids: selection })} title="Del">
-        Delete
+      <button
+        type="button"
+        onClick={() => void run("edit_delete", { ids: selection })}
+        title={t("Del")}
+      >
+        {t("Delete")}
       </button>
     </div>
   );
@@ -445,16 +461,18 @@ export default function PropertiesPanel() {
       {selectedWalls.length === 2 && (
         <button
           type="button"
-          title="Extend or shorten both walls to the intersection of their axes and connect them (J)"
+          title={t(
+            "Extend or shorten both walls to the intersection of their axes and connect them (J)",
+          )}
           onClick={() => void run("wall_join", { ids: selectedWalls.map((w) => w.attrs.id) })}
         >
-          Join walls
+          {t("Join walls")}
         </button>
       )}
       {selectedWalls.length === 1 && (
         <button
           type="button"
-          title="Split the wall into two connected walls at its middle"
+          title={t("Split the wall into two connected walls at its middle")}
           onClick={() =>
             void run("wall_split", { id: selectedWalls[0].attrs.id }).then((r) => {
               const ids = (r as { ids?: string[] } | undefined)?.ids;
@@ -462,16 +480,16 @@ export default function PropertiesPanel() {
             })
           }
         >
-          Split
+          {t("Split")}
         </button>
       )}
       {selectedWalls.some((w) => w.attrs.wall_at_start || w.attrs.wall_at_end) && (
         <button
           type="button"
-          title="Remove the connections of the selected walls"
+          title={t("Remove the connections of the selected walls")}
           onClick={() => void run("wall_detach", { ids: selectedWalls.map((w) => w.attrs.id) })}
         >
-          Detach
+          {t("Detach")}
         </button>
       )}
     </div>
@@ -482,7 +500,7 @@ export default function PropertiesPanel() {
     <div className="prop-actions">
       <button
         type="button"
-        title="Group the selected furniture (Ctrl+G)"
+        title={t("Group the selected furniture (Ctrl+G)")}
         onClick={() =>
           void run("furniture_group", { ids: topFurniture.map((f) => f.attrs.id) }).then((r) => {
             const gid = (r as { id?: string } | undefined)?.id;
@@ -490,7 +508,7 @@ export default function PropertiesPanel() {
           })
         }
       >
-        Group
+        {t("Group")}
       </button>
     </div>
   );
@@ -499,7 +517,7 @@ export default function PropertiesPanel() {
     return (
       <div className="props">
         <p className="muted small">
-          {selection.length} elements selected · changes apply to all of the same kind
+          {selection.length} {t("elements selected · changes apply to all of the same kind")}
         </p>
         {selectedWalls.length === 2 &&
           (() => {
@@ -509,7 +527,7 @@ export default function PropertiesPanel() {
             const joined = atStart || w2.attrs.wall_at_end === w1.attrs.id;
             return joined ? (
               <CornerAngleField
-                label="Angle between"
+                label={t("Angle between")}
                 home={home}
                 wall={w2}
                 atStart={atStart}
@@ -519,7 +537,9 @@ export default function PropertiesPanel() {
           })()}
         {selectedWalls.length === 2 && (
           <p className="muted small">
-            Join walls connects both walls at the intersection of their axes (corner or T junction).
+            {t(
+              "Join walls connects both walls at the intersection of their axes (corner or T junction).",
+            )}
           </p>
         )}
         {wallActions}
@@ -535,15 +555,15 @@ export default function PropertiesPanel() {
     const level = home.levels.find((l) => l.attrs.id === levelId);
     return (
       <div className="props">
-        <h2>Home</h2>
+        <h2>{t("Home")}</h2>
         <Field
-          label="Name"
+          label={t("Name")}
           type="text"
           value={home.attrs.name}
           onCommit={(v) => void run("home_set", { name: v })}
         />
         <Field
-          label="Wall height"
+          label={t("Wall height")}
           type="number"
           unit="cm"
           value={home.attrs.wall_height ?? 250}
@@ -551,36 +571,36 @@ export default function PropertiesPanel() {
         />
         {level && (
           <>
-            <h2>Level</h2>
+            <h2>{t("Level")}</h2>
             <Field
-              label="Name"
+              label={t("Name")}
               type="text"
               value={level.attrs.name}
               onCommit={(v) => void run("level_update", { id: level.attrs.id, name: v })}
             />
             <Field
-              label="Elevation"
+              label={t("Elevation")}
               type="number"
               unit="cm"
               value={level.attrs.elevation}
               onCommit={(v) => void run("level_update", { id: level.attrs.id, elevation: v })}
             />
             <Field
-              label="Height"
+              label={t("Height")}
               type="number"
               unit="cm"
               value={level.attrs.height}
               onCommit={(v) => void run("level_update", { id: level.attrs.id, height: v })}
             />
             <Field
-              label="Floor thickness"
+              label={t("Floor thickness")}
               type="number"
               unit="cm"
               value={level.attrs.floor_thickness}
               onCommit={(v) => void run("level_update", { id: level.attrs.id, floor_thickness: v })}
             />
             <Field
-              label="Visible in 3D"
+              label={t("Visible in 3D")}
               type="checkbox"
               value={level.attrs.viewable !== false}
               onCommit={(v) => void run("level_update", { id: level.attrs.id, viewable: v })}
@@ -588,7 +608,7 @@ export default function PropertiesPanel() {
             <div className="prop-actions">
               <button
                 type="button"
-                title="Add a level with the same elevation (e.g. a mezzanine or split level)"
+                title={t("Add a level with the same elevation (e.g. a mezzanine or split level)")}
                 onClick={() =>
                   void run("level_add", {
                     name: `${level.attrs.name} (2)`,
@@ -598,14 +618,14 @@ export default function PropertiesPanel() {
                   })
                 }
               >
-                Add level at same elevation
+                {t("Add level at same elevation")}
               </button>
               <button
                 type="button"
-                title="Delete this level and everything on it (Ctrl+Z restores it)"
+                title={t("Delete this level and everything on it (Ctrl+Z restores it)")}
                 onClick={() => void run("edit_delete", { ids: [level.attrs.id] })}
               >
-                Delete level
+                {t("Delete level")}
               </button>
             </div>
           </>
@@ -621,7 +641,7 @@ export default function PropertiesPanel() {
           )
         )}
         <CompassSection home={home} run={run} />
-        <p className="muted">Click an element in the plan to edit it.</p>
+        <p className="muted">{t("Click an element in the plan to edit it.")}</p>
       </div>
     );
   }
@@ -634,17 +654,17 @@ export default function PropertiesPanel() {
     });
     return (
       <div className="props">
-        <h2>Group</h2>
+        <h2>{t("Group")}</h2>
         <p className="muted small">
-          {group.attrs.name} · {count} pieces
+          {group.attrs.name} · {count} {t("pieces")}
         </p>
         <p className="muted small">
-          Drag to move the group. Ungroup to edit its pieces one by one.
+          {t("Drag to move the group. Ungroup to edit its pieces one by one.")}
         </p>
         <div className="prop-actions">
           <button
             type="button"
-            title="Dissolve the group (Ctrl+Shift+G)"
+            title={t("Dissolve the group (Ctrl+Shift+G)")}
             onClick={() =>
               void run("furniture_ungroup", { ids: [id] }).then((r) => {
                 const ids = (r as { ids?: string[] } | undefined)?.ids;
@@ -652,7 +672,7 @@ export default function PropertiesPanel() {
               })
             }
           >
-            Ungroup
+            {t("Ungroup")}
           </button>
         </div>
         {actions}
@@ -673,23 +693,23 @@ export default function PropertiesPanel() {
       <div className="props">
         <h2>
           {p.kind === "DoorOrWindow"
-            ? "Door or window"
-            : p.kind === "Light"
-              ? "Light"
-              : "Furniture"}
+            ? t("Door or window")
+            : p.kind === t("Light")
+              ? t("Light")
+              : t("Furniture")}
         </h2>
-        <Field label="Name" type="text" value={a.name} onCommit={set("name")} />
+        <Field label={t("Name")} type="text" value={a.name} onCommit={set("name")} />
         <Field label="X" type="number" unit="cm" value={a.x} onCommit={set("x")} />
         <Field label="Y" type="number" unit="cm" value={a.y} onCommit={set("y")} />
         <Field
-          label="Elevation"
+          label={t("Elevation")}
           type="number"
           unit="cm"
           value={a.elevation ?? 0}
           onCommit={set("elevation")}
         />
         <Field
-          label="Angle"
+          label={t("Angle")}
           type="angle"
           unit="°"
           value={a.angle ?? 0}
@@ -698,14 +718,14 @@ export default function PropertiesPanel() {
         {p.kind !== "DoorOrWindow" && a.horizontally_rotatable !== false && (
           <>
             <Field
-              label="Tilt forward"
+              label={t("Tilt forward")}
               type="angle"
               unit="°"
               value={a.pitch ?? 0}
               onCommit={set("pitch_deg")}
             />
             <Field
-              label="Tilt sideways"
+              label={t("Tilt sideways")}
               type="angle"
               unit="°"
               value={a.roll ?? 0}
@@ -714,58 +734,65 @@ export default function PropertiesPanel() {
           </>
         )}
         {p.kind === "DoorOrWindow" && <OpeningDistances piece={p} />}
-        <Field label="Width" type="number" unit="cm" value={a.width} onCommit={set("width")} />
-        <Field label="Depth" type="number" unit="cm" value={a.depth} onCommit={set("depth")} />
-        <Field label="Height" type="number" unit="cm" value={a.height} onCommit={set("height")} />
-        {p.kind === "Light" && (
+        <Field label={t("Width")} type="number" unit="cm" value={a.width} onCommit={set("width")} />
+        <Field label={t("Depth")} type="number" unit="cm" value={a.depth} onCommit={set("depth")} />
+        <Field
+          label={t("Height")}
+          type="number"
+          unit="cm"
+          value={a.height}
+          onCommit={set("height")}
+        />
+        {p.kind === t("Light") && (
           <>
             <Field
-              label="Light power"
+              label={t("Light power")}
               type="number"
               unit="%"
               value={Math.round((a.power ?? 0.5) * 100)}
               onCommit={set("power")}
             />
             <Field
-              label="Light cone"
+              label={t("Light cone")}
               type="number"
               unit="°"
               value={spotAngle(p) ?? 0}
               onCommit={set("spot_angle_deg")}
             />
             <p className="muted small">
-              Light cone 0: the lamp lights in all directions; otherwise downwards through its
-              bottom (tilt the lamp to aim it).
+              {t(
+                "Light cone 0: the lamp lights in all directions; otherwise downwards through its bottom (tilt the lamp to aim it).",
+              )}
             </p>
           </>
         )}
-        <Field label="Color" type="color" value={toHex(a.color)} onCommit={set("color")} />
+        <Field label={t("Color")} type="color" value={toHex(a.color)} onCommit={set("color")} />
         {a.color !== null && (
           <button type="button" className="link-button" onClick={() => set("color")("")}>
-            Restore model colors
+            {t("Restore model colors")}
           </button>
         )}
         <Field
-          label="Mirrored"
+          label={t("Mirrored")}
           type="checkbox"
           value={a.model_mirrored}
           onCommit={set("mirrored")}
         />
         <Field
-          label="Visible"
+          label={t("Visible")}
           type="checkbox"
           value={a.visible !== false}
           onCommit={set("visible")}
         />
         <Field
-          label="Name in plan"
+          label={t("Name in plan")}
           type="checkbox"
           value={a.name_visible === true}
           onCommit={set("name_visible")}
         />
         {a.name_visible && (
           <TextStyleFields
-            title="Name"
+            title={t("Name")}
             style={p.text_style}
             defaultSize={18}
             prefix="name_"
@@ -773,7 +800,11 @@ export default function PropertiesPanel() {
           />
         )}
         <MaterialsSection piece={p} docId={opened.id} run={run} />
-        {a.catalog_id && <p className="muted small">Catalog ID: {a.catalog_id}</p>}
+        {a.catalog_id && (
+          <p className="muted small">
+            {t("Catalog ID:")} {a.catalog_id}
+          </p>
+        )}
         {actions}
       </div>
     );
@@ -787,49 +818,57 @@ export default function PropertiesPanel() {
     const length = Math.hypot(a.x_end - a.x_start, a.y_end - a.y_start);
     return (
       <div className="props">
-        <h2>Wall</h2>
-        <p className="muted small">Length: {formatLength(length)}</p>
+        <h2>{t("Wall")}</h2>
+        <p className="muted small">
+          {t("Length:")} {formatLength(length)}
+        </p>
         <Field
-          label="X start"
+          label={t("X start")}
           type="number"
           unit="cm"
           value={a.x_start}
           onCommit={set("x_start")}
         />
         <Field
-          label="Y start"
+          label={t("Y start")}
           type="number"
           unit="cm"
           value={a.y_start}
           onCommit={set("y_start")}
         />
-        <Field label="X end" type="number" unit="cm" value={a.x_end} onCommit={set("x_end")} />
-        <Field label="Y end" type="number" unit="cm" value={a.y_end} onCommit={set("y_end")} />
-        <CornerAngleField label="Angle at start" home={home} wall={wall} atStart run={run} />
-        <CornerAngleField label="Angle at end" home={home} wall={wall} atStart={false} run={run} />
+        <Field label={t("X end")} type="number" unit="cm" value={a.x_end} onCommit={set("x_end")} />
+        <Field label={t("Y end")} type="number" unit="cm" value={a.y_end} onCommit={set("y_end")} />
+        <CornerAngleField label={t("Angle at start")} home={home} wall={wall} atStart run={run} />
+        <CornerAngleField
+          label={t("Angle at end")}
+          home={home}
+          wall={wall}
+          atStart={false}
+          run={run}
+        />
         <Field
-          label="Thickness"
+          label={t("Thickness")}
           type="number"
           unit="cm"
           value={a.thickness}
           onCommit={set("thickness")}
         />
         <Field
-          label="Height"
+          label={t("Height")}
           type="number"
           unit="cm"
           value={a.height ?? home.attrs.wall_height ?? 250}
           onCommit={set("height")}
         />
         <Field
-          label="Height at end"
+          label={t("Height at end")}
           type="number"
           unit="cm"
           value={a.height_at_end ?? a.height ?? home.attrs.wall_height ?? 250}
           onCommit={set("height_at_end")}
         />
         <SelectField
-          label="Pattern"
+          label={t("Pattern")}
           value={a.pattern ?? "hatchUp"}
           options={WALL_PATTERNS}
           onCommit={set("pattern")}
@@ -851,7 +890,9 @@ export default function PropertiesPanel() {
       <div className="props">
         <CompassSection home={home} run={run} />
         <p className="muted small">
-          Drag the compass to move it, the arrow tip to turn north, the ring to change its size.
+          {t(
+            "Drag the compass to move it, the arrow tip to turn north, the ring to change its size.",
+          )}
         </p>
       </div>
     );
@@ -870,37 +911,39 @@ export default function PropertiesPanel() {
     }
     return (
       <div className="props">
-        <h2>Room</h2>
-        <p className="muted small">Area: {formatArea(area / 2)}</p>
-        <Field label="Name" type="text" value={a.name} onCommit={set("name")} />
+        <h2>{t("Room")}</h2>
+        <p className="muted small">
+          {t("Area:")} {formatArea(area / 2)}
+        </p>
+        <Field label={t("Name")} type="text" value={a.name} onCommit={set("name")} />
         <TextStyleFields
-          title="Name"
+          title={t("Name")}
           style={room.text_styles?.find((t) => t.role === "nameStyle")}
           defaultSize={DEFAULT_ROOM_FONT}
           prefix="name_"
           onChange={(params) => void run("room_update", { id, ...params })}
         />
         <TextStyleFields
-          title="Area"
+          title={t("Area")}
           style={room.text_styles?.find((t) => t.role === "areaStyle")}
           defaultSize={DEFAULT_ROOM_FONT}
           prefix="area_"
           onChange={(params) => void run("room_update", { id, ...params })}
         />
         <Field
-          label="Show area"
+          label={t("Show area")}
           type="checkbox"
           value={a.area_visible}
           onCommit={set("area_visible")}
         />
         <Field
-          label="Floor visible"
+          label={t("Floor visible")}
           type="checkbox"
           value={a.floor_visible !== false}
           onCommit={set("floor_visible")}
         />
         <Field
-          label="Ceiling visible"
+          label={t("Ceiling visible")}
           type="checkbox"
           value={a.ceiling_visible !== false}
           onCommit={set("ceiling_visible")}
@@ -912,44 +955,44 @@ export default function PropertiesPanel() {
           <button
             type="button"
             className="link-button"
-            title="Place name and area automatically in the middle of the room again"
+            title={t("Place name and area automatically in the middle of the room again")}
             onClick={() => void run("room_update", { id, reset_label_positions: true })}
           >
-            Reset label positions
+            {t("Reset label positions")}
           </button>
         )}
-        <p className="muted small">Drag the name or area in the plan to move it.</p>
-        <h3>Floor</h3>
+        <p className="muted small">{t("Drag the name or area in the plan to move it.")}</p>
+        <h3>{t("Floor")}</h3>
         <Field
-          label="Color"
+          label={t("Color")}
           type="color"
           value={toHex(a.floor_color)}
           onCommit={set("floor_color")}
         />
         {a.floor_color !== null && (
           <button type="button" className="link-button" onClick={() => set("floor_color")("")}>
-            Default color
+            {t("Default color")}
           </button>
         )}
         <TextureField
-          label="Texture"
+          label={t("Texture")}
           current={byRole(room.textures, "floorTexture")}
           onCommit={set("floor_texture")}
         />
-        <h3>Ceiling</h3>
+        <h3>{t("Ceiling")}</h3>
         <Field
-          label="Color"
+          label={t("Color")}
           type="color"
           value={toHex(a.ceiling_color)}
           onCommit={set("ceiling_color")}
         />
         {a.ceiling_color !== null && (
           <button type="button" className="link-button" onClick={() => set("ceiling_color")("")}>
-            Default color
+            {t("Default color")}
           </button>
         )}
         <TextureField
-          label="Texture"
+          label={t("Texture")}
           current={byRole(room.textures, "ceilingTexture")}
           onCommit={set("ceiling_texture")}
         />
@@ -964,8 +1007,8 @@ export default function PropertiesPanel() {
       void run("label_update", { id, [field]: v });
     return (
       <div className="props">
-        <h2>Label</h2>
-        <Field label="Text" type="text" value={label.text} onCommit={set("text")} />
+        <h2>{t("Label")}</h2>
+        <Field label={t("Text")} type="text" value={label.text} onCommit={set("text")} />
         <Field label="X" type="number" unit="cm" value={label.attrs.x} onCommit={set("x")} />
         <Field label="Y" type="number" unit="cm" value={label.attrs.y} onCommit={set("y")} />
         <TextStyleFields
@@ -986,24 +1029,29 @@ export default function PropertiesPanel() {
       void run("polyline_update", { id, [field]: v });
     return (
       <div className="props">
-        <h2>Line</h2>
+        <h2>{t("Line")}</h2>
         <Field
-          label="Thickness"
+          label={t("Thickness")}
           type="number"
           unit="cm"
           value={a.thickness ?? 1}
           onCommit={set("thickness")}
         />
-        <Field label="Color" type="color" value={toHex(a.color ?? 0)} onCommit={set("color")} />
+        <Field
+          label={t("Color")}
+          type="color"
+          value={toHex(a.color ?? 0)}
+          onCommit={set("color")}
+        />
         <SelectField
-          label="Dashes"
+          label={t("Dashes")}
           value={a.dash_style ?? "SOLID"}
           options={DASH_STYLES}
           onCommit={set("dash_style")}
         />
-        <Field label="Closed" type="checkbox" value={a.closed_path} onCommit={set("closed")} />
+        <Field label={t("Closed")} type="checkbox" value={a.closed_path} onCommit={set("closed")} />
         <Field
-          label="Curved"
+          label={t("Curved")}
           type="checkbox"
           value={a.join_style === "CURVED"}
           onCommit={set("curved")}
@@ -1011,13 +1059,13 @@ export default function PropertiesPanel() {
         {!a.closed_path && (
           <>
             <SelectField
-              label="Start arrow"
+              label={t("Start arrow")}
               value={a.start_arrow_style ?? "NONE"}
               options={ARROW_STYLES}
               onCommit={set("start_arrow")}
             />
             <SelectField
-              label="End arrow"
+              label={t("End arrow")}
               value={a.end_arrow_style ?? "NONE"}
               options={ARROW_STYLES}
               onCommit={set("end_arrow")}
@@ -1036,9 +1084,11 @@ export default function PropertiesPanel() {
       void run("dimension_update", { id, [field]: v });
     return (
       <div className="props">
-        <h2>{a.x_start === a.x_end && a.y_start === a.y_end ? "Height dimension" : "Dimension"}</h2>
+        <h2>
+          {a.x_start === a.x_end && a.y_start === a.y_end ? t("Height dimension") : t("Dimension")}
+        </h2>
         <p className="muted small">
-          Length:{" "}
+          {t("Length:")}{" "}
           {(
             (a.x_start === a.x_end && a.y_start === a.y_end
               ? Math.abs((a.elevation_end ?? 0) - (a.elevation_start ?? 0))
@@ -1047,22 +1097,28 @@ export default function PropertiesPanel() {
           m
         </p>
         <Field
-          label="X start"
+          label={t("X start")}
           type="number"
           unit="cm"
           value={a.x_start}
           onCommit={set("x_start")}
         />
         <Field
-          label="Y start"
+          label={t("Y start")}
           type="number"
           unit="cm"
           value={a.y_start}
           onCommit={set("y_start")}
         />
-        <Field label="X end" type="number" unit="cm" value={a.x_end} onCommit={set("x_end")} />
-        <Field label="Y end" type="number" unit="cm" value={a.y_end} onCommit={set("y_end")} />
-        <Field label="Offset" type="number" unit="cm" value={a.offset} onCommit={set("offset")} />
+        <Field label={t("X end")} type="number" unit="cm" value={a.x_end} onCommit={set("x_end")} />
+        <Field label={t("Y end")} type="number" unit="cm" value={a.y_end} onCommit={set("y_end")} />
+        <Field
+          label={t("Offset")}
+          type="number"
+          unit="cm"
+          value={a.offset}
+          onCommit={set("offset")}
+        />
         <TextStyleFields
           style={dim.text_style}
           defaultSize={18}
@@ -1076,10 +1132,10 @@ export default function PropertiesPanel() {
 
   return (
     <div className="props">
-      <h2>Element</h2>
-      <p className="muted">This element has no editable properties yet.</p>
+      <h2>{t("Element")}</h2>
+      <p className="muted">{t("This element has no editable properties yet.")}</p>
       <button type="button" onClick={() => void run("edit_delete", { ids: [id] })}>
-        Delete
+        {t("Delete")}
       </button>
     </div>
   );

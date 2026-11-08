@@ -2,6 +2,7 @@
 // settings, on tabs. Changes apply at once and are kept for all windows of the app.
 
 import { type ReactNode, useEffect, useState } from "react";
+import { LANGUAGES, type LanguageChoice, languageChoice, setLanguage, t } from "./i18n";
 import { Field, WALL_PATTERNS } from "./panels/fields";
 import { type Preferences, usePreferences } from "./preferences";
 import { useStore } from "./store";
@@ -10,10 +11,10 @@ import { UNITS } from "./units";
 
 type Tab = "plan" | "new" | "view3d" | "general";
 const TABS: { id: Tab; label: string }[] = [
-  { id: "plan", label: "Plan" },
-  { id: "new", label: "New elements" },
-  { id: "view3d", label: "3D view" },
-  { id: "general", label: "General" },
+  { id: "plan", label: t("Plan") },
+  { id: "new", label: t("New elements") },
+  { id: "view3d", label: t("3D view") },
+  { id: "general", label: t("General") },
 ];
 
 function Check({
@@ -94,7 +95,7 @@ function OptionalColor({
             checked={value !== ""}
             onChange={(e) => onChange(e.currentTarget.checked ? "#d0d0d0" : "")}
           />
-          {value === "" ? "Default" : ""}
+          {value === "" ? t("Default") : ""}
         </label>
         {value !== "" && (
           <input
@@ -167,15 +168,20 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
 
   return (
     <div className="dialog-backdrop">
-      <div className="dialog prefs-dialog" role="dialog" aria-modal="true" aria-label="Preferences">
+      <div
+        className="dialog prefs-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Preferences")}
+      >
         <header className="dialog-header">
-          <h2>Preferences</h2>
-          <button type="button" onClick={onClose} aria-label="Close">
+          <h2>{t("Preferences")}</h2>
+          <button type="button" onClick={onClose} aria-label={t("Close")}>
             {"✕"}
           </button>
         </header>
         <div className="prefs-layout">
-          <div className="prefs-tabs" role="tablist" aria-label="Sections">
+          <div className="prefs-tabs" role="tablist" aria-label={t("Sections")}>
             {TABS.map((t) => (
               <button
                 type="button"
@@ -192,21 +198,23 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
           <div className="prefs-page" role="tabpanel">
             {tab === "plan" && (
               <>
-                <Group title="Units and magnetism">
+                <Group title={t("Units and magnetism")}>
                   <Choice
-                    label="Unit"
+                    label={t("Unit")}
                     value={p.unit}
                     options={UNITS.map((u) => [u.unit, u.label])}
                     onChange={(unit) => set({ unit })}
                   />
                   <Check
-                    label="Magnetism"
-                    hint="Snap points, angles and lengths while drawing and dragging; Alt inverts it"
+                    label={t("Magnetism")}
+                    hint={t(
+                      "Snap points, angles and lengths while drawing and dragging; Alt inverts it",
+                    )}
                     checked={p.magnetism}
                     onChange={(magnetism) => set({ magnetism })}
                   />
                   <Choice
-                    label="Angle steps"
+                    label={t("Angle steps")}
                     value={p.angleStep}
                     options={[
                       [1, "1°"],
@@ -217,36 +225,36 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                     onChange={(angleStep) => set({ angleStep })}
                   />
                 </Group>
-                <Group title="Display">
+                <Group title={t("Display")}>
                   <Check
-                    label="Rulers"
-                    hint="Along the top and left edge of the plan"
+                    label={t("Rulers")}
+                    hint={t("Along the top and left edge of the plan")}
                     checked={p.rulers}
                     onChange={(rulers) => set({ rulers })}
                   />
-                  <Check label="Grid" checked={p.grid} onChange={(grid) => set({ grid })} />
+                  <Check label={t("Grid")} checked={p.grid} onChange={(grid) => set({ grid })} />
                   <Check
-                    label="Furniture seen from above"
-                    hint="Rendered from its 3D model; off: the catalog icon"
+                    label={t("Furniture seen from above")}
+                    hint={t("Rendered from its 3D model; off: the catalog icon")}
                     checked={p.furnitureTopView}
                     onChange={(furnitureTopView) => set({ furnitureTopView })}
                   />
                   <Choice
-                    label="Rooms"
+                    label={t("Rooms")}
                     value={p.roomRendering}
                     options={[
-                      ["floor", "Floor color or texture"],
-                      ["monochrome", "One color"],
+                      ["floor", t("Floor color or texture")],
+                      ["monochrome", t("One color")],
                     ]}
                     onChange={(roomRendering) => set({ roomRendering })}
                   />
                   <Color
-                    label="Left wall side"
+                    label={t("Left wall side")}
                     value={p.leftSideColor}
                     onChange={(leftSideColor) => set({ leftSideColor })}
                   />
                   <Color
-                    label="Right wall side"
+                    label={t("Right wall side")}
                     value={p.rightSideColor}
                     onChange={(rightSideColor) => set({ rightSideColor })}
                   />
@@ -255,53 +263,53 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
             )}
             {tab === "new" && (
               <>
-                <Group title="Walls">
-                  {length("Thickness", "newWallThickness", (cm) =>
+                <Group title={t("Walls")}>
+                  {length(t("Thickness"), "newWallThickness", (cm) =>
                     useStore.getState().setWallThickness(cm),
                   )}
-                  {length("Height (new homes)", "newWallHeight")}
+                  {length(t("Height (new homes)"), "newWallHeight")}
                   <Choice
-                    label="Pattern in plan"
+                    label={t("Pattern in plan")}
                     value={p.newWallPattern}
                     options={WALL_PATTERNS}
                     onChange={(newWallPattern) => set({ newWallPattern })}
                   />
                   <OptionalColor
-                    label="Left side color"
+                    label={t("Left side color")}
                     value={p.newWallLeftColor}
                     onChange={(newWallLeftColor) => set({ newWallLeftColor })}
                   />
                   <OptionalColor
-                    label="Right side color"
+                    label={t("Right side color")}
                     value={p.newWallRightColor}
                     onChange={(newWallRightColor) => set({ newWallRightColor })}
                   />
                 </Group>
-                <Group title="Rooms, levels and texts">
+                <Group title={t("Rooms, levels and texts")}>
                   <OptionalColor
-                    label="Floor color"
+                    label={t("Floor color")}
                     value={p.newRoomFloorColor}
                     onChange={(newRoomFloorColor) => set({ newRoomFloorColor })}
                   />
-                  {length("Floor thickness of levels", "newFloorThickness")}
-                  {length("Text size", "newTextSize")}
+                  {length(t("Floor thickness of levels"), "newFloorThickness")}
+                  {length(t("Text size"), "newTextSize")}
                 </Group>
               </>
             )}
             {tab === "view3d" && (
-              <Group title="3D view">
+              <Group title={t("3D view")}>
                 <Choice
-                  label="Quality"
+                  label={t("Quality")}
                   value={p.quality3d}
                   options={[
-                    ["low", "Low (fast)"],
-                    ["medium", "Medium"],
-                    ["high", "High (sharp, detailed shadows)"],
+                    ["low", t("Low (fast)")],
+                    ["medium", t("Medium")],
+                    ["high", t("High (sharp, detailed shadows)")],
                   ]}
                   onChange={(quality3d) => set({ quality3d })}
                 />
                 <label className="prop-row">
-                  <span className="prop-label">Walking speed</span>
+                  <span className="prop-label">{t("Walking speed")}</span>
                   <input
                     type="range"
                     min={1}
@@ -310,38 +318,47 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
                     value={p.walkingSpeed}
                     onChange={(e) => set({ walkingSpeed: Number(e.currentTarget.value) })}
                   />
-                  <span className="prop-unit">{p.walkingSpeed} km/h</span>
+                  <span className="prop-unit">
+                    {p.walkingSpeed} {t("km/h")}
+                  </span>
                 </label>
               </Group>
             )}
             {tab === "general" && (
-              <Group title="General">
+              <Group title={t("General")}>
                 <Choice<ThemeChoice>
-                  label="Theme"
+                  label={t("Theme")}
                   value={theme}
                   options={[
-                    ["system", "Like Windows"],
-                    ["light", "Light"],
-                    ["dark", "Dark"],
+                    ["system", t("Like Windows")],
+                    ["light", t("Light")],
+                    ["dark", t("Dark")],
                   ]}
                   onChange={setTheme}
                 />
+                <Choice<LanguageChoice>
+                  label={t("Language")}
+                  value={languageChoice()}
+                  options={LANGUAGES.map((l) => [l.id, l.id === "system" ? t(l.label) : l.label])}
+                  onChange={setLanguage}
+                />
                 <Choice
-                  label="Autosave"
+                  label={t("Autosave")}
                   value={p.autosaveMinutes}
                   options={[
-                    [0, "Off"],
-                    [1, "Every minute"],
-                    [5, "Every 5 minutes"],
-                    [10, "Every 10 minutes"],
-                    [15, "Every 15 minutes"],
-                    [30, "Every 30 minutes"],
+                    [0, t("Off")],
+                    [1, t("Every minute")],
+                    [5, t("Every 5 minutes")],
+                    [10, t("Every 10 minutes")],
+                    [15, t("Every 15 minutes")],
+                    [30, t("Every 30 minutes")],
                   ]}
                   onChange={(autosaveMinutes) => set({ autosaveMinutes })}
                 />
                 <p className="muted small">
-                  Autosave keeps copies of changed homes to recover them after a crash. Window sizes
-                  and positions are remembered. The language follows with the German translation.
+                  {t(
+                    "Autosave keeps copies of changed homes to recover them after a crash. Window sizes and positions are remembered.",
+                  )}
                 </p>
               </Group>
             )}
@@ -355,13 +372,13 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
               setTheme("system");
               useStore.getState().setWallThickness(usePreferences.getState().newWallThickness);
             }}
-            title="Back to the default values of all preferences"
+            title={t("Back to the default values of all preferences")}
           >
-            Reset all
+            {t("Reset all")}
           </button>
           <span className="spacer" />
           <button type="button" onClick={onClose}>
-            Close
+            {t("Close")}
           </button>
         </div>
       </div>

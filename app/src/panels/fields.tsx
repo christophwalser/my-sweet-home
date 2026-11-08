@@ -3,9 +3,10 @@
 // elements with different values are selected.
 
 import { type ReactNode, useRef } from "react";
+import { formatNumber, t } from "../i18n";
 import type { Texture } from "../model";
 import { useStore } from "../store";
-import { parseLength, toUnit, unitSymbol, useUnit } from "../units";
+import { formatFieldValue, parseLength, toUnit, unitSymbol, useUnit } from "../units";
 
 /**
  * Properties of one wall side. Its color matches the marking of that side in the
@@ -27,7 +28,7 @@ export function SideSection({
       onMouseEnter={() => setHighlight(side)}
       onMouseLeave={() => setHighlight(null)}
     >
-      <h3 title="Seen when walking along the wall from its start to its end">
+      <h3 title={t("Seen when walking along the wall from its start to its end")}>
         <span className="side-swatch" aria-hidden="true" />
         {title}
       </h3>
@@ -75,24 +76,32 @@ export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps)
       </label>
     );
   }
-  const display = mixed
-    ? ""
-    : type === "angle" && typeof value === "number"
-      ? Math.round(((value * 180) / Math.PI) * 10) / 10
-      : typeof value === "number"
-        ? isLength
+  // Number shown (in the unit for lengths), null for other values
+  const shown =
+    mixed || typeof value !== "number"
+      ? null
+      : type === "angle"
+        ? Math.round(((value * 180) / Math.PI) * 10) / 10
+        : isLength
           ? toUnit(value, lengthUnit)
-          : Math.round(value * 10) / 10
-        : (value ?? "");
+          : Math.round(value * 10) / 10;
+  const display =
+    shown !== null
+      ? isLength
+        ? formatFieldValue(shown, lengthUnit)
+        : formatNumber(shown, 1)
+      : mixed
+        ? ""
+        : String(value ?? "");
   const commit = (raw: string) => {
     if (mixed && (raw === "" || (type === "color" && !changed.current))) return;
     changed.current = false;
     if (isLength) {
       const cm = parseLength(raw, lengthUnit);
-      if (cm !== null && toUnit(cm, lengthUnit) !== display) onCommit(cm);
+      if (cm !== null && toUnit(cm, lengthUnit) !== shown) onCommit(cm);
     } else if (type === "number" || type === "angle") {
       const n = Number.parseFloat(raw.replace(",", "."));
-      if (Number.isFinite(n) && n !== display) onCommit(n);
+      if (Number.isFinite(n) && n !== shown) onCommit(n);
     } else if (raw !== display) {
       onCommit(raw);
     }
@@ -148,7 +157,7 @@ export function SelectField({
           if (e.currentTarget.value) onCommit(e.currentTarget.value);
         }}
       >
-        {mixed && <option value="">mixed</option>}
+        {mixed && <option value="">{t("mixed")}</option>}
         {options.map(([v, text]) => (
           <option key={v} value={v}>
             {text}
@@ -160,28 +169,28 @@ export function SelectField({
 }
 
 export const WALL_PATTERNS: [string, string][] = [
-  ["hatchUp", "Hatch up"],
-  ["hatchDown", "Hatch down"],
-  ["reversedHatchUp", "Reversed hatch up"],
-  ["reversedHatchDown", "Reversed hatch down"],
-  ["crossHatch", "Cross hatch"],
-  ["background", "Background"],
-  ["foreground", "Foreground"],
+  ["hatchUp", t("Hatch up")],
+  ["hatchDown", t("Hatch down")],
+  ["reversedHatchUp", t("Reversed hatch up")],
+  ["reversedHatchDown", t("Reversed hatch down")],
+  ["crossHatch", t("Cross hatch")],
+  ["background", t("Background")],
+  ["foreground", t("Foreground")],
 ];
 
 export const DASH_STYLES: [string, string][] = [
-  ["SOLID", "Solid"],
-  ["DOT", "Dot"],
-  ["DASH", "Dash"],
-  ["DASH_DOT", "Dash dot"],
-  ["DASH_DOT_DOT", "Dash dot dot"],
+  ["SOLID", t("Solid")],
+  ["DOT", t("Dot")],
+  ["DASH", t("Dash")],
+  ["DASH_DOT", t("Dash dot")],
+  ["DASH_DOT_DOT", t("Dash dot dot")],
 ];
 
 export const ARROW_STYLES: [string, string][] = [
-  ["NONE", "None"],
-  ["DELTA", "Triangle"],
-  ["OPEN", "Open"],
-  ["DISC", "Disc"],
+  ["NONE", t("None")],
+  ["DELTA", t("Triangle")],
+  ["OPEN", t("Open")],
+  ["DISC", t("Disc")],
 ];
 
 export const byRole = (textures: Texture[] | undefined, role: string) =>

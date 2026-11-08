@@ -1,21 +1,22 @@
 // Overview of the keyboard shortcuts (F1): those of the commands and those of the views.
 
 import { useEffect } from "react";
+import { formatShortcut, t } from "../i18n";
 import { MENUS, type MenuEntry } from "./commands";
 
 /** Keys of the plan and the 3D view that are no commands of the menus. */
 const VIEW_KEYS: [string, string][] = [
-  ["Arrow keys", "Move the selection by 1 cm (Shift: 10 cm)"],
-  ["Shift+R", "Rotate the selected furniture by -15°"],
-  ["Enter / double-click", "Finish the drawing"],
-  ["Backspace", "Remove the last point while drawing"],
-  ["Digits + Enter (while drawing)", "Length of the next wall or line segment"],
-  ["Alt (held)", "Invert magnetism"],
-  ["Shift (held)", "Angles in 1° steps; add to the selection"],
-  ["Right mouse button", "Pan the plan; context menu"],
-  ["Mouse wheel", "Zoom the plan or the 3D view"],
-  ["W A S D / arrows", "Walk in the virtual visit"],
-  ["Q / E", "Move down / up in the virtual visit"],
+  [t("Arrow keys"), t("Move the selection by 1 cm (Shift: 10 cm)")],
+  [formatShortcut("Shift+R"), t("Rotate the selected furniture by -15°")],
+  [t("Enter / double-click"), t("Finish the drawing")],
+  [t("Backspace"), t("Remove the last point while drawing")],
+  [t("Digits + Enter (while drawing)"), t("Length of the next wall or line segment")],
+  [t("Alt (held)"), t("Invert magnetism")],
+  [t("Shift (held)"), t("Angles in 1° steps; add to the selection")],
+  [t("Right mouse button"), t("Pan the plan; context menu")],
+  [t("Mouse wheel"), t("Zoom the plan or the 3D view")],
+  [t("W A S D / arrows"), t("Walk in the virtual visit")],
+  ["Q / E", t("Move down / up in the virtual visit")],
 ];
 
 function shortcuts(): [string, string][] {
@@ -25,7 +26,7 @@ function shortcuts(): [string, string][] {
     for (const e of entries) {
       if (e.kind === "command" && e.command.shortcut && !seen.has(e.command.id)) {
         seen.add(e.command.id);
-        rows.push([e.command.shortcut, e.command.label]);
+        rows.push([formatShortcut(e.command.shortcut), e.command.label]);
       } else if (e.kind === "submenu") {
         walk(e.entries());
       }
@@ -59,20 +60,20 @@ export default function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   );
   return (
     <div className="dialog-backdrop">
-      <div className="dialog shortcuts-dialog" role="dialog" aria-label="Keyboard shortcuts">
+      <div className="dialog shortcuts-dialog" role="dialog" aria-label={t("Keyboard shortcuts")}>
         <header className="dialog-header">
-          <h2>Keyboard shortcuts</h2>
-          <button type="button" onClick={onClose} aria-label="Close">
+          <h2>{t("Keyboard shortcuts")}</h2>
+          <button type="button" onClick={onClose} aria-label={t("Close")}>
             ×
           </button>
         </header>
         <div className="dialog-body shortcuts-columns">
           <section>
-            <h3>Commands</h3>
+            <h3>{t("Commands")}</h3>
             {table(shortcuts())}
           </section>
           <section>
-            <h3>Plan and 3D view</h3>
+            <h3>{t("Plan and 3D view")}</h3>
             {table(VIEW_KEYS)}
           </section>
         </div>

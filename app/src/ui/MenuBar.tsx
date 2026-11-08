@@ -2,6 +2,7 @@
 // pointing at another category opens that one, like a native menu bar.
 
 import { useEffect, useRef, useState } from "react";
+import { formatShortcut, t } from "../i18n";
 import { MENUS } from "./commands";
 import Icon from "./Icon";
 import MenuList from "./MenuList";
@@ -36,7 +37,7 @@ export default function MenuBar() {
   }, [open]);
 
   return (
-    <nav className="menu-bar" aria-label="Menu" ref={ref}>
+    <nav className="menu-bar" aria-label={t("Menu")} ref={ref}>
       {MENUS.map((menu, i) => (
         <div key={menu.label} className="menu-anchor">
           <button
@@ -61,11 +62,11 @@ export default function MenuBar() {
         type="button"
         className="menu-search"
         onClick={() => setPaletteOpen(true)}
-        title="Search all commands (Ctrl+K)"
+        title={t("Search all commands (Ctrl+K)")}
       >
         <Icon name="search" size={16} />
-        <span>Search commands</span>
-        <kbd>Ctrl+K</kbd>
+        <span>{t("Search commands")}</span>
+        <kbd>{formatShortcut("Ctrl+K")}</kbd>
       </button>
     </nav>
   );

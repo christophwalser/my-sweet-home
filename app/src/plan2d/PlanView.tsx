@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api";
+import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
 import {
   magnetismActive,
@@ -221,7 +222,9 @@ const cursorStyle: Record<Tool, string> = {
   measure: "crosshair",
 };
 
-const FINISH = "Enter, Esc, right-click or double-click to finish · Backspace: remove last point";
+const FINISH = t(
+  "Enter, Esc, right-click or double-click to finish · Backspace: remove last point",
+);
 
 /** Side lines of the selected walls for the overlay. */
 function selectedWallSides(
@@ -360,60 +363,82 @@ export default function PlanView() {
   /** Explanation of what the next mouse action does, shown below the plan. */
   const hintText = (): string => {
     const g = gesture.current;
-    const alt = magnetism ? "Alt: no magnetism" : "Alt: magnetism (off in the preferences)";
+    const alt = magnetism ? t("Alt: no magnetism") : t("Alt: magnetism (off in the preferences)");
     if (g?.kind === "handle") return `${HANDLE_HINT[g.handle.kind]} · ${alt}`;
-    if (g?.kind === "visitor-rotate") return `Drag to turn the visitor · Shift: 1° steps · ${alt}`;
+    if (g?.kind === "visitor-rotate")
+      return t("Drag to turn the visitor · Shift: 1° steps · {alt}", { alt });
     const selected = useStore.getState().selection;
     if (!g && tool === "select" && selected.length === 1 && selected[0] === VISITOR_ID) {
-      return "Drag to move the visitor, the handle in front of it to turn it · arrow keys: move · R: turn by 15°";
+      return t(
+        "Drag to move the visitor, the handle in front of it to turn it · arrow keys: move · R: turn by 15°",
+      );
     }
     if (g?.kind === "move")
       return magnetism
-        ? "Release to drop · a single wall moves straight, furniture docks to walls · Alt: free"
-        : "Release to drop · Alt: magnetism";
+        ? t("Release to drop · a single wall moves straight, furniture docks to walls · Alt: free")
+        : t("Release to drop · Alt: magnetism");
     const drawing = draft.current.length > 0;
     switch (tool) {
       case "measure": {
         const m = measure.current;
-        if (m && !m.done) return `Click the end point · Shift: 1° steps · ${alt}`;
-        if (m?.done) return "Click to measure again · Esc: clear · nothing is added to the plan";
-        return `Click the start point, or drag · ${alt}`;
+        if (m && !m.done) return t("Click the end point · Shift: 1° steps · {alt}", { alt });
+        if (m?.done) return t("Click to measure again · Esc: clear · nothing is added to the plan");
+        return t("Click the start point, or drag · {alt}", { alt });
       }
       case "wall":
         return drawing
-          ? `Click the next point, or type a length + Enter · click the first point to close · ${FINISH}`
-          : `Click the start point, or drag to draw a single wall · Shift: 1° steps · ${alt}`;
+          ? t(
+              "Click the next point, or type a length + Enter · click the first point to close · {FINISH}",
+              { FINISH },
+            )
+          : t("Click the start point, or drag to draw a single wall · Shift: 1° steps · {alt}", {
+              alt,
+            });
       case "arcwall":
         return drawing
-          ? `Click the next point · each wall becomes a ${ARC_WALL_EXTENT_DEG}° arc, changeable in its properties · ${FINISH}`
-          : `Click the start point of the round wall · Shift: 1° steps · ${alt}`;
+          ? t(
+              "Click the next point · each wall becomes a {ARC_WALL_EXTENT_DEG}° arc, changeable in its properties · {FINISH}",
+              { ARC_WALL_EXTENT_DEG, FINISH },
+            )
+          : t("Click the start point of the round wall · Shift: 1° steps · {alt}", { alt });
       case "pan":
-        return "Drag to move the plan · wheel: zoom";
+        return t("Drag to move the plan · wheel: zoom");
       case "roomauto":
-        return "Click inside walls to create the room of that area";
+        return t("Click inside walls to create the room of that area");
       case "heightdim":
-        return "Click where the height dimension goes; it measures the height of the level";
+        return t("Click where the height dimension goes; it measures the height of the level");
       case "room":
         return drawing
-          ? `Click the next corner · click the first corner, ${FINISH}`
-          : "Double-click inside walls to create the room of that area, or click the first corner";
+          ? t("Click the next corner · click the first corner, {FINISH}", { FINISH })
+          : t(
+              "Double-click inside walls to create the room of that area, or click the first corner",
+            );
       case "polyline":
         return drawing
-          ? `Click the next point, or type a length + Enter · click the first point to close · ${FINISH}`
-          : "Click the first point";
+          ? t(
+              "Click the next point, or type a length + Enter · click the first point to close · {FINISH}",
+              { FINISH },
+            )
+          : t("Click the first point");
       case "dimension":
         return drawing
-          ? "Click the end point, or type a length + Enter · Esc to cancel"
-          : "Click the start point, or drag";
+          ? t("Click the end point, or type a length + Enter · Esc to cancel")
+          : t("Click the start point, or drag");
       case "label":
-        return "Click to place a text";
+        return t("Click to place a text");
       default:
         if (hoverHandle.current) return HANDLE_HINT[hoverHandle.current.kind];
         if (selectedWallCount() === 2)
-          return "J or Join walls: connect both walls at the intersection of their axes · Shift+click: change the selection";
+          return t(
+            "J or Join walls: connect both walls at the intersection of their axes · Shift+click: change the selection",
+          );
         return useStore.getState().selection.length > 0
-          ? "Drag to move · drag the handles to edit · Del: delete · Ctrl+C/V: copy/paste · Ctrl+D: duplicate"
-          : "Click to select, drag for a rubber band · Shift: add to the selection · double-click: fit";
+          ? t(
+              "Drag to move · drag the handles to edit · Del: delete · Ctrl+C/V: copy/paste · Ctrl+D: duplicate",
+            )
+          : t(
+              "Click to select, drag for a rubber band · Shift: add to the selection · double-click: fit",
+            );
     }
   };
 
@@ -864,7 +889,7 @@ export default function PlanView() {
         if (id) setSelection([id]);
       });
     } else if (tool === "label") {
-      const text = window.prompt("Label text");
+      const text = window.prompt(t("Label text"));
       if (text?.trim()) {
         void run("label_add", {
           text,
@@ -912,7 +937,7 @@ export default function PlanView() {
         let deg = (Math.atan2(-(p[0] - v.x), p[1] - v.y) * 180) / Math.PI;
         deg = magnetismActive(e.altKey) ? snapAngleDeg(deg, e.shiftKey) : Math.round(deg);
         g.yaw = (deg * Math.PI) / 180;
-        setHint(`Direction ${(((Math.round(deg) % 360) + 360) % 360).toString()}°`);
+        setHint(t("Direction {v0}°", { v0: (((Math.round(deg) % 360) + 360) % 360).toString() }));
       }
       draw();
       return;
@@ -1198,7 +1223,7 @@ export default function PlanView() {
     if (near >= 0) {
       return [
         {
-          label: "Delete point",
+          label: t("Delete point"),
           disabled: pts.length <= minPoints,
           action: () => apply(pts.filter((_, i) => i !== near)),
         },
@@ -1219,7 +1244,7 @@ export default function PlanView() {
     const r = (v: number) => Math.round(v * 10) / 10;
     return [
       {
-        label: "Add point here",
+        label: t("Add point here"),
         action: () => {
           const next = [...pts];
           next.splice(best + 1, 0, [r(q[0]), r(q[1])]);
@@ -1248,57 +1273,61 @@ export default function PlanView() {
     if (sel.includes(VISITOR_ID)) {
       return [
         {
-          label: "Look from here in 3D",
+          label: t("Look from here in 3D"),
           action: () => useStore.getState().setViewMode("observer"),
         },
         { separator: true },
-        { label: "Fit plan to window", action: () => refit() },
+        { label: t("Fit plan to window"), action: () => refit() },
       ];
     }
     if (sel.length === 1 && sel[0] === "compass") {
       return [
-        { label: "Hide compass", action: () => void run("compass_update", { visible: false }) },
+        { label: t("Hide compass"), action: () => void run("compass_update", { visible: false }) },
         { separator: true },
-        { label: "Fit plan to window", action: () => refit() },
+        { label: t("Fit plan to window"), action: () => refit() },
       ];
     }
     if (sel.length > 0) {
       items.push(
         {
-          label: "Cut",
+          label: t("Cut"),
           shortcut: "Ctrl+X",
           action: () =>
             void run("edit_copy", { ids: sel }).then((r) => {
               if (r) void run("edit_delete", { ids: sel });
             }),
         },
-        { label: "Copy", shortcut: "Ctrl+C", action: () => void run("edit_copy", { ids: sel }) },
+        { label: t("Copy"), shortcut: "Ctrl+C", action: () => void run("edit_copy", { ids: sel }) },
       );
     }
     items.push({
-      label: "Paste",
+      label: t("Paste"),
       shortcut: "Ctrl+V",
       action: () => void run("edit_paste", levelParam()).then(selectNew),
     });
     if (sel.length > 0) {
       items.push(
         {
-          label: "Paste style",
+          label: t("Paste style"),
           action: () => void run("edit_paste_style", { ids: sel }),
         },
         {
-          label: "Duplicate",
+          label: t("Duplicate"),
           shortcut: "Ctrl+D",
           action: () => void run("edit_duplicate", { ids: sel }).then(selectNew),
         },
-        { label: "Delete", shortcut: "Del", action: () => void run("edit_delete", { ids: sel }) },
+        {
+          label: t("Delete"),
+          shortcut: "Del",
+          action: () => void run("edit_delete", { ids: sel }),
+        },
         { separator: true },
         {
-          label: "Flip horizontally",
+          label: t("Flip horizontally"),
           action: () => void run("edit_flip", { ids: sel, axis: "horizontal" }),
         },
         {
-          label: "Flip vertically",
+          label: t("Flip vertically"),
           action: () => void run("edit_flip", { ids: sel, axis: "vertical" }),
         },
       );
@@ -1307,7 +1336,7 @@ export default function PlanView() {
       items.push({ separator: true });
       if (furniture.length > 1) {
         items.push({
-          label: "Group",
+          label: t("Group"),
           shortcut: "Ctrl+G",
           action: () =>
             void run("furniture_group", { ids: furnitureIds }).then((r) => {
@@ -1318,7 +1347,7 @@ export default function PlanView() {
       }
       if (groups.length > 0) {
         items.push({
-          label: "Ungroup",
+          label: t("Ungroup"),
           shortcut: "Ctrl+Shift+G",
           action: () =>
             void run("furniture_ungroup", { ids: groups.map((g) => g.attrs.id) }).then(selectNew),
@@ -1331,24 +1360,24 @@ export default function PlanView() {
       const align = (how: string) => () =>
         void run("furniture_align", { ids: furnitureIds, how, leader });
       items.push(
-        { heading: "Align to the piece selected last" },
-        { label: "Left sides", action: align("left") },
-        { label: "Right sides", action: align("right") },
-        { label: "Front sides", action: align("front") },
-        { label: "Back sides", action: align("back") },
-        { label: "Tops", action: align("top") },
-        { label: "Bottoms (elevation)", action: align("bottom") },
-        { label: "Side by side", action: align("side_by_side") },
+        { heading: t("Align to the piece selected last") },
+        { label: t("Left sides"), action: align("left") },
+        { label: t("Right sides"), action: align("right") },
+        { label: t("Front sides"), action: align("front") },
+        { label: t("Back sides"), action: align("back") },
+        { label: t("Tops"), action: align("top") },
+        { label: t("Bottoms (elevation)"), action: align("bottom") },
+        { label: t("Side by side"), action: align("side_by_side") },
       );
       if (furniture.length > 2) {
         items.push(
           {
-            label: "Distribute horizontally",
+            label: t("Distribute horizontally"),
             action: () =>
               void run("furniture_distribute", { ids: furnitureIds, axis: "horizontal" }),
           },
           {
-            label: "Distribute vertically",
+            label: t("Distribute vertically"),
             action: () => void run("furniture_distribute", { ids: furnitureIds, axis: "vertical" }),
           },
         );
@@ -1358,12 +1387,12 @@ export default function PlanView() {
       const wallIds = walls.map((w) => w.attrs.id);
       items.push({ separator: true });
       items.push({
-        label: walls.length > 1 ? "Reverse wall directions" : "Reverse wall direction",
+        label: walls.length > 1 ? t("Reverse wall directions") : t("Reverse wall direction"),
         action: () => void run("wall_reverse", { ids: wallIds }),
       });
       if (walls.length === 1) {
         items.push({
-          label: "Split wall here",
+          label: t("Split wall here"),
           action: () =>
             void run("wall_split", {
               id: wallIds[0],
@@ -1373,13 +1402,13 @@ export default function PlanView() {
       }
       if (walls.length === 2) {
         items.push({
-          label: "Join walls",
+          label: t("Join walls"),
           shortcut: "J",
           action: () => void run("wall_join", { ids: wallIds }),
         });
       }
       if (walls.some((w) => w.attrs.wall_at_start || w.attrs.wall_at_end)) {
-        items.push({ label: "Detach", action: () => void run("wall_detach", { ids: wallIds }) });
+        items.push({ label: t("Detach"), action: () => void run("wall_detach", { ids: wallIds }) });
       }
     }
     // Dimensions of a single wall or piece
@@ -1389,7 +1418,7 @@ export default function PlanView() {
       items.push({ separator: true });
       if (dims.length > 0) {
         items.push({
-          label: walls.length ? "Add dimensions of the wall" : "Add dimensions of the piece",
+          label: walls.length ? t("Add dimensions of the wall") : t("Add dimensions of the piece"),
           action: () => {
             for (const d of dims) {
               void run("dimension_add", {
@@ -1405,7 +1434,7 @@ export default function PlanView() {
         });
       }
       items.push({
-        label: "Add height dimension",
+        label: t("Add height dimension"),
         action: () => {
           if (walls.length) {
             const a = walls[0].attrs;
@@ -1464,17 +1493,17 @@ export default function PlanView() {
     if (sel.length === 0) {
       items.push(
         {
-          label: "Select all",
+          label: t("Select all"),
           shortcut: "Ctrl+A",
           action: () =>
             setSelection(elementsInRect(home, effectiveLevel, [-1e9, -1e9], [1e9, 1e9])),
         },
-        { label: "Fit plan to window", action: () => refit() },
+        { label: t("Fit plan to window"), action: () => refit() },
       );
     }
     const locked = home.attrs.base_plan_locked === true;
     items.push({
-      label: locked ? "Unlock base plan" : "Lock base plan",
+      label: locked ? t("Unlock base plan") : t("Lock base plan"),
       action: () => {
         void run("home_set", { base_plan_locked: !locked });
         if (!locked) setSelection([]);
@@ -1702,7 +1731,7 @@ export default function PlanView() {
     <div className={`plan-view${showRulers && opened ? " with-rulers" : ""}`}>
       {showRulers && opened && (
         <>
-          <div className="ruler-corner" title="Unit of the rulers (see the preferences)">
+          <div className="ruler-corner" title={t("Unit of the rulers (see the preferences)")}>
             {unit === "inch" ? "ft" : unitSymbol(unit)}
           </div>
           <canvas ref={topRulerRef} className="ruler ruler-top" />
@@ -1736,9 +1765,9 @@ export default function PlanView() {
             type="button"
             className="overlay-button"
             onClick={refit}
-            title="Fit plan to window"
+            title={t("Fit plan to window")}
           >
-            Fit
+            {t("Fit")}
           </button>
         )}
       </div>

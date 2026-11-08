@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { t } from "../i18n";
 import { Field, toHex } from "../panels/fields";
 import TextureField from "../panels/TextureField";
 import { useStore } from "../store";
@@ -102,44 +103,44 @@ export default function View3DSettings({ sun, onClose }: Props) {
   };
 
   return (
-    <div className="settings3d-panel" role="dialog" aria-label="3D view settings">
+    <div className="settings3d-panel" role="dialog" aria-label={t("3D view settings")}>
       <header className="dialog-header">
-        <h2>3D view settings</h2>
-        <button type="button" onClick={onClose} aria-label="Close">
+        <h2>{t("3D view settings")}</h2>
+        <button type="button" onClick={onClose} aria-label={t("Close")}>
           {"✕"}
         </button>
       </header>
 
       <fieldset className="settings3d-group">
-        <legend>Ground and sky</legend>
+        <legend>{t("Ground and sky")}</legend>
         <Field
-          label="Ground color"
+          label={t("Ground color")}
           type="color"
           value={toHex(a?.ground_color ?? 0xa8a8a8)}
           onCommit={(v) => update({ ground_color: v })}
         />
         <TextureField
-          label="Ground texture"
+          label={t("Ground texture")}
           current={texture("groundTexture")}
           onCommit={(id) => update({ ground_texture: id })}
         />
         <Field
-          label="Sky color"
+          label={t("Sky color")}
           type="color"
           value={toHex(a?.sky_color ?? 0xcce4fc)}
           onCommit={(v) => update({ sky_color: v })}
         />
         <TextureField
-          label="Sky texture"
+          label={t("Sky texture")}
           current={texture("skyTexture")}
           onCommit={(id) => update({ sky_texture: id })}
         />
       </fieldset>
 
       <fieldset className="settings3d-group">
-        <legend>Light and walls</legend>
+        <legend>{t("Light and walls")}</legend>
         <label className="prop-row">
-          <span className="prop-label">Light brightness</span>
+          <span className="prop-label">{t("Light brightness")}</span>
           <input
             key={`light-${light}`}
             type="range"
@@ -153,7 +154,7 @@ export default function View3DSettings({ sun, onClose }: Props) {
           <span className="prop-unit">{light} %</span>
         </label>
         <label className="prop-row">
-          <span className="prop-label">Walls transparency</span>
+          <span className="prop-label">{t("Walls transparency")}</span>
           <input
             key={`walls-${transparency}`}
             type="range"
@@ -169,7 +170,7 @@ export default function View3DSettings({ sun, onClose }: Props) {
       </fieldset>
 
       <fieldset className="settings3d-group">
-        <legend>Location</legend>
+        <legend>{t("Location")}</legend>
         <form
           className="settings3d-search"
           onSubmit={(e) => {
@@ -179,17 +180,17 @@ export default function View3DSettings({ sun, onClose }: Props) {
         >
           <input
             value={query}
-            placeholder="Address or place"
+            placeholder={t("Address or place")}
             onChange={(e) => setQuery(e.currentTarget.value)}
             onKeyDown={(e) => e.stopPropagation()}
           />
           <button type="submit" disabled={searching || !query.trim()}>
-            {searching ? "Searching…" : "Search"}
+            {searching ? t("Searching…") : t("Search")}
           </button>
         </form>
-        <p className="muted small">Searched online with OpenStreetMap Nominatim.</p>
+        <p className="muted small">{t("Searched online with OpenStreetMap Nominatim.")}</p>
         {searchError && <p className="settings3d-error">{searchError}</p>}
-        {found && found.length === 0 && <p className="muted small">Nothing found.</p>}
+        {found && found.length === 0 && <p className="muted small">{t("Nothing found.")}</p>}
         {found && found.length > 0 && (
           <ul className="settings3d-results">
             {found.map((f) => (
@@ -206,21 +207,21 @@ export default function View3DSettings({ sun, onClose }: Props) {
           </ul>
         )}
         <Field
-          label="Latitude"
+          label={t("Latitude")}
           type="number"
           unit="°"
           value={sun ? String(sun.latitude) : null}
           onCommit={(v) => void run("location_set", { latitude: Number(v) })}
         />
         <Field
-          label="Longitude"
+          label={t("Longitude")}
           type="number"
           unit="°"
           value={sun ? String(sun.longitude) : null}
           onCommit={(v) => void run("location_set", { longitude: Number(v) })}
         />
         <label className="prop-row">
-          <span className="prop-label">Time zone</span>
+          <span className="prop-label">{t("Time zone")}</span>
           <select
             value={sun?.time_zone ?? "UTC"}
             onChange={(e) => void run("location_set", { time_zone: e.currentTarget.value })}
@@ -233,27 +234,27 @@ export default function View3DSettings({ sun, onClose }: Props) {
           </select>
         </label>
         <Field
-          label="North direction"
+          label={t("North direction")}
           type="number"
           unit="°"
           value={Math.round(((north * 180) / Math.PI) * 10) / 10}
           onCommit={(v) => void run("compass_update", { north_direction_deg: Number(v) })}
         />
         {sun && !sun.location_set && (
-          <p className="muted small">No location set yet: the sun is computed for Paris.</p>
+          <p className="muted small">{t("No location set yet: the sun is computed for Paris.")}</p>
         )}
       </fieldset>
 
       <fieldset className="settings3d-group">
-        <legend>Sun</legend>
+        <legend>{t("Sun")}</legend>
         <Field
-          label="Follow the current time"
+          label={t("Follow the current time")}
           type="checkbox"
           value={sun?.follow_clock ?? false}
           onCommit={(v) => void run("sun_update", { follow_clock: v === true })}
         />
         <label className="prop-row">
-          <span className="prop-label">Date</span>
+          <span className="prop-label">{t("Date")}</span>
           <input
             key={`date-${sun?.date}`}
             type="date"
@@ -267,7 +268,7 @@ export default function View3DSettings({ sun, onClose }: Props) {
           />
         </label>
         <label className="prop-row">
-          <span className="prop-label">Time</span>
+          <span className="prop-label">{t("Time")}</span>
           <input
             key={`time-${sun?.time}`}
             type="time"
@@ -286,7 +287,7 @@ export default function View3DSettings({ sun, onClose }: Props) {
             disabled={sun?.follow_clock}
             onClick={() => void run("sun_update", nowIn(sun?.time_zone ?? "UTC"))}
           >
-            Now
+            {t("Now")}
           </button>
           <button
             type="button"
@@ -295,7 +296,7 @@ export default function View3DSettings({ sun, onClose }: Props) {
               void run("sun_update", { date: `${new Date().getFullYear()}-06-21`, time: "12:00" })
             }
           >
-            Summer noon
+            {t("Summer noon")}
           </button>
           <button
             type="button"
@@ -304,14 +305,18 @@ export default function View3DSettings({ sun, onClose }: Props) {
               void run("sun_update", { date: `${new Date().getFullYear()}-12-21`, time: "12:00" })
             }
           >
-            Winter noon
+            {t("Winter noon")}
           </button>
         </div>
         {sun && (
           <p className="muted small">
             {sun.elevation > 0
-              ? `Sun ${Math.round(sun.elevation)}° above the horizon, ${compassPoint(sun.azimuth)} (${Math.round(sun.azimuth)}°)`
-              : "The sun is below the horizon (night)."}
+              ? t("Sun {v0}° above the horizon, {v1} ({v2}°)", {
+                  v0: Math.round(sun.elevation),
+                  v1: compassPoint(sun.azimuth),
+                  v2: Math.round(sun.azimuth),
+                })
+              : t("The sun is below the horizon (night).")}
             {sun.follow_clock ? ` · ${sun.date} ${sun.time}` : ""}
           </p>
         )}

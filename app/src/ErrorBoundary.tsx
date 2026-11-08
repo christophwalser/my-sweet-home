@@ -2,6 +2,7 @@
 // whole app: the part shows the error and can be tried again.
 
 import { Component, type ReactNode } from "react";
+import { t } from "./i18n";
 
 type Props = {
   /** What failed, for the message ("3D view") */
@@ -35,11 +36,13 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children;
     return (
       <div className="error-boundary" role="alert">
-        <strong>The {this.props.name} could not be shown.</strong>
+        <strong>
+          {t("The")} {this.props.name} {t("could not be shown.")}
+        </strong>
         <code>{error.message}</code>
         {error.stack && <pre>{error.stack.split("\n").slice(0, 6).join("\n")}</pre>}
         <button type="button" onClick={() => this.setState({ error: null })}>
-          Try again
+          {t("Try again")}
         </button>
       </div>
     );

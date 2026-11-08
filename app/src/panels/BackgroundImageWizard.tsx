@@ -6,6 +6,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { t } from "../i18n";
 import { type BackgroundImage, backgroundScale, type Pt } from "../model";
 import { useStore } from "../store";
 
@@ -488,14 +489,14 @@ export default function BackgroundImageWizard({
     const path = await open({
       multiple: false,
       filters: [
-        { name: "Images and PDF", extensions: ["png", "jpg", "jpeg", "bmp", "gif", "pdf"] },
+        { name: t("Images and PDF"), extensions: ["png", "jpg", "jpeg", "bmp", "gif", "pdf"] },
       ],
     });
     if (typeof path !== "string") return;
     setError(null);
     const name = path.split(/[\\/]/).pop() ?? path;
     try {
-      setBusy("Reading the file…");
+      setBusy(t("Reading the file…"));
       const bytes = await api.readFile(path);
       if (/\.pdf$/i.test(path)) {
         const doc = await openPdf(bytes);
@@ -516,7 +517,7 @@ export default function BackgroundImageWizard({
   };
 
   const showPdfPage = async (doc: Pdf["doc"], n: number, name: string) => {
-    setBusy(`Rendering page ${n}…`);
+    setBusy(t("Rendering page {n}…", { n }));
     try {
       const { url, base64 } = await renderPdfPage(doc, n);
       const img = await loadImage(url);
@@ -533,7 +534,7 @@ export default function BackgroundImageWizard({
 
   const finish = async () => {
     if (!source || !cmPerPx) return;
-    setBusy("Saving…");
+    setBusy(t("Saving…"));
     const r2 = (v: number) => Math.round(v * 100) / 100;
     const params = {
       ...(levelId ? { level: levelId } : {}),
@@ -556,9 +557,9 @@ export default function BackgroundImageWizard({
   };
 
   const steps: { id: Step; label: string }[] = [
-    ...(existing ? [] : [{ id: "image" as Step, label: "Image" }]),
-    { id: "scale", label: "Scale" },
-    { id: "origin", label: "Origin" },
+    ...(existing ? [] : [{ id: "image" as Step, label: t("Image") }]),
+    { id: "scale", label: t("Scale") },
+    { id: "origin", label: t("Origin") },
   ];
   const index = steps.findIndex((s) => s.id === step);
   const canNext = step === "image" ? !!source && !busy : step === "scale" ? lengthOk : true;
@@ -569,11 +570,13 @@ export default function BackgroundImageWizard({
         className="dialog bg-wizard"
         role="dialog"
         aria-modal="true"
-        aria-label="Background image"
+        aria-label={t("Background image")}
       >
         <header className="dialog-header">
-          <h2>Background image · {title}</h2>
-          <button type="button" onClick={onClose} aria-label="Close" disabled={!!busy}>
+          <h2>
+            {t("Background image ·")} {title}
+          </h2>
+          <button type="button" onClick={onClose} aria-label={t("Close")} disabled={!!busy}>
             {"✕"}
           </button>
         </header>
@@ -588,16 +591,17 @@ export default function BackgroundImageWizard({
         {step === "image" && (
           <div className="bg-step-body">
             <p className="muted small">
-              Choose a floor plan as image (PNG, JPEG, BMP, GIF) or a PDF, for example a scan or a
-              plan from the architect. Walls, rooms and furniture are drawn on top of it.
+              {t(
+                "Choose a floor plan as image (PNG, JPEG, BMP, GIF) or a PDF, for example a scan or a plan from the architect. Walls, rooms and furniture are drawn on top of it.",
+              )}
             </p>
             <div className="bg-row">
               <button type="button" onClick={() => void chooseFile()} disabled={!!busy}>
-                {source ? "Choose another file…" : "Choose file…"}
+                {source ? t("Choose another file…") : t("Choose file…")}
               </button>
               {pdf && (
                 <label className="bg-inline">
-                  Page
+                  {t("Page")}
                   <select
                     value={page}
                     disabled={!!busy}
@@ -609,7 +613,7 @@ export default function BackgroundImageWizard({
                   >
                     {Array.from({ length: pdf.pages }, (_, i) => i + 1).map((n) => (
                       <option key={n} value={n}>
-                        {n} of {pdf.pages}
+                        {n} {t("of")} {pdf.pages}
                       </option>
                     ))}
                   </select>
@@ -617,13 +621,13 @@ export default function BackgroundImageWizard({
               )}
               {source && (
                 <span className="muted small">
-                  {source.name} · {source.img.naturalWidth} × {source.img.naturalHeight} px
+                  {source.name} · {source.img.naturalWidth} × {source.img.naturalHeight} {t("px")}
                 </span>
               )}
             </div>
             {source && (
               <div className="bg-preview">
-                <img src={source.img.src} alt="Chosen background" />
+                <img src={source.img.src} alt={t("Chosen background")} />
               </div>
             )}
           </div>
@@ -632,10 +636,9 @@ export default function BackgroundImageWizard({
         {step === "scale" && source && (
           <div className="bg-step-body">
             <p className="muted small">
-              Drag the ends of the orange marker onto two points whose distance you know, e.g. the
-              ends of a dimension line, and type that distance. Drag the marker itself to move it as
-              a whole. Zoom with the mouse wheel, move the image by dragging, double-click to fit.
-              Shift keeps the marker horizontal or vertical.
+              {t(
+                "Drag the ends of the orange marker onto two points whose distance you know, e.g. the ends of a dimension line, and type that distance. Drag the marker itself to move it as a whole. Zoom with the mouse wheel, move the image by dragging, double-click to fit. Shift keeps the marker horizontal or vertical.",
+              )}
             </p>
             <ImageStage
               img={source.img}
@@ -648,7 +651,7 @@ export default function BackgroundImageWizard({
             />
             <div className="bg-row">
               <label className="bg-inline">
-                Length of the marker
+                {t("Length of the marker")}
                 <input
                   type="text"
                   inputMode="decimal"
@@ -656,10 +659,10 @@ export default function BackgroundImageWizard({
                   placeholder="e.g. 873"
                   onChange={(e) => setLength(e.currentTarget.value)}
                 />
-                cm
+                {t("cm")}
               </label>
               <span className="muted small">
-                Marker: {Math.round(markerPx * 10) / 10} px
+                {t("Marker:")} {Math.round(markerPx * 10) / 10} {t("px")}
                 {cmPerPx ? ` · ${Math.round(cmPerPx * 1000) / 1000} cm per pixel` : ""}
                 {cmPerPx
                   ? ` · image ${Math.round((source.img.naturalWidth * cmPerPx) / 10) / 10} × ${
@@ -674,8 +677,9 @@ export default function BackgroundImageWizard({
         {step === "origin" && source && (
           <div className="bg-step-body">
             <p className="muted small">
-              Click the point of the image that becomes the origin of the plan (0, 0), e.g. an outer
-              corner of the building. Drag to adjust; the magnifier shows the exact spot.
+              {t(
+                "Click the point of the image that becomes the origin of the plan (0, 0), e.g. an outer corner of the building. Drag to adjust; the magnifier shows the exact spot.",
+              )}
             </p>
             <ImageStage
               img={source.img}
@@ -698,7 +702,7 @@ export default function BackgroundImageWizard({
                       setOrigin([Number(e.currentTarget.value) / cmPerPx, origin[1]])
                     }
                   />
-                  cm
+                  {t("cm")}
                 </label>
                 <label className="bg-inline">
                   Y
@@ -710,9 +714,9 @@ export default function BackgroundImageWizard({
                       setOrigin([origin[0], Number(e.currentTarget.value) / cmPerPx])
                     }
                   />
-                  cm
+                  {t("cm")}
                 </label>
-                <span className="muted small">from the top-left corner of the image</span>
+                <span className="muted small">{t("from the top-left corner of the image")}</span>
               </div>
             )}
           </div>
@@ -723,11 +727,11 @@ export default function BackgroundImageWizard({
           {busy && <span className="muted small">{busy}</span>}
           <span className="spacer" />
           <button type="button" onClick={onClose} disabled={!!busy}>
-            Cancel
+            {t("Cancel")}
           </button>
           {index > 0 && (
             <button type="button" onClick={() => setStep(steps[index - 1].id)} disabled={!!busy}>
-              Back
+              {t("Back")}
             </button>
           )}
           {index < steps.length - 1 ? (
@@ -736,9 +740,9 @@ export default function BackgroundImageWizard({
               className="primary"
               onClick={() => setStep(steps[index + 1].id)}
               disabled={!canNext}
-              title={step === "scale" && !lengthOk ? "Type the length of the marker" : undefined}
+              title={step === "scale" && !lengthOk ? t("Type the length of the marker") : undefined}
             >
-              Next
+              {t("Next")}
             </button>
           ) : (
             <button
@@ -747,7 +751,7 @@ export default function BackgroundImageWizard({
               onClick={() => void finish()}
               disabled={!!busy || !cmPerPx}
             >
-              {existing ? "Apply" : "Import"}
+              {existing ? t("Apply") : t("Import")}
             </button>
           )}
         </div>

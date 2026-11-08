@@ -1,6 +1,7 @@
 // Command search (Ctrl+K): finds any command of the menus by its name, menu or keywords.
 
 import { useMemo, useState } from "react";
+import { formatShortcut, t } from "../i18n";
 import { type Command, isEnabled, MENUS, type MenuEntry, runCommand } from "./commands";
 import Icon from "./Icon";
 import { useUi } from "./uiStore";
@@ -61,15 +62,15 @@ export default function CommandPalette() {
       className="palette-backdrop"
       onPointerDown={(e) => e.target === e.currentTarget && close()}
     >
-      <div className="palette" role="dialog" aria-label="Search commands">
+      <div className="palette" role="dialog" aria-label={t("Search commands")}>
         <label className="palette-search">
           <Icon name="search" size={18} />
           <input
             // biome-ignore lint/a11y/noAutofocus: the search is opened to type into it
             autoFocus
             value={query}
-            placeholder="Search commands"
-            aria-label="Search commands"
+            placeholder={t("Search commands")}
+            aria-label={t("Search commands")}
             onChange={(e) => {
               setQuery(e.currentTarget.value);
               setActive(0);
@@ -84,8 +85,8 @@ export default function CommandPalette() {
             }}
           />
         </label>
-        <div className="palette-results" role="listbox" aria-label="Commands">
-          {results.length === 0 && <p className="muted palette-empty">No command found</p>}
+        <div className="palette-results" role="listbox" aria-label={t("Commands")}>
+          {results.length === 0 && <p className="muted palette-empty">{t("No command found")}</p>}
           {results.map((f, i) => (
             <button
               type="button"
@@ -104,7 +105,9 @@ export default function CommandPalette() {
               )}
               <span className="menu-label">{f.command.label}</span>
               <span className="palette-path">{f.path}</span>
-              <span className="menu-shortcut">{f.command.shortcut}</span>
+              <span className="menu-shortcut">
+                {f.command.shortcut && formatShortcut(f.command.shortcut)}
+              </span>
             </button>
           ))}
         </div>

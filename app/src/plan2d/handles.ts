@@ -6,6 +6,7 @@
 // height (bottom-left), drawn as icons just outside the corners. Each handle turns a pointer
 // position into a preview outline and the registry command that applies it.
 
+import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Pt, type WallShape } from "../model";
 import { formatArea, formatLength, formatPrecise } from "../units";
 import { boundsCenter, DEFAULT_ROOM_FONT, labelCenter, roomLabelPositions } from "./drawPlan";
@@ -73,23 +74,23 @@ export const HANDLE_SHAPE: Record<HandleKind, HandleShape> = {
 
 /** Tooltip-like explanation shown while hovering a handle. */
 export const HANDLE_HINT: Record<HandleKind, string> = {
-  "wall-start": "Drag to move the wall start (length and angle) · Shift: 1° steps",
-  "wall-end": "Drag to move the wall end (length and angle) · Shift: 1° steps",
-  "wall-thickness": "Drag to change the thickness",
-  "wall-arc": "Drag sideways to bend the wall into an arc · Shift: 1° steps",
-  "wall-rotate": "Drag to rotate the wall around its center · Shift: 1° steps",
-  "room-point": "Drag to move this corner",
-  "polyline-point": "Drag to move this point",
-  "dimension-start": "Drag to move the start of the dimension",
-  "dimension-end": "Drag to move the end of the dimension",
-  "piece-resize": "Drag to resize (the opposite corner stays)",
-  "piece-rotate": "Drag to rotate · Shift: 1° steps",
-  "piece-elevation": "Drag up or down to change the elevation above the floor",
-  "piece-height": "Drag up or down to change the height",
-  "compass-rotate": "Drag to turn north · 5° steps, Shift: 1° steps",
-  "compass-resize": "Drag to change the size of the compass",
-  "room-name": "Drag to move the room name · it snaps back to the automatic position",
-  "room-area": "Drag to move the area label · it snaps back to the automatic position",
+  "wall-start": t("Drag to move the wall start (length and angle) · Shift: 1° steps"),
+  "wall-end": t("Drag to move the wall end (length and angle) · Shift: 1° steps"),
+  "wall-thickness": t("Drag to change the thickness"),
+  "wall-arc": t("Drag sideways to bend the wall into an arc · Shift: 1° steps"),
+  "wall-rotate": t("Drag to rotate the wall around its center · Shift: 1° steps"),
+  "room-point": t("Drag to move this corner"),
+  "polyline-point": t("Drag to move this point"),
+  "dimension-start": t("Drag to move the start of the dimension"),
+  "dimension-end": t("Drag to move the end of the dimension"),
+  "piece-resize": t("Drag to resize (the opposite corner stays)"),
+  "piece-rotate": t("Drag to rotate · Shift: 1° steps"),
+  "piece-elevation": t("Drag up or down to change the elevation above the floor"),
+  "piece-height": t("Drag up or down to change the height"),
+  "compass-rotate": t("Drag to turn north · 5° steps, Shift: 1° steps"),
+  "compass-resize": t("Drag to change the size of the compass"),
+  "room-name": t("Drag to move the room name · it snaps back to the automatic position"),
+  "room-area": t("Drag to move the area label · it snaps back to the automatic position"),
 };
 
 export type Handle = {
@@ -395,7 +396,7 @@ export function dragHandle(
       return {
         preview: [{ pts: wallOutline(start, end, thickness, a.arc_extent), closed: true }],
         ...none,
-        info: `Thickness ${formatPrecise(thickness)}`,
+        info: t("Thickness {v0}", { v0: formatPrecise(thickness) }),
         command: "wall_update",
         params: { id, thickness },
       };
@@ -420,7 +421,7 @@ export function dragHandle(
       return {
         preview: [{ pts: wallOutline(start, end, a.thickness, extent || null), closed: true }],
         ...none,
-        info: deg === 0 ? "Straight" : `Arc ${deg}°`,
+        info: deg === 0 ? t("Straight") : t("Arc {deg}°", { deg }),
         command: "wall_update",
         params: { id, arc_extent_deg: deg },
       };
@@ -479,7 +480,7 @@ export function dragHandle(
         preview: [],
         snap: magnetism && near ? autoPos : null,
         guides: [],
-        info: magnetism && near ? "automatic position" : isName ? "Name" : "Area",
+        info: magnetism && near ? t("automatic position") : isName ? t("Name") : t("Area"),
         text: { text, at, size: DEFAULT_ROOM_FONT },
         command: "room_update",
         // Back at the automatic position: no stored offset, so it keeps following the room
@@ -622,7 +623,7 @@ export function dragHandle(
             },
           ],
           ...none,
-          info: `North ${deg}°`,
+          info: t("North {deg}°", { deg }),
           command: "compass_update",
           params: { north_direction_deg: deg },
         };
@@ -635,7 +636,7 @@ export function dragHandle(
       return {
         preview: [{ pts: ring(diameter / 2), closed: true }],
         ...none,
-        info: `Diameter ${formatPrecise(diameter)}`,
+        info: t("Diameter {v0}", { v0: formatPrecise(diameter) }),
         command: "compass_update",
         params: { diameter },
       };
@@ -667,14 +668,14 @@ export function dragHandle(
         return {
           preview: [outline],
           ...none,
-          info: `Elevation ${formatPrecise(elevation)}${on}`,
+          info: t("Elevation {v0}{on}", { v0: formatPrecise(elevation), on }),
           command: "furniture_update",
           params: { id, elevation },
         };
       }
       const height = Math.max(1, Math.round((a.height + delta) * 10) / 10);
       const params: Record<string, unknown> = { id, height };
-      let info = `Height ${formatPrecise(height)}`;
+      let info = t("Height {v0}", { v0: formatPrecise(height) });
       if (a.deformable === false) {
         // Proportional pieces grow in all directions, around their center
         const f = height / a.height;

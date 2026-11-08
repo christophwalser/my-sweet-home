@@ -1,6 +1,7 @@
 // Context menu of the plan (right click in the select mode).
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { formatShortcut } from "../i18n";
 
 export type MenuItem =
   | { label: string; shortcut?: string; disabled?: boolean; action: () => void }
@@ -89,7 +90,9 @@ export default function ContextMenu({
             }}
           >
             <span>{item.label}</span>
-            {item.shortcut && <span className="context-menu-shortcut">{item.shortcut}</span>}
+            {item.shortcut && (
+              <span className="context-menu-shortcut">{formatShortcut(item.shortcut)}</span>
+            )}
           </button>
         );
       })}

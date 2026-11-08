@@ -2,6 +2,7 @@
 // chosen last with one click; only their small arrow opens the other variants.
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { formatShortcut, t } from "../i18n";
 import { usePreferences } from "../preferences";
 import { useStore } from "../store";
 import { type Command, command, isEnabled, type MenuEntry, runCommand } from "./commands";
@@ -11,7 +12,7 @@ import { useDarkMode, useUi } from "./uiStore";
 
 /** Tooltip of a command: label, shortcut and hint. */
 function tip(c: Command): string {
-  return `${c.label}${c.shortcut ? ` (${c.shortcut})` : ""}${c.hint ? `\n${c.hint}` : ""}`;
+  return `${c.label}${c.shortcut ? ` (${formatShortcut(c.shortcut)})` : ""}${c.hint ? `\n${c.hint}` : ""}`;
 }
 
 /** Open state of a drop-down that closes on a click outside of it or on Escape. */
@@ -108,8 +109,8 @@ function SplitButton({ button, variants }: { button: string; variants: string[] 
           type="button"
           className={`tool-button tool-arrow ${open ? "on" : ""}`}
           disabled={!isEnabled(current)}
-          title={`Variants of ${current.label.toLowerCase()}`}
-          aria-label={`Variants of ${current.label.toLowerCase()}`}
+          title={t("Variants of {v0}", { v0: current.label.toLowerCase() })}
+          aria-label={t("Variants of {v0}", { v0: current.label.toLowerCase() })}
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={() => setOpen(!open)}
@@ -190,21 +191,21 @@ export default function ToolBar() {
   const locked = opened?.home.attrs.base_plan_locked === true;
 
   return (
-    <div role="toolbar" aria-label="Tools" className="tool-bar">
-      <Group label="File">
+    <div role="toolbar" aria-label={t("Tools")} className="tool-bar">
+      <Group label={t("File")}>
         <ToolButton id="file.new" />
         <ToolButton id="file.open" />
         <ToolButton id="file.save" />
       </Group>
-      <Group label="History">
+      <Group label={t("History")}>
         <ToolButton id="edit.undo" />
         <ToolButton id="edit.redo" />
       </Group>
-      <Group label="Selection">
+      <Group label={t("Selection")}>
         <ToolButton id="tool.select" />
         <ToolButton id="tool.pan" />
       </Group>
-      <Group label="Draw">
+      <Group label={t("Draw")}>
         <SplitButton button="walls" variants={["tool.wall", "tool.arcwall"]} />
         <SplitButton button="rooms" variants={["tool.room", "tool.roomauto"]} />
         <ToolButton id="tool.polyline" />
@@ -212,11 +213,11 @@ export default function ToolBar() {
         <ToolButton id="tool.label" />
         <ToolButton id="tool.measure" />
       </Group>
-      <Group label="Levels">
+      <Group label={t("Levels")}>
         <MenuButton
-          label="Levels"
+          label={t("Levels")}
           icon="level"
-          text={levelName ?? "No levels"}
+          text={levelName ?? t("No levels")}
           disabled={!opened}
           entries={() => [
             ...levels.map(
@@ -242,9 +243,9 @@ export default function ToolBar() {
         />
         <ToolButton id="level.add" />
       </Group>
-      <Group label="Arrange">
+      <Group label={t("Arrange")}>
         <MenuButton
-          label="Align and distribute the selected furniture"
+          label={t("Align and distribute the selected furniture")}
           icon="align"
           disabled={!opened}
           entries={() => [
@@ -263,7 +264,7 @@ export default function ToolBar() {
         <SplitButton button="flip" variants={["edit.flipH", "edit.flipV"]} />
         <ToolButton id="furniture.rotate" />
       </Group>
-      <Group label="View">
+      <Group label={t("View")}>
         <ToolButton id="plan.zoomOut" />
         <ToolButton id="plan.fit" />
         <ToolButton id="plan.zoomIn" />
@@ -271,17 +272,17 @@ export default function ToolBar() {
       </Group>
       <span className="spacer" />
       {/* biome-ignore lint/a11y/useSemanticElements: a fieldset would add a border and legend */}
-      <div role="group" aria-label="3D view mode" className="view-mode">
+      <div role="group" aria-label={t("3D view mode")} className="view-mode">
         <button
           type="button"
           className={`chip ${viewMode === "aerial" ? "on" : ""}`}
           aria-pressed={viewMode === "aerial"}
           disabled={!opened}
           onClick={() => setViewMode("aerial")}
-          title="Aerial view (F7)"
+          title={t("Aerial view (F7)")}
         >
           <Icon name="aerial" size={16} />
-          <span className="chip-text">Aerial view</span>
+          <span className="chip-text">{t("Aerial view")}</span>
         </button>
         <button
           type="button"
@@ -289,10 +290,10 @@ export default function ToolBar() {
           aria-pressed={viewMode === "observer"}
           disabled={!opened}
           onClick={() => setViewMode("observer")}
-          title="Virtual visit (F8)"
+          title={t("Virtual visit (F8)")}
         >
           <Icon name="visit" size={16} />
-          <span className="chip-text">Virtual visit</span>
+          <span className="chip-text">{t("Virtual visit")}</span>
         </button>
       </div>
       <ToolButton id="view3d.photo" />

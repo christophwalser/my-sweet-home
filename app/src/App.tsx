@@ -26,6 +26,7 @@ import { initTheme, useUi } from "./ui/uiStore";
 import { formatPrecise, fromUnit, toUnit, unitSymbol, useUnit } from "./units";
 import View3D from "./view3d/View3D";
 import "./App.css";
+import { followLanguage, formatDateTime, t } from "./i18n";
 import { followPreferences, newHomeParams, usePreferences } from "./preferences";
 
 /** Thickness of the walls drawn next, shown while the wall tool is active. */
@@ -34,8 +35,8 @@ function WallThicknessInput() {
   const setThickness = useStore((s) => s.setWallThickness);
   const unit = useUnit();
   return (
-    <label className="tool-option" title="Thickness of new walls (default in the preferences)">
-      Thickness
+    <label className="tool-option" title={t("Thickness of new walls (default in the preferences)")}>
+      {t("Thickness")}
       <input
         type="number"
         min={0}
@@ -81,7 +82,7 @@ function LevelNameInput({ name, onDone }: { name: string; onDone: (name: string 
     <input
       className="level-name-input"
       defaultValue={name}
-      aria-label="Level name"
+      aria-label={t("Level name")}
       ref={(el) => {
         if (el && document.activeElement !== el) {
           el.focus();
@@ -124,6 +125,7 @@ export default function App() {
   const leftSideColor = usePreferences((s) => s.leftSideColor);
   const rightSideColor = usePreferences((s) => s.rightSideColor);
   useEffect(() => followPreferences(), []);
+  useEffect(() => followLanguage(), []);
   useEffect(() => {
     void api.setAutosaveInterval(Math.round(autosaveMinutes * 60)).catch(() => {});
   }, [autosaveMinutes]);
@@ -238,18 +240,20 @@ export default function App() {
       const current = useStore.getState().opened;
       if (!current?.modified) return;
       const answer = await message(
-        `Save the changes of "${homeTitle(current.home.attrs.name, current.path)}" before closing?`,
+        t('Save the changes of "{v0}" before closing?', {
+          v0: homeTitle(current.home.attrs.name, current.path),
+        }),
         {
-          title: "My Sweet Home",
+          title: t("My Sweet Home"),
           kind: "warning",
-          buttons: { yes: "Save", no: "Don't save", cancel: "Cancel" },
+          buttons: { yes: t("Save"), no: t("Don't save"), cancel: t("Cancel") },
         },
       );
-      if (answer === "Yes" || answer === "Save") {
+      if (answer === "Yes" || answer === t("Save")) {
         await useStore.getState().save();
         // Saving was cancelled or failed: keep the window
         if (useStore.getState().opened?.modified) event.preventDefault();
-      } else if (!(answer === "No" || answer === "Don't save")) {
+      } else if (!(answer === "No" || answer === t("Don't save"))) {
         event.preventDefault();
       }
     });
@@ -264,7 +268,7 @@ export default function App() {
       (a.attrs.elevation_index ?? 0) - (b.attrs.elevation_index ?? 0),
   );
   const title = opened
-    ? (opened.home.attrs.name ?? opened.path?.split(/[\\/]/).pop() ?? "Untitled")
+    ? (opened.home.attrs.name ?? opened.path?.split(/[\\/]/).pop() ?? t("Untitled"))
     : null;
   const currentLevel = levels.find((l) => l.attrs.id === selectedLevel) ?? null;
   const background = currentLevel
@@ -289,7 +293,7 @@ export default function App() {
       {dialog === "preferences" && <PreferencesDialog onClose={closeDialog} />}
       {dialog === "export" && opened && (
         <ExportDialog
-          baseName={(title ?? "Home").replace(/\.sh3d$/i, "")}
+          baseName={(title ?? t("Home")).replace(/\.sh3d$/i, "")}
           hasLevels={levels.length > 0}
           onClose={closeDialog}
         />
@@ -299,7 +303,7 @@ export default function App() {
       {(dialog === "backgroundImport" || dialog === "backgroundModify") && opened && (
         <BackgroundImageWizard
           levelId={currentLevel?.attrs.id ?? null}
-          title={currentLevel?.attrs.name ?? "Home"}
+          title={currentLevel?.attrs.name ?? t("Home")}
           existing={
             dialog === "backgroundModify" && background
               ? { bg: background, url: docResourceUrl(opened.id, background.image) }
@@ -315,7 +319,7 @@ export default function App() {
         <div className="error-bar" role="alert">
           <span>{error}</span>
           <button type="button" onClick={clearError}>
-            Dismiss
+            {t("Dismiss")}
           </button>
         </div>
       )}
@@ -326,7 +330,7 @@ export default function App() {
       <Splitter
         orientation="vertical"
         className="splitter-left"
-        title="Drag to resize, double-click for the default width"
+        title={t("Drag to resize, double-click for the default width")}
         onDrag={(x) => setLayout({ left: clampSide(x) })}
         onReset={() => setLayout({ left: DEFAULT_LAYOUT.left })}
       />
@@ -336,7 +340,7 @@ export default function App() {
           {opened && (
             <div className="plan-toolbar">
               {(tool === "wall" || tool === "arcwall") && <WallThicknessInput />}
-              <nav className="level-tabs" aria-label="Levels">
+              <nav className="level-tabs" aria-label={t("Levels")}>
                 {levels.map((l) =>
                   editingLevel === l.attrs.id ? (
                     <LevelNameInput
@@ -356,9 +360,13 @@ export default function App() {
                       }`}
                       onClick={() => selectLevel(l.attrs.id)}
                       onDoubleClick={() => setEditingLevel(l.attrs.id)}
-                      title={`Elevation ${formatPrecise(l.attrs.elevation)}${
-                        l.attrs.viewable === false ? " · hidden in 3D" : ""
-                      } · double-click to rename · the level below is shown faded in the plan`}
+                      title={t(
+                        "Elevation {v0}{v1} · double-click to rename · the level below is shown faded in the plan",
+                        {
+                          v0: formatPrecise(l.attrs.elevation),
+                          v1: l.attrs.viewable === false ? " · hidden in 3D" : "",
+                        },
+                      )}
                     >
                       {l.attrs.name}
                     </button>
@@ -368,14 +376,14 @@ export default function App() {
               <span className="pane-buttons">
                 {shown !== "3d" && !detached && (
                   <PaneButton
-                    label={shown === "plan" ? "Restore the 3D view" : "Maximize the plan"}
+                    label={shown === "plan" ? t("Restore the 3D view") : t("Maximize the plan")}
                     icon={shown === "plan" ? "❐" : "□"}
                     onClick={() => toggleMax("plan")}
                   />
                 )}
                 {!detached && (
                   <PaneButton
-                    label="Minimize the plan"
+                    label={t("Minimize the plan")}
                     icon={"–"}
                     onClick={() => setLayout({ maximized: "3d" })}
                   />
@@ -386,9 +394,9 @@ export default function App() {
           <PlanView />
           {!opened && !loading && (
             <div className="empty-hint">
-              <p>Open a Sweet Home 3D project (.sh3d) to get started.</p>
+              <p>{t("Open a Sweet Home 3D project (.sh3d) to get started.")}</p>
               <button type="button" onClick={() => void chooseFile()}>
-                Open…
+                {t("Open…")}
               </button>
             </div>
           )}
@@ -397,7 +405,7 @@ export default function App() {
         <Splitter
           orientation="horizontal"
           className={shown ? "collapsed" : ""}
-          title={detached ? undefined : "Drag to resize, double-click for equal sizes"}
+          title={detached ? undefined : t("Drag to resize, double-click for equal sizes")}
           onDrag={(x, y) => {
             if (!detached) dragSplit(x, y);
           }}
@@ -407,18 +415,18 @@ export default function App() {
         >
           {detached ? (
             <>
-              <span className="muted">The 3D view is open in a separate window</span>
+              <span className="muted">{t("The 3D view is open in a separate window")}</span>
               <button type="button" onClick={() => void closeView3DWindow()}>
-                Show here
+                {t("Show here")}
               </button>
             </>
           ) : shown === "plan" ? (
             <button type="button" onClick={() => setLayout({ maximized: null })}>
-              {"▴"} Show 3D view
+              {"▴"} {t("Show 3D view")}
             </button>
           ) : shown === "3d" ? (
             <button type="button" onClick={() => setLayout({ maximized: null })}>
-              {"▾"} Show plan
+              {"▾"} {t("Show plan")}
             </button>
           ) : null}
         </Splitter>
@@ -431,17 +439,17 @@ export default function App() {
               </ErrorBoundary>
               <span className="pane-buttons view3d-buttons">
                 <PaneButton
-                  label={shown === "3d" ? "Restore the plan" : "Maximize the 3D view"}
+                  label={shown === "3d" ? t("Restore the plan") : t("Maximize the 3D view")}
                   icon={shown === "3d" ? "❐" : "□"}
                   onClick={() => toggleMax("3d")}
                 />
                 <PaneButton
-                  label="Minimize the 3D view"
+                  label={t("Minimize the 3D view")}
                   icon={"–"}
                   onClick={() => setLayout({ maximized: "plan" })}
                 />
                 <PaneButton
-                  label="Open the 3D view in a separate window"
+                  label={t("Open the 3D view in a separate window")}
                   icon={"⧉"}
                   onClick={detach3D}
                 />
@@ -454,7 +462,7 @@ export default function App() {
       <Splitter
         orientation="vertical"
         className="splitter-right"
-        title="Drag to resize, double-click for the default width"
+        title={t("Drag to resize, double-click for the default width")}
         onDrag={(x) => setLayout({ right: clampSide(window.innerWidth - x) })}
         onReset={() => setLayout({ right: DEFAULT_LAYOUT.right })}
       />
@@ -466,11 +474,11 @@ export default function App() {
   );
 }
 
-/** Name of a home for titles: its name, else its file name, else "Untitled". */
+/** Name of a home for titles: its name, else its file name, else t("Untitled"). */
 function homeTitle(name: string | null, path: string | null): string {
   if (name) return name.replace(/\.sh3d$/i, "");
   if (path) return (path.split(/[\\/]/).pop() ?? path).replace(/\.sh3d$/i, "");
-  return "Untitled";
+  return t("Untitled");
 }
 
 /** Offers the homes autosave kept when the app ended without saving them (a crash). */
@@ -478,22 +486,25 @@ async function offerRecovery(): Promise<void> {
   const found = await api.recoveryList();
   if (found.length === 0) return;
   const names = found
-    .map((r) => `• ${homeTitle(r.name, r.path)} (${new Date(r.savedAt * 1000).toLocaleString()})`)
+    .map((r) => `• ${homeTitle(r.name, r.path)} (${formatDateTime(new Date(r.savedAt * 1000))})`)
     .join("\n");
   const answer = await message(
-    `My Sweet Home was not closed properly. These homes had unsaved changes:\n\n${names}\n\nOpen them again?`,
+    t(
+      "My Sweet Home was not closed properly. These homes had unsaved changes:\n\n{names}\n\nOpen them again?",
+      { names },
+    ),
     {
-      title: "Recover homes",
+      title: t("Recover homes"),
       kind: "info",
-      buttons: { yes: "Open", no: "Discard", cancel: "Later" },
+      buttons: { yes: t("Open"), no: t("Discard"), cancel: t("Later") },
     },
   );
-  if (answer === "Yes" || answer === "Open") {
+  if (answer === "Yes" || answer === t("Open")) {
     // The first one in this window, the others in new windows
     const [first, ...others] = found;
     applyHome(await api.recoveryOpen(first.key));
     for (const r of others) await api.newWindow(undefined, r.key);
-  } else if (answer === "No" || answer === "Discard") {
+  } else if (answer === "No" || answer === t("Discard")) {
     await api.recoveryDiscard(found.map((r) => r.key));
   }
 }

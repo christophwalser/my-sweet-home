@@ -6,6 +6,7 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { t } from "../i18n";
 import { collectTopViews } from "../plan2d/topView";
 import { useStore } from "../store";
 import { type PrintPages, printPages } from "./print";
@@ -60,11 +61,11 @@ export default function ExportDialog({
     });
     if (!path) return;
     setBusy(true);
-    setMessage("Exporting…");
+    setMessage(t("Exporting…"));
     try {
       setMessage(await action(path));
     } catch (e) {
-      setMessage(`Export failed: ${String(e)}`);
+      setMessage(t("Export failed: {v0}", { v0: String(e) }));
     } finally {
       setBusy(false);
     }
@@ -74,7 +75,7 @@ export default function ExportDialog({
   const furnitureParams = async (): Promise<Record<string, unknown>> => {
     const opened = useStore.getState().opened;
     if (furnitureIcons === "catalog" || !opened) return { furniture_icons: "catalog" };
-    setMessage("Rendering the furniture from above…");
+    setMessage(t("Rendering the furniture from above…"));
     return {
       furniture_icons: "top_view",
       top_views: await collectTopViews(opened.home, opened.id),
@@ -99,13 +100,13 @@ export default function ExportDialog({
 
   const print = async () => {
     setBusy(true);
-    setMessage("Preparing pages…");
+    setMessage(t("Preparing pages…"));
     try {
       const r = (await api.execute("export_document", await documentParams())) as PrintPages;
       setMessage(null);
       await printPages(r);
     } catch (e) {
-      setMessage(`Printing failed: ${String(e)}`);
+      setMessage(t("Printing failed: {v0}", { v0: String(e) }));
     } finally {
       setBusy(false);
     }
@@ -117,7 +118,10 @@ export default function ExportDialog({
         ...(await documentParams()),
         path,
       })) as { pages: number };
-      return `Saved ${r.pages} page${r.pages > 1 ? "s" : ""} to ${path}.`;
+      return t(r.pages > 1 ? "Saved {pages} pages to {path}." : "Saved 1 page to {path}.", {
+        pages: r.pages,
+        path,
+      });
     });
 
   const exportPlan = () =>
@@ -131,15 +135,18 @@ export default function ExportDialog({
       }
       if (format === "png") params.width = width;
       Object.assign(params, await furnitureParams());
-      setMessage("Exporting…");
+      setMessage(t("Exporting…"));
       const r = (await api.execute("export_plan", params)) as {
         path?: string;
         paths?: string[];
         pages?: number;
       };
       return r.pages
-        ? `Saved ${r.pages} page${r.pages > 1 ? "s" : ""} to ${r.path}.`
-        : `Saved ${r.paths?.join(", ")}.`;
+        ? t(r.pages > 1 ? "Saved {pages} pages to {path}." : "Saved 1 page to {path}.", {
+            pages: r.pages,
+            path: r.path ?? "",
+          })
+        : t("Saved {v0}.", { v0: r.paths?.join(", ") ?? "" });
     });
 
   const exportCsv = () =>
@@ -147,13 +154,16 @@ export default function ExportDialog({
       const r = (await api.execute("export_furniture_csv", { path, separator })) as {
         rows: number;
       };
-      return `Saved ${r.rows} pieces to ${path}.`;
+      return t("Saved {rows} pieces to {path}.", { rows: r.rows, path });
     });
 
   const exportObj = () =>
     runExport({ name: "OBJ model", extensions: ["obj"] }, async (path) => {
       const r = await api.exportObj(path);
-      return `Saved ${r.paths.length} files (OBJ, MTL and textures) next to ${path}.`;
+      return t("Saved {length} files (OBJ, MTL and textures) next to {path}.", {
+        length: r.paths.length,
+        path,
+      });
     });
 
   return (
@@ -162,48 +172,48 @@ export default function ExportDialog({
         className="dialog export-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Print and export"
+        aria-label={t("Print and export")}
       >
         <header className="dialog-header">
-          <h2>Print and export</h2>
-          <button type="button" onClick={onClose} aria-label="Close" disabled={busy}>
+          <h2>{t("Print and export")}</h2>
+          <button type="button" onClick={onClose} aria-label={t("Close")} disabled={busy}>
             {"✕"}
           </button>
         </header>
 
         <section className="export-section">
-          <h3>Page setup</h3>
+          <h3>{t("Page setup")}</h3>
           <div className="export-grid">
             <label>
-              Paper
+              {t("Paper")}
               <select value={paper} onChange={(e) => setPaper(e.currentTarget.value)}>
                 <option value="a4">A4</option>
                 <option value="a3">A3</option>
-                <option value="letter">Letter</option>
+                <option value="letter">{t("Letter")}</option>
               </select>
             </label>
             <label>
-              Orientation
+              {t("Orientation")}
               <select value={orientation} onChange={(e) => setOrientation(e.currentTarget.value)}>
-                <option value="auto">Automatic</option>
-                <option value="portrait">Portrait</option>
-                <option value="landscape">Landscape</option>
+                <option value="auto">{t("Automatic")}</option>
+                <option value="portrait">{t("Portrait")}</option>
+                <option value="landscape">{t("Landscape")}</option>
               </select>
             </label>
             <label>
-              Furniture in plans
+              {t("Furniture in plans")}
               <select
                 value={furnitureIcons}
                 onChange={(e) => setFurnitureIcons(e.currentTarget.value as "top_view" | "catalog")}
               >
-                <option value="top_view">Seen from above</option>
-                <option value="catalog">Catalog icons</option>
+                <option value="top_view">{t("Seen from above")}</option>
+                <option value="catalog">{t("Catalog icons")}</option>
               </select>
             </label>
             <label>
-              Plan scale
+              {t("Plan scale")}
               <select value={scale} onChange={(e) => setScale(e.currentTarget.value)}>
-                <option value="fit">Fit to page</option>
+                <option value="fit">{t("Fit to page")}</option>
                 {SCALES.map((s) => (
                   <option key={s} value={s}>
                     1:{s}
@@ -215,7 +225,7 @@ export default function ExportDialog({
         </section>
 
         <section className="export-section">
-          <h3>Print</h3>
+          <h3>{t("Print")}</h3>
           <div className="export-checks">
             <label>
               <input
@@ -223,7 +233,7 @@ export default function ExportDialog({
                 checked={parts.furniture}
                 onChange={(e) => setParts({ ...parts, furniture: e.currentTarget.checked })}
               />
-              Furniture list
+              {t("Furniture list")}
             </label>
             <label>
               <input
@@ -231,7 +241,8 @@ export default function ExportDialog({
                 checked={parts.plan}
                 onChange={(e) => setParts({ ...parts, plan: e.currentTarget.checked })}
               />
-              Plan{hasLevels ? " (every level)" : ""}
+              {t("Plan")}
+              {hasLevels ? t(" (every level)") : ""}
             </label>
             <label>
               <input
@@ -239,54 +250,55 @@ export default function ExportDialog({
                 checked={parts.view3d}
                 onChange={(e) => setParts({ ...parts, view3d: e.currentTarget.checked })}
               />
-              3D view
+              {t("3D view")}
             </label>
           </div>
           <div className="dialog-actions">
             <button type="button" onClick={() => void print()} disabled={busy || nothingToPrint}>
-              Print…
+              {t("Print…")}
             </button>
             <button
               type="button"
               onClick={() => void saveDocument()}
               disabled={busy || nothingToPrint}
             >
-              Save as PDF…
+              {t("Save as PDF…")}
             </button>
           </div>
         </section>
 
         <section className="export-section">
-          <h3>Plan</h3>
+          <h3>{t("Plan")}</h3>
           <div className="export-grid">
             <label>
-              Format
+              {t("Format")}
               <select
                 value={format}
                 onChange={(e) => setFormat(e.currentTarget.value as PlanFormat)}
               >
-                <option value="pdf">PDF (page setup above)</option>
-                <option value="svg">SVG (vector image)</option>
-                <option value="png">PNG (image)</option>
+                <option value="pdf">{t("PDF (page setup above)")}</option>
+                <option value="svg">{t("SVG (vector image)")}</option>
+                <option value="png">{t("PNG (image)")}</option>
               </select>
             </label>
             {hasLevels && (
               <label>
-                Levels
+                {t("Levels")}
                 <select
                   value={allLevels ? "all" : "selected"}
                   onChange={(e) => setAllLevels(e.currentTarget.value === "all")}
                 >
-                  <option value="selected">Selected level</option>
+                  <option value="selected">{t("Selected level")}</option>
                   <option value="all">
-                    All levels{format === "pdf" ? " (one page each)" : " (one file each)"}
+                    {t("All levels")}
+                    {format === "pdf" ? t(" (one page each)") : t(" (one file each)")}
                   </option>
                 </select>
               </label>
             )}
             {format === "png" && (
               <label>
-                Width
+                {t("Width")}
                 <span className="export-unit">
                   <input
                     type="number"
@@ -296,49 +308,52 @@ export default function ExportDialog({
                     value={width}
                     onChange={(e) => setWidth(Number(e.currentTarget.value) || 2000)}
                   />
-                  px
+                  {t("px")}
                 </span>
               </label>
             )}
           </div>
           <div className="dialog-actions">
             <button type="button" onClick={() => void exportPlan()} disabled={busy}>
-              Export plan…
+              {t("Export plan…")}
             </button>
           </div>
         </section>
 
         <section className="export-section">
-          <h3>Furniture list</h3>
+          <h3>{t("Furniture list")}</h3>
           <div className="export-grid">
             <label>
-              Separator
+              {t("Separator")}
               <select value={separator} onChange={(e) => setSeparator(e.currentTarget.value)}>
-                <option value=",">Comma</option>
-                <option value=";">Semicolon</option>
-                <option value={"\t"}>Tab</option>
+                <option value=",">{t("Comma")}</option>
+                <option value=";">{t("Semicolon")}</option>
+                <option value={"\t"}>{t("Tab")}</option>
               </select>
             </label>
           </div>
           <p className="muted small">
-            Columns of the furniture list, all levels; pieces inside groups are listed one by one.
+            {t(
+              "Columns of the furniture list, all levels; pieces inside groups are listed one by one.",
+            )}
           </p>
           <div className="dialog-actions">
             <button type="button" onClick={() => void exportCsv()} disabled={busy}>
-              Export CSV…
+              {t("Export CSV…")}
             </button>
           </div>
         </section>
 
         <section className="export-section">
-          <h3>3D view</h3>
+          <h3>{t("3D view")}</h3>
           <p className="muted small">
-            Walls, rooms and furniture shown in the 3D view as Wavefront OBJ with materials (MTL)
-            and textures, in centimeters.
+            {t(
+              "Walls, rooms and furniture shown in the 3D view as Wavefront OBJ with materials (MTL) and textures, in centimeters.",
+            )}
           </p>
           <div className="dialog-actions">
             <button type="button" onClick={() => void exportObj()} disabled={busy}>
-              Export OBJ…
+              {t("Export OBJ…")}
             </button>
           </div>
         </section>
