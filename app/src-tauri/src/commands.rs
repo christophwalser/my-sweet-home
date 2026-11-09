@@ -33,9 +33,15 @@ pub fn startup_file(window: WebviewWindow, state: State<'_, AppState>) -> Option
     if window.label() != "main" {
         return None;
     }
-    std::env::args()
-        .skip(1)
+    file_argument(std::env::args().skip(1)).map(|p| p.display().to_string())
+}
+
+/// The home file among command line arguments (`msh-app.exe house.sh3d`, also what
+/// Windows passes when a `.sh3d` file is opened by double click).
+pub fn file_argument(args: impl IntoIterator<Item = String>) -> Option<PathBuf> {
+    args.into_iter()
         .find(|a| !a.starts_with('-') && Path::new(a).is_file())
+        .map(PathBuf::from)
 }
 
 /// The home of the window, if any (used when the frontend starts or reloads).
@@ -84,15 +90,24 @@ pub async fn new_window(
     recovery: Option<String>,
     app: AppHandle,
 ) -> CmdResult<String> {
-    let state = app_state(&app);
+    open_window(&app, path.map(PathBuf::from), recovery)
+}
+
+/// Opens a new home window, optionally with a file or a recovered home to open.
+pub fn open_window(
+    app: &AppHandle,
+    path: Option<PathBuf>,
+    recovery: Option<String>,
+) -> CmdResult<String> {
+    let state = app_state(app);
     let label = state.new_window_label();
     if let Some(p) = path {
-        state.set_pending_open(&label, PathBuf::from(p));
+        state.set_pending_open(&label, p);
     }
     if let Some(key) = recovery {
         state.set_pending_recovery(&label, key);
     }
-    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
+    tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::App("index.html".into()))
         .title("My Sweet Home")
         .inner_size(1280.0, 800.0)
         .min_inner_size(640.0, 480.0)

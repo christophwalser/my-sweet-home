@@ -424,27 +424,43 @@ pub fn find_all_libraries(extra_dirs: &[PathBuf]) -> Vec<PathBuf> {
     find_libraries(&dirs)
 }
 
+/// File names of Sweet Home 3D's default catalogs.
+pub const DEFAULT_CATALOG_FILES: [&str; 2] = ["Furniture.jar", "Textures.jar"];
+
+/// Folder of the default catalog bundled with My Sweet Home, if it exists: the folder
+/// named by `MSH_CATALOG_DIR`, otherwise `catalog` next to the executable (where the
+/// installer puts it for the app and the CLI).
+pub fn bundled_catalog_dir() -> Option<PathBuf> {
+    let dir = match std::env::var_os("MSH_CATALOG_DIR") {
+        Some(dir) => PathBuf::from(dir),
+        None => std::env::current_exe().ok()?.parent()?.join("catalog"),
+    };
+    dir.is_dir().then_some(dir)
+}
+
 /// Known library locations on this machine (Windows only).
 ///
+/// The bundled default catalog comes first; a Sweet Home 3D installation only adds the
+/// default catalog files the bundle does not have, so no item appears twice.
 /// `extra_dirs` adds further folders, e.g. the resources folder of the Store
 /// version, whose path can only be determined through package management.
 pub fn find_libraries(extra_dirs: &[PathBuf]) -> Vec<PathBuf> {
     let mut found = Vec::new();
     let mut dirs: Vec<PathBuf> = Vec::new();
 
-    for base in [
-        std::env::var_os("ProgramFiles"),
-        std::env::var_os("ProgramFiles(x86)"),
-    ]
-    .into_iter()
-    .flatten()
-    {
-        let lib = PathBuf::from(base).join("Sweet Home 3D").join("lib");
-        for jar in ["Furniture.jar", "Textures.jar"] {
-            let p = lib.join(jar);
-            if p.is_file() {
-                found.push(p);
-            }
+    let mut lib_dirs: Vec<PathBuf> = bundled_catalog_dir().into_iter().collect();
+    lib_dirs.extend(
+        [
+            std::env::var_os("ProgramFiles"),
+            std::env::var_os("ProgramFiles(x86)"),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|base| PathBuf::from(base).join("Sweet Home 3D").join("lib")),
+    );
+    for jar in DEFAULT_CATALOG_FILES {
+        if let Some(p) = lib_dirs.iter().map(|d| d.join(jar)).find(|p| p.is_file()) {
+            found.push(p);
         }
     }
     if let Some(appdata) = std::env::var_os("APPDATA") {

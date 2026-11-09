@@ -838,7 +838,7 @@ furniture is read by its home reader.
 ### 4.35 Catalog management (2026-11-08)
 
 - Where catalog content lives: the default catalog comes with the installation (Sweet Home
-  3D's `Furniture.jar` / `Textures.jar` today, the bundled default catalog after P12f).
+  3D's default catalog `Furniture.jar` / `Textures.jar`, bundled by the installer since P12f).
   Everything the user adds — imported libraries, single imported models and textures, items
   from online catalogs — is written to Sweet Home 3D's user library folders
   (`%APPDATA%\eTeks\Sweet Home 3D\furniture` / `textures`, "My furniture.sh3f",
@@ -854,6 +854,32 @@ furniture is read by its home reader.
   own libraries). Catalog items are dragged onto another category, or onto the "new
   category" zone shown while dragging, to move them. The furniture and texture import
   dialogs pick the category from the existing ones or take a new one.
+
+### 4.36 Status after P12f (2026-11-09)
+
+- `scripts/build-installer.ps1` builds the MSI: it copies Sweet Home 3D's `Furniture.jar` /
+  `Textures.jar` from a Sweet Home 3D installation (Program Files, Store version or
+  `-Sh3dDir`) into `app/src-tauri/resources/catalog/` (git-ignored, next to the committed
+  `NOTICE.txt` with source and licenses), builds the CLI as Tauri external binary
+  (`app/src-tauri/binaries/msh-<target triple>.exe`, git-ignored) and runs
+  `pnpm tauri build` with `tauri.installer.conf.json` merged in. Normal builds
+  (`cargo build`, `pnpm tauri dev`) do not need these inputs.
+- The installer (per machine, `C:\Program Files\My Sweet Home`) contains the app, `msh.exe`,
+  the default catalog in `catalog\` and its notice; it adds the folder to the system `PATH`
+  (WiX fragment `wix/cli-path.wxs`, removed on uninstall), registers `.sh3d` files and embeds
+  the WebView2 bootstrapper (WebView2 is part of Windows 11; on systems without it the
+  bootstrapper downloads it).
+- Library discovery (`msh_catalog::find_libraries`): the bundled catalog
+  (`MSH_CATALOG_DIR`, otherwise `catalog` next to the executable, so app and CLI find it)
+  comes first; an installed Sweet Home 3D only adds default catalog files the bundle lacks,
+  so no item appears twice. User libraries and the Store version's libraries are found as
+  before.
+- Single instance (`tauri-plugin-single-instance`): starting the app again, e.g. by double
+  clicking a `.sh3d` file, opens the file in a new window of the running app (or brings the
+  focused window to the front), so one app owns the pipe of the CLI and the MCP server.
+- Updates prepared: `-Sign` creates the update artifacts (`.msi.sig`) with the private key
+  from `TAURI_SIGNING_PRIVATE_KEY` or `%USERPROFILE%\.msh\updater.key` (created on first use,
+  never in the repository). The updater plugin is added once the update source is decided.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 
@@ -967,7 +993,7 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
     .sh3f / .sh3t files), CC0 textures and models of ambientCG and Poly Haven (their public
     APIs, no account). License and source are kept with each item; network access can be
     turned off in the preferences.
-- P12f Stand-alone installer without dependencies on other programs: MSI via Tauri with the
+- P12f (done, see 4.36) Stand-alone installer without dependencies on other programs: MSI via Tauri with the
   WebView2 runtime, `.sh3d` file association, the CLI `msh`, and the freely licensed Sweet
   Home 3D default catalog (furniture GPL / CC-BY, textures CC-BY, with attribution; taken
   from a Sweet Home 3D installation at build time, never committed). Installed Sweet Home 3D

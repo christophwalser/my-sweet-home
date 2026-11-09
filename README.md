@@ -115,7 +115,7 @@ bar at the bottom of the plan explains the next step.
 
 ```powershell
 cd app
-pnpm tauri build        # installer (MSI/NSIS) in target\release\bundle
+..\scripts\build-installer.ps1  # MSI with default catalog and CLI in target\release\bundle\msi
 ```
 
 ## CLI (`msh`)

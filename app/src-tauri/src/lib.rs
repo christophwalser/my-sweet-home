@@ -9,6 +9,25 @@ use state::AppState;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // A second start (e.g. a double click on a .sh3d file) opens its file in a new
+        // window of the running app, which owns the pipe for the CLI and the MCP server
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            use tauri::Manager;
+            match commands::file_argument(args.into_iter().skip(1)) {
+                Some(path) => {
+                    if let Err(e) = commands::open_window(app, Some(path), None) {
+                        eprintln!("Cannot open a window: {e}");
+                    }
+                }
+                None => {
+                    let label = app.state::<AppState>().focused();
+                    if let Some(w) = app.get_webview_window(&label) {
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+                }
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         // Size, position and maximized state of the windows are remembered
         .plugin(tauri_plugin_window_state::Builder::default().build())

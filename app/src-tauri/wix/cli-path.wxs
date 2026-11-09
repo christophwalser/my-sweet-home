@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adds the installation folder to the system PATH, so the CLI `msh` (installed next to
+     the app) can be run from any shell and configured as MCP server. Removed on uninstall. -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <DirectoryRef Id="INSTALLDIR">
+      <Component Id="MshCliPath" Guid="6B0E3C2A-5D1F-4F4B-9E62-8A7C1D2E3F40">
+        <CreateFolder />
+        <Environment Id="MshCliPathEntry" Name="PATH" Value="[INSTALLDIR]" Action="set"
+                     Part="last" System="yes" Permanent="no" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

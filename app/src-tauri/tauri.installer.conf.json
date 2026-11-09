@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["msi"],
+    "publisher": "My Sweet Home",
+    "shortDescription": "Interior design in 2D and 3D, compatible with Sweet Home 3D",
+    "category": "GraphicsAndDesign",
+    "externalBin": ["binaries/msh"],
+    "resources": {
+      "resources/catalog/": "catalog/"
+    },
+    "fileAssociations": [
+      {
+        "ext": ["sh3d"],
+        "name": "Sweet Home 3D home",
+        "description": "Sweet Home 3D home",
+        "role": "Editor",
+        "mimeType": "application/x-sweethome3d"
+      }
+    ],
+    "windows": {
+      "webviewInstallMode": { "type": "embedBootstrapper" },
+      "wix": {
+        "fragmentPaths": ["wix/cli-path.wxs"],
+        "componentRefs": ["MshCliPath"]
+      }
+    }
+  }
+}
+
