@@ -143,6 +143,14 @@ const ARC_WALL_EXTENT_DEG = 90;
 /** Tools whose clicks snap to the plan: drawing tools and the measuring tool. */
 const isSnapTool = (t: Tool) => isPathTool(t) || t === "measure";
 
+/** Real depth of a piece from its catalog item, if that is loaded. */
+function catalogDepth(piece: Piece): number | undefined {
+  const id = piece.attrs.catalog_id;
+  if (!id) return undefined;
+  return useStore.getState().catalog?.items.find((i) => i.kind === "furniture" && i.id === id)
+    ?.depth;
+}
+
 /** Minimum number of points of a finished drawing. */
 const MIN_POINTS: Record<DraftKind, number> = { wall: 2, room: 3, polyline: 2, dimension: 2 };
 
@@ -1054,6 +1062,7 @@ export default function PlanView() {
           pxToCm(30),
           pxToCm(SNAP_PX),
           magnetismActive(e.altKey),
+          catalogDepth(single),
         );
       } else if (magnetismActive(e.altKey) && !sel.includes(VISITOR_ID)) {
         offset = constrainMove(input.home, sel, offset);
@@ -1168,6 +1177,7 @@ export default function PlanView() {
           y: g.slide.y,
           angle_deg: g.slide.angleDeg,
           depth: g.slide.depth,
+          ...(g.slide.cutThrough ? { wall_cut_out_on_both_sides: true } : {}),
         });
       } else if (g.dock && sel.length === 1) {
         const docked =

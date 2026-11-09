@@ -261,10 +261,24 @@ fn doors_and_windows_follow_the_wall_thickness() {
         "wall_update",
         json!({ "id": wall, "thickness": 30 }),
     );
+    // Thicker than the wall part (20 cm): the window keeps its depth instead of stretching
+    // frame and handle, sits flush with the side it opens to (front, +y) and cuts the whole wall
     let w = piece(&doc, "window");
-    assert!(close(w.depth, 60.0), "depth {}", w.depth);
-    // The wall part (back half) lies on the wall: the center is 15 cm in front of the axis
+    assert!(close(w.depth, 40.0), "depth {}", w.depth);
+    // Wall part from y 5 to 15 (flush with the wall side at 15), so the center is at 15
     assert!(close(w.y, 15.0), "y {}", w.y);
     assert!(close(w.x, 150.0));
+    assert_eq!(w.wall_cut_out_on_both_sides, Some(true));
     assert!(close(piece(&doc, "table").depth, 80.0));
+
+    // Thinner than the wall part: the depth follows the wall, the wall part centered on it
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": wall, "thickness": 10 }),
+    );
+    let w = piece(&doc, "window");
+    assert!(close(w.depth, 20.0), "depth {}", w.depth);
+    assert!(close(w.y, 5.0), "y {}", w.y);
 }

@@ -88,6 +88,9 @@ struct UpdateParams {
     color: Option<String>,
     mirrored: Option<bool>,
     visible: Option<bool>,
+    /// Doors and windows: the opening goes through the whole wall, also where the piece is
+    /// thinner than the wall (a reveal)
+    wall_cut_out_on_both_sides: Option<bool>,
     /// Tilt forward / backward in degrees (rotation around the width axis); not for doors,
     /// windows and pieces that cannot be rotated horizontally
     pitch_deg: Option<f32>,
@@ -325,8 +328,9 @@ pub(super) fn register(r: &mut Registry) {
             }
             a.angle = Some(normalize_angle(piece_angle)).filter(|v| *v != 0.0);
             apply_size(a, p.width, None, p.height);
-            // Depth from the wall thickness, the wall part of the door centered on the wall
-            fit_in_wall(a, w);
+            // Depth from the wall thickness (or its real depth with a reveal in thick walls)
+            let natural = a.depth;
+            fit_in_wall(a, w, Some(natural));
             if let Some(e) = p.elevation {
                 a.elevation = Some(e);
             }
@@ -435,6 +439,9 @@ pub(super) fn register(r: &mut Registry) {
                 }
                 if let Some(v) = p.visible {
                     a.visible = Some(v);
+                }
+                if let Some(v) = p.wall_cut_out_on_both_sides {
+                    a.wall_cut_out_on_both_sides = Some(v);
                 }
                 if let Some(v) = p.name_visible {
                     a.name_visible = v.then_some(true);
@@ -723,13 +730,38 @@ fn piece_from_catalog(doc: &mut Document, entry: &FurnitureEntry) -> Result<Piec
     })
 }
 
-/// Fits a door or window into a wall like Sweet Home 3D's magnetism: its depth follows the
-/// wall thickness (the part `wallThickness` of the depth is the wall), and the piece is moved
-/// across the wall so that this part lies on the wall. Its position along the wall stays.
-pub(super) fn fit_in_wall(a: &mut msh_model::PieceAttrs, w: &msh_model::WallAttrs) {
+/// Depth of a door or window from the catalog (its real depth), if its catalog item is known.
+fn catalog_depth(a: &msh_model::PieceAttrs) -> Option<f32> {
+    let id = a.catalog_id.as_deref()?;
+    CatalogIndex::get()
+        .furniture_by_id(id)
+        .map(|e| e.item.depth)
+}
+
+/// Fits a door or window into a wall. The part `wallThickness` of its depth is the wall: in a
+/// wall up to that thick the depth follows the wall thickness and this part lies centered on
+/// the wall (like Sweet Home 3D's magnetism). In a thicker wall the piece keeps its real depth
+/// (`natural`, else its current depth), so frame and handle are not stretched; it sits flush
+/// with the wall side it opens to and the opening goes through the whole wall (a reveal).
+/// Its position along the wall stays.
+pub(super) fn fit_in_wall(
+    a: &mut msh_model::PieceAttrs,
+    w: &msh_model::WallAttrs,
+    natural: Option<f32>,
+) {
     let fraction = a.wall_thickness.unwrap_or(1.0).max(0.01);
+    // Wall part center from the wall axis towards the front (local +y) of the piece
+    let mut shift = 0.0;
     if a.resizable != Some(false) && a.width_depth_deformable != Some(false) {
-        a.depth = w.thickness / fraction;
+        let natural = natural.unwrap_or(a.depth);
+        let part = natural * fraction;
+        if w.thickness > part + 0.5 {
+            a.depth = natural;
+            shift = (w.thickness - part) / 2.0;
+            a.wall_cut_out_on_both_sides = Some(true);
+        } else {
+            a.depth = w.thickness / fraction;
+        }
     }
     let (dx, dy) = (w.x_end - w.x_start, w.y_end - w.y_start);
     let len = dx.hypot(dy);
@@ -742,8 +774,8 @@ pub(super) fn fit_in_wall(a: &mut msh_model::PieceAttrs, w: &msh_model::WallAttr
     // Middle of the wall part, measured from the piece center towards its front (local +y)
     let wall_part = -a.depth / 2.0 + (a.wall_distance.unwrap_or(0.0) + fraction / 2.0) * a.depth;
     let (s, c) = a.angle_or_default().sin_cos();
-    a.x = px + s * wall_part;
-    a.y = py - c * wall_part;
+    a.x = px + s * (wall_part - shift);
+    a.y = py - c * (wall_part - shift);
 }
 
 /// Refits the doors and windows standing in walls whose thickness changed (`old` thickness by
@@ -796,7 +828,8 @@ pub(super) fn refit_openings(home: &mut msh_model::Home, old: &[(String, f32)]) 
                             && (0.0..=len).contains(&t)
                             && across <= old_thickness / 2.0 + 0.5
                         {
-                            fit_in_wall(a, wall);
+                            let natural = catalog_depth(a);
+                            fit_in_wall(a, wall, natural);
                         }
                     }
                 }

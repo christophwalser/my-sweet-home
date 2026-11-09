@@ -3,7 +3,7 @@
 
 import { t } from "../i18n";
 import type { Piece } from "../model";
-import { centerInWall, wallSlot } from "../plan2d/moving";
+import { centerInWall, shiftInWall, wallSlot } from "../plan2d/moving";
 import { useStore } from "../store";
 import { Field } from "./fields";
 
@@ -25,7 +25,8 @@ export default function OpeningDistances({ piece }: { piece: Piece }) {
   const beforeName = forward ? first : second;
   const afterName = forward ? second : first;
   const move = (t: number) => {
-    const [x, y] = centerInWall(slot, piece, t, a.depth);
+    // Keeps the position across the wall (centered or flush with a wall side)
+    const [x, y] = centerInWall(slot, piece, t, a.depth, shiftInWall(slot, piece));
     void run("furniture_update", {
       id: a.id,
       x: Math.round(x * 10) / 10,

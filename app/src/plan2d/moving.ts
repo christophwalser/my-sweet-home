@@ -304,21 +304,56 @@ export type WallSlot = {
   angle: number;
 };
 
-/** Depth of a door or window in a wall of this thickness (its wall part fills the wall). */
-export function depthInWall(piece: Piece, thickness: number): number {
+/**
+ * How a door or window sits in a wall of this thickness: its depth, and the shift of its wall
+ * part from the wall axis towards its front.
+ */
+export type WallFit = { depth: number; shift: number; cutThrough: boolean };
+
+/**
+ * Fits a door or window into a wall (as `fit_in_wall` in msh-core). The part `wall_thickness`
+ * of its depth is the wall: up to that thickness the depth follows the wall and the part lies
+ * centered on it. In a thicker wall the piece keeps its real depth (`natural`, from the
+ * catalog, else its current depth), so frame and handle are not stretched; it sits flush with
+ * the side it opens to and the opening goes through the whole wall (a reveal).
+ */
+export function fitInWall(piece: Piece, thickness: number, natural?: number): WallFit {
   const a = piece.attrs;
-  if (a.resizable === false || a.width_depth_deformable === false) return a.depth;
-  return thickness / Math.max(a.wall_thickness ?? 1, 0.01);
+  if (a.resizable === false || a.width_depth_deformable === false) {
+    return { depth: a.depth, shift: 0, cutThrough: false };
+  }
+  const fraction = Math.max(a.wall_thickness ?? 1, 0.01);
+  const depth = natural ?? a.depth;
+  const part = depth * fraction;
+  if (thickness > part + 0.5) return { depth, shift: (thickness - part) / 2, cutThrough: true };
+  return { depth: thickness / fraction, shift: 0, cutThrough: false };
 }
 
-/** Center of a door or window whose wall part lies on the wall axis at `t`. */
-export function centerInWall(slot: WallSlot, piece: Piece, t: number, depth: number): Pt {
+/** Center of a door or window whose wall part lies `shift` in front of the wall axis at `t`. */
+export function centerInWall(
+  slot: WallSlot,
+  piece: Piece,
+  t: number,
+  depth: number,
+  shift = 0,
+): Pt {
   const a = piece.attrs;
   const fraction = Math.max(a.wall_thickness ?? 1, 0.01);
-  const wallPart = -depth / 2 + ((a.wall_distance ?? 0) + fraction / 2) * depth;
+  const k = -depth / 2 + ((a.wall_distance ?? 0) + fraction / 2) * depth - shift;
   const px = slot.start[0] + slot.u[0] * t;
   const py = slot.start[1] + slot.u[1] * t;
-  return [px + Math.sin(slot.angle) * wallPart, py - Math.cos(slot.angle) * wallPart];
+  return [px + Math.sin(slot.angle) * k, py - Math.cos(slot.angle) * k];
+}
+
+/** Shift of the wall part of a door or window from the axis of the wall in `slot`. */
+export function shiftInWall(slot: WallSlot, piece: Piece): number {
+  const a = piece.attrs;
+  const fraction = Math.max(a.wall_thickness ?? 1, 0.01);
+  const wallPart = -a.depth / 2 + ((a.wall_distance ?? 0) + fraction / 2) * a.depth;
+  // Wall part center, signed across the wall towards the piece's front
+  const wx = a.x - Math.sin(a.angle ?? 0) * wallPart - slot.start[0];
+  const wy = a.y + Math.cos(a.angle ?? 0) * wallPart - slot.start[1];
+  return wx * -Math.sin(slot.angle) + wy * Math.cos(slot.angle);
 }
 
 /**
@@ -380,17 +415,11 @@ export function wallSlot(
     let angle = diff > Math.PI / 2 ? wallAngle + Math.PI : wallAngle;
     if (followSide) {
       // While dragging, the piece opens to the side of the wall it is pulled to (like Sweet
-      // Home 3D). Measured at its wall part, which lies on the wall axis before the drag, so
-      // the side changes only when the piece is pulled clearly across the wall.
-      const pa = a.angle ?? 0;
-      const fraction = Math.max(a.wall_thickness ?? 1, 0.01);
-      const wallPart = -a.depth / 2 + ((a.wall_distance ?? 0) + fraction / 2) * a.depth;
-      const wx = rx - Math.sin(pa) * wallPart;
-      const wy = ry + Math.cos(pa) * wallPart;
-      // Positive on the side the local +y (front) of a piece at `wallAngle` points to
-      const side = wx * -u[1] + wy * u[0];
-      if (Math.abs(side) > Math.max(w.thickness / 4, 5)) {
-        angle = side > 0 ? wallAngle : wallAngle + Math.PI;
+      // Home 3D): it turns when pulled clearly across the wall from where it was. Positive
+      // towards the side the front (local +y) of a piece at `wallAngle` points to.
+      const pulled = rx * -u[1] + ry * u[0] - ((a.x - start[0]) * -u[1] + (a.y - start[1]) * u[0]);
+      if (Math.abs(pulled) > Math.max(w.thickness / 4, 5)) {
+        angle = pulled > 0 ? wallAngle : wallAngle + Math.PI;
       }
     }
     bestAcross = across;
@@ -406,11 +435,13 @@ export type Slid = Docked & {
   /** Free spaces to the neighbors, drawn as measured distances */
   gaps: [Pt, Pt][];
   note: string | null;
+  /** The opening goes through the whole wall (the piece is thinner than the wall) */
+  cutThrough: boolean;
 };
 
 /**
  * Slides a dragged door or window along the wall it is moved to: it turns along the wall,
- * its depth follows the wall thickness, and with magnetism it snaps to the middle of the free
+ * it is fitted to the wall thickness (see `fitInWall`, `natural` is its catalog depth), and with magnetism it snaps to the middle of the free
  * space and into line with doors and windows of parallel walls (also on other levels).
  */
 export function slideInWall(
@@ -422,12 +453,13 @@ export function slideInWall(
   capture: number,
   snap: number,
   magnetism: boolean,
+  natural?: number,
 ): Slid | null {
   const slot = wallSlot(home, wallShapes, levelId, piece, center, capture, true);
   if (!slot) return null;
   const a = piece.attrs;
   const w = a.width;
-  const depth = depthInWall(piece, slot.thickness);
+  const { depth, shift, cutThrough } = fitInWall(piece, slot.thickness, natural);
   const proj = (q: Pt) => (q[0] - slot.start[0]) * slot.u[0] + (q[1] - slot.start[1]) * slot.u[1];
   let t = slot.t;
   let note: string | null = null;
@@ -472,7 +504,7 @@ export function slideInWall(
     });
     if (!note) t = Math.round(t);
   }
-  const [x, y] = centerInWall(slot, piece, t, depth);
+  const [x, y] = centerInWall(slot, piece, t, depth, shift);
   const guides: Segment[] = [];
   if (guideFrom) {
     const along = guideAt === "center" ? t : guideAt === "start" ? t - w / 2 : t + w / 2;
@@ -502,5 +534,6 @@ export function slideInWall(
     guides,
     gaps,
     note: note ? `${note} · ${distances}` : distances,
+    cutThrough,
   };
 }

@@ -917,6 +917,13 @@ furniture is read by its home reader.
 - A door or window opens to the side of the wall it is dropped on, and turns to the other
   side when it is dragged clearly across the wall (its wall part more than a quarter of the
   wall thickness, at least 5 cm, off the axis).
+- Thick walls get a reveal instead of a stretched door: the part `wallThickness` of the depth
+  is the wall. Up to that thickness the depth follows the wall as in Sweet Home 3D. In a
+  thicker wall the piece keeps its real depth (from its catalog item, else its current depth),
+  so frame and handle keep their size; it sits flush with the wall side it opens to and gets
+  `wallCutOutOnBothSides` (msh-core `fit_in_wall`, frontend `fitInWall`). The 3D view always
+  cuts openings through the whole wall; the plan now clears the wall across the width of every
+  door and window as well.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

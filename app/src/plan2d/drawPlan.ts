@@ -511,6 +511,33 @@ function drawDoorOrWindow(
 ): void {
   const { width: w, depth: d } = p.attrs;
   const icons = input.icons;
+  // The opening goes through the whole wall, as in the 3D view: clear the walls across the
+  // width of the piece (a reveal where the piece is thinner than the wall)
+  const { home, wallShapes, levelId } = input;
+  ctx.save();
+  ctx.beginPath();
+  let thickest = 0;
+  home.walls.forEach((wall, i) => {
+    if (!wallAtLevel(home, wall, levelId)) return;
+    const poly = wallPolygon(wallShapes[i]);
+    poly.forEach((q, k) => {
+      if (k) ctx.lineTo(q[0], q[1]);
+      else ctx.moveTo(q[0], q[1]);
+    });
+    ctx.closePath();
+    thickest = Math.max(thickest, wall.attrs.thickness);
+  });
+  if (thickest > 0) {
+    ctx.clip("nonzero");
+    pieceTransform(ctx, p);
+    ctx.fillStyle = colors.background;
+    ctx.fillRect(-w / 2, -d / 2 - thickest, w, d + 2 * thickest);
+    // Edges of the opening through the wall
+    ctx.lineWidth = px;
+    ctx.strokeStyle = colors.wallStroke;
+    ctx.strokeRect(-w / 2, -d / 2 - thickest, w, d + 2 * thickest);
+  }
+  ctx.restore();
   ctx.save();
   pieceTransform(ctx, p);
   // Opening in the wall, with the frame seen from above
