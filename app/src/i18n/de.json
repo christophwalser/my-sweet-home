@@ -811,5 +811,15 @@
   "Curved outline from the library – drag a corner to replace it with a rectangle.": "Gebogener Umriss aus der Bibliothek – ziehe an einer Ecke, um ihn durch ein Rechteck zu ersetzen.",
   "{w} × {h} cm, {left} cm from the left, {top} cm from the top": "{w} × {h} cm, {left} cm von links, {top} cm von oben",
   "Whole size": "Ganze Größe",
-  "Add to library…": "Zur Bibliothek hinzufügen…"
+  "Add to library…": "Zur Bibliothek hinzufügen…",
+  "Default catalog": "Standardkatalog",
+  "change item": "Eintrag ändern",
+  "move items": "Einträge verschieben",
+  "copy items": "Einträge kopieren",
+  "remove items": "Einträge löschen",
+  "rename library": "Bibliothek umbenennen",
+  "create library": "Bibliothek anlegen",
+  "import": "Import",
+  "change icon": "Symbol ändern",
+  "add from home": "Aus dem Haus übernehmen"
 }

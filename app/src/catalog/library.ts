@@ -18,7 +18,27 @@ export function libraryOf(item: CatalogItem, data: CatalogData | null): LibraryI
 /** Name of a library as shown (its name, else its file name). */
 export function libraryName(lib: LibraryInfo | undefined): string {
   if (!lib) return "";
-  return lib.name ?? lib.path.split(/[\\/]/).pop() ?? lib.path;
+  if (lib.name) return lib.name;
+  const file = lib.path.split(/[\\/]/).pop() ?? lib.path;
+  return /^(Furniture|Textures)\.jar$/i.test(file) ? t("Default catalog") : file;
+}
+
+/** Names of the steps of the library history (the core reports them in English). */
+const HISTORY_LABELS: Record<string, () => string> = {
+  "change item": () => t("change item"),
+  "move items": () => t("move items"),
+  "copy items": () => t("copy items"),
+  "remove items": () => t("remove items"),
+  "rename library": () => t("rename library"),
+  "create library": () => t("create library"),
+  import: () => t("import"),
+  "change icon": () => t("change icon"),
+  "add from home": () => t("add from home"),
+};
+
+export function historyLabel(label: string | null | undefined): string {
+  if (!label) return "–";
+  return HISTORY_LABELS[label]?.() ?? label;
 }
 
 /** Categories of the catalog of a kind plus the ones created in `path` (sorted). */

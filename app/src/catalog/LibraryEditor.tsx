@@ -18,6 +18,7 @@ import {
   askCategoryName,
   categoriesFor,
   type History,
+  historyLabel,
   itemKey,
   itemMenu,
   libraryName,
@@ -378,12 +379,14 @@ export default function LibraryEditor({
   }, [refreshHistory]);
 
   const libraries = useMemo(() => {
-    const seen = new Set<string>();
-    return (data?.libraries ?? []).filter((l) => {
-      if (l.kind !== kind || seen.has(l.path)) return false;
-      seen.add(l.path);
-      return true;
-    });
+    // A file may hold several catalogs: one entry per file, preferably one with a name
+    const byPath = new Map<string, LibraryInfo>();
+    for (const l of data?.libraries ?? []) {
+      if (l.kind !== kind) continue;
+      const known = byPath.get(l.path);
+      if (!known || (!known.name && l.name)) byPath.set(l.path, l);
+    }
+    return [...byPath.values()];
   }, [data, kind]);
 
   const libByIndex = useMemo(() => {
@@ -496,12 +499,18 @@ export default function LibraryEditor({
   const undo = useCallback(async () => {
     const r = await run("library_undo", {});
     if (r)
-      setMessage({ text: t("Undone: {what}", { what: String(r.undone ?? "–") }), undo: false });
+      setMessage({
+        text: t("Undone: {what}", { what: historyLabel(r.undone as string | null) }),
+        undo: false,
+      });
   }, [run]);
   const redo = useCallback(async () => {
     const r = await run("library_redo", {});
     if (r)
-      setMessage({ text: t("Redone: {what}", { what: String(r.redone ?? "–") }), undo: false });
+      setMessage({
+        text: t("Redone: {what}", { what: historyLabel(r.redone as string | null) }),
+        undo: false,
+      });
   }, [run]);
 
   // Escape closes, Ctrl+Z / Ctrl+Y undo and redo library changes
@@ -784,7 +793,11 @@ export default function LibraryEditor({
           <span className="libed-spacer" />
           <button
             type="button"
-            title={history.undo ? t("Undo: {what}", { what: history.undo }) : t("Nothing to undo")}
+            title={
+              history.undo
+                ? t("Undo: {what}", { what: historyLabel(history.undo) })
+                : t("Nothing to undo")
+            }
             disabled={!history.undo}
             onClick={() => void undo()}
           >
@@ -792,7 +805,11 @@ export default function LibraryEditor({
           </button>
           <button
             type="button"
-            title={history.redo ? t("Redo: {what}", { what: history.redo }) : t("Nothing to redo")}
+            title={
+              history.redo
+                ? t("Redo: {what}", { what: historyLabel(history.redo) })
+                : t("Nothing to redo")
+            }
             disabled={!history.redo}
             onClick={() => void redo()}
           >

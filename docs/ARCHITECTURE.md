@@ -936,6 +936,43 @@ furniture is read by its home reader.
   where the staircase cuts no hole. Spiral and other curved staircases can be walked up; the
   straight ramp is still used while a model is loading.
 
+### 4.41 Library editor (2026-11-09)
+
+- One place for everything about libraries; it replaces the libraries dialog and takes in the
+  import steps. Principle: one way per result. The catalog in the side bar keeps two entries,
+  "Add…" (the editor's Add menu: files, online search, furniture of the home; files dropped onto
+  the catalog lead to the same step) and "Libraries…"; the menus offer "Add to library…" and
+  "Libraries…". Moving items to another category is no longer done by drag and drop but through
+  the item's context menu ("Move to" with the categories and "New category…"), the same menu in
+  the catalog and in the editor (`catalog/library.ts`, `plan2d/ContextMenu.tsx` with sub-entries).
+- msh-catalog `library_edit.rs`: `EditableLibrary` reads a library completely (main properties,
+  translations `…_de.properties`, all resources) and writes it back atomically; items are
+  changed, moved (a category shown through a translation keeps both languages), copied with
+  their resources and a new catalog ID, removed with the resources no other item uses. `record`
+  keeps the file contents before and after each change for undo / redo (30 steps).
+  `user_library` adds imports to any editable library through it.
+- Commands (msh-core `commands/library_edit.rs`): `library_create`, `library_rename`,
+  `library_items` (search over all libraries), `library_item`, `library_update_item` (keys of
+  Sweet Home 3D's format, with `lang` for translations), `library_move_items`,
+  `library_copy_items` (also "edit as copy" for read-only items and duplicate),
+  `library_remove_items`, `library_add_category` (empty categories are kept in the catalog
+  settings), `library_categories`, `library_set_icon`, `library_add_from_home`, `library_undo`,
+  `library_redo`, `library_history`; `furniture_import` / `texture_import` take a target
+  `library`. Editable are the libraries in the user's library folders (also imported ones, shared
+  with Sweet Home 3D); the installation's libraries are read-only. `library_list` reports
+  `editable`.
+- App (`catalog/LibraryEditor.tsx`): kind switch, libraries (rename, new category, show or hide,
+  remove), search over all libraries, items by category; preview by kind: 3D model (turned by
+  dragging, "Icon from view", upright in 90° steps), texture on a 4 × 2.5 m wall at its real tile
+  size, the opening of doors and windows on their front and the floor hole of staircases from
+  above, both drawn as a rectangle with handles (`catalog/ShapeEditor.tsx`); properties in tabs
+  (general, size and model, kind: furniture, door or window, staircase, light with its light
+  sources, shelf). Changes are saved at once; Ctrl+Z / Ctrl+Y and the buttons undo and redo.
+  The catalog DTO lists hidden libraries too (`catalogAll` in the store, the catalog filters
+  them) and gives each item its index in the library.
+- The 3D view now cuts openings with their own outline (`doorOrWindowCutOutShape`, e.g. round
+  arches or an opening smaller than the frame) instead of the whole box.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
@@ -1042,8 +1079,8 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
     through the three.js loaders. Textures: JPG, PNG, BMP, GIF (as before), plus WebP, TIFF,
     SVG and PBR material packages (ZIP; the color map becomes the texture). Drag and drop of files onto the catalog. Not possible: SketchUp
     .skp and Blender .blend (no free reader; export to DAE, FBX or glTF instead).
-  - P12e-b Library editor: moved after version 1.0 (decided 2026-11-08); a UI draft is on
-    the design canvas.
+  - P12e-b (done, see 4.41) Library editor in the app, brought forward on 2026-11-09 after a
+    second draft ("one way per result").
   - P12e-c (done, see 4.34) Online sources: search and import the free libraries of sweethome3d.com (whole
     .sh3f / .sh3t files), CC0 textures and models of ambientCG and Poly Haven (their public
     APIs, no account). License and source are kept with each item; network access can be

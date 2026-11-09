@@ -14,7 +14,7 @@ import {
   type Pt,
   type Texture,
 } from "../model";
-import { holesAt, staircases } from "./staircase";
+import { holesAt, parseSvgPath, staircases } from "./staircase";
 import { baseboardOf, baseboardPolygon } from "./wallSides";
 
 export type LevelInfo = { elevation: number; height: number; floorThickness: number };
@@ -211,9 +211,39 @@ function signedArea(pts: Pt[]): number {
   return s / 2;
 }
 
+/**
+ * Prism that cuts the opening of a door or window with its own outline (Sweet Home 3D's
+ * `doorOrWindowCutOutShape`: an SVG path in the unit square of the front, y downwards), e.g.
+ * a round arch or an opening smaller than the frame. Null if the path has no outline.
+ */
+function shapedOpeningBrush(
+  p: Piece,
+  baseY: number,
+  depth: number,
+  materials: THREE.Material[],
+): Brush | null {
+  const a = p.attrs;
+  const outline = parseSvgPath(a.cut_out_shape ?? "")[0];
+  if (!outline || outline.length < 3) return null;
+  const mirror = a.model_mirrored ? -1 : 1;
+  const shape = new THREE.Shape(
+    outline.map(([u, v]) => new THREE.Vector2(mirror * (u - 0.5) * a.width, (0.5 - v) * a.height)),
+  );
+  const geom = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 1 });
+  geom.translate(0, 0, -depth / 2);
+  for (const g of geom.groups) g.materialIndex = EDGE_OTHER;
+  const brush = new Brush(geom, materials);
+  brush.position.set(a.x, baseY + (a.elevation ?? 0) + a.height / 2, a.y);
+  brush.rotation.y = -(a.angle ?? 0);
+  brush.updateMatrixWorld();
+  return brush;
+}
+
 /** Box that cuts the wall opening of a door or window. */
 function openingBrush(p: Piece, baseY: number, depth: number, materials: THREE.Material[]): Brush {
   const a = p.attrs;
+  const shaped = a.cut_out_shape ? shapedOpeningBrush(p, baseY, depth, materials) : null;
+  if (shaped) return shaped;
   const cutWidth = a.width * (a.wall_width ?? 1);
   const cutHeight = a.height * (a.wall_height ?? 1);
   const cutLeft = a.width * (a.wall_left ?? 0);
