@@ -375,17 +375,29 @@ fn texture_item(index: u32, m: &mut BTreeMap<String, String>) -> Result<TextureI
 /// Resources folder of the Microsoft Store version of Sweet Home 3D, if installed.
 ///
 /// The install location of Store apps can only be determined through package
-/// management, so this asks PowerShell (`Get-AppxPackage`).
+/// management, so this asks PowerShell (`Get-AppxPackage`), once per process: the
+/// answer takes about a second and does not change while the app runs.
 pub fn store_resources_dir() -> Option<PathBuf> {
-    let out = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "(Get-AppxPackage -Name eTeks.SweetHome3D | Select-Object -First 1).InstallLocation",
-        ])
-        .output()
-        .ok()?;
+    static DIR: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(query_store_resources_dir).clone()
+}
+
+fn query_store_resources_dir() -> Option<PathBuf> {
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "(Get-AppxPackage -Name eTeks.SweetHome3D | Select-Object -First 1).InstallLocation",
+    ]);
+    // The app has no console, so Windows would open a console window for PowerShell
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let out = cmd.output().ok()?;
     let loc = String::from_utf8_lossy(&out.stdout).trim().to_owned();
     if loc.is_empty() {
         return None;
