@@ -323,7 +323,8 @@ export function centerInWall(slot: WallSlot, piece: Piece, t: number, depth: num
 
 /**
  * The straight wall a door or window at `center` stands in (or is moved to, within
- * `capture` cm of its sides), with the free space around it.
+ * `capture` cm of its sides), with the free space around it. With `followSide` the piece
+ * turns to open to the side of the wall it is moved to.
  */
 export function wallSlot(
   home: Home,
@@ -332,6 +333,7 @@ export function wallSlot(
   piece: Piece,
   center: Pt,
   capture: number,
+  followSide = false,
 ): WallSlot | null {
   const a = piece.attrs;
   let best: WallSlot | null = null;
@@ -375,7 +377,22 @@ export function wallSlot(
       (((((a.angle ?? 0) - wallAngle) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI)) - Math.PI,
     );
     // `diff` is the angle between the piece and the wall direction (0..π)
-    const angle = diff > Math.PI / 2 ? wallAngle + Math.PI : wallAngle;
+    let angle = diff > Math.PI / 2 ? wallAngle + Math.PI : wallAngle;
+    if (followSide) {
+      // While dragging, the piece opens to the side of the wall it is pulled to (like Sweet
+      // Home 3D). Measured at its wall part, which lies on the wall axis before the drag, so
+      // the side changes only when the piece is pulled clearly across the wall.
+      const pa = a.angle ?? 0;
+      const fraction = Math.max(a.wall_thickness ?? 1, 0.01);
+      const wallPart = -a.depth / 2 + ((a.wall_distance ?? 0) + fraction / 2) * a.depth;
+      const wx = rx - Math.sin(pa) * wallPart;
+      const wy = ry + Math.cos(pa) * wallPart;
+      // Positive on the side the local +y (front) of a piece at `wallAngle` points to
+      const side = wx * -u[1] + wy * u[0];
+      if (Math.abs(side) > Math.max(w.thickness / 4, 5)) {
+        angle = side > 0 ? wallAngle : wallAngle + Math.PI;
+      }
+    }
     bestAcross = across;
     best = { wallIndex: i, start, u, thickness: w.thickness, t, prev, next, angle };
   });
@@ -406,7 +423,7 @@ export function slideInWall(
   snap: number,
   magnetism: boolean,
 ): Slid | null {
-  const slot = wallSlot(home, wallShapes, levelId, piece, center, capture);
+  const slot = wallSlot(home, wallShapes, levelId, piece, center, capture, true);
   if (!slot) return null;
   const a = piece.attrs;
   const w = a.width;

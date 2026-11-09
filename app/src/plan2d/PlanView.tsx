@@ -1754,11 +1754,17 @@ export default function PlanView() {
     let result: unknown;
     const wall = item.doorOrWindow ? nearestWall(input.home, effectiveLevel, p, pxToCm(40)) : null;
     if (wall) {
+      // Opens to the side of the wall it is dropped on (front of the piece: left of the wall)
+      const w = input.home.walls.find((x) => x.attrs.id === wall.id)?.attrs;
+      const side = w
+        ? (p[0] - w.x_start) * -(w.y_end - w.y_start) + (p[1] - w.y_start) * (w.x_end - w.x_start)
+        : 0;
       result = await run("furniture_add_in_wall", {
         catalog_id: item.catalogId,
         name: item.name,
         wall_id: wall.id,
         offset: Math.round(wall.offset),
+        ...(side < 0 ? { flip: true } : {}),
       });
     } else {
       result = await run("furniture_add", {

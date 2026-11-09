@@ -522,7 +522,9 @@ function drawDoorOrWindow(
   ctx.lineWidth = px;
   ctx.strokeStyle = colors.furnitureStroke;
   ctx.strokeRect(-w / 2, -d / 2, w, d);
-  // Sashes: axis relative to the piece's top-left corner, opening angles in radians
+  // Sashes: axis relative to the piece's top-left corner, opening angles in radians. Drawn as
+  // pie like Sweet Home 3D (both edges and the arc): models differ in which angle is the open
+  // position, so drawing one edge only loses the open sash of some windows.
   for (const s of p.sashes ?? []) {
     const ax = -w / 2 + s.x_axis * w;
     const ay = -d / 2 + s.y_axis * d;
@@ -534,6 +536,7 @@ function drawDoorOrWindow(
     const start = -s.start_angle;
     ctx.lineTo(ax + Math.cos(end) * r, ay + Math.sin(end) * r);
     ctx.arc(ax, ay, r, end, start, end > start);
+    ctx.closePath();
     ctx.stroke();
   }
   if (!p.sashes?.length && !top) {

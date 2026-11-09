@@ -910,6 +910,14 @@ furniture is read by its home reader.
   `My Sweet Home.sh3d` (WiX fragment `wix/cli-path.wxs`), because Tauri registers file
   associations without an icon of their own.
 
+### 4.39 Doors and windows: sashes and opening side (2026-11-09)
+
+- Sashes are drawn as pie (both edges and the arc) like Sweet Home 3D; models differ in which
+  of their angles is the open position, so one edge only lost the open sash of some windows.
+- A door or window opens to the side of the wall it is dropped on, and turns to the other
+  side when it is dragged clearly across the wall (its wall part more than a quarter of the
+  wall thickness, at least 5 cm, off the axis).
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
