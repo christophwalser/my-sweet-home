@@ -925,6 +925,17 @@ furniture is read by its home reader.
   cuts openings through the whole wall; the plan now clears the wall across the width of every
   door and window as well.
 
+### 4.40 Imported staircases and walking on real steps (2026-11-09)
+
+- `furniture_import` takes `staircase` (and optionally `staircase_cut_out_shape`, an SVG path
+  in the unit square; default the whole piece), stored as `staircaseCutOutShape` in the user
+  library like Sweet Home 3D. The import dialog has a "Staircase" check box.
+- The virtual visitor walks on the steps of the model instead of a straight ramp: a ray down
+  through the loaded staircase models (`view3d/stepSurfaces.ts`) gives the upward faces at its
+  position, and it stands on the highest one at most a step above its feet, or on a floor
+  where the staircase cuts no hole. Spiral and other curved staircases can be walked up; the
+  straight ramp is still used while a model is loading.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

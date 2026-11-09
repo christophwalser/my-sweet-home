@@ -39,6 +39,8 @@ pub struct NewFurniture {
     pub door_or_window: bool,
     /// 3x3 rotation of the model (row major), applied before scaling to the size
     pub model_rotation: Option<[f32; 9]>,
+    /// Staircase: SVG path in the unit square of the floor hole it cuts in the level above
+    pub staircase_cut_out_shape: Option<String>,
 }
 
 /// Where an item was added.
@@ -269,6 +271,9 @@ pub fn add_furniture(piece: NewFurniture) -> Result<AddedItem, CatalogError> {
     if let Some(r) = piece.model_rotation {
         let text: Vec<String> = r.iter().map(|v| v.to_string()).collect();
         put("modelRotation", text.join(" "));
+    }
+    if let Some(shape) = piece.staircase_cut_out_shape {
+        put("staircaseCutOutShape", shape);
     }
     if let Some(c) = piece.creator {
         put("creator", c);

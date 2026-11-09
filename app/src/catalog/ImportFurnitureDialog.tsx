@@ -76,6 +76,7 @@ export default function ImportFurnitureDialog({
   const [keepRatio, setKeepRatio] = useState(true);
   const [elevation, setElevation] = useState("0");
   const [doorOrWindow, setDoorOrWindow] = useState(false);
+  const [staircase, setStaircase] = useState(false);
   const [addToHome, setAddToHome] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -259,6 +260,7 @@ export default function ImportFurnitureDialog({
         height: h,
         elevation: num(elevation) || 0,
         door_or_window: doorOrWindow,
+        staircase,
         model_rotation: rotationRowMajor(rotation),
         icon_png_base64: iconBase64(),
       })) as { catalog_id: string };
@@ -404,6 +406,14 @@ export default function ImportFurnitureDialog({
                 onChange={(e) => setDoorOrWindow(e.currentTarget.checked)}
               />
               <span>{t("Door or window (cuts an opening into walls)")}</span>
+            </label>
+            <label className="prop-row prop-check">
+              <input
+                type="checkbox"
+                checked={staircase}
+                onChange={(e) => setStaircase(e.currentTarget.checked)}
+              />
+              <span>{t("Staircase (cuts a hole in the floor above, can be walked up)")}</span>
             </label>
             <label className="prop-row prop-check">
               <input

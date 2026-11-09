@@ -35,6 +35,7 @@ import { clearModelCache, createPieceObject, disposeObject, waitForModels } from
 import { buildObj } from "./objExport";
 import PhotoDialog from "./PhotoDialog";
 import { type PhotoJob, type PhotoQuality, type PhotoSource, renderPhoto } from "./photo";
+import { stepSurfaces } from "./stepSurfaces";
 import VideoDialog from "./VideoDialog";
 import View3DSettings from "./View3DSettings";
 import ViewpointsMenu from "./ViewpointsMenu";
@@ -287,10 +288,13 @@ export default function View3D() {
 
     const furniture = new THREE.Group();
     furniture.name = "furniture";
+    const stairObjects: THREE.Object3D[] = [];
     forEachPiece(home.furniture, (p) => {
       if (!shown.has(p.attrs.level)) return;
       const base = (levels.get(p.attrs.level) ?? levels.get(null))?.elevation ?? 0;
-      furniture.add(createPieceObject(p, opened.id, base, c.requestRender));
+      const object = createPieceObject(p, opened.id, base, c.requestRender);
+      if (p.attrs.staircase_cut_out_shape && p.attrs.visible !== false) stairObjects.push(object);
+      furniture.add(object);
     });
     c.content.add(furniture);
     // Walls and doors for the virtual visitor (all levels: the visitor may change level)
@@ -299,6 +303,7 @@ export default function View3D() {
       opened.wallShapes,
       (level) => (levels.get(level) ?? levels.get(null))?.elevation ?? 0,
     );
+    c.visitor.colliders.stepSurfaces = (p) => stepSurfaces(stairObjects, p);
     c.requestRender();
   }, [opened, levelId]);
 

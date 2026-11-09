@@ -8,6 +8,7 @@ import * as THREE from "three";
 import { forEachPiece, type Home, type Pt, type WallShape } from "../model";
 import { usePreferences } from "../preferences";
 import { applyPose, type CameraPose } from "./camera";
+import { cutOutOutlines } from "./staircase";
 
 /** Radius of the visitor's body in the plan (cm). */
 export const VISITOR_RADIUS = 20;
@@ -51,6 +52,8 @@ type Ramp = {
   halfD: number;
   bottom: number;
   top: number;
+  /** Outlines of the hole the staircase cuts in the floor above (plan coordinates) */
+  holes: Pt[][];
 };
 
 export type Colliders = {
@@ -59,6 +62,11 @@ export type Colliders = {
   /** Elevations of the floors (levels), ascending */
   floors: number[];
   ramps: Ramp[];
+  /**
+   * Elevations of the upward faces of the staircase models at a plan point (their steps),
+   * or null while the models are not loaded (the ramps stand in for them then)
+   */
+  stepSurfaces?: (p: Pt) => number[] | null;
 };
 
 /** Lowest eye height above the floor the visitor stands on (cm). */
@@ -97,6 +105,21 @@ function rampHeight(r: Ramp, p: Pt): number | null {
  * whose steps are far below, the visitor stays on its floor.
  */
 export function groundAt(c: Colliders, p: Pt, eye: number, previous: number): number {
+  const stairs = c.ramps.filter((r) => rampHeight(r, p) !== null);
+  const surfaces = stairs.length > 0 ? (c.stepSurfaces?.(p) ?? null) : null;
+  if (surfaces) {
+    // On the real steps (any shape, e.g. spiral staircases): the highest surface at most a
+    // step above the feet, a step of the model or a floor where no stairwell is cut into it
+    const floors = c.floors.filter(
+      (f) =>
+        !stairs.some(
+          (r) => f > r.bottom + 1 && f <= r.top + 1 && r.holes.some((h) => pointInPolygon(p, h)),
+        ),
+    );
+    let top = Number.NEGATIVE_INFINITY;
+    for (const h of [...surfaces, ...floors]) if (h <= previous + STEP && h > top) top = h;
+    if (top > Number.NEGATIVE_INFINITY) return top;
+  }
   let best: number | null = null;
   for (const r of c.ramps) {
     const h = rampHeight(r, p);
@@ -109,8 +132,9 @@ export function groundAt(c: Colliders, p: Pt, eye: number, previous: number): nu
 /** Elevation of the level a staircase leads to, if the visitor stands on its steps. */
 export function stairTopAt(c: Colliders, p: Pt, ground: number): number | null {
   for (const r of c.ramps) {
-    const h = rampHeight(r, p);
-    if (h !== null && Math.abs(h - ground) < 0.5 && h > r.bottom + 1) return r.top;
+    // Above the bottom of the staircase within its outline: on its steps (also when they are
+    // not those of a straight ramp)
+    if (rampHeight(r, p) !== null && ground > r.bottom + 1 && ground <= r.top + 0.5) return r.top;
   }
   return null;
 }
@@ -175,6 +199,7 @@ export function buildColliders(
       halfD: (a.depth_in_plan ?? a.depth) / 2,
       bottom,
       top,
+      holes: cutOutOutlines(p),
     });
   });
   return { obstacles, passages, floors, ramps };

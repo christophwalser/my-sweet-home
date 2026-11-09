@@ -44,6 +44,12 @@ struct FurnitureImportParams {
     elevation: Option<f32>,
     /// The piece is a door or window (cuts openings into walls)
     door_or_window: Option<bool>,
+    /// The piece is a staircase: it cuts a hole in the floor of the level above and the
+    /// virtual visitor can walk up its steps
+    staircase: Option<bool>,
+    /// Outline of that hole as SVG path in the unit square of the piece seen from above
+    /// (x to the right, y to the front), e.g. "M0,0 L1,0 L1,1 L0,1 Z" (the default)
+    staircase_cut_out_shape: Option<String>,
     /// The piece can be moved (default true)
     movable: Option<bool>,
     /// 3x3 rotation matrix (row major) that turns the model upright and to the front,
@@ -53,6 +59,9 @@ struct FurnitureImportParams {
     icon_png_base64: Option<String>,
     creator: Option<String>,
 }
+
+/// Cut-out of a staircase over its whole width and depth (as Sweet Home 3D's import).
+const FULL_CUT_OUT: &str = "M0,0 v1 h1 v-1 z";
 
 /// Size of the model after `rotation` (each axis of the result as extent of the rotated box).
 fn rotated_size(size: [f32; 3], rotation: Option<[f32; 9]>) -> [f32; 3] {
@@ -132,6 +141,11 @@ pub(super) fn register(r: &mut Registry) {
                 movable: p.movable.unwrap_or(true),
                 door_or_window: p.door_or_window.unwrap_or(false),
                 model_rotation: p.model_rotation,
+                staircase_cut_out_shape: p.staircase_cut_out_shape.or_else(|| {
+                    p.staircase
+                        .unwrap_or(false)
+                        .then(|| FULL_CUT_OUT.to_owned())
+                }),
             })
             .map_err(|e| CommandError::failed(e.to_string()))?;
             CatalogIndex::reload();
