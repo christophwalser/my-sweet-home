@@ -289,12 +289,18 @@ pub struct LibraryDto {
     pub name: Option<String>,
     pub kind: CatalogKind,
     pub license: Option<String>,
+    /// Not shown in the catalog (the library editor still lists it)
+    pub hidden: bool,
+    /// Its items can be changed (libraries in the user's library folders)
+    pub editable: bool,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogItemDto {
     pub library: usize,
+    /// Index of the item in its library (for the library_* commands)
+    pub index: u32,
     pub kind: CatalogKind,
     pub id: Option<String>,
     pub name: String,
@@ -363,9 +369,8 @@ pub async fn catalog_load(lang: String, state: State<'_, AppState>) -> CmdResult
         // Hidden libraries are left out; categories chosen by the user replace the library's own
         let settings = CatalogSettings::load();
         for (index, path) in store.paths.iter().enumerate() {
-            if settings.is_hidden(path) {
-                continue;
-            }
+            let hidden = settings.is_hidden(path);
+            let editable = msh_catalog::library_edit::is_editable(path);
             let catalogs = match open_library(path, Some(&lang)) {
                 Ok(c) => c,
                 Err(e) => {
@@ -374,19 +379,21 @@ pub async fn catalog_load(lang: String, state: State<'_, AppState>) -> CmdResult
                 }
             };
             for c in catalogs {
-                if c.furniture.is_empty() && c.textures.is_empty() {
-                    continue;
-                }
+                // Empty libraries are listed too: the editor shows new ones
+                let _ = (c.furniture.is_empty(), c.textures.is_empty());
                 dto.libraries.push(LibraryDto {
                     index,
                     path: path.clone(),
                     name: c.name.clone(),
                     kind: c.kind,
                     license: c.license.clone(),
+                    hidden,
+                    editable,
                 });
                 dto.items.extend(c.furniture.into_iter().map(|f| {
                     CatalogItemDto {
                         library: index,
+                        index: f.index,
                         kind: CatalogKind::Furniture,
                         category: settings
                             .category(ItemKind::Furniture, f.id.as_deref())
@@ -407,6 +414,7 @@ pub async fn catalog_load(lang: String, state: State<'_, AppState>) -> CmdResult
                 dto.items.extend(c.textures.into_iter().map(|t| {
                     CatalogItemDto {
                         library: index,
+                        index: t.index,
                         kind: CatalogKind::Textures,
                         category: settings
                             .category(ItemKind::Textures, t.id.as_deref())

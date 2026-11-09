@@ -1,13 +1,13 @@
-//! The user's own libraries ("My furniture.sh3f", "My textures.sh3t") in Sweet Home
-//! 3D's user library folders. Imported textures and furniture are appended to them,
-//! so they stay in the catalog of both applications.
+//! Adding imported textures and furniture to a library. By default they go to the user's own
+//! libraries ("My furniture.sh3f", "My textures.sh3t") in Sweet Home 3D's user library
+//! folders, so they stay in the catalog of both applications; any other editable library can
+//! be chosen as target.
 
+use crate::library_edit::EditableLibrary;
 use crate::{CatalogError, CatalogKind, user_library_dir};
-use std::collections::BTreeMap;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-/// A texture to add to the user's texture library.
+/// A texture to add to a texture library.
 pub struct NewTexture {
     pub name: String,
     pub category: String,
@@ -19,9 +19,11 @@ pub struct NewTexture {
     /// Size of one tile in cm
     pub width: f32,
     pub height: f32,
+    /// Target library (default: "My textures.sh3t")
+    pub library: Option<PathBuf>,
 }
 
-/// A piece of furniture to add to the user's furniture library.
+/// A piece of furniture to add to a furniture library.
 pub struct NewFurniture {
     pub name: String,
     pub category: String,
@@ -41,6 +43,8 @@ pub struct NewFurniture {
     pub model_rotation: Option<[f32; 9]>,
     /// Staircase: SVG path in the unit square of the floor hole it cuts in the level above
     pub staircase_cut_out_shape: Option<String>,
+    /// Target library (default: "My furniture.sh3f")
+    pub library: Option<PathBuf>,
 }
 
 /// Where an item was added.
@@ -50,7 +54,8 @@ pub struct AddedItem {
     pub catalog_id: String,
 }
 
-fn library_path(kind: CatalogKind) -> Result<PathBuf, CatalogError> {
+/// The user's own library of a kind.
+pub fn default_library_path(kind: CatalogKind) -> Result<PathBuf, CatalogError> {
     let dir = user_library_dir(kind).ok_or_else(|| CatalogError::NoCatalog {
         path: PathBuf::from("%APPDATA%"),
     })?;
@@ -60,72 +65,19 @@ fn library_path(kind: CatalogKind) -> Result<PathBuf, CatalogError> {
     }))
 }
 
-fn properties_entry(kind: CatalogKind) -> &'static str {
-    match kind {
-        CatalogKind::Furniture => "PluginFurnitureCatalog.properties",
-        CatalogKind::Textures => "PluginTexturesCatalog.properties",
-    }
-}
-
 /// Unique catalog ID for a new item.
-fn new_catalog_id() -> String {
+pub fn new_catalog_id() -> String {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or_default();
-    format!("my-sweet-home#{nanos:x}")
-}
-
-/// Files (name, content) of a library except its properties file.
-type Entries = Vec<(String, Vec<u8>)>;
-
-/// Existing entries and properties of a user library (empty if it does not exist).
-fn read_library(
-    path: &Path,
-    kind: CatalogKind,
-) -> Result<(Entries, BTreeMap<String, String>), CatalogError> {
-    if !path.exists() {
-        return Ok((Vec::new(), BTreeMap::new()));
-    }
-    let io = |source| CatalogError::Io {
-        path: path.to_owned(),
-        source,
-    };
-    let zip_err = |e: zip::result::ZipError| CatalogError::Zip {
-        path: path.to_owned(),
-        message: e.to_string(),
-    };
-    let file = std::fs::File::open(path).map_err(io)?;
-    let mut zip = zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(zip_err)?;
-    let mut entries = Vec::new();
-    let mut props = BTreeMap::new();
-    for i in 0..zip.len() {
-        let mut f = zip.by_index(i).map_err(zip_err)?;
-        if f.is_dir() {
-            continue;
-        }
-        let mut data = Vec::new();
-        f.read_to_end(&mut data).map_err(io)?;
-        if f.name() == properties_entry(kind) {
-            props = crate::properties::parse(&data);
-        } else {
-            entries.push((f.name().to_owned(), data));
-        }
-    }
-    Ok((entries, props))
-}
-
-/// Next free item index (`name#N`).
-fn next_index(props: &BTreeMap<String, String>) -> u32 {
-    props
-        .keys()
-        .filter_map(|k| k.rsplit_once('#')?.1.parse::<u32>().ok())
-        .max()
-        .map_or(1, |n| n + 1)
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("my-sweet-home#{:x}", nanos + n as u128)
 }
 
 /// Escapes a key or value for a Java properties file (ISO 8859-1 with \\u escapes).
-fn escape(s: &str, key: bool) -> String {
+pub(crate) fn escape(s: &str, key: bool) -> String {
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {
         match c {
@@ -150,81 +102,41 @@ fn escape(s: &str, key: bool) -> String {
     out
 }
 
-/// Writes the library atomically (temporary file, then rename).
-fn write_library(
-    path: &Path,
-    kind: CatalogKind,
-    entries: &[(String, Vec<u8>)],
-    props: &BTreeMap<String, String>,
-) -> Result<(), CatalogError> {
-    let io = |source| CatalogError::Io {
-        path: path.to_owned(),
-        source,
+/// The target library, read or (for the user's own library) created.
+fn target(kind: CatalogKind, library: Option<PathBuf>) -> Result<EditableLibrary, CatalogError> {
+    let path = match library {
+        Some(p) => p,
+        None => default_library_path(kind)?,
     };
-    let zip_err = |e: zip::result::ZipError| CatalogError::Zip {
-        path: path.to_owned(),
-        message: e.to_string(),
-    };
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(io)?;
-    }
-    let tmp = path.with_extension("tmp");
-    {
-        let file = std::fs::File::create(&tmp).map_err(io)?;
-        let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(file));
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
-        let mut text = String::from("# Created by My Sweet Home\n");
-        for (k, v) in props {
-            text.push_str(&escape(k, true));
-            text.push('=');
-            text.push_str(&escape(v, false));
-            text.push('\n');
+    if path.exists() {
+        let lib = EditableLibrary::open(&path)?;
+        if lib.kind != kind {
+            return Err(CatalogError::NoCatalog { path });
         }
-        zip.start_file(properties_entry(kind), options)
-            .map_err(zip_err)?;
-        zip.write_all(text.as_bytes()).map_err(io)?;
-        for (name, data) in entries {
-            zip.start_file(name.as_str(), options).map_err(zip_err)?;
-            zip.write_all(data).map_err(io)?;
-        }
-        zip.finish().map_err(zip_err)?;
+        return Ok(lib);
     }
-    std::fs::rename(&tmp, path).map_err(io)
-}
-
-fn set_header(props: &mut BTreeMap<String, String>, kind: CatalogKind) {
     let (id, name) = match kind {
         CatalogKind::Furniture => ("my-sweet-home.my-furniture", "My furniture"),
         CatalogKind::Textures => ("my-sweet-home.my-textures", "My textures"),
     };
-    props.entry("id".into()).or_insert_with(|| id.into());
-    props.entry("name".into()).or_insert_with(|| name.into());
-    props
-        .entry("description".into())
-        .or_insert_with(|| "Imported with My Sweet Home".into());
-    props
-        .entry("version".into())
-        .or_insert_with(|| "1.0".into());
-    props
-        .entry("provider".into())
-        .or_insert_with(|| "My Sweet Home".into());
+    let mut lib = EditableLibrary::new(&path, kind, name);
+    lib.props.insert("id".into(), id.into());
+    lib.props
+        .insert("description".into(), "Imported with My Sweet Home".into());
+    Ok(lib)
 }
 
-/// Appends a texture to "My textures.sh3t" in the user's texture folder.
+/// Adds a texture (by default to "My textures.sh3t").
 pub fn add_texture(texture: NewTexture) -> Result<AddedItem, CatalogError> {
-    let kind = CatalogKind::Textures;
-    let path = library_path(kind)?;
-    let (mut entries, mut props) = read_library(&path, kind)?;
-    set_header(&mut props, kind);
-    let n = next_index(&props);
+    let mut lib = target(CatalogKind::Textures, texture.library)?;
+    let n = lib.next_index();
     let id = new_catalog_id();
-    let image = format!(
+    let image = lib.free_name(&format!(
         "{n}/texture.{}",
         texture.image_extension.to_ascii_lowercase()
-    );
+    ));
     let mut put = |k: &str, v: String| {
-        props.insert(format!("{k}#{n}"), v);
+        lib.props.insert(format!("{k}#{n}"), v);
     };
     put("id", id.clone());
     put("name", texture.name);
@@ -235,24 +147,21 @@ pub fn add_texture(texture: NewTexture) -> Result<AddedItem, CatalogError> {
     if let Some(c) = texture.creator {
         put("creator", c);
     }
-    entries.push((image, texture.image));
-    write_library(&path, kind, &entries, &props)?;
+    lib.push_file(image, texture.image);
+    lib.save()?;
     Ok(AddedItem {
-        library: path,
+        library: lib.path,
         catalog_id: id,
     })
 }
 
-/// Appends a piece of furniture to "My furniture.sh3f" in the user's furniture folder.
+/// Adds a piece of furniture (by default to "My furniture.sh3f").
 pub fn add_furniture(piece: NewFurniture) -> Result<AddedItem, CatalogError> {
-    let kind = CatalogKind::Furniture;
-    let path = library_path(kind)?;
-    let (mut entries, mut props) = read_library(&path, kind)?;
-    set_header(&mut props, kind);
-    let n = next_index(&props);
+    let mut lib = target(CatalogKind::Furniture, piece.library)?;
+    let n = lib.next_index();
     let id = new_catalog_id();
     let mut put = |k: &str, v: String| {
-        props.insert(format!("{k}#{n}"), v);
+        lib.props.insert(format!("{k}#{n}"), v);
     };
     put("id", id.clone());
     put("name", piece.name);
@@ -278,15 +187,23 @@ pub fn add_furniture(piece: NewFurniture) -> Result<AddedItem, CatalogError> {
     if let Some(c) = piece.creator {
         put("creator", c);
     }
-    entries.push((format!("{n}/icon.png"), piece.icon));
+    lib.push_file(format!("{n}/icon.png"), piece.icon);
     for (name, data) in piece.model_files {
-        entries.push((format!("{n}/model/{name}"), data));
+        lib.push_file(format!("{n}/model/{name}"), data);
     }
-    write_library(&path, kind, &entries, &props)?;
+    lib.save()?;
     Ok(AddedItem {
-        library: path,
+        library: lib.path,
         catalog_id: id,
     })
+}
+
+/// Whether `path` names the user's own library of its kind.
+pub fn is_default_library(path: &Path) -> bool {
+    [CatalogKind::Furniture, CatalogKind::Textures]
+        .into_iter()
+        .filter_map(|k| default_library_path(k).ok())
+        .any(|p| p == path)
 }
 
 #[cfg(test)]
@@ -302,12 +219,9 @@ mod tests {
     }
 
     #[test]
-    fn next_index_continues_after_the_highest() {
-        let mut props = BTreeMap::new();
-        props.insert("id".into(), "x".into());
-        props.insert("name#3".into(), "a".into());
-        props.insert("name#7".into(), "b".into());
-        assert_eq!(next_index(&props), 8);
-        assert_eq!(next_index(&BTreeMap::new()), 1);
+    fn catalog_ids_are_unique() {
+        let a = new_catalog_id();
+        let b = new_catalog_id();
+        assert_ne!(a, b);
     }
 }

@@ -56,6 +56,9 @@ type UiState = {
   /** Level whose name is edited in its tab */
   editingLevel: string | null;
   setEditingLevel: (id: string | null) => void;
+  /** Library new catalog items go to (chosen in the library editor; null: the own one) */
+  libraryTarget: string | null;
+  setLibraryTarget: (path: string | null) => void;
   /** Variant last chosen per split button of the tool bar (button ID → command ID) */
   variants: Record<string, string>;
   setVariant: (button: string, command: string) => void;
@@ -106,6 +109,8 @@ export const useUi = create<UiState>((set, get) => ({
   setDetached: (detached) => set({ detached }),
   editingLevel: null,
   setEditingLevel: (editingLevel) => set({ editingLevel }),
+  libraryTarget: null,
+  setLibraryTarget: (libraryTarget) => set({ libraryTarget }),
   variants: loadJson<Record<string, string>>(VARIANTS_KEY, {}),
   setVariant: (button, command) => {
     const variants = { ...get().variants, [button]: command };

@@ -81,6 +81,7 @@ fn describe(path: &Path) -> Value {
                 "textures": catalogs.iter().map(|c| c.textures.len()).sum::<usize>(),
                 "license": first.and_then(|c| c.license.clone()),
                 "user": is_user_library(path),
+                "editable": msh_catalog::library_edit::is_editable(path),
                 "hidden": hidden,
             })
         }

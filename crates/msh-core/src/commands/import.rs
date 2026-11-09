@@ -4,7 +4,11 @@ use crate::catalog::CatalogIndex;
 use crate::model_package::{collect, placeholder_icon};
 use crate::registry::{CommandError, Registry};
 use base64::Engine;
-use msh_catalog::user_library::{NewFurniture, NewTexture, add_furniture, add_texture};
+use msh_catalog::CatalogKind;
+use msh_catalog::library_edit::{is_editable, record};
+use msh_catalog::user_library::{
+    NewFurniture, NewTexture, add_furniture, add_texture, default_library_path,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
@@ -23,6 +27,8 @@ struct TextureImportParams {
     /// Height of one tile in cm (default: same as width)
     height: Option<f32>,
     creator: Option<String>,
+    /// Target library (default: the user's own "My textures"); see library_list
+    library: Option<PathBuf>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -58,6 +64,20 @@ struct FurnitureImportParams {
     /// Icon as PNG (base64); a neutral placeholder is used if missing
     icon_png_base64: Option<String>,
     creator: Option<String>,
+    /// Target library (default: the user's own "My furniture"); see library_list
+    library: Option<PathBuf>,
+}
+
+/// The library an import goes to: the given one (it must be editable) or the user's own.
+fn target_library(library: Option<PathBuf>, kind: CatalogKind) -> Result<PathBuf, CommandError> {
+    match library {
+        Some(p) if is_editable(&p) => Ok(p),
+        Some(p) => Err(CommandError::failed(format!(
+            "{} cannot be changed (only libraries in the user's library folders)",
+            p.display()
+        ))),
+        None => default_library_path(kind).map_err(|e| CommandError::failed(e.to_string())),
+    }
 }
 
 /// Cut-out of a staircase over its whole width and depth (as Sweet Home 3D's import).
@@ -127,7 +147,8 @@ pub(super) fn register(r: &mut Registry) {
                     .map_err(|e| CommandError::failed(format!("invalid icon: {e}")))?,
                 None => placeholder_icon(),
             };
-            let added = add_furniture(NewFurniture {
+            let target = target_library(p.library, CatalogKind::Furniture)?;
+            let added = record("import", std::slice::from_ref(&target), || add_furniture(NewFurniture {
                 name: p.name.unwrap_or_else(|| stem(&p.model_path)),
                 category: p.category.unwrap_or_else(|| "My furniture".into()),
                 creator: p.creator,
@@ -146,7 +167,8 @@ pub(super) fn register(r: &mut Registry) {
                         .unwrap_or(false)
                         .then(|| FULL_CUT_OUT.to_owned())
                 }),
-            })
+                library: Some(target.clone()),
+            }))
             .map_err(|e| CommandError::failed(e.to_string()))?;
             CatalogIndex::reload();
             Ok(json!({
@@ -173,15 +195,19 @@ pub(super) fn register(r: &mut Registry) {
             if width <= 0.0 || height <= 0.0 {
                 return Err(CommandError::failed("width and height must be positive"));
             }
-            let added = add_texture(NewTexture {
-                // From a material package: the package's name, not the color map's
-                name: p.name.unwrap_or_else(|| stem(&p.path)),
-                category: p.category.unwrap_or_else(|| "My textures".into()),
-                creator: p.creator,
-                image: texture.data,
-                image_extension: texture.extension,
-                width,
-                height,
+            let target = target_library(p.library, CatalogKind::Textures)?;
+            let added = record("import", std::slice::from_ref(&target), || {
+                add_texture(NewTexture {
+                    // From a material package: the package's name, not the color map's
+                    name: p.name.unwrap_or_else(|| stem(&p.path)),
+                    category: p.category.unwrap_or_else(|| "My textures".into()),
+                    creator: p.creator,
+                    image: texture.data,
+                    image_extension: texture.extension,
+                    width,
+                    height,
+                    library: Some(target.clone()),
+                })
             })
             .map_err(|e| CommandError::failed(e.to_string()))?;
             CatalogIndex::reload();

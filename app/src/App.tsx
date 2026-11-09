@@ -5,7 +5,7 @@ import { api, docResourceUrl, TOP_VIEWS_EVENT } from "./api";
 import CatalogPanel from "./catalog/CatalogPanel";
 import ImportFurnitureDialog from "./catalog/ImportFurnitureDialog";
 import ImportTextureDialog from "./catalog/ImportTextureDialog";
-import LibraryDialog from "./catalog/LibraryDialog";
+import LibraryEditor from "./catalog/LibraryEditor";
 import OnlineDialog from "./catalog/OnlineDialog";
 import ErrorBoundary from "./ErrorBoundary";
 import ExportDialog from "./export/ExportDialog";
@@ -309,7 +309,7 @@ export default function App() {
       {dialog === "importTexture" && (
         <ImportTextureDialog initialPath={dialogArg ?? undefined} onClose={closeDialog} />
       )}
-      {dialog === "libraries" && <LibraryDialog onClose={closeDialog} />}
+      {dialog === "libraries" && <LibraryEditor initial={dialogArg} onClose={closeDialog} />}
       {dialog === "online" && <OnlineDialog onClose={closeDialog} />}
       {(dialog === "backgroundImport" || dialog === "backgroundModify") && opened && (
         <BackgroundImageWizard

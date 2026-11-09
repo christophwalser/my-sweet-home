@@ -369,6 +369,17 @@ pub fn execute<R: Runtime>(
             | "catalog_set_category"
             | "texture_import"
             | "furniture_import"
+            | "library_create"
+            | "library_rename"
+            | "library_update_item"
+            | "library_move_items"
+            | "library_copy_items"
+            | "library_remove_items"
+            | "library_add_category"
+            | "library_set_icon"
+            | "library_add_from_home"
+            | "library_undo"
+            | "library_redo"
     ) {
         state.reload_libraries();
         let _ = app.emit(CATALOG_CHANGED_EVENT, ());

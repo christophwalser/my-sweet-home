@@ -6,6 +6,7 @@
 //! numbered: `name#1`, `model#1`, `width#1`, …. Translations live in
 //! `…_de.properties` etc. and override individual keys.
 
+pub mod library_edit;
 pub mod properties;
 pub mod user_library;
 

@@ -1,9 +1,10 @@
-// Files dropped onto the catalog: libraries are imported, a model opens the furniture import,
-// images and material packages become textures of "My textures".
+// Files added to the libraries (dropped onto the catalog or chosen with "Add" in the library
+// editor): library files are imported, a model opens the furniture import, images and
+// material packages become textures. New items go to the library chosen in the editor.
 
 import { api } from "../api";
 import { t } from "../i18n";
-import { useUi } from "../ui/uiStore";
+import { type DialogName, useUi } from "../ui/uiStore";
 import {
   extensionOf,
   LIBRARY_EXTENSIONS,
@@ -35,8 +36,16 @@ function fileName(path: string): string {
 /** Imports the dropped files; returns a message for the user. */
 export async function importDroppedFiles(files: File[]): Promise<string> {
   if (files.length === 0) return "";
-  const paths = await saveDroppedFiles(files);
+  return importFiles(await saveDroppedFiles(files));
+}
+
+/**
+ * Imports files from the disk; returns a message for the user. A dialog opened for a model or
+ * a texture returns to `returnTo` when it closes.
+ */
+export async function importFiles(paths: string[], returnTo?: DialogName): Promise<string> {
   const done: string[] = [];
+  const library = useUi.getState().libraryTarget;
 
   // Libraries
   for (const p of paths.filter((p) => LIBRARY_EXTENSIONS.includes(extensionOf(p)))) {
@@ -53,7 +62,7 @@ export async function importDroppedFiles(files: File[]): Promise<string> {
   // One model: the furniture import (MTL and texture files dropped with it lie next to it)
   const model = MODEL_ORDER.map((ext) => paths.find((p) => extensionOf(p) === ext)).find(Boolean);
   if (model) {
-    useUi.getState().openDialog("importFurniture", model);
+    useUi.getState().openDialog("importFurniture", model, returnTo);
     return done.length ? t("Imported {names}.", { names: done.join(", ") }) : "";
   }
 
@@ -67,7 +76,7 @@ export async function importDroppedFiles(files: File[]): Promise<string> {
         .then(() => true)
         .catch(() => false);
       if (isModel) {
-        useUi.getState().openDialog("importFurniture", p);
+        useUi.getState().openDialog("importFurniture", p, returnTo);
         return "";
       }
       textures.push(p);
@@ -76,11 +85,11 @@ export async function importDroppedFiles(files: File[]): Promise<string> {
     }
   }
   if (textures.length === 1 && done.length === 0) {
-    useUi.getState().openDialog("importTexture", textures[0]);
+    useUi.getState().openDialog("importTexture", textures[0], returnTo);
     return "";
   }
   for (const p of textures) {
-    await api.execute("texture_import", { path: p });
+    await api.execute("texture_import", { path: p, ...(library ? { library } : {}) });
     done.push(fileName(p));
   }
   const unknown = paths.filter((p) => {

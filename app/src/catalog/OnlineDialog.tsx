@@ -218,6 +218,7 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
           creator: d.creator,
           width,
           height: d.height_cm ?? width,
+          ...(useUi.getState().libraryTarget ? { library: useUi.getState().libraryTarget } : {}),
         });
       } else {
         // Models: the furniture import sets icon, upright position and size, then comes back

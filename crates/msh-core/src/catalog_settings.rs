@@ -33,6 +33,10 @@ pub struct CatalogSettings {
     /// Category chosen by the user, by "<kind>:<catalog ID>"
     #[serde(default)]
     pub categories: BTreeMap<String, String>,
+    /// Categories the user created in a library before any item was moved there, by the
+    /// library path in lower case
+    #[serde(default)]
+    pub library_categories: BTreeMap<String, Vec<String>>,
 }
 
 /// Paths are compared without case, like Windows does.
@@ -84,6 +88,27 @@ impl CatalogSettings {
         if hidden {
             self.hidden_libraries.push(library.to_path_buf());
         }
+    }
+
+    /// Categories created in a library that may not have items yet.
+    pub fn library_categories(&self, library: &Path) -> Vec<String> {
+        self.library_categories
+            .get(&library.to_string_lossy().to_lowercase())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Adds a category to a library; returns false if it exists already.
+    pub fn add_library_category(&mut self, library: &Path, name: &str) -> bool {
+        let list = self
+            .library_categories
+            .entry(library.to_string_lossy().to_lowercase())
+            .or_default();
+        if list.iter().any(|c| c.eq_ignore_ascii_case(name)) {
+            return false;
+        }
+        list.push(name.to_owned());
+        true
     }
 
     /// Category the user chose for an item, if any.

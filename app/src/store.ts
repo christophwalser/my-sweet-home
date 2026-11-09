@@ -53,7 +53,10 @@ type State = {
   visitorPose: CameraPose | null;
   /** Writes the cameras of the 3D view into the home (set by the 3D view, used before saving) */
   cameraSync: (() => Promise<void>) | null;
+  /** Catalog of the visible libraries */
   catalog: CatalogData | null;
+  /** All libraries with their items, hidden ones too (for the library editor) */
+  catalogAll: CatalogData | null;
   catalogLoading: boolean;
   openHome: (path: string) => Promise<void>;
   /** Runs a registry command; errors are shown in the error bar. */
@@ -100,6 +103,7 @@ export const useStore = create<State>((set, get) => ({
   visitorPose: null,
   cameraSync: null,
   catalog: null,
+  catalogAll: null,
   catalogLoading: false,
 
   openHome: async (path) => {
@@ -155,7 +159,16 @@ export const useStore = create<State>((set, get) => ({
     if (get().catalogLoading) return;
     set({ catalogLoading: true });
     try {
-      set({ catalog: await api.catalogLoad(lang) });
+      const all = await api.catalogLoad(lang);
+      const shown = new Set(all.libraries.filter((l) => !l.hidden).map((l) => l.index));
+      set({
+        catalogAll: all,
+        catalog: {
+          ...all,
+          libraries: all.libraries.filter((l) => shown.has(l.index)),
+          items: all.items.filter((i) => shown.has(i.library)),
+        },
+      });
     } catch (e) {
       set({ error: String(e) });
     } finally {

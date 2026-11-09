@@ -72,6 +72,8 @@ export default function ImportFurnitureDialog({
   const extra = useUi.getState().dialogExtra;
   const [category, setCategory] = useState(extra?.category ?? "My furniture");
   const creator = extra?.creator;
+  /** Library chosen in the library editor (null: the user's own) */
+  const library = useUi((s) => s.libraryTarget);
   const [size, setSize] = useState({ width: "", depth: "", height: "" });
   const [keepRatio, setKeepRatio] = useState(true);
   const [elevation, setElevation] = useState("0");
@@ -261,6 +263,7 @@ export default function ImportFurnitureDialog({
         elevation: num(elevation) || 0,
         door_or_window: doorOrWindow,
         staircase,
+        ...(library ? { library } : {}),
         model_rotation: rotationRowMajor(rotation),
         icon_png_base64: iconBase64(),
       })) as { catalog_id: string };
@@ -441,7 +444,7 @@ export default function ImportFurnitureDialog({
 }
 
 /** Center of the walls and rooms of the home (where a new piece is placed). */
-function homeCenter(home: {
+export function homeCenter(home: {
   walls: { attrs: { x_start: number; y_start: number; x_end: number; y_end: number } }[];
   rooms: { points: { x: number; y: number }[] }[];
 }): [number, number] {

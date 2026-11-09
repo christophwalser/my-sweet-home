@@ -1,6 +1,7 @@
 // Catalog panel: furniture and textures of all installed libraries, grouped by
-// category, with full-text search over name, category, tags and creator. Items can be
-// dragged onto another category (or a new one) to move them there.
+// category, with full-text search over name, category, tags and creator. Each item has a
+// context menu (right click or ⋯): add to the home, edit, move to another category,
+// duplicate, delete – the same menu as in the library editor.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -13,29 +14,31 @@ import {
 } from "../api";
 import { language, t } from "../i18n";
 import Splitter from "../layout/Splitter";
+import ContextMenu, { type MenuItem } from "../plan2d/ContextMenu";
 import { usePreferences } from "../preferences";
 import { useStore } from "../store";
 import { useUi } from "../ui/uiStore";
 import { formatPrecise } from "../units";
 import { importDroppedFiles } from "./dropImport";
 import FurnitureList from "./FurnitureList";
+import { homeCenter } from "./ImportFurnitureDialog";
+import { categoriesFor, itemMenu, libraryOf, openEditor, undoLibrary } from "./library";
 
 const MAX_RESULTS = 300;
 
-/** Drag data of a catalog item that may be moved to another category */
-const MOVE_TYPE = "application/x-msh-catalog-move";
-type MoveData = { id: string; kind: CatalogKind; category: string };
-
-/** Moves a catalog item to a category (the backend reloads the catalog afterwards). */
-async function moveToCategory(raw: string, category: string): Promise<void> {
-  const data = JSON.parse(raw) as MoveData;
-  const target = category.trim();
-  if (!target || target === data.category) return;
-  await api.execute("catalog_set_category", {
-    catalog_id: data.id,
-    kind: data.kind,
-    category: target,
-  });
+/** Places a catalog piece in the middle of the home, on the selected level. */
+async function addToHome(item: CatalogItem): Promise<void> {
+  const opened = useStore.getState().opened;
+  if (!opened || !item.id || item.kind !== "furniture") return;
+  const level = useStore.getState().selectedLevel;
+  const [x, y] = homeCenter(opened.home);
+  const added = (await api.execute("furniture_add", {
+    catalog_id: item.id,
+    x,
+    y,
+    ...(level ? { level } : {}),
+  })) as { id?: string };
+  if (added.id) useStore.getState().setSelection([added.id]);
 }
 
 function formatSize(item: CatalogItem): string {
@@ -56,12 +59,15 @@ function ItemRow({
   libraryName,
   preview,
   onHover,
+  onMenu,
 }: {
   item: CatalogItem;
   libraryName: string;
   /** The large preview is on: no native tooltip */
   preview: boolean;
   onHover: (hovered: Hovered | null) => void;
+  /** Opens the item's context menu at a position in the window */
+  onMenu: (item: CatalogItem, x: number, y: number) => void;
 }) {
   const tooltip = [
     item.name,
@@ -81,22 +87,24 @@ function ItemRow({
         onHover({ item, libraryName, top: r.top, bottom: r.bottom });
       }}
       onMouseLeave={() => onHover(null)}
-      // Furniture can be dragged onto the plan, all items onto another category
-      draggable={!!item.id}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onHover(null);
+        onMenu(item, e.clientX, e.clientY);
+      }}
+      onDoubleClick={() => void addToHome(item)}
+      // Furniture can be dragged onto the plan
+      draggable={!!item.id && item.kind === "furniture"}
       onDragStart={(e) => {
         onHover(null);
-        if (!item.id) return;
-        const move: MoveData = { id: item.id, kind: item.kind, category: item.category };
-        e.dataTransfer.setData(MOVE_TYPE, JSON.stringify(move));
-        if (item.kind === "furniture") {
-          const data: CatalogDragData = {
-            catalogId: item.id,
-            doorOrWindow: item.doorOrWindow,
-            name: item.name,
-          };
-          e.dataTransfer.setData(CATALOG_DRAG_TYPE, JSON.stringify(data));
-        }
-        e.dataTransfer.effectAllowed = "copyMove";
+        if (!item.id || item.kind !== "furniture") return;
+        const data: CatalogDragData = {
+          catalogId: item.id,
+          doorOrWindow: item.doorOrWindow,
+          name: item.name,
+        };
+        e.dataTransfer.setData(CATALOG_DRAG_TYPE, JSON.stringify(data));
+        e.dataTransfer.effectAllowed = "copy";
       }}
     >
       {item.icon ? (
@@ -108,6 +116,20 @@ function ItemRow({
         <span className="catalog-item-name">{item.name}</span>
         <span className="catalog-item-meta">{formatSize(item)}</span>
       </span>
+      <button
+        type="button"
+        className="catalog-item-more"
+        aria-label={t("Actions for {name}", { name: item.name })}
+        title={t("Actions (right click)")}
+        onClick={(e) => {
+          e.stopPropagation();
+          onHover(null);
+          const r = e.currentTarget.getBoundingClientRect();
+          onMenu(item, r.left, r.bottom);
+        }}
+      >
+        ⋯
+      </button>
     </li>
   );
 }
@@ -170,9 +192,7 @@ export default function CatalogPanel() {
   const loading = useStore((s) => s.catalogLoading);
   const loadCatalog = useStore((s) => s.loadCatalog);
   const [kind, setKind] = useState<CatalogKind>("furniture");
-  const openDialog = useUi((s) => s.openDialog);
   const previewOn = usePreferences((s) => s.catalogPreview);
-  const onlineOn = usePreferences((s) => s.onlineSources);
   const [hovered, setHovered] = useState<Hovered | null>(null);
   const hoverTimer = useRef(0);
   /** Opens the preview after a short delay; closes it at once */
@@ -191,6 +211,30 @@ export default function CatalogPanel() {
   /** Files are dragged over the catalog / message about dropped files */
   const [dropping, setDropping] = useState(false);
   const [dropMessage, setDropMessage] = useState<string | null>(null);
+  /** The last message is about a library change that can be undone */
+  const [canUndo, setCanUndo] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const notify = (text: string, undo = false) => {
+    setDropMessage(text);
+    setCanUndo(undo);
+  };
+  const openMenu = async (item: CatalogItem, x: number, y: number) => {
+    const all = useStore.getState().catalogAll;
+    const lib = libraryOf(item, all);
+    const categories = await categoriesFor(item.kind, lib?.path ?? null);
+    setMenu({
+      x,
+      y,
+      items: itemMenu(item, lib, categories, {
+        notify,
+        addToHome:
+          item.kind === "furniture" && useStore.getState().opened
+            ? () => void addToHome(item).catch((e) => notify(String(e)))
+            : undefined,
+        edit: (path, index) => openEditor(path, index),
+      }),
+    });
+  };
   const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
   const onDrop = async (e: React.DragEvent) => {
     if (!hasFiles(e)) return;
@@ -219,36 +263,6 @@ export default function CatalogPanel() {
     setSplit(Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, (y - rect.top) / rect.height)));
   };
   const [open, setOpen] = useState<Set<string>>(new Set());
-  /** Category a catalog item is dragged over ("" = the "new category" zone) */
-  const [dropCategory, setDropCategory] = useState<string | null>(null);
-  /** A catalog item is being dragged (shows the "new category" zone) */
-  const [movingItem, setMovingItem] = useState(false);
-  const isMove = (e: React.DragEvent) => e.dataTransfer.types.includes(MOVE_TYPE);
-  const categoryDropProps = (category: string) => ({
-    onDragOver: (e: React.DragEvent) => {
-      if (!isMove(e)) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      setDropCategory(category);
-    },
-    onDragLeave: (e: React.DragEvent) => {
-      if (!e.currentTarget.contains(e.relatedTarget as Node))
-        setDropCategory((c) => (c === category ? null : c));
-    },
-    onDrop: (e: React.DragEvent) => {
-      if (!isMove(e)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setDropCategory(null);
-      setMovingItem(false);
-      const raw = e.dataTransfer.getData(MOVE_TYPE);
-      const target = category || window.prompt(t("Name of the new category"), "")?.trim() || "";
-      if (!target) return;
-      // The moved item stays visible: its new category opens
-      setOpen((prev) => new Set(prev).add(target));
-      moveToCategory(raw, target).catch((err) => setDropMessage(String(err)));
-    },
-  });
 
   useEffect(() => {
     // Catalog content is shown in the language of the user interface when translations exist
@@ -340,47 +354,38 @@ export default function CatalogPanel() {
             aria-label={t("Search catalog")}
           />
           <div className="catalog-tools">
-            {kind === "furniture" ? (
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => openDialog("importFurniture")}
-                title={t("Import a 3D model as piece of furniture (OBJ, DAE, 3DS, glTF, FBX, ...)")}
-              >
-                {t("Import furniture…")}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => openDialog("importTexture")}
-                title={t("Import an image or a PBR material package as texture into the catalog")}
-              >
-                {t("Import textures…")}
-              </button>
-            )}
             <button
               type="button"
               className="link-button"
-              onClick={() => openDialog("libraries")}
-              title={t("Import and manage furniture and texture libraries")}
+              onClick={() => useUi.getState().openDialog("libraries", "add")}
+              title={t("Add 3D models, textures, libraries, online items or furniture of the home")}
+            >
+              {t("Add…")}
+            </button>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => useUi.getState().openDialog("libraries")}
+              title={t("Edit furniture and texture libraries: items, categories, names")}
             >
               {t("Libraries…")}
             </button>
-            {onlineOn && (
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => openDialog("online")}
-                title={t("Search and import free libraries, textures and models from the internet")}
-              >
-                {t("Online…")}
-              </button>
-            )}
           </div>
           {dropMessage && (
             <div className="catalog-drop-message" role="status">
               <span>{dropMessage}</span>
+              {canUndo && (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => {
+                    setDropMessage(null);
+                    void undoLibrary().catch((e) => notify(String(e)));
+                  }}
+                >
+                  {t("Undo")}
+                </button>
+              )}
               <button type="button" onClick={() => setDropMessage(null)} aria-label={t("Close")}>
                 ×
               </button>
@@ -397,18 +402,7 @@ export default function CatalogPanel() {
                   })}
           </div>
         </div>
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: drag start/end of catalog items only show the drop zones */}
-        <div
-          className="catalog-list"
-          onScroll={() => onHover(null)}
-          onDragStart={(e) => {
-            if (isMove(e)) setMovingItem(true);
-          }}
-          onDragEnd={() => {
-            setMovingItem(false);
-            setDropCategory(null);
-          }}
-        >
+        <div className="catalog-list" onScroll={() => onHover(null)}>
           {results ? (
             <ul>
               {results.slice(0, MAX_RESULTS).map((i) => (
@@ -418,6 +412,7 @@ export default function CatalogPanel() {
                   libraryName={libraryNames.get(i.library) ?? ""}
                   preview={previewOn}
                   onHover={onHover}
+                  onMenu={(i, x, y) => void openMenu(i, x, y)}
                 />
               ))}
               {results.length > MAX_RESULTS && (
@@ -426,11 +421,7 @@ export default function CatalogPanel() {
             </ul>
           ) : (
             categories.map(([category, list]) => (
-              <section
-                key={category}
-                className={dropCategory === category ? "catalog-drop-target" : undefined}
-                {...categoryDropProps(category)}
-              >
+              <section key={category}>
                 <button
                   type="button"
                   className="catalog-category"
@@ -449,20 +440,13 @@ export default function CatalogPanel() {
                         libraryName={libraryNames.get(i.library) ?? ""}
                         preview={previewOn}
                         onHover={onHover}
+                        onMenu={(i, x, y) => void openMenu(i, x, y)}
                       />
                     ))}
                   </ul>
                 )}
               </section>
             ))
-          )}
-          {!results && movingItem && (
-            <div
-              className={`catalog-new-category ${dropCategory === "" ? "catalog-drop-target" : ""}`}
-              {...categoryDropProps("")}
-            >
-              {t("Drop here to move into a new category…")}
-            </div>
           )}
         </div>
       </div>
@@ -472,6 +456,9 @@ export default function CatalogPanel() {
         onDrag={dragSplit}
         onReset={() => setSplit(SPLIT_DEFAULT)}
       />
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menu.items} fixed onClose={() => setMenu(null)} />
+      )}
       {hovered && previewOn && (
         <ItemPreview
           hovered={hovered}

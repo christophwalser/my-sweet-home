@@ -13,10 +13,16 @@ export type LibraryInfo = {
   name: string | null;
   kind: CatalogKind;
   license: string | null;
+  /** Not shown in the catalog (the library editor lists it) */
+  hidden: boolean;
+  /** Its items can be changed (libraries in the user's library folders) */
+  editable: boolean;
 };
 
 export type CatalogItem = {
   library: number;
+  /** Index of the item in its library (for the library_* commands) */
+  index: number;
   kind: CatalogKind;
   id: string | null;
   name: string;

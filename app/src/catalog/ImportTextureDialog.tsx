@@ -6,6 +6,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
+import { useUi } from "../ui/uiStore";
 import { formatFieldValue, parseLength, toUnit, unitSymbol, useUnit } from "../units";
 import CategoryField from "./CategoryField";
 import { extensionOf, TEXTURE_EXTENSIONS } from "./modelConvert";
@@ -110,6 +111,7 @@ export default function ImportTextureDialog({
         ...(creator.trim() && { creator: creator.trim() }),
         width: w,
         height: h,
+        ...(useUi.getState().libraryTarget ? { library: useUi.getState().libraryTarget } : {}),
       });
       onClose();
     } catch (e) {

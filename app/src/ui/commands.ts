@@ -628,33 +628,19 @@ const LIST: Command[] = [
   // Furniture
   {
     id: "furniture.import",
-    label: t("Import furniture…"),
+    label: t("Add to library…"),
     icon: "import",
-    hint: t("Import a 3D model (OBJ, DAE, 3DS, glTF, ...) into the catalog"),
-    run: () => useUi.getState().openDialog("importFurniture"),
-  },
-  {
-    id: "furniture.importTexture",
-    label: t("Import textures…"),
-    icon: "texture",
-    hint: t("Import an image or a PBR material package as texture into the catalog"),
-    keywords: "image webp tiff svg pbr material",
-    run: () => useUi.getState().openDialog("importTexture"),
-  },
-  {
-    id: "furniture.online",
-    label: t("Online catalogs…"),
-    icon: "search",
-    hint: t("Search and import free libraries, textures and models from the internet"),
-    keywords: "internet download ambientcg poly haven sweet home 3d library",
-    enabled: () => usePreferences.getState().onlineSources,
-    run: () => useUi.getState().openDialog("online"),
+    hint: t("Add 3D models, textures, libraries, online items or furniture of the home"),
+    keywords:
+      "import model obj dae 3ds gltf fbx texture image pbr material online internet ambientcg poly haven sh3f sh3t",
+    run: () => useUi.getState().openDialog("libraries", "add"),
   },
   {
     id: "furniture.libraries",
-    label: t("Furniture and texture libraries…"),
+    label: t("Libraries…"),
     icon: "library",
-    keywords: "sh3f sh3t catalog",
+    hint: t("Edit furniture and texture libraries: items, categories, names"),
+    keywords: "sh3f sh3t catalog edit category rename library editor",
     run: () => useUi.getState().openDialog("libraries"),
   },
   {
@@ -919,11 +905,7 @@ export const MENUS: Menu[] = [
         kind: "submenu",
         label: t("Import"),
         icon: "import",
-        entries: () => [
-          cmd("furniture.import"),
-          cmd("furniture.importTexture"),
-          cmd("plan.backgroundImport"),
-        ],
+        entries: () => [cmd("furniture.import"), cmd("plan.backgroundImport")],
       },
       cmd("file.print"),
       sep,
@@ -1015,8 +997,6 @@ export const MENUS: Menu[] = [
     label: t("Furniture"),
     entries: () => [
       cmd("furniture.import"),
-      cmd("furniture.importTexture"),
-      cmd("furniture.online"),
       cmd("furniture.libraries"),
       sep,
       cmd("furniture.group"),
