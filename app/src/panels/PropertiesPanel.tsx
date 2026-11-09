@@ -819,9 +819,14 @@ export default function PropertiesPanel() {
     return (
       <div className="props">
         <h2>{t("Wall")}</h2>
-        <p className="muted small">
-          {t("Length:")} {formatLength(length)}
-        </p>
+        {/* The length between the end points, the same the plan shows for the selected wall */}
+        <Field
+          label={t("Length")}
+          type="number"
+          unit="cm"
+          value={Math.round(length * 10) / 10}
+          onCommit={set("length")}
+        />
         <Field
           label={t("X start")}
           type="number"
@@ -1089,12 +1094,11 @@ export default function PropertiesPanel() {
         </h2>
         <p className="muted small">
           {t("Length:")}{" "}
-          {(
-            (a.x_start === a.x_end && a.y_start === a.y_end
+          {formatLength(
+            a.x_start === a.x_end && a.y_start === a.y_end
               ? Math.abs((a.elevation_end ?? 0) - (a.elevation_start ?? 0))
-              : Math.hypot(a.x_end - a.x_start, a.y_end - a.y_start)) / 100
-          ).toFixed(2)}{" "}
-          m
+              : Math.hypot(a.x_end - a.x_start, a.y_end - a.y_start),
+          )}
         </p>
         <Field
           label={t("X start")}

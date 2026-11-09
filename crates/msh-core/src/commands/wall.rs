@@ -63,6 +63,9 @@ struct UpdateParams {
     y_start: Option<f32>,
     x_end: Option<f32>,
     y_end: Option<f32>,
+    /// Length between the end points in cm: the start stays, the end moves along the wall
+    /// (not together with x_end / y_end)
+    length: Option<f32>,
     thickness: Option<f32>,
     height: Option<f32>,
     height_at_end: Option<f32>,
@@ -195,9 +198,11 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "wall_update",
-        "Changes coordinates, thickness, height, colors, textures, baseboards or pattern of a \
-         wall (or of several walls with ids; coordinates only for one wall). Joined walls keep their connection: when an end point moves, the touching end \
-         of the joined wall moves along.",
+        "Changes coordinates, length, thickness, height, colors, textures, baseboards or pattern \
+         of a wall (or of several walls with ids; coordinates only for one wall). Joined walls \
+         keep their connection: when an end point moves, the touching end of the joined wall \
+         moves along. A new length keeps the start and moves the wall joined at the end in \
+         parallel, so corners keep their angles.",
         true,
         |doc, p: UpdateParams| {
             let left_tex = texture_for(doc, non_empty(&p.left_side_texture), "leftSideTexture")?;
@@ -212,7 +217,7 @@ pub(super) fn register(r: &mut Registry) {
             }
             let targets = target_ids(p.id.clone(), p.ids.clone())?;
             if targets.len() > 1
-                && [p.x_start, p.y_start, p.x_end, p.y_end]
+                && [p.x_start, p.y_start, p.x_end, p.y_end, p.length]
                     .iter()
                     .any(Option::is_some)
             {
@@ -232,94 +237,159 @@ pub(super) fn register(r: &mut Registry) {
                 Vec::new()
             };
             for target in &targets {
-            let w = home
-                .walls
-                .iter_mut()
-                .find(|w| &w.attrs.id == target)
-                .ok_or_else(|| CommandError::failed(format!("unknown wall '{target}'")))?;
-            let a = &mut w.attrs;
-            let old_start = (a.x_start, a.y_start);
-            let old_end = (a.x_end, a.y_end);
-            macro_rules! set {
+                let w = home
+                    .walls
+                    .iter_mut()
+                    .find(|w| &w.attrs.id == target)
+                    .ok_or_else(|| CommandError::failed(format!("unknown wall '{target}'")))?;
+                let a = &mut w.attrs;
+                let old_start = (a.x_start, a.y_start);
+                let old_end = (a.x_end, a.y_end);
+                macro_rules! set {
                 ($($f:ident),*) => { $( if let Some(v) = p.$f { a.$f = v; } )* };
             }
-            set!(x_start, y_start, x_end, y_end, thickness);
-            if a.thickness <= 0.0 {
-                return Err(CommandError::failed("thickness must be positive"));
-            }
-            if let Some(v) = p.height {
-                a.height = Some(v);
-            }
-            if let Some(v) = p.height_at_end {
-                a.height_at_end = Some(v);
-            }
-            if let Some(v) = p.arc_extent_deg {
-                a.arc_extent = (v != 0.0).then(|| rad(v));
-            }
-            if let Some(c) = &p.left_side_color {
-                a.left_side_color = optional_color(c)?;
-            }
-            if let Some(c) = &p.right_side_color {
-                a.right_side_color = optional_color(c)?;
-            }
-            if let Some(v) = &p.pattern {
-                a.pattern = Some(v.clone());
-            }
-            for (role, tex, param) in [
-                ("leftSideTexture", left_tex.clone(), &p.left_side_texture),
-                ("rightSideTexture", right_tex.clone(), &p.right_side_texture),
-            ] {
-                if param.is_some() {
-                    w.textures.retain(|t| t.role.as_deref() != Some(role));
+                set!(x_start, y_start, x_end, y_end, thickness);
+                if let Some(length) = p.length {
+                    if p.x_end.is_some() || p.y_end.is_some() {
+                        return Err(CommandError::failed(
+                            "length cannot be combined with x_end / y_end",
+                        ));
+                    }
+                    if length <= 0.0 {
+                        return Err(CommandError::failed("length must be positive"));
+                    }
+                    let (dx, dy) = (old_end.0 - old_start.0, old_end.1 - old_start.1);
+                    let old_length = dx.hypot(dy);
+                    if old_length < 1e-3 {
+                        return Err(CommandError::failed("the wall has no direction"));
+                    }
+                    a.x_end = a.x_start + dx / old_length * length;
+                    a.y_end = a.y_start + dy / old_length * length;
                 }
-                w.textures.extend(tex);
-            }
-            for ((role, tex), params) in ["leftSideBaseboard", "rightSideBaseboard"]
-                .into_iter()
-                .zip(baseboard_tex.iter().cloned())
-                .zip([&p.left_side_baseboard, &p.right_side_baseboard])
-            {
-                if let Some(b) = params {
-                    update_baseboard(w, role, b, tex)?;
+                if a.thickness <= 0.0 {
+                    return Err(CommandError::failed("thickness must be positive"));
                 }
-            }
-            let id = w.attrs.id.clone();
-            let new_start = (w.attrs.x_start, w.attrs.y_start);
-            let new_end = (w.attrs.x_end, w.attrs.y_end);
-            let at_start = w.attrs.wall_at_start.clone();
-            let at_end = w.attrs.wall_at_end.clone();
-            // Joined walls follow moved end points
-            for (joined, old, new) in [
-                (at_start.clone(), old_start, new_start),
-                (at_end.clone(), old_end, new_end),
-            ] {
-                let Some(joined) = joined else { continue };
-                if old == new {
-                    continue;
+                if let Some(v) = p.height {
+                    a.height = Some(v);
                 }
-                if let Some(j) = home.walls.iter_mut().find(|w| w.attrs.id == joined) {
-                    move_joined_end(&mut j.attrs, &id, old, new);
+                if let Some(v) = p.height_at_end {
+                    a.height_at_end = Some(v);
                 }
-            }
-            // A free end moved onto a free end of another wall gets joined to it
-            let level = home
-                .walls
-                .iter()
-                .find(|w| w.attrs.id == id)
-                .and_then(|w| w.attrs.level.clone());
-            for (joined, at_start, old, new) in [
-                (&at_start, true, old_start, new_start),
-                (&at_end, false, old_end, new_end),
-            ] {
-                if joined.is_none() && old != new {
-                    join_free_end(home, &id, [new.0, new.1], at_start, &level);
+                if let Some(v) = p.arc_extent_deg {
+                    a.arc_extent = (v != 0.0).then(|| rad(v));
                 }
-            }
+                if let Some(c) = &p.left_side_color {
+                    a.left_side_color = optional_color(c)?;
+                }
+                if let Some(c) = &p.right_side_color {
+                    a.right_side_color = optional_color(c)?;
+                }
+                if let Some(v) = &p.pattern {
+                    a.pattern = Some(v.clone());
+                }
+                for (role, tex, param) in [
+                    ("leftSideTexture", left_tex.clone(), &p.left_side_texture),
+                    ("rightSideTexture", right_tex.clone(), &p.right_side_texture),
+                ] {
+                    if param.is_some() {
+                        w.textures.retain(|t| t.role.as_deref() != Some(role));
+                    }
+                    w.textures.extend(tex);
+                }
+                for ((role, tex), params) in ["leftSideBaseboard", "rightSideBaseboard"]
+                    .into_iter()
+                    .zip(baseboard_tex.iter().cloned())
+                    .zip([&p.left_side_baseboard, &p.right_side_baseboard])
+                {
+                    if let Some(b) = params {
+                        update_baseboard(w, role, b, tex)?;
+                    }
+                }
+                let id = w.attrs.id.clone();
+                let new_start = (w.attrs.x_start, w.attrs.y_start);
+                let new_end = (w.attrs.x_end, w.attrs.y_end);
+                let at_start = w.attrs.wall_at_start.clone();
+                let at_end = w.attrs.wall_at_end.clone();
+                // A new length moves the wall joined at the end in parallel (a rectangle stays
+                // rectangular, the arm of a U keeps its direction)
+                let parallel_end = p.length.is_some()
+                    && old_end != new_end
+                    && at_end.as_ref().is_some_and(|j| {
+                        shift_joined_wall(
+                            home,
+                            &id,
+                            j,
+                            (new_end.0 - old_end.0, new_end.1 - old_end.1),
+                        )
+                    });
+                // Joined walls follow moved end points
+                for (joined, old, new) in [
+                    (at_start.clone(), old_start, new_start),
+                    (at_end.clone().filter(|_| !parallel_end), old_end, new_end),
+                ] {
+                    let Some(joined) = joined else { continue };
+                    if old == new {
+                        continue;
+                    }
+                    if let Some(j) = home.walls.iter_mut().find(|w| w.attrs.id == joined) {
+                        move_joined_end(&mut j.attrs, &id, old, new);
+                    }
+                }
+                // A free end moved onto a free end of another wall gets joined to it
+                let level = home
+                    .walls
+                    .iter()
+                    .find(|w| w.attrs.id == id)
+                    .and_then(|w| w.attrs.level.clone());
+                for (joined, at_start, old, new) in [
+                    (&at_start, true, old_start, new_start),
+                    (&at_end, false, old_end, new_end),
+                ] {
+                    if joined.is_none() && old != new {
+                        join_free_end(home, &id, [new.0, new.1], at_start, &level);
+                    }
+                }
             }
             super::furniture::refit_openings(home, &old_thickness);
             Ok(updated(&targets))
         },
     );
+}
+
+/// Moves the wall `joined` (joined to wall `id`) by `delta` as a whole; the wall joined at
+/// its other end follows with its touching end. Returns false if `joined` does not exist.
+fn shift_joined_wall(
+    home: &mut msh_model::Home,
+    id: &str,
+    joined: &str,
+    delta: (f32, f32),
+) -> bool {
+    let Some(j) = home.walls.iter_mut().find(|w| w.attrs.id == joined) else {
+        return false;
+    };
+    let a = &mut j.attrs;
+    let far_is_end = a.wall_at_start.as_deref() == Some(id);
+    let old_far = if far_is_end {
+        (a.x_end, a.y_end)
+    } else {
+        (a.x_start, a.y_start)
+    };
+    a.x_start += delta.0;
+    a.y_start += delta.1;
+    a.x_end += delta.0;
+    a.y_end += delta.1;
+    let new_far = (old_far.0 + delta.0, old_far.1 + delta.1);
+    let next = if far_is_end {
+        a.wall_at_end.clone()
+    } else {
+        a.wall_at_start.clone()
+    };
+    if let Some(next) = next.filter(|n| n != id)
+        && let Some(k) = home.walls.iter_mut().find(|w| w.attrs.id == next)
+    {
+        move_joined_end(&mut k.attrs, joined, old_far, new_far);
+    }
+    true
 }
 
 /// Joins the start (or end) of the new wall `id` at `point` to an existing wall on

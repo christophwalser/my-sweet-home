@@ -252,6 +252,56 @@ fn copy_paste_duplicate_and_room_detection() {
     run(&r, &mut doc, "edit_undo", json!({}));
     assert_eq!(doc.home().walls[0].attrs.thickness, 20.0);
 
+    // The length keeps the start and moves the end along the wall; the wall joined at the
+    // end moves in parallel (same length and direction)
+    let w0 = doc.home().walls[0].attrs.clone();
+    let next_before = w0.wall_at_end.as_ref().map(|n| {
+        let a = &doc
+            .home()
+            .walls
+            .iter()
+            .find(|x| &x.attrs.id == n)
+            .unwrap()
+            .attrs;
+        (a.x_end - a.x_start, a.y_end - a.y_start)
+    });
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": w0.id, "length": 500 }),
+    );
+    let w = doc.home().walls[0].attrs.clone();
+    let (dx, dy) = (w0.x_end - w0.x_start, w0.y_end - w0.y_start);
+    let k = 500.0 / dx.hypot(dy);
+    assert_eq!((w.x_start, w.y_start), (w0.x_start, w0.y_start));
+    assert!((w.x_end - (w0.x_start + dx * k)).abs() < 1e-3);
+    assert!((w.y_end - (w0.y_start + dy * k)).abs() < 1e-3);
+    if let Some(next) = &w.wall_at_end {
+        let n = doc
+            .home()
+            .walls
+            .iter()
+            .find(|x| &x.attrs.id == next)
+            .unwrap();
+        let touches = |x: f32, y: f32| (x - w.x_end).abs() < 1e-3 && (y - w.y_end).abs() < 1e-3;
+        assert!(touches(n.attrs.x_start, n.attrs.y_start) || touches(n.attrs.x_end, n.attrs.y_end));
+        let (bx, by) = next_before.unwrap();
+        let (ax, ay) = (
+            n.attrs.x_end - n.attrs.x_start,
+            n.attrs.y_end - n.attrs.y_start,
+        );
+        assert!(
+            (ax - bx).abs() < 1e-3 && (ay - by).abs() < 1e-3,
+            "moved in parallel"
+        );
+    }
+    assert!(
+        r.execute(&mut doc, "wall_update", json!({ "id": w0.id, "length": 0 }))
+            .is_err()
+    );
+    run(&r, &mut doc, "edit_undo", json!({}));
+
     // Flipping the closed outline horizontally keeps it in place (symmetric) and keeps the
     // joins; a second flip restores the original coordinates
     let before: Vec<_> = doc.home().walls.iter().map(|w| w.attrs.clone()).collect();

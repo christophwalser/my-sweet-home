@@ -94,8 +94,8 @@ export function formatLength(cm: number, unit: LengthUnit = currentUnit()): stri
     case "inch":
       return feetInches(cm);
     default:
-      // Like Sweet Home 3D's centimeter unit: meters from 1 m on
-      return Math.abs(cm) >= 100 ? `${num(cm / 100, 2, 2)} m` : `${num(cm, 1, 1)} cm`;
+      // Always centimeters, like the input fields (no switch to meters from 1 m on)
+      return `${num(cm, DECIMALS.cm)} cm`;
   }
 }
 

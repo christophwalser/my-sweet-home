@@ -5,7 +5,8 @@
 
 import type { Home, Pt, WallShape } from "../model";
 import { usePreferences } from "../preferences";
-import { formatPrecise, unitSymbol } from "../units";
+import { formatLength, formatPrecise, unitSymbol } from "../units";
+import { type AutoDim, dimensionLine } from "./autoDims";
 import type { ViewTransform } from "./drawPlan";
 import { HANDLE_SHAPE, type Handle, type HandleDrag, lengthText } from "./handles";
 import { elementOutlines } from "./interaction";
@@ -49,7 +50,9 @@ export type PlanOverlay = {
   /** Free spaces beside a door or window being slid along its wall */
   gaps: [Pt, Pt][];
   /** Automatic dimensions of the selected wall or piece */
-  autoDims: [Pt, Pt][];
+  autoDims: AutoDim[];
+  /** Dimension being placed with the dimension tool (after its two points) */
+  dimensionDraft: AutoDim | null;
   /** Point the cursor snapped to */
   snap: Pt | null;
   /** Virtual visitor in the plan (position in cm, yaw and field of view in radians) */
@@ -348,7 +351,10 @@ export function drawOverlay(
 
   if (overlay.measure) drawMeasure(ctx, overlay.measure[0], overlay.measure[1], overlay.guide, px);
   for (const [a, b] of overlay.gaps) drawGap(ctx, a, b, overlay.guide, px);
-  for (const [a, b] of overlay.autoDims) drawGap(ctx, a, b, overlay.accent, px);
+  for (const d of overlay.autoDims) drawDimensionPreview(ctx, d, overlay.accent, px);
+  if (overlay.dimensionDraft) {
+    drawDimensionPreview(ctx, overlay.dimensionDraft, overlay.accent, px);
+  }
 
   // Rubber band
   if (overlay.rubberBand) {
@@ -456,7 +462,31 @@ function drawHandleIcon(
 }
 
 /** A free space beside a door or window: a line with end marks and its length. */
-function drawGap(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, color: string, px: number) {
+/** A dimension with its extension lines from the measured points to the dimension line. */
+function drawDimensionPreview(
+  ctx: CanvasRenderingContext2D,
+  d: AutoDim,
+  color: string,
+  px: number,
+): void {
+  const [a, b] = dimensionLine(d);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = px;
+  ctx.setLineDash([3 * px, 3 * px]);
+  strokePath(ctx, [d.start, a], false);
+  strokePath(ctx, [d.end, b], false);
+  ctx.setLineDash([]);
+  drawGap(ctx, a, b, color, px, formatLength(Math.hypot(b[0] - a[0], b[1] - a[1])));
+}
+
+function drawGap(
+  ctx: CanvasRenderingContext2D,
+  a: Pt,
+  b: Pt,
+  color: string,
+  px: number,
+  text?: string,
+) {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const len = Math.hypot(dx, dy);
@@ -477,7 +507,7 @@ function drawGap(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, color: string, px:
       false,
     );
   }
-  drawCenteredTag(ctx, formatPrecise(len), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);
+  drawCenteredTag(ctx, text ?? formatPrecise(len), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);
 }
 
 /** Number with at most one decimal. */

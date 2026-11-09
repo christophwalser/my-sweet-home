@@ -32,7 +32,7 @@ import { registerPlanActions } from "../ui/planBridge";
 import { useDarkMode } from "../ui/uiStore";
 import { fromUnit, unitSymbol } from "../units";
 import { levelOfEye } from "../view3d/visitor";
-import { autoDimensions, dimensionLine } from "./autoDims";
+import { autoDimensions } from "./autoDims";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
 import {
   drawPlan,
@@ -290,6 +290,8 @@ export default function PlanView() {
   const snapState = useRef<Snapped | null>(null);
   const snapHints = useRef<{ pt: Pt; label: string }[] | null>(null);
   const typed = useRef<string | null>(null);
+  /** Dimension tool: offset of the dimension line while it is placed (after two points) */
+  const dimOffset = useRef<number | null>(null);
   const hoverHandle = useRef<Handle | null>(null);
 
   const input: PlanInput | null = useMemo(() => {
@@ -421,6 +423,10 @@ export default function PlanView() {
             )
           : t("Click the first point");
       case "dimension":
+        if (dimOffset.current !== null)
+          return t(
+            "Move the mouse to place the dimension line, click to finish · or type its distance + Enter · Esc to cancel",
+          );
         return drawing
           ? t("Click the end point, or type a length + Enter · Esc to cancel")
           : t("Click the start point, or drag");
@@ -486,12 +492,17 @@ export default function PlanView() {
       // Size of the selected wall or piece while nothing is dragged
       autoDims:
         tool === "select" && sel.length === 1 && !g
-          ? autoDimensions(input.home, input.wallShapes, sel[0]).map(dimensionLine)
+          ? autoDimensions(input.home, input.wallShapes, sel[0])
           : [],
+      dimensionDraft:
+        tool === "dimension" && dimOffset.current !== null && draft.current.length === 2
+          ? { start: draft.current[0], end: draft.current[1], offset: dimOffset.current }
+          : null,
       selectionJoints: tool === "select" ? selectionJoints(input.home, sel) : [],
       wallSides: tool === "select" ? selectedWallSides(input, sel, highlightSide) : null,
+      // A dimension being placed shows as dimensionDraft instead
       draft:
-        drawing && points.length > 0
+        drawing && points.length > 0 && dimOffset.current === null
           ? { points, kind: draftKind(tool), thickness: wallThickness }
           : null,
       guides:
@@ -604,6 +615,7 @@ export default function PlanView() {
     draft.current = [];
     snapState.current = null;
     typed.current = null;
+    dimOffset.current = null;
     measure.current = null;
     draw();
   }, [tool]);
@@ -663,11 +675,14 @@ export default function PlanView() {
     cursor.current = null;
     snapState.current = null;
     typed.current = null;
+    dimOffset.current = null;
+    setHint(hintText());
   };
 
   /** Finishes the drawing: keeps it if it has enough points, otherwise discards it. */
   const finishDraft = async () => {
     const pts = draft.current;
+    const offset = dimOffset.current;
     resetDraft();
     draw();
     if (!isPathTool(tool) || pts.length < MIN_POINTS[draftKind(tool)]) return;
@@ -691,11 +706,14 @@ export default function PlanView() {
     } else if (tool === "polyline") {
       result = await run("polyline_add", { points, closed, ...levelParam() });
     } else if (tool === "dimension") {
+      // Only a placed dimension is added (Esc while placing cancels it)
+      if (offset === null) return;
       result = await run("dimension_add", {
         x_start: first[0],
         y_start: first[1],
         x_end: last[0],
         y_end: last[1],
+        offset,
         ...levelParam(),
       });
     }
@@ -737,10 +755,21 @@ export default function PlanView() {
     }
     pts.push(p);
     if (tool === "dimension" && pts.length === 2) {
-      await finishDraft();
-      return;
+      // The end point is set: now the mouse places the dimension line, a click finishes it
+      cursor.current = null;
+      dimOffset.current = mouseWorld.current ? offsetAt(mouseWorld.current) : 0;
+      setHint(hintText());
     }
     draw();
+  };
+
+  /** Dimension tool: offset of the dimension line through the point (whole cm). */
+  const offsetAt = (p: Pt): number => {
+    const [s, e] = draft.current;
+    const dx = e[0] - s[0];
+    const dy = e[1] - s[1];
+    const len = Math.hypot(dx, dy) || 1;
+    return Math.round(((p[0] - s[0]) * -dy + (p[1] - s[1]) * dx) / len);
   };
 
   /** Adds the point at the typed length in the direction of the cursor. */
@@ -748,6 +777,14 @@ export default function PlanView() {
     const pts = draft.current;
     const length = fromUnit(Number.parseFloat((typed.current ?? "").replace(",", ".")));
     typed.current = null;
+    if (dimOffset.current !== null) {
+      // Placing a dimension: the typed distance on the side of the mouse
+      if (Number.isFinite(length) && length >= 0) {
+        dimOffset.current = dimOffset.current < 0 ? -length : length;
+        void finishDraft();
+      } else draw();
+      return;
+    }
     if (pts.length === 0 || !Number.isFinite(length) || length <= 0) {
       draw();
       return;
@@ -902,6 +939,9 @@ export default function PlanView() {
           if (id) setSelection([id]);
         });
       }
+    } else if (tool === "dimension" && dimOffset.current !== null) {
+      dimOffset.current = offsetAt(p);
+      void finishDraft();
     } else {
       const s = snapped(p, e.altKey, e.shiftKey);
       if (draft.current.length === 0) {
@@ -1033,6 +1073,9 @@ export default function PlanView() {
       draw();
     } else if (g2?.kind === "band") {
       g2.end = p;
+      draw();
+    } else if (tool === "dimension" && dimOffset.current !== null) {
+      dimOffset.current = offsetAt(p);
       draw();
     } else if (isPathTool(tool)) {
       // Before the first click the snap marker and guides already show where it lands
@@ -1572,6 +1615,9 @@ export default function PlanView() {
       return true;
     } else if (e.key === "Escape" && typed.current !== null) {
       typed.current = null;
+    } else if (e.key === "Escape" && drawing && dimOffset.current !== null) {
+      // Escape while placing a dimension cancels it
+      resetDraft();
     } else if (e.key === "Escape" && drawing) {
       // Escape keeps what was drawn (if it is complete), like Enter
       void finishDraft();

@@ -881,6 +881,20 @@ furniture is read by its home reader.
   from `TAURI_SIGNING_PRIVATE_KEY` or `%USERPROFILE%\.msh\updater.key` (created on first use,
   never in the repository). The updater plugin is added once the update source is decided.
 
+### 4.37 Wall length and dimension placement (2026-11-09)
+
+- Walls have one length: the distance between their end points (the axis), the same value
+  as the coordinates. The properties panel edits it (`wall_update` with `length`: the start
+  stays, the end moves along the wall, and the wall joined at the end moves in parallel, so
+  corners keep their angles). The selected wall shows exactly this length as a single
+  dimension with extension lines, on the side away from its joined walls; "Add dimensions
+  of the wall" adds that dimension. The lengths of both faces are no longer shown.
+- Dimension tool: start click, end click, then the mouse places the dimension line (left
+  or right, any distance), a third click finishes it; a typed number + Enter sets the
+  distance, Esc cancels.
+- With the centimeter unit, lengths are always shown in cm (dimension lines, panels,
+  previews), no switch to meters from 1 m on.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

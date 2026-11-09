@@ -732,5 +732,7 @@
   "Drop here to move into a new category…": "Hier ablegen, um in eine neue Kategorie zu verschieben…",
   "Show the library's items in the catalog": "Einträge der Bibliothek im Katalog anzeigen",
   "Shown": "Sichtbar",
-  "Show {name} in the catalog": "{name} im Katalog anzeigen"
+  "Show {name} in the catalog": "{name} im Katalog anzeigen",
+  "Length": "Länge",
+  "Move the mouse to place the dimension line, click to finish · or type its distance + Enter · Esc to cancel": "Maus bewegen, um die Maßlinie zu platzieren, Klick zum Abschließen · oder Abstand eintippen + Enter · Esc zum Abbrechen"
 }
