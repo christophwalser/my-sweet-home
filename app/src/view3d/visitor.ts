@@ -26,6 +26,8 @@ export const MIN_FOV = THREE.MathUtils.degToRad(20);
 export const MAX_FOV = THREE.MathUtils.degToRad(120);
 /** Height that can be stepped over (cm), e.g. low walls or a threshold. */
 const STEP = 30;
+/** Half the size of the feet on the steps (cm). */
+const FOOT = 8;
 
 /** An obstacle in the plan: a wall polygon with its vertical extent. */
 type Obstacle = { poly: Pt[]; bottom: number; top: number };
@@ -106,16 +108,36 @@ function rampHeight(r: Ramp, p: Pt): number | null {
  */
 export function groundAt(c: Colliders, p: Pt, eye: number, previous: number): number {
   const stairs = c.ramps.filter((r) => rampHeight(r, p) !== null);
-  const surfaces = stairs.length > 0 ? (c.stepSurfaces?.(p) ?? null) : null;
+  // The feet cover a small area: small gaps between steps or at the edge of a stairwell
+  // do not let the visitor fall
+  const feet: Pt[] = [
+    p,
+    ...[
+      [FOOT, 0],
+      [-FOOT, 0],
+      [0, FOOT],
+      [0, -FOOT],
+    ].map(([dx, dy]) => [p[0] + dx, p[1] + dy] as Pt),
+  ];
+  let surfaces: number[] | null = null;
+  if (stairs.length > 0 && c.stepSurfaces) {
+    for (const q of feet) {
+      const found = c.stepSurfaces(q);
+      if (!found) {
+        surfaces = null;
+        break;
+      }
+      surfaces = [...(surfaces ?? []), ...found];
+    }
+  }
   if (surfaces) {
     // On the real steps (any shape, e.g. spiral staircases): the highest surface at most a
     // step above the feet, a step of the model or a floor where no stairwell is cut into it
-    const floors = c.floors.filter(
-      (f) =>
-        !stairs.some(
-          (r) => f > r.bottom + 1 && f <= r.top + 1 && r.holes.some((h) => pointInPolygon(p, h)),
-        ),
-    );
+    const inHole = (f: number, q: Pt) =>
+      stairs.some(
+        (r) => f > r.bottom + 1 && f <= r.top + 1 && r.holes.some((h) => pointInPolygon(q, h)),
+      );
+    const floors = c.floors.filter((f) => feet.some((q) => !inHole(f, q)));
     let top = Number.NEGATIVE_INFINITY;
     for (const h of [...surfaces, ...floors]) if (h <= previous + STEP && h > top) top = h;
     if (top > Number.NEGATIVE_INFINITY) return top;
