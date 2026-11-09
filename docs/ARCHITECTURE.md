@@ -895,6 +895,21 @@ furniture is read by its home reader.
 - With the centimeter unit, lengths are always shown in cm (dimension lines, panels,
   previews), no switch to meters from 1 m on.
 
+### 4.38 Logo and icons (2026-11-09)
+
+- Logo: isometric house (white gable with door and window, coral roof, chimney) with a
+  dimension line along the side wall, on a dark blue rounded tile; it stands for 3D view and
+  planning. Masters in `app/src-tauri/icons/source/`: `logo.svg` (48 px and larger),
+  `logo-small.svg` (16–32 px, without the dimension line, which is too fine there) and the
+  `.sh3d` file icon (`file-sh3d*.svg`: page with the logo).
+- `node scripts/build-icons.mjs` (in `app/`) generates everything from them: the Tauri icon
+  set, `icon.ico` (exe, window, taskbar, shortcuts) and `sh3d-file.ico` with small and large
+  images mixed, and `public/favicon.svg`. It touches `build.rs`, because Cargo does not
+  notice changed icons.
+- The MSI installs `sh3d-file.ico` and sets it as `DefaultIcon` of the advertised ProgId
+  `My Sweet Home.sh3d` (WiX fragment `wix/cli-path.wxs`), because Tauri registers file
+  associations without an icon of their own.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

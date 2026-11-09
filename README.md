@@ -116,6 +116,7 @@ bar at the bottom of the plan explains the next step.
 ```powershell
 cd app
 ..\scripts\build-installer.ps1  # MSI with default catalog and CLI in target\release\bundle\msi
+node scripts\build-icons.mjs    # all icons from the SVG masters in src-tauri\icons\source
 ```
 
 ## CLI (`msh`)

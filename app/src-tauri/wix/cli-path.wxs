@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adds the installation folder to the system PATH, so the CLI `msh` (installed next to
-     the app) can be run from any shell and configured as MCP server. Removed on uninstall. -->
+<!-- Additions to Tauri's MSI: the installation folder in the system PATH, so the CLI `msh`
+     (installed next to the app) can be run from any shell and configured as MCP server, and
+     the icon of .sh3d files. Both are removed on uninstall. -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
     <DirectoryRef Id="INSTALLDIR">
@@ -8,6 +9,13 @@
         <CreateFolder />
         <Environment Id="MshCliPathEntry" Name="PATH" Value="[INSTALLDIR]" Action="set"
                      Part="last" System="yes" Permanent="no" />
+      </Component>
+      <!-- Own icon for .sh3d files. Tauri registers the file association as advertised ProgId
+           "<productName>.sh3d" without an icon; this adds its DefaultIcon (the icon file is
+           installed as resource, see tauri.installer.conf.json). -->
+      <Component Id="MshFileIcon" Guid="9D4A7B21-3E6C-4C58-A1F0-2B7E5C8D9A13">
+        <RegistryValue Root="HKCR" Key="My Sweet Home.sh3d\DefaultIcon" Type="string"
+                       Value="&quot;[INSTALLDIR]icons\sh3d-file.ico&quot;,0" KeyPath="yes" />
       </Component>
     </DirectoryRef>
   </Fragment>

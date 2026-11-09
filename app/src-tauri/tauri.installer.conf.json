@@ -7,7 +7,8 @@
     "category": "GraphicsAndDesign",
     "externalBin": ["binaries/msh"],
     "resources": {
-      "resources/catalog/": "catalog/"
+      "resources/catalog/": "catalog/",
+      "icons/sh3d-file.ico": "icons/sh3d-file.ico"
     },
     "fileAssociations": [
       {
@@ -22,7 +23,7 @@
       "webviewInstallMode": { "type": "embedBootstrapper" },
       "wix": {
         "fragmentPaths": ["wix/cli-path.wxs"],
-        "componentRefs": ["MshCliPath"]
+        "componentRefs": ["MshCliPath", "MshFileIcon"]
       }
     }
   }
