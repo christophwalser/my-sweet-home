@@ -1115,6 +1115,12 @@ drawn): example home 226 → 66 ms, a real home with 47 pieces and 48 walls 152 
   of our own (`help/markdown.ts`) builds plain objects that React renders, so no HTML from
   the text reaches the page. Long help texts live in these files rather than in `de.json`;
   a test checks that every language has the same topics and sections.
+- French and Italian user interface (`i18n/fr.json`, `i18n/it.json`, machine translated with
+  the terms of the French and Italian Sweet Home 3D; key names Maj / Maiusc, Suppr / Canc).
+  "Like Windows" picks them from the system language; number formats use the region of
+  Windows when it speaks the language, else fr-FR / it-IT. The catalog shows `_fr` / `_it`
+  names where the libraries have them. The user guide is English in these languages.
+  `i18n-check.mjs` checks all three translation files.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

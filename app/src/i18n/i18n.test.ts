@@ -27,9 +27,18 @@ describe("language choice", () => {
   });
 
   it("ignores unknown stored languages", async () => {
-    const i18n = await load("fr");
+    const i18n = await load("tlh");
     expect(i18n.languageChoice()).toBe("system");
     expect(i18n.language()).toBe("en");
+  });
+
+  it("offers French and Italian, also from the system language", async () => {
+    expect((await load("fr")).language()).toBe("fr");
+    const it2 = await load(null, "it-CH");
+    expect(it2.language()).toBe("it");
+    expect(it2.locale()).toBe("it-CH");
+    expect(it2.t("Save as…")).toBe("Salva con nome…");
+    expect((await load("fr", "de-DE")).locale()).toBe("fr-FR");
   });
 
   it("follows a German system language", async () => {

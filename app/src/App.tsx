@@ -455,7 +455,7 @@ export default function App() {
         <section className="view3d" style={{ flex: view3dFlex }}>
           {!detached && (
             <>
-              <ErrorBoundary name="3D view" resetKey={opened}>
+              <ErrorBoundary name={t("3D view")} resetKey={opened}>
                 <View3D />
               </ErrorBoundary>
               <span className="pane-buttons view3d-buttons">

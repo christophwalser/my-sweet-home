@@ -139,7 +139,6 @@
   "Compass": "Kompass",
   "Connected: {furniture} furniture items, {textures} texture items": "Verbunden: {furniture} Möbel-Einträge, {textures} Textur-Einträge",
   "Copy": "Kopieren",
-  "could not be shown.": "konnte nicht angezeigt werden.",
   "Create": "Erstellen",
   "Create a photo of the current view (draft or path traced)": "Ein Foto der aktuellen Ansicht erstellen (Entwurf oder Path Tracing)",
   "Create a video along a camera path": "Ein Video entlang eines Kamerapfads erstellen",
@@ -645,7 +644,6 @@
   "Text size": "Textgröße",
   "Texture": "Textur",
   "Textures": "Texturen",
-  "The": "Die Komponente",
   "The 3D view is open in a separate window": "Die 3D-Ansicht ist in einem separaten Fenster offen",
   "The home has no visitor yet.": "Das Haus hat noch keinen Besucher.",
   "The model has no named materials.": "Das Modell hat keine benannten Materialien.",
@@ -865,5 +863,6 @@
   "Header and footer may contain $pageNumber, $pageCount, $planScale, $name, $file, $date and $time. An empty footer prints the name and page number.": "Kopf- und Fußzeile können $pageNumber, $pageCount, $planScale, $name, $file, $date und $time enthalten. Eine leere Fußzeile druckt Name und Seitenzahl.",
   "User guide": "Handbuch",
   "Topics": "Themen",
-  "Search the guide": "Handbuch durchsuchen"
+  "Search the guide": "Handbuch durchsuchen",
+  "{name} could not be shown.": "{name} konnte nicht angezeigt werden."
 }

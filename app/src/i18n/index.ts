@@ -7,28 +7,46 @@
 // option lists) are translated too.
 
 import de from "./de.json";
+import fr from "./fr.json";
+import it from "./it.json";
 
-export type Language = "en" | "de";
+export type Language = "en" | "de" | "fr" | "it";
 export type LanguageChoice = "system" | Language;
 
 export const LANGUAGES: { id: LanguageChoice; label: string }[] = [
   { id: "system", label: "Like Windows" },
   { id: "en", label: "English" },
   { id: "de", label: "Deutsch" },
+  { id: "fr", label: "Français" },
+  { id: "it", label: "Italiano" },
 ];
 
 const TRANSLATIONS: Record<Language, Record<string, string>> = {
   en: {},
   de: de as Record<string, string>,
+  fr: fr as Record<string, string>,
+  it: it as Record<string, string>,
+};
+
+/** Region used for number and date formats when Windows speaks another language. */
+const DEFAULT_LOCALE: Record<Language, string> = {
+  en: "en-US",
+  de: "de-DE",
+  fr: "fr-FR",
+  it: "it-IT",
 };
 
 const KEY = "msh.language";
+
+function isLanguage(v: string | null): v is Language {
+  return v !== null && v in DEFAULT_LOCALE;
+}
 
 /** The language chosen in the preferences (or "system"). */
 export function languageChoice(): LanguageChoice {
   try {
     const v = localStorage.getItem(KEY);
-    return v === "en" || v === "de" ? v : "system";
+    return isLanguage(v) ? v : "system";
   } catch {
     return "system";
   }
@@ -36,7 +54,8 @@ export function languageChoice(): LanguageChoice {
 
 function resolve(choice: LanguageChoice): Language {
   if (choice !== "system") return choice;
-  return navigator.language.toLowerCase().startsWith("de") ? "de" : "en";
+  const system = navigator.language.toLowerCase().slice(0, 2);
+  return isLanguage(system) ? system : "en";
 }
 
 let current: Language = resolve(languageChoice());
@@ -53,7 +72,7 @@ export function language(): Language {
 export function locale(): string {
   const system = navigator.language;
   if (system.toLowerCase().startsWith(current)) return system;
-  return current === "de" ? "de-DE" : "en-US";
+  return DEFAULT_LOCALE[current];
 }
 
 /** Sets the language and reloads all windows of the app (they share the local storage). */
@@ -114,6 +133,8 @@ export function formatDateTime(date: Date): string {
 const KEY_NAMES: Record<Language, Record<string, string>> = {
   en: {},
   de: { Ctrl: "Strg", Shift: "Umschalt", Del: "Entf", Esc: "Esc", Space: "Leertaste" },
+  fr: { Shift: "Maj", Del: "Suppr", Esc: "Échap", Space: "Espace" },
+  it: { Shift: "Maiusc", Del: "Canc", Esc: "Esc", Space: "Spazio" },
 };
 
 /** A shortcut like "Ctrl+Shift+S" in the notation of the language. */

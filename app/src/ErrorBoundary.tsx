@@ -36,9 +36,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children;
     return (
       <div className="error-boundary" role="alert">
-        <strong>
-          {t("The")} {this.props.name} {t("could not be shown.")}
-        </strong>
+        <strong>{t("{name} could not be shown.", { name: this.props.name })}</strong>
         <code>{error.message}</code>
         {error.stack && <pre>{error.stack.split("\n").slice(0, 6).join("\n")}</pre>}
         <button type="button" onClick={() => this.setState({ error: null })}>

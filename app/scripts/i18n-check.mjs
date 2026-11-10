@@ -8,7 +8,7 @@ import path from "node:path";
 import ts from "typescript";
 
 const SRC = path.resolve("src");
-const LANGUAGES = ["de"];
+const LANGUAGES = ["de", "fr", "it"];
 /** Texts that stay the same in every language (names, units, shortcuts of other keys). */
 const SAME = new Set(["My Sweet Home", "Sweet Home 3D", "Sweet Home 3D (Store)", "Tab", "cm", "cm ·", "km/h", "px", "px ·"]);
 

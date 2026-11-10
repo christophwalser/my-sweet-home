@@ -103,7 +103,7 @@ export default function View3DWindow() {
         {!opened && <span className="muted">{t("No home open")}</span>}
       </header>
       <section className="view3d">
-        <ErrorBoundary name="3D view" resetKey={opened}>
+        <ErrorBoundary name={t("3D view")} resetKey={opened}>
           <View3D />
         </ErrorBoundary>
       </section>
