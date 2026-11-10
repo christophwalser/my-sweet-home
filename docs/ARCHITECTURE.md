@@ -1122,6 +1122,27 @@ drawn): example home 226 → 66 ms, a real home with 47 pieces and 48 walls 152 
   names where the libraries have them. The user guide is English in these languages.
   `i18n-check.mjs` checks all three translation files.
 
+### 4.47 Memory and startup measured (2026-11-10)
+
+Release build on Windows 11 (RTX 2070), the same home (47 pieces, 48 walls, 2 levels) opened
+by double click; time until the window title shows the home, memory 15 s later, summed over
+the process tree (the app and its WebView2 processes; Sweet Home 3D 7.6.1 is one Java process).
+
+| | My Sweet Home | Sweet Home 3D |
+|---|---|---|
+| Start until the home is shown | 1.0–2.0 s | 6.6–8.4 s |
+| Private working set (RAM used only by the program) | 206–210 MB | 283 MB |
+| Without a home / example home with 132 pieces | 109 MB / 288 MB | – |
+
+- The goal of section 1 (< 2 s start) is met; < 150 MB RAM is not: WebView2 alone needs
+  ~100 MB before a home is open, and the page grows with the models (their geometry stays in
+  JavaScript for picking, collisions and wall cuts). The Rust core needs 12 MB.
+- The GPU process commits ~400 MB of private memory on this NVIDIA driver, of which only
+  ~90 MB are resident; Chromium flags limiting GPU memory changed nothing. The furniture top
+  views and the 3D quality preference make no measurable difference.
+- Working set without "private" double-counts pages shared between the WebView2 processes
+  and is therefore not compared.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
