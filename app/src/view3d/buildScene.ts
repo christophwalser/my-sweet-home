@@ -263,12 +263,81 @@ function openingBrush(p: Piece, baseY: number, depth: number, materials: THREE.M
   return brush;
 }
 
-/** Walls of the visible levels with textures, baseboards and door/window openings. */
+/**
+ * Geometries of walls and baseboards with their door and window openings cut out, kept from
+ * one build of the scene to the next: cutting the openings is the slowest part of a rebuild,
+ * and most changes (moving a piece, a texture) leave the walls as they are. A geometry is
+ * looked up by everything that shapes it, so a changed wall or opening is cut again.
+ * The cache owns its geometries (`userData.wallCache`): `disposeObject` leaves them alone.
+ */
+export class WallGeometryCache {
+  private entries = new Map<string, THREE.BufferGeometry>();
+  private used = new Map<string, THREE.BufferGeometry>();
+  /** Number of geometries built (not found) since the cache was created; for tests. */
+  built = 0;
+
+  /** The geometry of `key`, from the last build or built now by `build`. */
+  get(key: string, build: () => THREE.BufferGeometry): THREE.BufferGeometry {
+    let geometry = this.used.get(key) ?? this.entries.get(key);
+    if (!geometry) {
+      geometry = build();
+      geometry.userData.wallCache = true;
+      this.built++;
+    }
+    this.used.set(key, geometry);
+    return geometry;
+  }
+
+  /** Ends a build: frees the geometries that it no longer uses. */
+  commit(): void {
+    for (const [key, geometry] of this.entries) {
+      if (!this.used.has(key)) geometry.dispose();
+    }
+    this.entries = this.used;
+    this.used = new Map();
+  }
+
+  /** Frees all geometries (another home, or the 3D view is closed). */
+  clear(): void {
+    for (const geometry of new Set([...this.entries.values(), ...this.used.values()])) {
+      geometry.dispose();
+    }
+    this.entries.clear();
+    this.used.clear();
+  }
+}
+
+/** Attributes of a door or window that shape its wall opening (see `openingBrush`). */
+function openingKey(p: Piece): unknown[] {
+  const a = p.attrs;
+  return [
+    a.x,
+    a.y,
+    a.elevation,
+    a.angle,
+    a.width,
+    a.height,
+    a.depth,
+    a.wall_width,
+    a.wall_height,
+    a.wall_left,
+    a.wall_top,
+    a.cut_out_shape,
+    a.model_mirrored,
+  ];
+}
+
+/**
+ * Walls of the visible levels with textures, baseboards and door/window openings. With a
+ * `cache`, unchanged wall geometries of the last build are reused (call `cache.commit()`
+ * after the build).
+ */
 export function buildWalls(
   opened: OpenedHome,
   levels: Map<string | null, LevelInfo>,
   shown: Set<string | null>,
   requestRender: () => void,
+  cache?: WallGeometryCache,
 ): THREE.Group {
   const { home, wallShapes } = opened;
   const group = new THREE.Group();
@@ -285,32 +354,58 @@ export function buildWalls(
   });
   const maxThickness = Math.max(1, ...home.walls.map((w) => w.attrs.thickness));
 
-  /** Subtracts the door and window openings of `level` from a wall or baseboard. */
+  const cutDepth = (p: Piece) => p.attrs.depth + 2 * maxThickness + 10;
+  /** Bounds of the cut of each opening (they do not depend on the wall's materials). */
+  const cutBoxes = new Map<string, THREE.Box3>();
+  const cutBox = (p: Piece, index: number, baseY: number): THREE.Box3 => {
+    const k = `${index}|${baseY}`;
+    let box = cutBoxes.get(k);
+    if (!box) {
+      box = new THREE.Box3().setFromObject(openingBrush(p, baseY, cutDepth(p), []));
+      cutBoxes.set(k, box);
+    }
+    return box;
+  };
+
+  /**
+   * Subtracts the door and window openings of `level` from a wall or baseboard. `key`
+   * describes `geom` completely; with the openings that touch it, it finds the cut
+   * geometry of an earlier build.
+   */
   const cutOpenings = (
     geom: THREE.BufferGeometry,
     materials: THREE.Material[],
     level: string | null,
     baseY: number,
+    key: string,
   ): THREE.BufferGeometry => {
-    let brush = new Brush(geom, materials);
-    brush.updateMatrixWorld();
     const box = new THREE.Box3().setFromBufferAttribute(
       geom.getAttribute("position") as THREE.BufferAttribute,
     );
-    for (const p of openings) {
-      if (p.attrs.level !== level) continue;
-      const cut = openingBrush(p, baseY, p.attrs.depth + 2 * maxThickness + 10, materials);
-      const cutBox = new THREE.Box3().setFromObject(cut);
-      if (!cutBox.intersectsBox(box)) continue;
-      try {
-        brush = evaluator.evaluate(brush, cut, SUBTRACTION) as Brush;
-      } catch (e) {
-        // A failed cut leaves the wall closed instead of failing the 3D view
-        console.warn(`wall opening of ${p.attrs.name} skipped:`, e);
-      }
+    const cuts: Piece[] = [];
+    openings.forEach((p, index) => {
+      if (p.attrs.level === level && cutBox(p, index, baseY).intersectsBox(box)) cuts.push(p);
+    });
+    const cut = (): THREE.BufferGeometry => {
+      let brush = new Brush(geom, materials);
       brush.updateMatrixWorld();
-    }
-    return brush.geometry;
+      for (const p of cuts) {
+        try {
+          brush = evaluator.evaluate(
+            brush,
+            openingBrush(p, baseY, cutDepth(p), materials),
+            SUBTRACTION,
+          ) as Brush;
+        } catch (e) {
+          // A failed cut leaves the wall closed instead of failing the 3D view
+          console.warn(`wall opening of ${p.attrs.name} skipped:`, e);
+        }
+        brush.updateMatrixWorld();
+      }
+      return brush.geometry;
+    };
+    if (!cache) return cut();
+    return cache.get(JSON.stringify([key, level, baseY, maxThickness, cuts.map(openingKey)]), cut);
   };
 
   const lowestElevation = Math.min(...home.levels.map((l) => l.attrs.elevation));
@@ -351,8 +446,11 @@ export function buildWalls(
       level && a.level !== null && level.elevation !== lowestElevation
         ? Math.max(0, level.floorThickness + LEVEL_WALL_OVERLAP)
         : 0;
-    const geom = prismGeometry(poly, kinds, baseY - drop, (p) => heightAt(p) + drop, axis);
-    const mesh = new THREE.Mesh(cutOpenings(geom, materials, a.level, baseY), materials);
+    const wallHeightAt = (p: Pt) => heightAt(p) + drop;
+    const geom = prismGeometry(poly, kinds, baseY - drop, wallHeightAt, axis);
+    // The prism only evaluates the heights at the polygon's points; three distinct materials
+    const key = JSON.stringify(["wall", poly, kinds, baseY - drop, poly.map(wallHeightAt), axis]);
+    const mesh = new THREE.Mesh(cutOpenings(geom, materials, a.level, baseY, key), materials);
     mesh.name = `wall:${a.id}`;
     group.add(mesh);
 
@@ -374,7 +472,12 @@ export function buildWalls(
       const bbKinds = outline.poly.map((_, j) => (j >= half && j < n - 1 ? EDGE_LEFT : EDGE_OTHER));
       const height = Math.min(bb.attrs.height, Math.min(h0, h1));
       const bbGeom = prismGeometry(outline.poly, bbKinds, baseY, () => height, axis);
-      const bbMesh = new THREE.Mesh(cutOpenings(bbGeom, bbMaterials, a.level, baseY), bbMaterials);
+      // One material in all three slots
+      const bbKey = JSON.stringify(["baseboard", outline.poly, bbKinds, baseY, height, axis]);
+      const bbMesh = new THREE.Mesh(
+        cutOpenings(bbGeom, bbMaterials, a.level, baseY, bbKey),
+        bbMaterials,
+      );
       bbMesh.name = `baseboard:${a.id}:${side}`;
       group.add(bbMesh);
     }

@@ -28,6 +28,7 @@ import {
   lightColor,
   skyColor,
   visibleLevels,
+  WallGeometryCache,
 } from "./buildScene";
 import { applyPose, type CameraPose, cameraDirection, cameraPose, verticalFov } from "./camera";
 import type { Lens } from "./lens";
@@ -144,6 +145,10 @@ export default function View3D() {
     sky: THREE.Object3D | null;
     hfov: number;
     requestRender: () => void;
+    /** Wall geometries kept from one rebuild to the next */
+    walls: WallGeometryCache;
+    /** Replaced content, freed after the next frame (see `retire`) */
+    trash: THREE.Object3D[];
   } | null>(null);
 
   // Renderer, camera and controls live as long as the component
@@ -200,6 +205,7 @@ export default function View3D() {
     const pivotMarker = buildPivotMarker();
     scene.add(pivotMarker.group);
 
+    const trash: THREE.Object3D[] = [];
     let frame = 0;
     const render = () => {
       frame = 0;
@@ -212,6 +218,9 @@ export default function View3D() {
       }
       pivotMarker.group.visible = marked;
       renderer.render(scene, camera);
+      // The new content now uses the shader programs: freeing the replaced content's
+      // materials no longer makes three.js compile them again
+      for (const o of trash.splice(0)) disposeObject(o);
       pivotMarker.group.visible = false;
       placePivot();
     };
@@ -289,6 +298,8 @@ export default function View3D() {
       sky: null,
       hfov: Math.PI / 3,
       requestRender,
+      walls: new WallGeometryCache(),
+      trash,
     };
     ctx.current = state;
     visitor.onChange = (pose) => {
@@ -325,6 +336,8 @@ export default function View3D() {
       visitor.dispose();
       disposeObject(content);
       disposeObject(lamps);
+      for (const o of trash.splice(0)) disposeObject(o);
+      state.walls.clear();
       clearModelCache();
       renderer.dispose();
       renderer.domElement.remove();
@@ -340,11 +353,18 @@ export default function View3D() {
     if (lastDocId.current !== (opened?.id ?? null)) {
       // Models of the previous home are no longer needed
       clearModelCache();
+      c.walls.clear();
       lastDocId.current = opened?.id ?? null;
     }
+    // The replaced content is freed after the next frame, when the new content has taken
+    // over its shader programs. Content that was never drawn (still waiting trash means no
+    // frame since the last rebuild) holds no programs and is freed right away, so at most
+    // one replaced scene waits.
+    const retire = c.trash.length === 0;
     for (const child of [...c.content.children]) {
       c.content.remove(child);
-      disposeObject(child);
+      if (retire) c.trash.push(child);
+      else disposeObject(child);
     }
     c.sky = null;
     if (!opened) {
@@ -367,7 +387,8 @@ export default function View3D() {
     const ground = buildGround(opened, c.requestRender);
     ground.receiveShadow = true;
     c.content.add(ground);
-    const walls = buildWalls(opened, levels, shown, c.requestRender);
+    const walls = buildWalls(opened, levels, shown, c.requestRender, c.walls);
+    c.walls.commit();
     const rooms = buildRooms(opened, levels, shown, c.requestRender);
     for (const g of [walls, rooms]) {
       g.traverse((o) => {
@@ -462,6 +483,7 @@ export default function View3D() {
       : DEFAULT_SUN_DIRECTION;
     // Below the horizon there are no shadows (and the light is off)
     const castShadow = shadows && (!sun || sun.elevation > 0);
+    const shadowsChanged = c.renderer.shadowMap.enabled !== castShadow;
     c.renderer.shadowMap.enabled = castShadow;
     c.sun.castShadow = castShadow;
     // Fit the shadow camera around the walls of the shown levels
@@ -482,11 +504,14 @@ export default function View3D() {
     cam.near = radius * 0.5;
     cam.far = radius * 3.5;
     cam.updateProjectionMatrix();
-    // Materials compiled without shadow support must be rebuilt
-    c.scene.traverse((o) => {
-      const mats = (o as THREE.Mesh).material;
-      for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) m.needsUpdate = true;
-    });
+    // Materials compiled without shadow support must be rebuilt when shadows are switched
+    // (new materials of a rebuilt scene are compiled for the current state anyway)
+    if (shadowsChanged) {
+      c.scene.traverse((o) => {
+        const mats = (o as THREE.Mesh).material;
+        for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) m.needsUpdate = true;
+      });
+    }
     c.requestRender();
   }, [shadows, opened, levelId, sun]);
 

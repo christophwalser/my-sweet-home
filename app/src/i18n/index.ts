@@ -86,13 +86,23 @@ export function t(text: string, vars?: Record<string, string | number>): string 
   );
 }
 
+/** Number formats by locale and decimals: creating one per call is slow in long lists. */
+const numberFormats = new Map<string, Intl.NumberFormat>();
+
 /** A number in the format of the language (decimal comma in German), without grouping. */
 export function formatNumber(value: number, maxDecimals = 2, minDecimals = 0): string {
-  return value.toLocaleString(locale(), {
-    maximumFractionDigits: maxDecimals,
-    minimumFractionDigits: minDecimals,
-    useGrouping: false,
-  });
+  const loc = locale();
+  const key = `${loc}|${maxDecimals}|${minDecimals}`;
+  let format = numberFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat(loc, {
+      maximumFractionDigits: maxDecimals,
+      minimumFractionDigits: minDecimals,
+      useGrouping: false,
+    });
+    numberFormats.set(key, format);
+  }
+  return format.format(value);
 }
 
 /** A date and time in the format of the language. */

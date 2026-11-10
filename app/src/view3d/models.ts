@@ -16,28 +16,60 @@ import { DEFAULT_MATERIALS } from "./defaultMaterials";
 import { boxProjectedUvs, cachedTexture, clearTextureCache } from "./textures";
 
 const cache = new Map<string, Promise<THREE.Object3D>>();
+/**
+ * Geometries, materials and textures of cached models. Pieces share them (clones of a model
+ * keep its geometry, and materials without changes); they are freed with the model cache,
+ * not with the scene, so a rebuilt scene does not upload them to the GPU again. A WeakSet,
+ * not userData: cloned materials must not inherit the mark.
+ */
+const modelParts = new WeakSet<object>();
 
 /** Forgets all cached models (call when a home is closed). */
 export function clearModelCache(): void {
   for (const p of cache.values()) {
-    p.then((obj) => disposeObject(obj)).catch(() => {});
+    p.then((obj) => disposeObject(obj, true)).catch(() => {});
   }
   cache.clear();
   clearTextureCache();
 }
 
-export function disposeObject(obj: THREE.Object3D): void {
+/**
+ * Frees the GPU resources of an object. Parts of cached models and wall geometries of the
+ * WallGeometryCache are left to their caches unless `force` is set.
+ */
+export function disposeObject(obj: THREE.Object3D, force = false): void {
+  const owned = (x: object) => force || !modelParts.has(x);
   obj.traverse((o) => {
     const mesh = o as THREE.Mesh;
-    mesh.geometry?.dispose();
+    const geometry = mesh.geometry;
+    if (geometry && owned(geometry) && (force || !geometry.userData.wallCache)) {
+      geometry.dispose();
+    }
     const mats = Array.isArray(mesh.material)
       ? mesh.material
       : mesh.material
         ? [mesh.material]
         : [];
     for (const m of mats) {
-      for (const v of Object.values(m)) if (v instanceof THREE.Texture) v.dispose();
-      m.dispose();
+      for (const v of Object.values(m)) if (v instanceof THREE.Texture && owned(v)) v.dispose();
+      if (owned(m)) m.dispose();
+    }
+  });
+}
+
+/** Marks the parts of a cached model (see `modelParts`). */
+function markModelParts(obj: THREE.Object3D): void {
+  obj.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (mesh.geometry) modelParts.add(mesh.geometry);
+    const mats = Array.isArray(mesh.material)
+      ? mesh.material
+      : mesh.material
+        ? [mesh.material]
+        : [];
+    for (const m of mats) {
+      modelParts.add(m);
+      for (const v of Object.values(m)) if (v instanceof THREE.Texture) modelParts.add(v);
     }
   });
 }
@@ -50,7 +82,10 @@ export function loadModelUncached(url: string): Promise<THREE.Object3D> {
 function loadModel(url: string): Promise<THREE.Object3D> {
   let p = cache.get(url);
   if (!p) {
-    p = fetchAndParse(url);
+    p = fetchAndParse(url).then((obj) => {
+      markModelParts(obj);
+      return obj;
+    });
     cache.set(url, p);
   }
   return p;

@@ -108,6 +108,26 @@ describe("locale and number formats", () => {
     expect(formatNumber(2, 2, 2)).toBe("2.00");
     expect(formatNumber(2.5, 0)).toBe("3");
   });
+
+  it("formats like toLocaleString with the same options (cached formats)", async () => {
+    const { formatNumber } = await load("de", "de-CH");
+    for (const value of [0, -0, 1.005, -12.345, 99999.999, 1e-7, 123456789.5]) {
+      for (const [max, min] of [
+        [2, 0],
+        [1, 1],
+        [0, 0],
+        [3, 2],
+      ]) {
+        const expected = value.toLocaleString("de-CH", {
+          maximumFractionDigits: max,
+          minimumFractionDigits: min,
+          useGrouping: false,
+        });
+        expect(formatNumber(value, max, min)).toBe(expected);
+        expect(formatNumber(value, max, min)).toBe(expected);
+      }
+    }
+  });
 });
 
 describe("formatShortcut", () => {
