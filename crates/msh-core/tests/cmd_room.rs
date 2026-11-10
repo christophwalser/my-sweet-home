@@ -410,3 +410,36 @@ fn room_update_floor_and_ceiling_textures_are_set_and_removed() {
     assert_eq!(textures.len(), 1);
     assert_eq!(textures[0].role.as_deref(), Some("ceilingTexture"));
 }
+
+#[test]
+fn update_sets_matt_or_shiny_floor_and_ceiling() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let id = run(
+        &r,
+        &mut doc,
+        "room_add",
+        json!({ "points": [[0, 0], [300, 0], [300, 200], [0, 200]] }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    run(
+        &r,
+        &mut doc,
+        "room_update",
+        json!({ "id": id, "floor_shininess": 0.25, "ceiling_shininess": 0 }),
+    );
+    let room = doc.home().rooms[0].attrs.clone();
+    assert_eq!(room.floor_shininess, Some(0.25));
+    assert_eq!(room.ceiling_shininess, Some(0.0));
+    let reopened = save_and_reopen(&r, &mut doc, "update_sets_matt_or_shiny_floor");
+    assert_eq!(reopened.home().rooms[0].attrs.floor_shininess, Some(0.25));
+    run(
+        &r,
+        &mut doc,
+        "room_update",
+        json!({ "id": id, "floor_shininess": -1 }),
+    );
+    assert_eq!(doc.home().rooms[0].attrs.floor_shininess, None);
+}

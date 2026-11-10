@@ -111,6 +111,14 @@ pub(crate) fn optional_color(s: &str) -> Result<Option<Color>, CommandError> {
     }
 }
 
+/// A shininess parameter: 0 (matt) to 1, a negative value for "not set" (the default).
+pub(crate) fn optional_shininess(v: f32) -> Result<Option<f32>, CommandError> {
+    if !v.is_finite() {
+        return Err(CommandError::failed("shininess must be a number"));
+    }
+    Ok((v >= 0.0).then(|| v.clamp(0.0, 1.0)))
+}
+
 /// IDs an update command applies to: `id` and/or `ids` (at least one).
 pub(crate) fn target_ids(
     id: Option<String>,

@@ -78,6 +78,10 @@ struct UpdateParams {
     /// "" to remove the texture
     left_side_texture: Option<String>,
     right_side_texture: Option<String>,
+    /// Shininess of the left side from 0 (matt) to 1; Sweet Home 3D's "shiny" is 0.25. A
+    /// negative value restores the default (matt)
+    left_side_shininess: Option<f32>,
+    right_side_shininess: Option<f32>,
     /// Baseboard on the left side
     left_side_baseboard: Option<BaseboardParams>,
     right_side_baseboard: Option<BaseboardParams>,
@@ -286,6 +290,12 @@ pub(super) fn register(r: &mut Registry) {
                 }
                 if let Some(v) = &p.pattern {
                     a.pattern = Some(v.clone());
+                }
+                if let Some(v) = p.left_side_shininess {
+                    a.left_side_shininess = super::optional_shininess(v)?;
+                }
+                if let Some(v) = p.right_side_shininess {
+                    a.right_side_shininess = super::optional_shininess(v)?;
                 }
                 for (role, tex, param) in [
                     ("leftSideTexture", left_tex.clone(), &p.left_side_texture),

@@ -1092,6 +1092,10 @@ drawn): example home 226 → 66 ms, a real home with 47 pieces and 48 walls 152 
   Home 3D shows the same columns); defaults when a home stores none. Price columns need a
   currency, VAT columns VAT switched on; a totals row sums price, VAT and price with VAT.
   Groups count the prices of their pieces.
+- Matt or shiny wall sides, floors and ceilings: `wall_update left_side_shininess /
+  right_side_shininess`, `room_update floor_shininess / ceiling_shininess` (Sweet Home 3D's
+  attributes; "shiny" = 0.25), a "Surface" choice in the panels; the 3D view uses a Phong
+  material with a highlight for shiny surfaces (`surfaceMaterial`).
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

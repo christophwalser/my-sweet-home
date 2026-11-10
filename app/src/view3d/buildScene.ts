@@ -437,8 +437,18 @@ export function buildWalls(
 
     const leftTexture = wall.textures?.find((t) => t.role === "leftSideTexture");
     const rightTexture = wall.textures?.find((t) => t.role === "rightSideTexture");
-    const leftMaterial = wallMaterial(a.left_side_color, wallsAlpha, textures.get(leftTexture));
-    const rightMaterial = wallMaterial(a.right_side_color, wallsAlpha, textures.get(rightTexture));
+    const leftMaterial = wallMaterial(
+      a.left_side_color,
+      wallsAlpha,
+      textures.get(leftTexture),
+      a.left_side_shininess,
+    );
+    const rightMaterial = wallMaterial(
+      a.right_side_color,
+      wallsAlpha,
+      textures.get(rightTexture),
+      a.right_side_shininess,
+    );
     const materials = [leftMaterial, rightMaterial, wallMaterial(a.top_color, wallsAlpha, null)];
     // Like Sweet Home 3D, walls of upper levels reach down through the floor slab to the top
     // of the walls below, otherwise a gap of the floor thickness shows between the storeys
@@ -461,7 +471,7 @@ export function buildWalls(
       const outline = baseboardPolygon(shape, side, bb.attrs.thickness);
       if (!outline) continue;
       const sideMaterial = side === "left" ? leftMaterial : rightMaterial;
-      let material: THREE.MeshLambertMaterial;
+      let material: THREE.MeshLambertMaterial | THREE.MeshPhongMaterial;
       if (bb.texture) material = wallMaterial(null, wallsAlpha, textures.get(bb.texture));
       else if (bb.attrs.color !== null) material = wallMaterial(bb.attrs.color, wallsAlpha, null);
       else material = sideMaterial;
@@ -505,13 +515,30 @@ class TextureCache {
   }
 }
 
+/**
+ * Material of a wall side, floor or ceiling: matt (Lambert) by default; a shininess above 0
+ * (Sweet Home 3D's "shiny" is 0.25) gives a Phong material with a highlight.
+ */
+export function surfaceMaterial(
+  params: THREE.MeshLambertMaterialParameters,
+  shininess: number | null | undefined,
+): THREE.MeshLambertMaterial | THREE.MeshPhongMaterial {
+  if (!shininess || shininess <= 0) return new THREE.MeshLambertMaterial(params);
+  return new THREE.MeshPhongMaterial({
+    ...params,
+    shininess: shininess * 128,
+    specular: new THREE.Color(0xffffff).multiplyScalar(Math.min(1, shininess * 1.6)),
+  });
+}
+
 function wallMaterial(
   color: number | null,
   wallsAlpha: number,
   map: THREE.Texture | null,
-): THREE.MeshLambertMaterial {
+  shininess?: number | null,
+): THREE.MeshLambertMaterial | THREE.MeshPhongMaterial {
   // Like Sweet Home 3D, a texture replaces the color
-  const m = new THREE.MeshLambertMaterial({ color: map ? 0xffffff : colorOf(color, 0xffffff) });
+  const m = surfaceMaterial({ color: map ? 0xffffff : colorOf(color, 0xffffff) }, shininess);
   if (map) m.map = map;
   if (wallsAlpha > 0) {
     m.transparent = true;
@@ -552,12 +579,15 @@ export function buildRooms(
       // depth test, so nothing flickers and nothing pokes through the floor. Constant only
       // (no slope factor): at flat viewing angles a slope factor pushed floors behind the
       // ground just below them, which then showed through.
-      const mat = new THREE.MeshLambertMaterial({
-        color: floorTexture ? 0xffffff : colorOf(a.floor_color, 0xd8d2c4),
-        polygonOffset: true,
-        polygonOffsetFactor: 0,
-        polygonOffsetUnits: FLOOR_OFFSET_UNITS,
-      });
+      const mat = surfaceMaterial(
+        {
+          color: floorTexture ? 0xffffff : colorOf(a.floor_color, 0xd8d2c4),
+          polygonOffset: true,
+          polygonOffsetFactor: 0,
+          polygonOffsetUnits: FLOOR_OFFSET_UNITS,
+        },
+        a.floor_shininess,
+      );
       if (floorTexture) {
         mat.map = loadTiledTexture(
           docResourceUrl(opened.id, floorTexture.image),
@@ -587,11 +617,14 @@ export function buildRooms(
     }
     if (a.ceiling_visible !== false) {
       const ceilingTexture = room.textures?.find((t) => t.role === "ceilingTexture");
-      const mat = new THREE.MeshLambertMaterial({
-        color: ceilingTexture ? 0xffffff : colorOf(a.ceiling_color, 0xf4f4f4),
-        // The rotated shape faces down: visible from below, hidden in the aerial view
-        side: THREE.FrontSide,
-      });
+      const mat = surfaceMaterial(
+        {
+          color: ceilingTexture ? 0xffffff : colorOf(a.ceiling_color, 0xf4f4f4),
+          // The rotated shape faces down: visible from below, hidden in the aerial view
+          side: THREE.FrontSide,
+        },
+        a.ceiling_shininess,
+      );
       if (ceilingTexture) {
         mat.map = loadTiledTexture(
           docResourceUrl(opened.id, ceilingTexture.image),

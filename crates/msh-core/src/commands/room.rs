@@ -45,6 +45,10 @@ struct UpdateParams {
     floor_texture: Option<String>,
     ceiling_color: Option<String>,
     ceiling_texture: Option<String>,
+    /// Shininess of the floor from 0 (matt) to 1; Sweet Home 3D's "shiny" is 0.25. A
+    /// negative value restores the default (matt)
+    floor_shininess: Option<f32>,
+    ceiling_shininess: Option<f32>,
     /// Offset of the name label in cm from the center of the room's bounding box
     /// (Sweet Home 3D convention)
     name_x_offset: Option<f32>,
@@ -187,6 +191,12 @@ pub(super) fn register(r: &mut Registry) {
                 }
                 if let Some(c) = &p.floor_color {
                     a.floor_color = optional_color(c)?;
+                }
+                if let Some(v) = p.floor_shininess {
+                    a.floor_shininess = super::optional_shininess(v)?;
+                }
+                if let Some(v) = p.ceiling_shininess {
+                    a.ceiling_shininess = super::optional_shininess(v)?;
                 }
                 if let Some(c) = &p.ceiling_color {
                     a.ceiling_color = optional_color(c)?;

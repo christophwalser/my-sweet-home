@@ -228,6 +228,9 @@ export type Wall = {
     top_color: number | null;
     left_side_color: number | null;
     right_side_color: number | null;
+    /** 0 matt (default) to 1; Sweet Home 3D's "shiny" is 0.25 */
+    left_side_shininess?: number | null;
+    right_side_shininess?: number | null;
   };
   textures?: Texture[];
   baseboards?: Baseboard[];
@@ -260,6 +263,8 @@ export type Room = {
     floor_color: number | null;
     ceiling_visible: boolean | null;
     ceiling_color: number | null;
+    floor_shininess?: number | null;
+    ceiling_shininess?: number | null;
   };
   text_styles?: TextStyle[];
   textures?: Texture[];

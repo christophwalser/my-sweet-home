@@ -2,7 +2,13 @@ import type * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import type { Home, OpenedHome } from "../model";
 import { makeHome, makePiece, makeWall, straightShape } from "../testFixtures";
-import { buildWalls, levelInfos, visibleLevels, WallGeometryCache } from "./buildScene";
+import {
+  buildWalls,
+  levelInfos,
+  surfaceMaterial,
+  visibleLevels,
+  WallGeometryCache,
+} from "./buildScene";
 import { disposeObject } from "./models";
 
 const door = (x: number) =>
@@ -89,5 +95,16 @@ describe("WallGeometryCache", () => {
     expect(freed).toBe(false);
     cache.clear();
     expect(freed).toBe(true);
+  });
+});
+
+describe("surfaceMaterial", () => {
+  it("is matt without shininess and has a highlight when shiny", () => {
+    expect(surfaceMaterial({ color: 0xff0000 }, null).type).toBe("MeshLambertMaterial");
+    expect(surfaceMaterial({ color: 0xff0000 }, 0).type).toBe("MeshLambertMaterial");
+    const shiny = surfaceMaterial({ color: 0xff0000 }, 0.25) as THREE.MeshPhongMaterial;
+    expect(shiny.type).toBe("MeshPhongMaterial");
+    expect(shiny.shininess).toBe(32);
+    expect(shiny.color.getHex()).toBe(0xff0000);
   });
 });

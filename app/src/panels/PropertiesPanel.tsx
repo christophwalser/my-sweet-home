@@ -142,6 +142,10 @@ function WallSide({
         current={byRole(wall.textures, `${side}SideTexture`)}
         onCommit={(v) => update("texture", v)}
       />
+      <SurfaceField
+        value={side === "left" ? wall.attrs.left_side_shininess : wall.attrs.right_side_shininess}
+        onCommit={(v) => update("shininess", v)}
+      />
       <Field
         label={t("Baseboard")}
         type="checkbox"
@@ -312,8 +316,30 @@ function CompassSection({
   );
 }
 
-/** Shininess Sweet Home 3D gives to "shiny" pieces (its furniture dialog). */
+/** Shininess Sweet Home 3D gives to "shiny" pieces, walls and rooms (its dialogs). */
 const SHINY = 0.25;
+
+/** Matt or shiny surface of a wall side, floor or ceiling (matt is the default). */
+function SurfaceField({
+  value,
+  onCommit,
+}: {
+  value: number | null | undefined;
+  onCommit: (shininess: number) => void;
+}) {
+  return (
+    <label className="prop-row">
+      <span className="prop-label">{t("Surface")}</span>
+      <select
+        value={value && value > 0 ? "shiny" : "matt"}
+        onChange={(e) => onCommit(e.currentTarget.value === "shiny" ? SHINY : -1)}
+      >
+        <option value="matt">{t("Matt")}</option>
+        <option value="shiny">{t("Shiny")}</option>
+      </select>
+    </label>
+  );
+}
 
 /**
  * Price and VAT of a piece, shown like Sweet Home 3D only when a currency is chosen in the
@@ -1095,6 +1121,7 @@ export default function PropertiesPanel() {
           current={byRole(room.textures, "floorTexture")}
           onCommit={set("floor_texture")}
         />
+        <SurfaceField value={a.floor_shininess} onCommit={set("floor_shininess")} />
         <h3>{t("Ceiling")}</h3>
         <Field
           label={t("Color")}
@@ -1112,6 +1139,7 @@ export default function PropertiesPanel() {
           current={byRole(room.textures, "ceilingTexture")}
           onCommit={set("ceiling_texture")}
         />
+        <SurfaceField value={a.ceiling_shininess} onCommit={set("ceiling_shininess")} />
         {actions}
       </div>
     );

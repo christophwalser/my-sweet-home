@@ -758,3 +758,30 @@ fn the_same_texture_is_stored_once() {
     }
     assert_eq!(names.iter().filter(|n| **n == used[0]).count(), 1);
 }
+
+#[test]
+fn update_sets_matt_or_shiny_wall_sides() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let id = add_wall(&r, &mut doc, [0.0, 0.0], [300.0, 0.0]);
+    let before = snapshot(&doc);
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": id, "left_side_shininess": 0.25, "right_side_shininess": 3 }),
+    );
+    let after = snapshot(&doc);
+    assert_eq!(wall(&doc, &id).left_side_shininess, Some(0.25));
+    assert_eq!(wall(&doc, &id).right_side_shininess, Some(1.0));
+    check_undo_redo(&r, &mut doc, &before, &after);
+    let reopened = save_and_reopen(&r, &mut doc, "update_sets_matt_or_shiny_wall_sides");
+    assert_eq!(wall(&reopened, &id).left_side_shininess, Some(0.25));
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": id, "left_side_shininess": -1 }),
+    );
+    assert_eq!(wall(&doc, &id).left_side_shininess, None);
+}
