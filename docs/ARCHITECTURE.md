@@ -1109,6 +1109,12 @@ drawn): example home 226 → 66 ms, a real home with 47 pieces and 48 walls 152 
   right, a footer replaces the default footer text. The print dialog has both fields,
   preset from the home. The page setup itself is not yet stored in the home.
 - Not adopted: rotating the background image (Sweet Home 3D cannot either).
+- User guide (Help › User guide, F1; the shortcut overview stays in the Help menu): one
+  Markdown file per language, `app/src/help/guide.<lang>.md` (English as fallback), one
+  topic per `# ` heading, shown with topics, search and links between topics. A small reader
+  of our own (`help/markdown.ts`) builds plain objects that React renders, so no HTML from
+  the text reaches the page. Long help texts live in these files rather than in `de.json`;
+  a test checks that every language has the same topics and sections.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

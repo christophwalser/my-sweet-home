@@ -9,6 +9,7 @@ import LibraryEditor from "./catalog/LibraryEditor";
 import OnlineDialog from "./catalog/OnlineDialog";
 import ErrorBoundary from "./ErrorBoundary";
 import ExportDialog from "./export/ExportDialog";
+import HelpDialog from "./help/HelpDialog";
 import { clampSide, DEFAULT_LAYOUT, type Maximized, useLayout } from "./layout/layout";
 import Splitter from "./layout/Splitter";
 import { closeView3DWindow, findView3DWindow, syncUiState } from "./layout/view3dWindow";
@@ -332,6 +333,7 @@ export default function App() {
         />
       )}
       {dialog === "shortcuts" && <ShortcutsDialog onClose={closeDialog} />}
+      {dialog === "help" && <HelpDialog onClose={closeDialog} />}
       {paletteOpen && <CommandPalette />}
 
       {error && (

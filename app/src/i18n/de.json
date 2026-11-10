@@ -862,5 +862,8 @@
   "Footer": "Fußzeile",
   "e.g. $name, $date": "z. B. $name, $date",
   "e.g. Page $pageNumber of $pageCount": "z. B. Seite $pageNumber von $pageCount",
-  "Header and footer may contain $pageNumber, $pageCount, $planScale, $name, $file, $date and $time. An empty footer prints the name and page number.": "Kopf- und Fußzeile können $pageNumber, $pageCount, $planScale, $name, $file, $date und $time enthalten. Eine leere Fußzeile druckt Name und Seitenzahl."
+  "Header and footer may contain $pageNumber, $pageCount, $planScale, $name, $file, $date and $time. An empty footer prints the name and page number.": "Kopf- und Fußzeile können $pageNumber, $pageCount, $planScale, $name, $file, $date und $time enthalten. Eine leere Fußzeile druckt Name und Seitenzahl.",
+  "User guide": "Handbuch",
+  "Topics": "Themen",
+  "Search the guide": "Handbuch durchsuchen"
 }

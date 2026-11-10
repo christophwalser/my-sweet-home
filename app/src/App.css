@@ -2165,6 +2165,89 @@ body.moving-dialog * {
   width: min(860px, calc(100vw - 32px));
 }
 
+/* User guide: topics on the left, the topic on the right */
+.help-dialog {
+  width: min(960px, calc(100vw - 32px));
+  height: min(680px, calc(100vh - 64px));
+  display: flex;
+  flex-direction: column;
+}
+
+.help-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 16px;
+}
+
+.help-topics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding-right: 8px;
+}
+
+.help-topics ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.help-topics li button {
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.help-topics li button:hover {
+  background: var(--panel-2);
+}
+
+.help-topics li button.active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  font-weight: 600;
+}
+
+.help-topic {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 8px;
+  line-height: 1.55;
+  max-width: 70ch;
+}
+
+.help-topic h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.help-topic h4 {
+  margin: 16px 0 4px;
+  font-size: 14px;
+}
+
+.help-topic code {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--panel-2);
+}
+
+.help-topic ul,
+.help-topic ol {
+  padding-left: 20px;
+}
+
 .shortcuts-columns {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));

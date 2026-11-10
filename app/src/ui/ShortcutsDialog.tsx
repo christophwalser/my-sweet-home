@@ -1,4 +1,4 @@
-// Overview of the keyboard shortcuts (F1): those of the commands and those of the views.
+// Overview of the keyboard shortcuts (Help menu): those of the commands and those of the views.
 
 import { useEffect } from "react";
 import { formatShortcut, t } from "../i18n";

@@ -857,10 +857,17 @@ const LIST: Command[] = [
   },
   // Help
   {
+    id: "help.guide",
+    label: t("User guide"),
+    icon: "info",
+    shortcut: "F1",
+    keywords: "help manual documentation guide",
+    run: () => useUi.getState().openDialog("help"),
+  },
+  {
     id: "help.shortcuts",
     label: t("Keyboard shortcuts"),
     icon: "keyboard",
-    shortcut: "F1",
     run: () => useUi.getState().openDialog("shortcuts"),
   },
   { id: "help.about", label: t("About My Sweet Home"), icon: "info", run: about },
@@ -1102,6 +1109,7 @@ export const MENUS: Menu[] = [
   {
     label: t("Help"),
     entries: () => [
+      cmd("help.guide"),
       cmd("window.search"),
       cmd("help.shortcuts"),
       sep,
