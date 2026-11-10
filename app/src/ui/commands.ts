@@ -14,6 +14,7 @@ import {
 } from "../layout/view3dWindow";
 import { forEachPiece } from "../model";
 import { newHomeParams, prefs, usePreferences } from "../preferences";
+import { clearRecentHomes, recentHomes, recentLabel, removeRecentHome } from "../recentHomes";
 import { type Tool, useStore, VISITOR_ID } from "../store";
 import type { IconName } from "./Icon";
 import { planActions } from "./planBridge";
@@ -113,9 +114,51 @@ export async function chooseFile(): Promise<void> {
     ],
   });
   if (typeof path !== "string") return;
-  // Like Sweet Home 3D: an untouched window takes the home, otherwise a new window opens
+  await openFile(path);
+}
+
+/** Opens a home file: an untouched window takes it, otherwise a new window opens (like SH3D). */
+async function openFile(path: string): Promise<void> {
   if (isUntouched()) await store().openHome(path);
   else await api.newWindow(path);
+}
+
+/** Opens a home of the recent list; a file that is gone leaves the list. */
+async function openRecent(path: string): Promise<void> {
+  // The home of this window: nothing to open
+  if (store().opened?.path?.toLowerCase() === path.toLowerCase()) return;
+  if (!(await api.fileExists(path).catch(() => false))) {
+    removeRecentHome(path);
+    await message(t("The file {path} no longer exists. It was removed from the list.", { path }), {
+      title: t("Open recent"),
+      kind: "warning",
+    });
+    return;
+  }
+  await openFile(path);
+}
+
+function recentEntries(): MenuEntry[] {
+  const list = recentHomes();
+  if (list.length === 0) return [{ kind: "heading", label: t("No recent homes") }];
+  return [
+    ...list.map(
+      (path, i): MenuEntry => ({
+        kind: "command",
+        command: {
+          id: `file.recent.${i}`,
+          label: `${i + 1}  ${recentLabel(path, list)}`,
+          hint: path,
+          run: () => openRecent(path),
+        },
+      }),
+    ),
+    sep,
+    {
+      kind: "command",
+      command: { id: "file.recent.clear", label: t("Clear list"), run: clearRecentHomes },
+    },
+  ];
 }
 
 export function newHome(): void {
@@ -897,6 +940,7 @@ export const MENUS: Menu[] = [
     entries: () => [
       cmd("file.new"),
       cmd("file.open"),
+      { kind: "submenu", label: t("Open recent"), icon: "open", entries: recentEntries },
       sep,
       cmd("file.save"),
       cmd("file.saveAs"),

@@ -208,6 +208,12 @@ pub fn save_image(path: String, data_url: String) -> Result<(), String> {
     std::fs::write(&path, bytes).map_err(|e| format!("cannot write {path}: {e}"))
 }
 
+/// Whether a file exists (e.g. an entry of the recent homes).
+#[tauri::command]
+pub fn file_exists(path: String) -> bool {
+    Path::new(&path).is_file()
+}
+
 /// Reads a file chosen by the user (e.g. a background image or PDF) as raw bytes.
 #[tauri::command]
 pub fn read_file(path: String) -> Result<tauri::ipc::Response, String> {

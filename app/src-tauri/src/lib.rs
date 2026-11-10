@@ -95,6 +95,7 @@ pub fn run() {
             commands::save_image,
             commands::save_file,
             commands::read_file,
+            commands::file_exists,
             commands::new_window,
             commands::recovery_list,
             commands::startup_recovery,

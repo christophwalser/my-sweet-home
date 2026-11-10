@@ -17,6 +17,7 @@ import BackgroundImageWizard from "./panels/BackgroundImageWizard";
 import PropertiesPanel from "./panels/PropertiesPanel";
 import PlanView from "./plan2d/PlanView";
 import { collectTopViews } from "./plan2d/topView";
+import { addRecentHome } from "./recentHomes";
 import { applyHome, subscribeToHomeChanges, useStore } from "./store";
 import CommandPalette from "./ui/CommandPalette";
 import { chooseFile, detach3D, handleGlobalShortcut } from "./ui/commands";
@@ -236,6 +237,12 @@ export default function App() {
   useEffect(() => {
     void getCurrentWebviewWindow().setTitle(windowTitle);
   }, [windowTitle]);
+
+  // Every home file opened or saved (also under another name) goes to the top of "Open recent"
+  const homePath = opened?.path ?? null;
+  useEffect(() => {
+    if (homePath?.toLowerCase().endsWith(".sh3d")) addRecentHome(homePath);
+  }, [homePath]);
 
   // Closing a window with unsaved changes asks whether to save them
   useEffect(() => {

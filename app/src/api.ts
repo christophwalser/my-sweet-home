@@ -65,6 +65,7 @@ export const api = {
   /** Writes a PNG data URL to a file. */
   saveImage: (path: string, dataUrl: string) => invoke<void>("save_image", { path, dataUrl }),
   /** Reads a file chosen by the user as raw bytes. */
+  fileExists: (path: string) => invoke<boolean>("file_exists", { path }),
   readFile: async (path: string) =>
     new Uint8Array(await invoke<ArrayBuffer>("read_file", { path })),
   /** Writes binary data (e.g. a video) to a file. */
