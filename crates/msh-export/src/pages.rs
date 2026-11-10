@@ -362,9 +362,83 @@ fn png_size(png: &[u8]) -> Option<(u32, u32)> {
     (w > 0 && h > 0).then_some((w, h))
 }
 
+/// Header and footer of printed pages, like Sweet Home 3D's page setup: format strings with
+/// the variables `$pageNumber`, `$pageCount`, `$planScale`, `$name` (home name), `$file`
+/// (file name), `$date`, `$time` and `$$` for a dollar sign.
+#[derive(Debug, Clone, Default)]
+pub struct PageFrame {
+    /// Header, written at the top right of each page
+    pub header: Option<String>,
+    /// Footer, written at the bottom left instead of the default text
+    pub footer: Option<String>,
+    pub name: String,
+    pub file: String,
+    pub date: String,
+    pub time: String,
+}
+
+/// A header or footer format with its variables replaced.
+pub fn expand_page_format(
+    format: &str,
+    frame: &PageFrame,
+    page: usize,
+    count: usize,
+    scale: Option<&str>,
+) -> String {
+    let mut out = String::with_capacity(format.len());
+    let mut rest = format;
+    const VARS: &[&str] = &[
+        "$$",
+        "$pageNumber",
+        "$pageCount",
+        "$planScale",
+        "$name",
+        "$file",
+        "$date",
+        "$time",
+    ];
+    while let Some(i) = rest.find('$') {
+        out.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        match VARS.iter().find(|v| tail.starts_with(**v)) {
+            Some(v) => {
+                match *v {
+                    "$$" => out.push('$'),
+                    "$pageNumber" => out.push_str(&page.to_string()),
+                    "$pageCount" => out.push_str(&count.to_string()),
+                    "$planScale" => out.push_str(scale.unwrap_or("")),
+                    "$name" => out.push_str(&frame.name),
+                    "$file" => out.push_str(&frame.file),
+                    "$date" => out.push_str(&frame.date),
+                    _ => out.push_str(&frame.time),
+                }
+                rest = &tail[v.len()..];
+            }
+            None => {
+                out.push('$');
+                rest = &tail[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 /// SVG documents of the pages with title, footer text and page numbers ("Page 2 of 5"
 /// when there is more than one page). Width and height in points, drawing in mm.
 pub fn page_svgs(pages: &[Page], paper: Paper, margin: f32, footer: Option<&str>) -> Vec<String> {
+    page_svgs_framed(pages, paper, margin, footer, &PageFrame::default())
+}
+
+/// Like [`page_svgs`], with a header and a footer of the page setup (`frame`); a footer
+/// format replaces the default footer text.
+pub fn page_svgs_framed(
+    pages: &[Page],
+    paper: Paper,
+    margin: f32,
+    footer: Option<&str>,
+    frame: &PageFrame,
+) -> Vec<String> {
     let count = pages.len();
     pages
         .iter()
@@ -387,15 +461,33 @@ pub fn page_svgs(pages: &[Page], paper: Paper, margin: f32, footer: Option<&str>
                     escape(t)
                 );
             }
+            // The note of a plan page is its scale ("1:100")
+            let scale = page.note.as_deref().filter(|n| n.starts_with("1:"));
+            if let Some(h) = frame.header.as_deref().filter(|h| !h.is_empty()) {
+                let text = expand_page_format(h, frame, i + 1, count, scale);
+                let _ = write!(
+                    s,
+                    r#"<text x="{}" y="{}" font-size="3" text-anchor="end" fill="{MUTED}">{}</text>"#,
+                    pw - m,
+                    m + 5.0,
+                    escape(&text)
+                );
+            }
             s.push_str(&page.body);
             let fy = ph - m;
-            let mut left = footer.map(str::to_string).unwrap_or_default();
-            if count > 1 {
-                if !left.is_empty() {
-                    left.push_str(" \u{b7} ");
+            let left = match frame.footer.as_deref().filter(|f| !f.is_empty()) {
+                Some(f) => expand_page_format(f, frame, i + 1, count, scale),
+                None => {
+                    let mut left = footer.map(str::to_string).unwrap_or_default();
+                    if count > 1 {
+                        if !left.is_empty() {
+                            left.push_str(" \u{b7} ");
+                        }
+                        let _ = write!(left, "Page {} of {count}", i + 1);
+                    }
+                    left
                 }
-                let _ = write!(left, "Page {} of {count}", i + 1);
-            }
+            };
             if !left.is_empty() {
                 let _ = write!(
                     s,

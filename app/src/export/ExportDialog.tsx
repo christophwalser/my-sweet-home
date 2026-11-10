@@ -41,6 +41,14 @@ export default function ExportDialog({
   const [furnitureIcons, setFurnitureIcons] = useState<"top_view" | "catalog">("top_view");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Header and footer of the pages, preset from the home's page setup (Sweet Home 3D)
+  const printSetup = (
+    useStore.getState().opened?.home as
+      | { print?: { attrs?: { header_format?: string | null; footer_format?: string | null } } }
+      | undefined
+  )?.print?.attrs;
+  const [header, setHeader] = useState(printSetup?.header_format ?? "");
+  const [footer, setFooter] = useState(printSetup?.footer_format ?? "");
 
   // Escape closes the dialog wherever the focus is
   useEffect(() => {
@@ -92,6 +100,9 @@ export default function ExportDialog({
     };
     if (orientation !== "auto") params.landscape = orientation === "landscape";
     if (scale !== "fit") params.scale = Number(scale);
+    // Empty fields: the default footer (name and page number), no header
+    params.header = header;
+    if (footer.trim()) params.footer = footer;
     if (parts.view3d) params.view_3d_image = await api.capture3d();
     if (parts.plan) Object.assign(params, await furnitureParams());
     return params;
@@ -253,6 +264,31 @@ export default function ExportDialog({
               {t("3D view")}
             </label>
           </div>
+          <div className="export-grid">
+            <label>
+              {t("Header")}
+              <input
+                type="text"
+                value={header}
+                placeholder={t("e.g. $name, $date")}
+                onChange={(e) => setHeader(e.currentTarget.value)}
+              />
+            </label>
+            <label>
+              {t("Footer")}
+              <input
+                type="text"
+                value={footer}
+                placeholder={t("e.g. Page $pageNumber of $pageCount")}
+                onChange={(e) => setFooter(e.currentTarget.value)}
+              />
+            </label>
+          </div>
+          <p className="muted small">
+            {t(
+              "Header and footer may contain $pageNumber, $pageCount, $planScale, $name, $file, $date and $time. An empty footer prints the name and page number.",
+            )}
+          </p>
           <div className="dialog-actions">
             <button type="button" onClick={() => void print()} disabled={busy || nothingToPrint}>
               {t("Print…")}

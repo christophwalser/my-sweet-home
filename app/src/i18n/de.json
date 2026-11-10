@@ -857,5 +857,10 @@
   "Cancelled after {saved} photos.": "Nach {saved} Fotos abgebrochen.",
   "Photos of points of view": "Fotos von Blickpunkten",
   "Each chosen point of view gets its own photo with these settings, saved into a folder.": "Jeder gewählte Blickpunkt bekommt mit diesen Einstellungen ein eigenes Foto, gespeichert in einem Ordner.",
-  "Render {n} photos…": "{n} Fotos rendern…"
+  "Render {n} photos…": "{n} Fotos rendern…",
+  "Header": "Kopfzeile",
+  "Footer": "Fußzeile",
+  "e.g. $name, $date": "z. B. $name, $date",
+  "e.g. Page $pageNumber of $pageCount": "z. B. Seite $pageNumber von $pageCount",
+  "Header and footer may contain $pageNumber, $pageCount, $planScale, $name, $file, $date and $time. An empty footer prints the name and page number.": "Kopf- und Fußzeile können $pageNumber, $pageCount, $planScale, $name, $file, $date und $time enthalten. Eine leere Fußzeile druckt Name und Seitenzahl."
 }

@@ -16,8 +16,8 @@ mod plan;
 
 pub use csv::{COLUMNS as FURNITURE_COLUMNS, furniture_csv, resolve_columns};
 pub use pages::{
-    Page, PageOptions, Paper, furniture_pages, image_page, page_svgs, pdf_from_svg_pages,
-    plan_page, plan_page_svg,
+    Page, PageFrame, PageOptions, Paper, expand_page_format, furniture_pages, image_page,
+    page_svgs, page_svgs_framed, pdf_from_svg_pages, plan_page, plan_page_svg,
 };
 pub use plan::{PlanDrawing, PlanOptions, draw_plan, format_length, plan_images, plan_svg};
 

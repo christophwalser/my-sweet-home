@@ -269,3 +269,28 @@ fn csv_of_an_empty_home_has_only_the_header() {
         json!({ "path": csv, "separator": ";;" }),
     );
 }
+
+#[test]
+fn document_pages_get_the_header_and_footer_of_the_page_setup() {
+    let r = Registry::standard();
+    let mut doc = flat(&r);
+    let result = export(
+        &r,
+        &mut doc,
+        "export_document",
+        json!({ "view_3d": false, "furniture_icons": "catalog", "scale": 50,
+                "header": "Project $name", "footer": "Page $pageNumber/$pageCount, $planScale, 5$$" }),
+    );
+    let pages: Vec<&str> = result["pages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    assert_eq!(pages.len(), 2);
+    assert!(pages[0].contains("Project Test"));
+    assert!(pages[0].contains("Page 1/2, , 5$"));
+    assert!(pages[1].contains("Page 2/2, 1:50, 5$"), "{}", pages[1]);
+    // The default footer is replaced
+    assert!(!pages[1].contains("Page 2 of 2"));
+}

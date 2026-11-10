@@ -1102,6 +1102,13 @@ drawn): example home 226 → 66 ms, a real home with 47 pieces and 48 walls 152 
   folder as "<home> - <point of view>.png" (`view3d/photoSeries.ts`), then returns to the
   view it started from (`syncCameras`, `camera_get`, `camera_set`). CLI and MCP get the same
   with `viewpoint_go` and `msh photo`.
+- Header and footer of printed pages (`export_document header / footer`, default: the
+  home's page setup `<print headerFormat footerFormat>` from Sweet Home 3D) with Sweet Home
+  3D's variables `$pageNumber`, `$pageCount`, `$planScale` (plan pages), `$name`, `$file`,
+  `$date`, `$time` and `$$` (`msh_export::expand_page_format`); the header stands at the top
+  right, a footer replaces the default footer text. The print dialog has both fields,
+  preset from the home. The page setup itself is not yet stored in the home.
+- Not adopted: rotating the background image (Sweet Home 3D cannot either).
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

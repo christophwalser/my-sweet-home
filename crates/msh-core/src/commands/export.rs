@@ -87,6 +87,12 @@ struct DocumentParams {
     furniture_icons: Option<FurnitureIcons>,
     /// Views from above rendered by the app (supplied by the app in live mode)
     top_views: Option<TopViews>,
+    /// Header of each page, like Sweet Home 3D's page setup (default: the home's print
+    /// settings). Variables: $pageNumber, $pageCount, $planScale, $name, $file, $date, $time,
+    /// $$ for a dollar sign
+    header: Option<String>,
+    /// Footer of each page (default: the home's print settings, else name and page number)
+    footer: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -421,7 +427,28 @@ fn export_document(doc: &Document, p: DocumentParams) -> Result<serde_json::Valu
     }
 
     let landscape: Vec<bool> = pages.iter().map(|p| p.landscape).collect();
-    let svgs = msh_export::page_svgs(&pages, paper, PAGE_MARGIN, Some(&title));
+    let print = home.print.as_ref().map(|p| &p.attrs);
+    let now = chrono::Local::now();
+    let frame = msh_export::PageFrame {
+        header: p
+            .header
+            .clone()
+            .or_else(|| print.and_then(|a| a.header_format.clone())),
+        footer: p
+            .footer
+            .clone()
+            .or_else(|| print.and_then(|a| a.footer_format.clone())),
+        name: title.clone(),
+        file: doc
+            .path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        date: now.format("%Y-%m-%d").to_string(),
+        time: now.format("%H:%M").to_string(),
+    };
+    let svgs = msh_export::page_svgs_framed(&pages, paper, PAGE_MARGIN, Some(&title), &frame);
     match &p.path {
         Some(path) => {
             let pdf = msh_export::pdf_from_svg_pages(&svgs).map_err(CommandError::failed)?;
