@@ -320,7 +320,9 @@ export function lengthText(cm: number): string {
 /** Direction of a segment in degrees, clockwise from the x axis (0..360). */
 export function directionDeg(a: Pt, b: Pt): number {
   const deg = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
-  return Math.round((((deg % 360) + 360) % 360) * 10) / 10;
+  // Rounded before wrapping (atan2 gives -180..180), so -0.03° shows as 0 and not as 360
+  const r = Math.round(deg * 10) / 10;
+  return r <= 0 ? (r + 360) % 360 : r;
 }
 
 /**

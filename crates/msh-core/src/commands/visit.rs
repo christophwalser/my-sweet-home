@@ -91,6 +91,7 @@ pub(super) fn register(r: &mut Registry) {
          degrees. Omitted values stay. With activate the 3D view switches to this camera. \
          Camera changes are not undone.",
         |doc, p: CameraSetParams| {
+            validate_pose(&p.pose)?;
             let home = doc.home_mut();
             let cam = camera_mut(home, p.mode);
             apply_pose(&mut cam.attrs, &p.pose)?;
@@ -268,21 +269,7 @@ pub(super) fn camera_mut(home: &mut Home, mode: Mode) -> &mut Camera {
 }
 
 fn apply_pose(a: &mut CameraAttrs, p: &PoseParams) -> Result<(), CommandError> {
-    for v in [p.x, p.y, p.z, p.yaw, p.pitch, p.field_of_view]
-        .into_iter()
-        .flatten()
-    {
-        if !v.is_finite() {
-            return Err(CommandError::failed("camera values must be finite numbers"));
-        }
-    }
-    if let Some(f) = p.field_of_view
-        && !(2.0..=170.0).contains(&f)
-    {
-        return Err(CommandError::failed(
-            "field_of_view must be between 2 and 170 degrees",
-        ));
-    }
+    validate_pose(p)?;
     if let Some(v) = p.x {
         a.x = v;
     }
@@ -300,6 +287,26 @@ fn apply_pose(a: &mut CameraAttrs, p: &PoseParams) -> Result<(), CommandError> {
     }
     if let Some(v) = p.field_of_view {
         a.field_of_view = rad(v);
+    }
+    Ok(())
+}
+
+/// Checks the values before anything is changed (camera changes have no undo step).
+fn validate_pose(p: &PoseParams) -> Result<(), CommandError> {
+    for v in [p.x, p.y, p.z, p.yaw, p.pitch, p.field_of_view]
+        .into_iter()
+        .flatten()
+    {
+        if !v.is_finite() {
+            return Err(CommandError::failed("camera values must be finite numbers"));
+        }
+    }
+    if let Some(f) = p.field_of_view
+        && !(2.0..=170.0).contains(&f)
+    {
+        return Err(CommandError::failed(
+            "field_of_view must be between 2 and 170 degrees",
+        ));
     }
     Ok(())
 }

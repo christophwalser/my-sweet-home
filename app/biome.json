@@ -11,7 +11,14 @@
   "linter": {
     "rules": {
       "preset": "recommended"
-    }
+    },
+    "domains": { "test": "none" }
   },
+  "overrides": [
+    {
+      "includes": ["**/*.test.ts"],
+      "linter": { "domains": { "test": "recommended" } }
+    }
+  ],
   "assist": { "actions": { "source": { "organizeImports": "on" } } }
 }

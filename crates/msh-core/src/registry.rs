@@ -140,6 +140,7 @@ impl Registry {
         doc.checkpoint(name);
         match (spec.handler)(doc, params) {
             Ok(v) => {
+                doc.commit_checkpoint();
                 doc.modified = true;
                 Ok(v)
             }

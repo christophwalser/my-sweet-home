@@ -227,8 +227,9 @@ pub(super) fn register(r: &mut Registry) {
                 pl.points = to_points(points);
             }
             let a = &mut pl.attrs;
+            // Like polyline_add: two points cannot form a closed outline
             if let Some(v) = p.closed {
-                a.closed_path = Some(v);
+                a.closed_path = Some(v && pl.points.len() >= 3);
             }
             if let Some(v) = p.thickness {
                 a.thickness = Some(v);
@@ -329,6 +330,12 @@ pub(super) fn register(r: &mut Registry) {
         "Adds a text label to the plan.",
         true,
         |doc, p: LabelParams| {
+            if p.text.trim().is_empty() {
+                return Err(CommandError::failed("label text must not be empty"));
+            }
+            if p.font_size.is_some_and(|s| !s.is_finite() || s <= 0.0) {
+                return Err(CommandError::failed("font size must be positive"));
+            }
             let level = resolve_level(doc.home(), p.level)?;
             let id = new_id("label");
             let label = Label {

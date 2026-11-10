@@ -980,6 +980,30 @@ furniture is read by its home reader.
 - The 3D view now cuts openings with their own outline (`doorOrWindowCutOutShape`, e.g. round
   arches or an opening smaller than the frame) instead of the whole box.
 
+### 4.42 Tests (2026-11-10)
+
+- Every command module of msh-core has its own integration test file
+  `crates/msh-core/tests/cmd_<module>.rs`: result, exact undo/redo (serialized home before
+  and after), no undo step for getters, view commands and exports, invalid input, and
+  saving and reopening where the value is stored in the file. Shared helpers are in
+  `tests/common/mod.rs`; `run_err` also checks that a failing command leaves the home and
+  the undo history unchanged.
+- Library and import tests run in a child process of the test binary
+  (`common::isolated_catalog`) whose user folders point at a temporary folder, so they
+  never touch the user's libraries. Tests that need the installed Sweet Home 3D catalog
+  skip without it; online tests use local feeds and only checks that fail before a request.
+- The frontend uses Vitest (`pnpm test` in `app/`, `src/**/*.test.ts`, config in
+  `vitest.config.ts`): pure logic of the plan (snapping, moving, handles, hit testing,
+  drawing helpers), the 3D view (visitor, staircases, scene helpers), units, i18n and the
+  recent homes. React components and WebGL are not tested. `src/testFixtures.ts` builds
+  homes for the tests; `src/testSetup.ts` fixes the language to English.
+- `scripts/check.ps1` runs the Rust tests, Vitest and, when Sweet Home 3D and a JDK are
+  installed, `compat-check.ps1`.
+- Bugs found and fixed: a failing command emptied the redo history; `furniture_group`
+  accepted the same piece twice; a failed `camera_set` left a new camera behind;
+  `label_add` accepted empty text and non-positive font sizes; `polyline_update` closed
+  two-point lines; the plan's direction readout showed 360° instead of 0°.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

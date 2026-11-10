@@ -16,7 +16,8 @@ function files(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
     const p = path.join(dir, d.name);
     if (d.isDirectory()) return files(p);
-    return /\.(ts|tsx)$/.test(d.name) ? [p] : [];
+    // Unit tests (*.test.ts) call t() with test texts, not with texts of the user interface
+    return /\.(ts|tsx)$/.test(d.name) && !/\.test\.ts$/.test(d.name) ? [p] : [];
   });
 }
 

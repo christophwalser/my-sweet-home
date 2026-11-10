@@ -20,7 +20,15 @@ try {
     try {
         Step 'biome'      { pnpm lint }
         Step 'typescript' { pnpm typecheck }
+        Step 'vitest'     { pnpm test }
         Step 'i18n'       { node scripts/i18n-check.mjs }
     } finally { Pop-Location }
+    # Files written by msh, read with the original Sweet Home 3D (needs Sweet Home 3D and a JDK)
+    $sh3dJar = 'C:\Program Files\Sweet Home 3D\lib\SweetHome3D.jar'
+    if ((Test-Path $sh3dJar) -and (Get-Command javac -ErrorAction SilentlyContinue)) {
+        Step 'compat-check' { & (Join-Path $PSScriptRoot 'compat-check.ps1') -Sh3dJar $sh3dJar }
+    } else {
+        Write-Host '==> compat-check skipped (Sweet Home 3D or JDK not found)' -ForegroundColor Yellow
+    }
     Write-Host 'All checks passed.' -ForegroundColor Green
 } finally { Pop-Location }

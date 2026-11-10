@@ -132,12 +132,18 @@ impl Document {
         file
     }
 
-    /// Records the current state before a modifying command.
+    /// Records the current state before a modifying command. The history is only trimmed
+    /// and the redo steps only dropped by `commit_checkpoint`, so a failing command leaves
+    /// both untouched.
     pub(crate) fn checkpoint(&mut self, label: &str) {
         self.undo.push(Snapshot {
             label: label.to_owned(),
             home: self.file.home.clone(),
         });
+    }
+
+    /// Keeps the last checkpoint (command succeeded).
+    pub(crate) fn commit_checkpoint(&mut self) {
         if self.undo.len() > MAX_UNDO {
             self.undo.remove(0);
         }

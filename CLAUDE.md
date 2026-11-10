@@ -28,10 +28,14 @@ a CLI (`msh`) and an MCP server. Architecture and roadmap: `docs/ARCHITECTURE.md
 Key rule: every user-facing action is implemented as a command in `msh-core`, so that UI,
 CLI and MCP all get it from the same registry.
 
+New or changed commands get tests in `crates/msh-core/tests/cmd_<module>.rs` (helpers in
+`tests/common/mod.rs`); new pure frontend logic gets a `*.test.ts` next to it.
+
 ## Commands
 
 ```powershell
-.\scripts\check.ps1          # rustfmt, clippy (-D warnings), tests, Biome, tsc
+.\scripts\check.ps1          # rustfmt, clippy (-D warnings), Rust tests, Biome, tsc, Vitest, i18n, compat-check
+cd app; pnpm test            # frontend unit tests (Vitest, src/**/*.test.ts)
 .\scripts\compat-check.ps1   # verify written files with the original Sweet Home 3D reader
 .\scripts\mcp-smoke.ps1      # scripted MCP session, result verified with the SH3D reader
 .\scripts\live-demo.ps1      # live control of the running app (start target\debug\msh-app.exe first)

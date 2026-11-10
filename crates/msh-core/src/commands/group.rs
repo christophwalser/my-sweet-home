@@ -78,7 +78,8 @@ pub(super) fn register(r: &mut Registry) {
          Returns the ID of the new group.",
         true,
         |doc, p: GroupParams| {
-            if p.ids.len() < 2 {
+            let distinct: std::collections::HashSet<&String> = p.ids.iter().collect();
+            if distinct.len() < 2 {
                 return Err(CommandError::failed("a group needs at least two pieces"));
             }
             let home = doc.home_mut();
