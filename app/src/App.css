@@ -2413,14 +2413,14 @@ body.moving-dialog * {
   display: flex;
 }
 
+/* Side panes keep their chosen width but give way in a narrow window */
 .libed-side {
-  width: 330px;
-  flex: none;
+  flex: 0 1 var(--libed-side, 330px);
+  min-width: 200px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  border-right: 1px solid var(--border);
   min-height: 0;
 }
 
@@ -2439,9 +2439,118 @@ body.moving-dialog * {
   padding: 0;
 }
 
+.libed-libs-pane {
+  height: var(--libed-libs, 180px);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
 .libed-libs {
-  max-height: 30%;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.libed-libs-pane > .link-button {
+  align-self: flex-start;
+}
+
+/* Splitters of the editor: inside the layout, not over it like those of the main window */
+.libed .splitter-vertical.libed-split {
+  position: static;
+  width: 5px;
+  flex: none;
+  background: var(--border);
+}
+
+.libed .splitter-horizontal.libed-split-libs {
+  margin: 2px -12px;
+}
+
+.libed-toolbar {
+  cursor: default;
+  user-select: none;
+}
+
+.dialog.libed.maximized {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+}
+
+.libed-resize {
+  position: absolute;
+  z-index: 20;
+}
+
+/* Inside the window: its rounded corners clip what lies outside */
+.libed-resize.n,
+.libed-resize.s {
+  left: 14px;
+  right: 14px;
+  height: 5px;
+  cursor: ns-resize;
+}
+
+.libed-resize.e,
+.libed-resize.w {
+  top: 14px;
+  bottom: 14px;
+  width: 5px;
+  cursor: ew-resize;
+}
+
+.libed-resize.n {
+  top: 0;
+}
+
+.libed-resize.s {
+  bottom: 0;
+}
+
+.libed-resize.e {
+  right: 0;
+}
+
+.libed-resize.w {
+  left: 0;
+}
+
+.libed-resize.ne,
+.libed-resize.nw,
+.libed-resize.se,
+.libed-resize.sw {
+  width: 14px;
+  height: 14px;
+}
+
+.libed-resize.ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.libed-resize.sw {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.libed-resize.nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.libed-resize.se {
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
 }
 
 .libed-libs li,
@@ -2559,8 +2668,8 @@ body.moving-dialog * {
 }
 
 .libed-preview {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 0;
+  min-width: 240px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2624,11 +2733,10 @@ body.moving-dialog * {
 }
 
 .libed-props {
-  width: 420px;
-  flex: none;
+  flex: 0 1 var(--libed-props, 420px);
+  min-width: 260px;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--border);
   min-height: 0;
 }
 

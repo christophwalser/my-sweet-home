@@ -599,7 +599,7 @@ pub(super) fn register(r: &mut Registry) {
             record("copy items", std::slice::from_ref(&to), || {
                 for &i in &p.indexes {
                     let src = if same { target.clone() } else { source.clone() };
-                    let n = target.copy_item_from(&src, i);
+                    let n = target.copy_item_from(&src, i)?;
                     if let (Some(name), 1) = (&p.name, p.indexes.len()) {
                         target.set(n, "name", Some(name), p.lang.as_deref());
                     }

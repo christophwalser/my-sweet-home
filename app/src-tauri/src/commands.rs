@@ -5,10 +5,11 @@
 
 use crate::autosave::{self, RecoveryInfo};
 use crate::state::{self, AppState, HOME_CHANGED_EVENT, HomeView};
-use msh_catalog::{CatalogKind, open_library};
+use msh_catalog::{Catalog, CatalogKind, open_library};
 use msh_core::catalog_settings::{CatalogSettings, ItemKind};
 use serde::Serialize;
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, State, WebviewWindow};
 
@@ -356,6 +357,38 @@ pub async fn model_stage(path: PathBuf, state: State<'_, AppState>) -> CmdResult
     })
 }
 
+/// Parsed libraries by path and language, with the file's size and time when it was read.
+type LibraryCache = HashMap<(PathBuf, String), (u64, Option<std::time::SystemTime>, Vec<Catalog>)>;
+
+/// Reads a library, or takes it from the cache if the file did not change since: after an
+/// edit in the library editor only the changed library is read again.
+fn open_library_cached(path: &Path, lang: &str) -> Result<Vec<Catalog>, msh_catalog::CatalogError> {
+    static CACHE: std::sync::Mutex<Option<LibraryCache>> = std::sync::Mutex::new(None);
+    let meta = std::fs::metadata(path).ok();
+    let stamp = (
+        meta.as_ref().map_or(0, std::fs::Metadata::len),
+        meta.and_then(|m| m.modified().ok()),
+    );
+    let key = (path.to_owned(), lang.to_owned());
+    if let Some((len, time, catalogs)) = CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get_or_insert_with(HashMap::new)
+        .get(&key)
+        && (*len, *time) == stamp
+        && stamp.1.is_some()
+    {
+        return Ok(catalogs.clone());
+    }
+    let catalogs = open_library(path, Some(lang))?;
+    CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get_or_insert_with(HashMap::new)
+        .insert(key, (stamp.0, stamp.1, catalogs.clone()));
+    Ok(catalogs)
+}
+
 /// Loads all furniture and texture catalogs found on this machine.
 #[tauri::command]
 pub async fn catalog_load(lang: String, state: State<'_, AppState>) -> CmdResult<CatalogDto> {
@@ -371,7 +404,7 @@ pub async fn catalog_load(lang: String, state: State<'_, AppState>) -> CmdResult
         for (index, path) in store.paths.iter().enumerate() {
             let hidden = settings.is_hidden(path);
             let editable = msh_catalog::library_edit::is_editable(path);
-            let catalogs = match open_library(path, Some(&lang)) {
+            let catalogs = match open_library_cached(path, &lang) {
                 Ok(c) => c,
                 Err(e) => {
                     dto.errors.push(e.to_string());

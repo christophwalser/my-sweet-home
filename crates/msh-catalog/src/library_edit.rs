@@ -1,8 +1,10 @@
 //! Editing furniture and texture libraries: items, categories, names, and an undo history.
 //!
-//! A library is read completely (main properties, translations `…_de.properties` and all
-//! resources), changed in memory and written back atomically. Every change made through
-//! [`record`] keeps the file contents before and after, so it can be undone and redone.
+//! Opening a library reads only its properties (main and translations `…_de.properties`) and
+//! the names of its files; models, icons and images are read when an item is copied. Saving
+//! writes the properties and copies the unchanged files without unpacking them, so even large
+//! libraries are saved in a fraction of a second. Every change made through [`record`] keeps
+//! copies of the files before and after it (in the temporary folder) for undo and redo.
 
 use crate::properties;
 use crate::user_library::{escape, new_catalog_id};
@@ -26,8 +28,11 @@ pub struct EditableLibrary {
     pub props: BTreeMap<String, String>,
     /// Translations by locale (`de`, `fr`, …)
     pub localized: BTreeMap<String, BTreeMap<String, String>>,
-    /// All other files of the ZIP, in their order
-    files: Vec<(String, Vec<u8>)>,
+    /// All other files of the ZIP, in their order: `None` for a file still in `source`
+    /// (copied unchanged when saving), `Some` for new content
+    files: Vec<(String, Option<Vec<u8>>)>,
+    /// Library file the unchanged files are read from
+    source: Option<PathBuf>,
 }
 
 fn io_err(path: &Path) -> impl Fn(std::io::Error) -> CatalogError + '_ {
@@ -90,40 +95,41 @@ pub fn is_editable(path: &Path) -> bool {
 }
 
 impl EditableLibrary {
-    /// Reads a library file.
+    /// Reads a library file (its properties and the names of its files).
     pub fn open(path: &Path) -> Result<Self, CatalogError> {
         let file = std::fs::File::open(path).map_err(io_err(path))?;
         let mut zip = zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(zip_err(path))?;
-        let mut all = Vec::new();
-        for i in 0..zip.len() {
-            let mut f = zip.by_index(i).map_err(zip_err(path))?;
-            if f.is_dir() {
-                continue;
-            }
-            let mut data = Vec::new();
-            f.read_to_end(&mut data).map_err(io_err(path))?;
-            all.push((f.name().to_owned(), data));
-        }
-        let (main, kind) = all
+        let names: Vec<String> = zip
+            .file_names()
+            .filter(|n| !n.ends_with('/'))
+            .map(str::to_owned)
+            .collect();
+        let (main, kind) = names
             .iter()
-            .find_map(|(n, _)| kind_of_entry(n).map(|k| (n.clone(), k)))
+            .find_map(|n| kind_of_entry(n).map(|k| (n.clone(), k)))
             .ok_or_else(|| CatalogError::NoCatalog {
                 path: path.to_owned(),
             })?;
         let stem = main.trim_end_matches(".properties").to_owned();
+        let mut read = |name: &str| -> Result<Vec<u8>, CatalogError> {
+            let mut f = zip.by_name(name).map_err(zip_err(path))?;
+            let mut data = Vec::new();
+            f.read_to_end(&mut data).map_err(io_err(path))?;
+            Ok(data)
+        };
         let mut props = BTreeMap::new();
         let mut localized = BTreeMap::new();
         let mut files = Vec::new();
-        for (name, data) in all {
+        for name in names {
             if name == main {
-                props = properties::parse(&data);
+                props = properties::parse(&read(&name)?);
             } else if let Some(loc) = name
                 .strip_prefix(&format!("{stem}_"))
                 .and_then(|r| r.strip_suffix(".properties"))
             {
-                localized.insert(loc.to_owned(), properties::parse(&data));
+                localized.insert(loc.to_owned(), properties::parse(&read(&name)?));
             } else {
-                files.push((name, data));
+                files.push((name, None));
             }
         }
         Ok(Self {
@@ -133,7 +139,29 @@ impl EditableLibrary {
             props,
             localized,
             files,
+            source: Some(path.to_owned()),
         })
+    }
+
+    /// Content of a file of the library.
+    fn file_data(&self, name: &str) -> Result<Vec<u8>, CatalogError> {
+        match self.files.iter().find(|(n, _)| n == name) {
+            Some((_, Some(data))) => Ok(data.clone()),
+            Some((_, None)) => {
+                let source = self.source.as_deref().unwrap_or(&self.path);
+                let file = std::fs::File::open(source).map_err(io_err(source))?;
+                let mut zip =
+                    zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(zip_err(source))?;
+                let mut f = zip.by_name(name).map_err(zip_err(source))?;
+                let mut data = Vec::new();
+                f.read_to_end(&mut data).map_err(io_err(source))?;
+                Ok(data)
+            }
+            None => Err(CatalogError::ResourceNotFound {
+                path: self.path.clone(),
+                resource: name.to_owned(),
+            }),
+        }
     }
 
     /// A new, empty library (not written yet).
@@ -151,15 +179,21 @@ impl EditableLibrary {
             props,
             localized: BTreeMap::new(),
             files: Vec::new(),
+            source: None,
         }
     }
 
-    /// The library file as bytes.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, CatalogError> {
+    /// Writes the library atomically: properties and new files, the unchanged files copied
+    /// from the source without unpacking them.
+    pub fn save(&self) -> Result<(), CatalogError> {
         let path = &self.path;
-        let mut out = std::io::Cursor::new(Vec::new());
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(io_err(path))?;
+        }
+        let tmp = path.with_extension("msh-tmp");
         {
-            let mut zip = zip::ZipWriter::new(&mut out);
+            let out = std::fs::File::create(&tmp).map_err(io_err(path))?;
+            let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(out));
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated);
             zip.start_file(self.main.as_str(), options)
@@ -173,19 +207,33 @@ impl EditableLibrary {
                 zip.write_all(properties_text(map).as_bytes())
                     .map_err(io_err(path))?;
             }
+            let mut source = match &self.source {
+                Some(src) if self.files.iter().any(|(_, d)| d.is_none()) => {
+                    let file = std::fs::File::open(src).map_err(io_err(src))?;
+                    Some(
+                        zip::ZipArchive::new(std::io::BufReader::new(file))
+                            .map_err(zip_err(src))?,
+                    )
+                }
+                _ => None,
+            };
             for (name, data) in &self.files {
-                zip.start_file(name.as_str(), options)
-                    .map_err(zip_err(path))?;
-                zip.write_all(data).map_err(io_err(path))?;
+                match (data, source.as_mut()) {
+                    (Some(data), _) => {
+                        zip.start_file(name.as_str(), options)
+                            .map_err(zip_err(path))?;
+                        zip.write_all(data).map_err(io_err(path))?;
+                    }
+                    (None, Some(src)) => {
+                        let f = src.by_name(name).map_err(zip_err(path))?;
+                        zip.raw_copy_file(f).map_err(zip_err(path))?;
+                    }
+                    (None, None) => {}
+                }
             }
             zip.finish().map_err(zip_err(path))?;
         }
-        Ok(out.into_inner())
-    }
-
-    /// Writes the library atomically.
-    pub fn save(&self) -> Result<(), CatalogError> {
-        write_file(&self.path, &self.to_bytes()?)
+        std::fs::rename(&tmp, path).map_err(io_err(path))
     }
 
     /// Indexes of the items, ascending.
@@ -367,7 +415,7 @@ impl EditableLibrary {
     /// Adds a file to the library (replacing one with the same name).
     pub fn push_file(&mut self, name: String, data: Vec<u8>) {
         self.files.retain(|(n, _)| n != &name);
-        self.files.push((name, data));
+        self.files.push((name, Some(data)));
     }
 
     /// Replaces a resource of an item (e.g. a new icon) with `data` under `file`.
@@ -395,7 +443,11 @@ impl EditableLibrary {
 
     /// Copies an item of `source` (which may be this library) into this library with a new
     /// catalog ID and its own copies of the resources. Returns the new index.
-    pub fn copy_item_from(&mut self, source: &EditableLibrary, index: u32) -> u32 {
+    pub fn copy_item_from(
+        &mut self,
+        source: &EditableLibrary,
+        index: u32,
+    ) -> Result<u32, CatalogError> {
         let n = self.next_index();
         let mut values = source.item(index);
         for (key, path) in source.resources(index) {
@@ -404,9 +456,7 @@ impl EditableLibrary {
             let base_dir = path.rsplit_once('/').map(|(d, _)| d.to_owned());
             let mut new_main = None;
             for f in &files {
-                let Some((_, data)) = source.files.iter().find(|(name, _)| name == f) else {
-                    continue;
-                };
+                let data = source.file_data(f)?;
                 let rel = match (&base_dir, multi) {
                     (Some(d), true) => f.strip_prefix(&format!("{d}/")).unwrap_or(f).to_owned(),
                     _ => f.rsplit('/').next().unwrap_or(f).to_owned(),
@@ -419,7 +469,7 @@ impl EditableLibrary {
                 if f == &path {
                     new_main = Some(target.clone());
                 }
-                self.files.push((target, data.clone()));
+                self.files.push((target, Some(data)));
             }
             if let Some(m) = new_main {
                 values.insert(key, format!("/{m}"));
@@ -439,7 +489,7 @@ impl EditableLibrary {
                 target.insert(format!("{k}#{n}"), v);
             }
         }
-        n
+        Ok(n)
     }
 }
 
@@ -450,16 +500,6 @@ fn item_of(map: &BTreeMap<String, String>, index: u32) -> BTreeMap<String, Strin
             (i == index).then(|| (key.to_owned(), v.clone()))
         })
         .collect()
-}
-
-/// Writes a file atomically (temporary file, then rename).
-fn write_file(path: &Path, data: &[u8]) -> Result<(), CatalogError> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(io_err(path))?;
-    }
-    let tmp = path.with_extension("msh-tmp");
-    std::fs::write(&tmp, data).map_err(io_err(path))?;
-    std::fs::rename(&tmp, path).map_err(io_err(path))
 }
 
 /// A file name for a new library from its name (in the user's folder of that kind).
@@ -491,12 +531,13 @@ pub fn new_library_path(dir: &Path, kind: CatalogKind, name: &str) -> PathBuf {
 
 // ---- Undo history ------------------------------------------------------------------------
 
-/// One file before and after a change (`None`: the file did not exist).
+/// One file before and after a change: copies in the history folder (`None`: the file did not
+/// exist).
 #[derive(Debug, Clone)]
 struct FileChange {
     path: PathBuf,
-    before: Option<Vec<u8>>,
-    after: Option<Vec<u8>>,
+    before: Option<PathBuf>,
+    after: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -509,18 +550,43 @@ struct Step {
 struct History {
     undo: Vec<Step>,
     redo: Vec<Step>,
+    next: u64,
 }
 
 static HISTORY: Mutex<History> = Mutex::new(History {
     undo: Vec::new(),
     redo: Vec::new(),
+    next: 0,
 });
 
-/// Steps kept for undo (library files can be large).
+/// Steps kept for undo.
 const MAX_STEPS: usize = 30;
 
-fn read_opt(path: &Path) -> Option<Vec<u8>> {
-    std::fs::read(path).ok()
+/// Folder of the copies, one per process.
+fn history_dir() -> PathBuf {
+    std::env::temp_dir()
+        .join("msh-library-history")
+        .join(std::process::id().to_string())
+}
+
+/// A copy of `path` in the history folder, if the file exists.
+fn snapshot(path: &Path, n: u64) -> Result<Option<PathBuf>, CatalogError> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let dir = history_dir();
+    std::fs::create_dir_all(&dir).map_err(io_err(&dir))?;
+    let copy = dir.join(format!("{n}.bin"));
+    std::fs::copy(path, &copy).map_err(io_err(path))?;
+    Ok(Some(copy))
+}
+
+fn forget(step: &Step) {
+    for c in &step.changes {
+        for p in [&c.before, &c.after].into_iter().flatten() {
+            let _ = std::fs::remove_file(p);
+        }
+    }
 }
 
 /// Runs `change`, which may write the files `paths`, and records it for undo as `label`.
@@ -529,28 +595,43 @@ pub fn record<T>(
     paths: &[PathBuf],
     change: impl FnOnce() -> Result<T, CatalogError>,
 ) -> Result<T, CatalogError> {
-    let before: Vec<Option<Vec<u8>>> = paths.iter().map(|p| read_opt(p)).collect();
-    let result = change()?;
-    let changes = paths
-        .iter()
-        .zip(before)
-        .map(|(p, b)| FileChange {
+    let counter = || {
+        let mut h = HISTORY.lock().unwrap_or_else(|e| e.into_inner());
+        h.next += 1;
+        h.next
+    };
+    let mut before = Vec::new();
+    for p in paths {
+        before.push(snapshot(p, counter())?);
+    }
+    let result = match change() {
+        Ok(r) => r,
+        Err(e) => {
+            for b in before.into_iter().flatten() {
+                let _ = std::fs::remove_file(b);
+            }
+            return Err(e);
+        }
+    };
+    let mut changes = Vec::new();
+    for (p, b) in paths.iter().zip(before) {
+        changes.push(FileChange {
             path: p.clone(),
             before: b,
-            after: read_opt(p),
-        })
-        .filter(|c| c.before != c.after)
-        .collect::<Vec<_>>();
-    if !changes.is_empty() {
-        let mut h = HISTORY.lock().unwrap_or_else(|e| e.into_inner());
-        h.undo.push(Step {
-            label: label.to_owned(),
-            changes,
+            after: snapshot(p, counter())?,
         });
-        if h.undo.len() > MAX_STEPS {
-            h.undo.remove(0);
-        }
-        h.redo.clear();
+    }
+    let mut h = HISTORY.lock().unwrap_or_else(|e| e.into_inner());
+    h.undo.push(Step {
+        label: label.to_owned(),
+        changes,
+    });
+    if h.undo.len() > MAX_STEPS {
+        let old = h.undo.remove(0);
+        forget(&old);
+    }
+    for step in std::mem::take(&mut h.redo) {
+        forget(&step);
     }
     Ok(result)
 }
@@ -558,7 +639,11 @@ pub fn record<T>(
 fn apply(changes: &[FileChange], forward: bool) -> Result<(), CatalogError> {
     for c in changes {
         match if forward { &c.after } else { &c.before } {
-            Some(data) => write_file(&c.path, data)?,
+            Some(copy) => {
+                let tmp = c.path.with_extension("msh-tmp");
+                std::fs::copy(copy, &tmp).map_err(io_err(&c.path))?;
+                std::fs::rename(&tmp, &c.path).map_err(io_err(&c.path))?;
+            }
             None => {
                 if c.path.exists() {
                     std::fs::remove_file(&c.path).map_err(io_err(&c.path))?;
@@ -621,11 +706,9 @@ mod tests {
             for k in ["width", "depth", "height"] {
                 lib.props.insert(format!("{k}#{n}"), "50".into());
             }
-            lib.files.push((format!("{n}/icon.png"), vec![n as u8]));
-            lib.files
-                .push((format!("{n}/model/m.obj"), b"v 0 0 0".to_vec()));
-            lib.files
-                .push((format!("{n}/model/m.mtl"), b"newmtl a".to_vec()));
+            lib.push_file(format!("{n}/icon.png"), vec![n as u8]);
+            lib.push_file(format!("{n}/model/m.obj"), b"v 0 0 0".to_vec());
+            lib.push_file(format!("{n}/model/m.mtl"), b"newmtl a".to_vec());
         }
         let de = lib.localized.entry("de".into()).or_default();
         de.insert("category#1".into(), "Stühle".into());
@@ -667,7 +750,7 @@ mod tests {
         assert!(!lib.localized["de"].contains_key("category#2"));
 
         let source = lib.clone();
-        let n = lib.copy_item_from(&source, 1);
+        let n = lib.copy_item_from(&source, 1).unwrap();
         assert_eq!(n, 3);
         assert_ne!(lib.props["id#3"], lib.props["id#1"]);
         assert_eq!(lib.props["model#3"], "/3/model/m.obj");

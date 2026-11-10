@@ -945,11 +945,14 @@ furniture is read by its home reader.
   "Libraries…". Moving items to another category is no longer done by drag and drop but through
   the item's context menu ("Move to" with the categories and "New category…"), the same menu in
   the catalog and in the editor (`catalog/library.ts`, `plan2d/ContextMenu.tsx` with sub-entries).
-- msh-catalog `library_edit.rs`: `EditableLibrary` reads a library completely (main properties,
-  translations `…_de.properties`, all resources) and writes it back atomically; items are
-  changed, moved (a category shown through a translation keeps both languages), copied with
-  their resources and a new catalog ID, removed with the resources no other item uses. `record`
-  keeps the file contents before and after each change for undo / redo (30 steps).
+- msh-catalog `library_edit.rs`: `EditableLibrary` reads only the properties of a library (main
+  and translations `…_de.properties`) and the names of its files; resources are read when an
+  item is copied. Saving writes the properties and copies unchanged files without unpacking them
+  (`raw_copy_file`), then replaces the file atomically: a change to a 30 MB library takes well
+  under a second instead of half a minute. Items are changed, moved (a category shown through a
+  translation keeps both languages), copied with their resources and a new catalog ID, removed
+  with the resources no other item uses. `record` keeps copies of the files before and after
+  each change in the temporary folder for undo / redo (30 steps).
   `user_library` adds imports to any editable library through it.
 - Commands (msh-core `commands/library_edit.rs`): `library_create`, `library_rename`,
   `library_items` (search over all libraries), `library_item`, `library_update_item` (keys of
@@ -969,7 +972,11 @@ furniture is read by its home reader.
   (general, size and model, kind: furniture, door or window, staircase, light with its light
   sources, shelf). Changes are saved at once; Ctrl+Z / Ctrl+Y and the buttons undo and redo.
   The catalog DTO lists hidden libraries too (`catalogAll` in the store, the catalog filters
-  them) and gives each item its index in the library.
+  them) and gives each item its index in the library; `catalog_load` keeps parsed libraries
+  and reads again only files whose size or time changed. The editor window is moved by its
+  title bar, resized at its edges, maximized (button or double-click on the title bar); the
+  side panes and the split between libraries and items are dragged (double-click: default);
+  the layout is kept in the browser storage.
 - The 3D view now cuts openings with their own outline (`doorOrWindowCutOutShape`, e.g. round
   arches or an opening smaller than the frame) instead of the whole box.
 

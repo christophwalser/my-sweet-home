@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { api, type CatalogItem, type CatalogKind, type LibraryInfo, libResourceUrl } from "../api";
 import { language, t } from "../i18n";
+import Splitter from "../layout/Splitter";
 import ContextMenu, { type MenuItem } from "../plan2d/ContextMenu";
 import { useStore } from "../store";
 import { useUi } from "../ui/uiStore";
@@ -36,6 +37,156 @@ type Details = {
 };
 
 type Menu = { x: number; y: number; items: MenuItem[] };
+
+/** Size and place of the editor window and its panes, kept between sessions. */
+type Frame = {
+  /** Window rectangle; null: centered in its default size */
+  rect: { x: number; y: number; w: number; h: number } | null;
+  maximized: boolean;
+  side: number;
+  props: number;
+  libs: number;
+};
+
+const FRAME_KEY = "msh.libraryEditor.frame";
+const DEFAULT_FRAME: Frame = { rect: null, maximized: false, side: 330, props: 420, libs: 180 };
+const MIN_W = 720;
+const MIN_H = 420;
+
+function loadFrame(): Frame {
+  try {
+    const raw = localStorage.getItem(FRAME_KEY);
+    if (raw) return { ...DEFAULT_FRAME, ...(JSON.parse(raw) as Partial<Frame>) };
+  } catch {
+    // Unknown or unreadable: the default layout
+  }
+  return DEFAULT_FRAME;
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** Edges and corners of the window that resize it. */
+const EDGES = ["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const;
+
+/**
+ * The editor window: moved by its title bar, resized at its edges and corners, maximized with
+ * the button or a double-click on the title bar; side panes and the library list resized with
+ * splitters (double-click: default size).
+ */
+function useFrame() {
+  const [frame, setFrame] = useState<Frame>(loadFrame);
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    try {
+      localStorage.setItem(FRAME_KEY, JSON.stringify(frame));
+    } catch {
+      // Not kept: the layout starts as default next time
+    }
+  }, [frame]);
+  const update = useCallback(
+    (change: Partial<Frame>) => setFrame((f) => ({ ...f, ...change })),
+    [],
+  );
+
+  /** Follows the pointer from a pointerdown; `apply` gets the start rectangle and the offset */
+  const track = useCallback(
+    (
+      e: React.PointerEvent<HTMLElement>,
+      cursor: string,
+      apply: (start: DOMRect, dx: number, dy: number) => void,
+    ) => {
+      const el = dialog.current;
+      if (!el || e.button !== 0) return;
+      e.preventDefault();
+      const start = el.getBoundingClientRect();
+      const x0 = e.clientX;
+      const y0 = e.clientY;
+      const target = e.currentTarget;
+      target.setPointerCapture(e.pointerId);
+      document.body.style.cursor = cursor;
+      document.body.style.userSelect = "none";
+      const move = (ev: PointerEvent) => apply(start, ev.clientX - x0, ev.clientY - y0);
+      const end = () => {
+        target.removeEventListener("pointermove", move);
+        target.removeEventListener("pointerup", end);
+        target.removeEventListener("pointercancel", end);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+      target.addEventListener("pointermove", move);
+      target.addEventListener("pointerup", end);
+      target.addEventListener("pointercancel", end);
+    },
+    [],
+  );
+
+  const moveStart = useCallback(
+    (e: React.PointerEvent<HTMLElement>) => {
+      if (frame.maximized || (e.target as HTMLElement).closest("button, input, select")) return;
+      track(e, "move", (r, dx, dy) =>
+        update({
+          rect: {
+            x: clamp(r.left + dx, 80 - r.width, window.innerWidth - 80),
+            y: clamp(r.top + dy, 0, Math.max(0, window.innerHeight - r.height)),
+            w: r.width,
+            h: r.height,
+          },
+        }),
+      );
+    },
+    [frame.maximized, track, update],
+  );
+
+  const resizeStart = useCallback(
+    (edge: (typeof EDGES)[number]) => (e: React.PointerEvent<HTMLElement>) =>
+      track(e, `${edge}-resize`, (r, dx, dy) => {
+        let { left, top, right, bottom } = r;
+        if (edge.includes("e")) right = clamp(r.right + dx, left + MIN_W, window.innerWidth);
+        if (edge.includes("w")) left = clamp(r.left + dx, 0, right - MIN_W);
+        if (edge.includes("s")) bottom = clamp(r.bottom + dy, top + MIN_H, window.innerHeight);
+        if (edge.includes("n")) top = clamp(r.top + dy, 0, bottom - MIN_H);
+        update({ rect: { x: left, y: top, w: right - left, h: bottom - top } });
+      }),
+    [track, update],
+  );
+
+  const style: React.CSSProperties = {
+    "--libed-side": `${frame.side}px`,
+    "--libed-props": `${frame.props}px`,
+    "--libed-libs": `${frame.libs}px`,
+  } as React.CSSProperties;
+  if (!frame.maximized && frame.rect) {
+    // Kept inside the app window if that became smaller
+    const w = Math.min(frame.rect.w, window.innerWidth);
+    const top = clamp(frame.rect.y, 0, window.innerHeight - MIN_H);
+    Object.assign(style, {
+      position: "fixed",
+      left: clamp(frame.rect.x, 80 - w, window.innerWidth - 80),
+      top,
+      width: w,
+      // The bottom edge stays reachable for resizing
+      height: Math.min(frame.rect.h, window.innerHeight - top),
+    });
+  }
+
+  /** Pane sizes from splitter positions (client coordinates) */
+  const panes = {
+    side: (x: number) => {
+      const r = dialog.current?.getBoundingClientRect();
+      if (r) update({ side: clamp(x - r.left, 220, r.width - frame.props - 240) });
+    },
+    props: (x: number) => {
+      const r = dialog.current?.getBoundingClientRect();
+      if (r) update({ props: clamp(r.right - x, 280, r.width - frame.side - 240) });
+    },
+    libs: (y: number, top: number | undefined, bottom: number | undefined) => {
+      if (top !== undefined && bottom !== undefined)
+        update({ libs: clamp(y - top, 70, bottom - top - 160) });
+    },
+  };
+
+  return { frame, update, dialog, style, moveStart, resizeStart, panes };
+}
 
 /** Kind of a piece, from the keys it has. */
 type PieceType = "furniture" | "door" | "stairs" | "light" | "shelf";
@@ -345,6 +496,9 @@ export default function LibraryEditor({
   const [closed, setClosed] = useState<Set<string>>(new Set());
   const iconRef = useRef<(() => string | null) | null>(null);
   const addButton = useRef<HTMLButtonElement>(null);
+  const { frame, update: updateFrame, dialog, style, moveStart, resizeStart, panes } = useFrame();
+  const side = useRef<HTMLElement>(null);
+  const toggleMaximized = () => updateFrame({ maximized: !frame.maximized });
 
   useEffect(() => {
     if (!data) void loadCatalog(language());
@@ -763,8 +917,26 @@ export default function LibraryEditor({
 
   return (
     <div className="dialog-backdrop">
-      <div className="dialog libed" role="dialog" aria-modal="true" aria-label={t("Libraries")}>
-        <header className="libed-toolbar">
+      <div
+        ref={dialog}
+        className={`dialog libed${frame.maximized ? " maximized" : ""}`}
+        style={style}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Libraries")}
+      >
+        {!frame.maximized &&
+          EDGES.map((edge) => (
+            <div key={edge} className={`libed-resize ${edge}`} onPointerDown={resizeStart(edge)} />
+          ))}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: title bar, moved with the mouse */}
+        <header
+          className="libed-toolbar"
+          onPointerDown={moveStart}
+          onDoubleClick={(e) => {
+            if (!(e.target as HTMLElement).closest("button, input, select")) toggleMaximized();
+          }}
+        >
           <h2>{t("Libraries")}</h2>
           <div className="segmented">
             <button
@@ -826,57 +998,77 @@ export default function LibraryEditor({
           >
             {t("Add")} ▾
           </button>
+          <button
+            type="button"
+            onClick={toggleMaximized}
+            aria-label={frame.maximized ? t("Restore") : t("Maximize")}
+            title={frame.maximized ? t("Restore") : t("Maximize")}
+          >
+            {frame.maximized ? "❐" : "□"}
+          </button>
           <button type="button" onClick={onClose} aria-label={t("Close")} title={t("Close")}>
             ×
           </button>
         </header>
         <div className="libed-body">
-          <aside className="libed-side">
-            <div className="libed-heading">{t("Libraries")}</div>
-            <ul className="libed-libs">
-              {libraries.map((l) => (
-                <li key={l.path} className={l.path === libPath ? "active" : undefined}>
-                  <button
-                    type="button"
-                    className="libed-lib"
-                    onClick={() => {
-                      setLibPath(l.path);
-                      setQuery("");
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      libraryMenu(l, e.clientX, e.clientY);
-                    }}
-                    title={l.path}
-                  >
-                    <span className="libed-lib-name">{libraryName(l)}</span>
-                    <span className="muted small">
-                      {(data?.items ?? []).filter((i) => i.library === l.index).length}
-                    </span>
-                    {!l.editable && (
-                      <span className="muted small" title={t("Read-only")}>
-                        🔒
+          <aside className="libed-side" ref={side}>
+            <div className="libed-libs-pane">
+              <div className="libed-heading">{t("Libraries")}</div>
+              <ul className="libed-libs">
+                {libraries.map((l) => (
+                  <li key={l.path} className={l.path === libPath ? "active" : undefined}>
+                    <button
+                      type="button"
+                      className="libed-lib"
+                      onClick={() => {
+                        setLibPath(l.path);
+                        setQuery("");
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        libraryMenu(l, e.clientX, e.clientY);
+                      }}
+                      title={l.path}
+                    >
+                      <span className="libed-lib-name">{libraryName(l)}</span>
+                      <span className="muted small">
+                        {(data?.items ?? []).filter((i) => i.library === l.index).length}
                       </span>
-                    )}
-                    {l.hidden && <span className="muted small">{t("hidden")}</span>}
-                  </button>
-                  <button
-                    type="button"
-                    className="libed-more"
-                    aria-label={t("Actions for {name}", { name: libraryName(l) })}
-                    onClick={(e) => {
-                      const r = e.currentTarget.getBoundingClientRect();
-                      libraryMenu(l, r.left, r.bottom);
-                    }}
-                  >
-                    ⋯
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <button type="button" className="link-button" onClick={() => void newLibrary()}>
-              {t("New library…")}
-            </button>
+                      {!l.editable && (
+                        <span className="muted small" title={t("Read-only")}>
+                          🔒
+                        </span>
+                      )}
+                      {l.hidden && <span className="muted small">{t("hidden")}</span>}
+                    </button>
+                    <button
+                      type="button"
+                      className="libed-more"
+                      aria-label={t("Actions for {name}", { name: libraryName(l) })}
+                      onClick={(e) => {
+                        const r = e.currentTarget.getBoundingClientRect();
+                        libraryMenu(l, r.left, r.bottom);
+                      }}
+                    >
+                      ⋯
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button type="button" className="link-button" onClick={() => void newLibrary()}>
+                {t("New library…")}
+              </button>
+            </div>
+            <Splitter
+              orientation="horizontal"
+              className="libed-split-libs"
+              title={t("Drag to resize")}
+              onDrag={(_x, y) => {
+                const r = side.current?.getBoundingClientRect();
+                panes.libs(y, r?.top, r?.bottom);
+              }}
+              onReset={() => updateFrame({ libs: DEFAULT_FRAME.libs })}
+            />
             <input
               type="search"
               placeholder={t("Search all libraries…")}
@@ -972,6 +1164,13 @@ export default function LibraryEditor({
               ))}
             </div>
           </aside>
+          <Splitter
+            orientation="vertical"
+            className="libed-split"
+            title={t("Drag to resize")}
+            onDrag={(x) => panes.side(x)}
+            onReset={() => updateFrame({ side: DEFAULT_FRAME.side })}
+          />
 
           <section className="libed-preview">
             {!sel && (
@@ -1035,6 +1234,13 @@ export default function LibraryEditor({
               </div>
             )}
           </section>
+          <Splitter
+            orientation="vertical"
+            className="libed-split"
+            title={t("Drag to resize")}
+            onDrag={(x) => panes.props(x)}
+            onReset={() => updateFrame({ props: DEFAULT_FRAME.props })}
+          />
 
           <section className="libed-props">
             {sel && details ? (
