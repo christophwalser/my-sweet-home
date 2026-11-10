@@ -197,6 +197,23 @@ impl Document {
         name
     }
 
+    /// Adds a single-file resource, or returns the name of one with the same bytes that the
+    /// file already has. Sweet Home 3D also stores a content once for all its users (e.g. a
+    /// texture on several walls), and the views load and cache a resource by its name.
+    /// Only top-level entries count: files inside a model folder belong to that model.
+    pub(crate) fn add_or_reuse_content(&mut self, data: Vec<u8>) -> String {
+        if let Some(existing) = self
+            .file
+            .contents
+            .iter()
+            .find(|c| !c.name.contains('/') && c.data.len() == data.len() && c.data == data)
+        {
+            return existing.name.clone();
+        }
+        let index = self.next_content_index();
+        self.add_content(index.to_string(), data)
+    }
+
     /// Next free numeric resource prefix (`0`, `1`, … as Sweet Home 3D uses).
     pub(crate) fn next_content_index(&self) -> u32 {
         self.file

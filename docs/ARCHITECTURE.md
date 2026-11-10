@@ -1033,6 +1033,38 @@ furniture is read by its home reader.
   allocates it at the size of the first upload (the 1×1 placeholder), and a larger image
   would otherwise not show until the next rebuild. The top view icons and the OBJ export wait for or skip such textures.
 
+### 4.45 Faster scene rebuilds (2026-11-10)
+
+Every change rebuilds the 3D scene. A profile of the release build showed that most of the
+time went into cutting door and window openings into all walls (CSG) and into compiling the
+shader programs again; the GPU needs 1–8 ms per frame and is not the limit.
+
+- `WallGeometryCache` (`buildScene.ts`) keeps the cut geometries of walls and baseboards
+  from one build to the next. A geometry is found by everything that shapes it: the prism
+  (outline, edge kinds, base, heights at the outline's points, texture axis) and the
+  attributes of the openings whose cut touches it. A changed wall or a moved door is cut
+  again, everything else is reused; unused geometries are freed after each build. Only the
+  3D view passes a cache, other callers build as before.
+- The replaced scene is freed after the first frame of the new one (`trash` in `View3D`),
+  so the new materials take over the compiled programs instead of compiling them again. At
+  most one replaced scene waits; content that was never drawn is freed at once.
+- Geometries, materials and textures of cached models belong to the model cache
+  (`modelParts` in `models.ts`) and are freed with it, not with every scene: pieces share
+  them, and freeing them uploaded them to the GPU again after every change.
+- Materials are marked for recompilation only when shadows are switched on or off.
+- `formatNumber` keeps one `Intl.NumberFormat` per locale and decimals instead of creating
+  one for every cell of the furniture list.
+- A texture image is stored once per home (`Document::add_or_reuse_content`, used by
+  `embed_texture`): a texture on another wall, floor or piece, or applied again, reuses the
+  top-level resource with the same bytes, as Sweet Home 3D shares a content between its
+  users. Before, every assignment added a copy; a home with its rooms and walls textured
+  one by one grew from 3 to 59 MB instead of 5 MB, and the views loaded each copy again
+  because they cache resources by name.
+
+Measured over CDP on the release build (median of 10 edits, time until the changed view is
+drawn): example home 226 → 66 ms, a real home with 47 pieces and 48 walls 152 → 40 ms; the
+3D images before and after are identical.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

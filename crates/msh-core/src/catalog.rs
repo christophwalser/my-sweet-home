@@ -195,13 +195,13 @@ pub(crate) fn embed_furniture_resources(
     })
 }
 
-/// Copies a texture image into the document and returns its resource name.
+/// Copies a texture image into the document and returns its resource name. An image the
+/// home already has (the same texture on another wall, floor or piece) is reused.
 pub(crate) fn embed_texture(
     doc: &mut Document,
     entry: &TextureEntry,
 ) -> Result<String, CommandError> {
     let data = msh_catalog::read_resource(&entry.library, &entry.item.image)
         .map_err(|e| CommandError::failed(e.to_string()))?;
-    let index = doc.next_content_index();
-    Ok(doc.add_content(index.to_string(), data))
+    Ok(doc.add_or_reuse_content(data))
 }

@@ -640,3 +640,121 @@ fn wall_side_and_baseboard_textures_are_saved_and_removed() {
     assert_eq!(w.textures[0].role.as_deref(), Some("rightSideTexture"));
     assert!(w.baseboards[0].texture.is_none());
 }
+
+/// Saves a home with one texture on all walls, the floor and the ceiling, applied twice and
+/// again after an undo. Also written to `MSH_TEXTURE_SCENARIO_OUT` when set (for comparing
+/// files with the Sweet Home 3D reader).
+#[test]
+fn the_same_texture_is_stored_once() {
+    let Some(root) = isolated_catalog("the_same_texture_is_stored_once") else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let png = root.join("Shared planks Qx4.png");
+    std::fs::write(&png, png_bytes(16, 16)).unwrap();
+    let tex = run(&r, &mut doc, "texture_import", json!({ "path": png }))["catalog_id"].clone();
+    let other_png = root.join("Other stone Qx4.png");
+    std::fs::write(&other_png, png_bytes(8, 8)).unwrap();
+    let other =
+        run(&r, &mut doc, "texture_import", json!({ "path": other_png }))["catalog_id"].clone();
+
+    let corners = [[0, 0], [400, 0], [400, 300], [0, 300]];
+    let walls: Vec<String> = (0..4)
+        .map(|i| {
+            let [a, b] = [corners[i], corners[(i + 1) % 4]];
+            run(
+                &r,
+                &mut doc,
+                "wall_add",
+                json!({ "x_start": a[0], "y_start": a[1], "x_end": b[0], "y_end": b[1] }),
+            )["id"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    let room = run(&r, &mut doc, "room_add", json!({ "points": corners }))["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let contents_before = doc.file.contents.len();
+
+    let apply = |doc: &mut Document| {
+        run(
+            &r,
+            doc,
+            "wall_update",
+            json!({ "ids": walls, "left_side_texture": tex, "right_side_texture": tex }),
+        );
+        run(
+            &r,
+            doc,
+            "room_update",
+            json!({ "id": room, "floor_texture": tex, "ceiling_texture": tex }),
+        );
+    };
+    apply(&mut doc);
+    apply(&mut doc);
+    run(&r, &mut doc, "edit_undo", json!({}));
+    apply(&mut doc);
+
+    let images = |doc: &Document| -> Vec<String> {
+        let home = doc.home();
+        home.walls
+            .iter()
+            .flat_map(|w| w.textures.iter().map(|t| t.image.clone()))
+            .chain(
+                home.rooms
+                    .iter()
+                    .flat_map(|r| r.textures.iter().map(|t| t.image.clone())),
+            )
+            .collect()
+    };
+    let used = images(&doc);
+    let contents_after_shared = doc.file.contents.len();
+
+    // Another image gets its own resource
+    run(
+        &r,
+        &mut doc,
+        "room_update",
+        json!({ "id": room, "ceiling_texture": other }),
+    );
+    let ceiling = doc.home().rooms[0]
+        .textures
+        .iter()
+        .find(|t| t.role.as_deref() == Some("ceilingTexture"))
+        .unwrap()
+        .image
+        .clone();
+    let contents_after_other = doc.file.contents.len();
+    let path = out_dir("the_same_texture_is_stored_once").join("home.sh3d");
+    run(&r, &mut doc, "home_save", json!({ "path": path }));
+    if let Some(copy) = std::env::var_os("MSH_TEXTURE_SCENARIO_OUT") {
+        std::fs::copy(&path, copy).unwrap();
+    }
+
+    assert_eq!(used.len(), 10, "{used:?}");
+    assert!(used.iter().all(|i| *i == used[0]), "{used:?}");
+    // One new resource for all ten uses, also after applying it again and undo
+    assert_eq!(contents_after_shared, contents_before + 1);
+    assert_ne!(ceiling, used[0]);
+    assert_eq!(contents_after_other, contents_before + 2);
+
+    // The saved file keeps one copy that all references find
+    let reopened = Document::open(&path).unwrap();
+    let names: Vec<&str> = reopened
+        .file
+        .contents
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
+    for image in images(&reopened) {
+        assert!(
+            names.contains(&image.as_str()),
+            "{image} missing in {names:?}"
+        );
+    }
+    assert_eq!(names.iter().filter(|n| **n == used[0]).count(), 1);
+}
