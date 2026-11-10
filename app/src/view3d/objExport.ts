@@ -3,6 +3,7 @@
 // Units are centimeters, the y axis points up.
 
 import * as THREE from "three";
+import { texturePending } from "./textures";
 
 export interface ObjFiles {
   /** Content of the .obj file (references `mtlName`) */
@@ -164,7 +165,7 @@ export function buildObj(content: THREE.Object3D, mtlName: string): ObjFiles {
 /** PNG (base64, without data URL prefix) of a texture's image, or null if it has none. */
 function textureToPng(tex: THREE.Texture): string | null {
   const image = tex.image as CanvasImageSource & { width?: number; height?: number };
-  if (!image?.width || !image.height) return null;
+  if (texturePending(tex) || !image?.width || !image.height) return null;
   const canvas = document.createElement("canvas");
   canvas.width = image.width;
   canvas.height = image.height;

@@ -1019,6 +1019,18 @@ furniture is read by its home reader.
   (maximize, restore, minimize, separate window) and the library editor use SVG icons of the
   icon set. The 3D view settings open centered in the window.
 
+### 4.44 Textures of model materials, texture cache (2026-11-10)
+
+- A texture given to a material of a model without texture coordinates (e.g. the default
+  doors) used to show as one color. Such meshes now get texture coordinates in centimeters
+  of the piece (`view3d/textures.ts`, `boxProjectedUvs`): each triangle takes the two axes
+  across its normal, so a door shows the image upright at its real size (texture width,
+  height, scale and angle). Models with their own texture coordinates keep them.
+- Texture images of the 3D view are loaded once per open home and shared
+  (`cachedTexture`). Rebuilding the scene after a change no longer renders all textured
+  surfaces black until their images load again; a new image shows a white placeholder
+  until it is there. The top view icons and the OBJ export wait for or skip such textures.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

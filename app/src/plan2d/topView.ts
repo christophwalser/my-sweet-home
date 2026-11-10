@@ -7,6 +7,7 @@
 import * as THREE from "three";
 import { forEachPiece, type Home, type Piece } from "../model";
 import { createPieceObject } from "../view3d/models";
+import { texturePending } from "../view3d/textures";
 
 /** Longest side of a top view in pixels. */
 const SIZE = 384;
@@ -167,7 +168,11 @@ function texturesLoaded(obj: THREE.Object3D): boolean {
     for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
       const map = (m as THREE.MeshPhongMaterial).map;
       const img = map?.image as HTMLImageElement | undefined;
-      if (map && (!img || (img instanceof HTMLImageElement && !img.complete))) ready = false;
+      if (
+        map &&
+        (texturePending(map) || !img || (img instanceof HTMLImageElement && !img.complete))
+      )
+        ready = false;
     }
   });
   return ready;

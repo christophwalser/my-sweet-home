@@ -15,6 +15,7 @@ import {
   type Texture,
 } from "../model";
 import { holesAt, parseSvgPath, staircases } from "./staircase";
+import { cachedTexture } from "./textures";
 import { baseboardOf, baseboardPolygon } from "./wallSides";
 
 export type LevelInfo = { elevation: number; height: number; floorThickness: number };
@@ -71,12 +72,9 @@ export function colorOf(argb: number | null | undefined, fallback: number): THRE
 /** Constant depth offset of floors (in depth buffer steps), see buildRooms. */
 const FLOOR_OFFSET_UNITS = 2;
 
-const textureLoader = new THREE.TextureLoader();
-textureLoader.setCrossOrigin("anonymous");
-
 /** Repeating texture sized in centimeters (one image covers width × height cm). */
 export function loadTiledTexture(url: string, t: Texture, onLoad: () => void): THREE.Texture {
-  const tex = textureLoader.load(url, onLoad);
+  const tex = cachedTexture(url, onLoad);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -667,7 +665,7 @@ const SKY_RADIUS = 90000;
 export function buildSky(opened: OpenedHome, requestRender: () => void): THREE.Mesh | null {
   const skyTexture = opened.home.environment?.textures.find((t) => t.role === "skyTexture");
   if (!skyTexture) return null;
-  const tex = textureLoader.load(docResourceUrl(opened.id, skyTexture.image), requestRender);
+  const tex = cachedTexture(docResourceUrl(opened.id, skyTexture.image), requestRender);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   // Upper half sphere; u runs around the y axis, v from the zenith (1) to the horizon (0)

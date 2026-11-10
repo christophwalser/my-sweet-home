@@ -11,8 +11,9 @@ import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { TDSLoader } from "three/examples/jsm/loaders/TDSLoader.js";
 import { docResourceUrl } from "../api";
-import type { Piece } from "../model";
+import type { Piece, Texture } from "../model";
 import { DEFAULT_MATERIALS } from "./defaultMaterials";
+import { boxProjectedUvs, cachedTexture, clearTextureCache } from "./textures";
 
 const cache = new Map<string, Promise<THREE.Object3D>>();
 
@@ -22,6 +23,7 @@ export function clearModelCache(): void {
     p.then((obj) => disposeObject(obj)).catch(() => {});
   }
   cache.clear();
+  clearTextureCache();
 }
 
 export function disposeObject(obj: THREE.Object3D): void {
@@ -275,6 +277,8 @@ export function createPieceObject(
       );
       if (a.model_mirrored) scale.x = -scale.x;
       rotated.scale.copy(scale);
+      // World matrices in centimeters of the piece (for generated texture coordinates)
+      rotated.updateMatrixWorld(true);
       applyPieceMaterials(inner, piece, docId, onLoaded);
       applyLightGlow(inner, piece);
       inner.traverse((o) => {
@@ -379,7 +383,7 @@ function applyPieceMaterials(
   const texturesByName = new Map(
     (piece.materials ?? [])
       .filter((m) => m.texture)
-      .map((m) => [m.attrs.name, (m.texture as { image: string }).image]),
+      .map((m) => [m.attrs.name, m.texture as Texture]),
   );
   const side = a.back_face_shown ? THREE.DoubleSide : THREE.FrontSide;
   if (a.color === null && overrides.size === 0 && side === THREE.FrontSide && !a.model_mirrored)
@@ -387,6 +391,10 @@ function applyPieceMaterials(
   obj.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
+    // A model without texture coordinates gets them in centimeters, so that a texture
+    // shows at its real size instead of one color
+    const generateUvs = !mesh.geometry.getAttribute("uv");
+    let generated = false;
     const convert = (m: THREE.Material): THREE.Material => {
       const c = m.clone() as THREE.MeshPhongMaterial;
       // Mirroring flips the winding order; show both sides to stay visible
@@ -399,11 +407,17 @@ function applyPieceMaterials(
       }
       // A texture of the material editor replaces the model's texture and color
       if (o && texturesByName.has(m.name)) {
-        const image = texturesByName.get(m.name) as string;
-        const tex = new THREE.TextureLoader().load(docResourceUrl(docId, image), onLoaded);
+        const t = texturesByName.get(m.name) as Texture;
+        const tex = cachedTexture(docResourceUrl(docId, t.image), onLoaded);
         tex.wrapS = THREE.RepeatWrapping;
         tex.wrapT = THREE.RepeatWrapping;
         tex.colorSpace = THREE.SRGBColorSpace;
+        if (generateUvs) {
+          generated = true;
+          const scale = t.scale ?? 1;
+          tex.repeat.set(1 / ((t.width || 100) * scale), 1 / ((t.height || 100) * scale));
+          tex.rotation = t.angle ?? 0;
+        }
         c.map = tex;
         c.color = new THREE.Color(0xffffff);
       }
@@ -415,5 +429,6 @@ function applyPieceMaterials(
     mesh.material = Array.isArray(mesh.material)
       ? mesh.material.map(convert)
       : convert(mesh.material);
+    if (generated) mesh.geometry = boxProjectedUvs(mesh.geometry, mesh.matrixWorld);
   });
 }
