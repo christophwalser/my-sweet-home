@@ -357,7 +357,7 @@ export default function CatalogPanel() {
             <button
               type="button"
               className="link-button"
-              onClick={() => useUi.getState().openDialog("libraries", "add")}
+              onClick={() => useUi.getState().openDialog("libraries", `add:${kind}`)}
               title={t("Add 3D models, textures, libraries, online items or furniture of the home")}
             >
               {t("Add…")}

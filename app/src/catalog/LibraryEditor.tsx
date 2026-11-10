@@ -472,7 +472,10 @@ export default function LibraryEditor({
   initial,
   onClose: close,
 }: {
-  /** "path|index" of an item to show first */
+  /**
+   * "path|index" of an item to show first, or "add" / "add:<kind>" to start adding:
+   * furniture shows the Add menu, textures open the file dialog right away.
+   */
   initial: string | null;
   onClose: () => void;
 }) {
@@ -484,9 +487,12 @@ export default function LibraryEditor({
   const loadCatalog = useStore((s) => s.loadCatalog);
   const openDialog = useUi((s) => s.openDialog);
   const setLibraryTarget = useUi((s) => s.setLibraryTarget);
-  const [kind, setKind] = useState<CatalogKind>("furniture");
+  const adding = initial === "add" || !!initial?.startsWith("add:");
+  const [kind, setKind] = useState<CatalogKind>(
+    initial === "add:textures" ? "textures" : "furniture",
+  );
   const [libPath, setLibPath] = useState<string | null>(null);
-  const [selKey, setSelKey] = useState<string | null>(initial === "add" ? null : initial);
+  const [selKey, setSelKey] = useState<string | null>(adding ? null : initial);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<Menu | null>(null);
   const [message, setMessage] = useState<{ text: string; undo: boolean } | null>(null);
@@ -751,35 +757,38 @@ export default function LibraryEditor({
     if (r?.path) setLibPath(String(r.path));
   };
 
+  /** Asks for model or image files and libraries of the shown kind and imports them */
+  const addFiles = async () => {
+    const chosen = await open({
+      multiple: true,
+      filters: [
+        {
+          name: t("Supported files"),
+          extensions: [
+            ...(kind === "furniture" ? MODEL_EXTENSIONS : TEXTURE_EXTENSIONS),
+            ...LIBRARY_EXTENSIONS,
+            "zip",
+          ],
+        },
+      ],
+    });
+    const paths = Array.isArray(chosen) ? chosen : chosen ? [chosen] : [];
+    if (paths.length === 0) return;
+    try {
+      const note = await importFiles(paths, "libraries");
+      if (note) notify(note, true);
+    } catch (e) {
+      notify(String(e));
+    }
+  };
+
   const addMenu = (x: number, y: number) => {
     const target = lib?.editable ? lib.path : null;
     const items: MenuItem[] = [
       {
         label: t("Files…"),
         note: kind === "furniture" ? t("models, libraries") : t("images, libraries"),
-        action: async () => {
-          const chosen = await open({
-            multiple: true,
-            filters: [
-              {
-                name: t("Supported files"),
-                extensions: [
-                  ...(kind === "furniture" ? MODEL_EXTENSIONS : TEXTURE_EXTENSIONS),
-                  ...LIBRARY_EXTENSIONS,
-                  "zip",
-                ],
-              },
-            ],
-          });
-          const paths = Array.isArray(chosen) ? chosen : chosen ? [chosen] : [];
-          if (paths.length === 0) return;
-          try {
-            const note = await importFiles(paths, "libraries");
-            if (note) notify(note, true);
-          } catch (e) {
-            notify(String(e));
-          }
-        },
+        action: addFiles,
       },
       {
         label: t("Search online…"),
@@ -810,12 +819,16 @@ export default function LibraryEditor({
     setMenu({ x, y, items });
   };
 
-  // "Add to library…" from the menu opens the editor with its Add menu
-  const addOnStart = useRef(initial === "add");
+  // "Add…" opens the editor with its Add menu, or for textures with the file dialog
+  const addOnStart = useRef(adding);
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, when the libraries are known
   useEffect(() => {
     if (!addOnStart.current || !lib || !addButton.current) return;
     addOnStart.current = false;
+    if (kind === "textures") {
+      void addFiles();
+      return;
+    }
     const r = addButton.current.getBoundingClientRect();
     addMenu(r.left, r.bottom + 4);
   }, [lib]);
