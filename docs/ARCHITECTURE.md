@@ -1004,6 +1004,21 @@ furniture is read by its home reader.
   `label_add` accepted empty text and non-positive font sizes; `polyline_update` closed
   two-point lines; the plan's direction readout showed 360° instead of 0°.
 
+### 4.43 Pivot of the aerial view, icons (2026-11-10)
+
+- The point the aerial view turns around (target of OrbitControls, `view3d/pivot.ts`) is
+  shown while the pointer is over the 3D view: a crosshair in the middle of the view and,
+  when the point is above or below the ground, a dashed line down to the ground with a ring
+  there (drawn only by the live render loop, not in photos, videos or captures).
+- Double-click on a surface (not the sky; else the plane at the pivot's height) makes it the
+  new pivot; the camera slides along so the point comes to the middle. The crosshair button
+  at the bottom right fits the home from the current direction and turns around its middle.
+- A stored camera now turns around the point of its view line nearest to the middle of the
+  home (before: where the view hit the ground, which could be far away).
+- "Fit" in the plan, toolbar and 3D view uses a crosshair icon; the pane buttons
+  (maximize, restore, minimize, separate window) and the library editor use SVG icons of the
+  icon set. The 3D view settings open centered in the window.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

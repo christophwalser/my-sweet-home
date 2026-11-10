@@ -22,6 +22,7 @@ import { applyHome, subscribeToHomeChanges, useStore } from "./store";
 import CommandPalette from "./ui/CommandPalette";
 import { chooseFile, detach3D, handleGlobalShortcut } from "./ui/commands";
 import { enableDialogDragging } from "./ui/dialogDragging";
+import Icon, { type IconName } from "./ui/Icon";
 import MenuBar from "./ui/MenuBar";
 import ShortcutsDialog from "./ui/ShortcutsDialog";
 import ToolBar from "./ui/ToolBar";
@@ -62,7 +63,7 @@ function PaneButton({
   onClick,
 }: {
   label: string;
-  icon: string;
+  icon: IconName;
   onClick: () => void;
 }) {
   return (
@@ -73,7 +74,7 @@ function PaneButton({
       aria-label={label}
       onClick={onClick}
     >
-      {icon}
+      <Icon name={icon} size={16} />
     </button>
   );
 }
@@ -395,14 +396,14 @@ export default function App() {
                 {shown !== "3d" && !detached && (
                   <PaneButton
                     label={shown === "plan" ? t("Restore the 3D view") : t("Maximize the plan")}
-                    icon={shown === "plan" ? "❐" : "□"}
+                    icon={shown === "plan" ? "restore" : "maximize"}
                     onClick={() => toggleMax("plan")}
                   />
                 )}
                 {!detached && (
                   <PaneButton
                     label={t("Minimize the plan")}
-                    icon={"–"}
+                    icon="collapseup"
                     onClick={() => setLayout({ maximized: "3d" })}
                   />
                 )}
@@ -458,17 +459,17 @@ export default function App() {
               <span className="pane-buttons view3d-buttons">
                 <PaneButton
                   label={shown === "3d" ? t("Restore the plan") : t("Maximize the 3D view")}
-                  icon={shown === "3d" ? "❐" : "□"}
+                  icon={shown === "3d" ? "restore" : "maximize"}
                   onClick={() => toggleMax("3d")}
                 />
                 <PaneButton
                   label={t("Minimize the 3D view")}
-                  icon={"–"}
+                  icon="collapsedown"
                   onClick={() => setLayout({ maximized: "plan" })}
                 />
                 <PaneButton
                   label={t("Open the 3D view in a separate window")}
-                  icon={"⧉"}
+                  icon="detach"
                   onClick={detach3D}
                 />
               </span>

@@ -16,6 +16,7 @@ import { VIEW3D_PREFIX } from "../layout/view3dWindow";
 import { forEachPiece, type Home } from "../model";
 import { usePreferences } from "../preferences";
 import { poseParams, useStore, type ViewMode } from "../store";
+import Icon from "../ui/Icon";
 import { useUi } from "../ui/uiStore";
 import { buildAnnotations } from "./annotations";
 import {
@@ -35,6 +36,7 @@ import { clearModelCache, createPieceObject, disposeObject, waitForModels } from
 import { buildObj } from "./objExport";
 import PhotoDialog from "./PhotoDialog";
 import { type PhotoJob, type PhotoQuality, type PhotoSource, renderPhoto } from "./photo";
+import { buildPivotMarker, fittedView, homeBox, orbitDistance, pickPoint } from "./pivot";
 import { stepSurfaces } from "./stepSurfaces";
 import VideoDialog from "./VideoDialog";
 import View3DSettings from "./View3DSettings";
@@ -129,6 +131,7 @@ export default function View3D() {
   const videoOpen = dialog === "video";
   const settingsOpen = dialog === "settings3d";
   const containerRef = useRef<HTMLDivElement>(null);
+  const pivotRef = useRef<HTMLDivElement>(null);
   const ctx = useRef<{
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
@@ -173,17 +176,101 @@ export default function View3D() {
     sun.shadow.normalBias = 1;
     scene.add(content, lamps, sun, sun.target);
 
+    // The point the aerial view turns around is marked while the pointer is over the view
+    let hover = false;
+    let dragging = false;
+    const placePivot = () => {
+      const el = pivotRef.current;
+      if (!el) return;
+      let shown = false;
+      if (controls.enabled && (hover || dragging)) {
+        const p = controls.target.clone().project(camera);
+        if (p.z > -1 && p.z < 1) {
+          const x = ((p.x + 1) / 2) * container.clientWidth;
+          const y = ((1 - p.y) / 2) * container.clientHeight;
+          el.style.transform = `translate(${x}px, ${y}px)`;
+          shown = true;
+        }
+      }
+      el.classList.toggle("shown", shown);
+    };
+
+    // In the scene the pivot gets a ring and a dashed line down to the ground, so its depth is
+    // seen too. Only drawn by this render loop (photos and captures render without it).
+    const pivotMarker = buildPivotMarker();
+    scene.add(pivotMarker.group);
+
     let frame = 0;
     const render = () => {
       frame = 0;
       // The sky dome stays centered on the viewer
       state.sky?.position.copy(camera.position);
+      const marked = controls.enabled && (hover || dragging);
+      if (marked) {
+        const pixel = (2 * Math.tan((camera.fov * Math.PI) / 360)) / container.clientHeight;
+        pivotMarker.place(controls.target, camera.position.distanceTo(controls.target) * pixel);
+      }
+      pivotMarker.group.visible = marked;
       renderer.render(scene, camera);
+      pivotMarker.group.visible = false;
+      placePivot();
     };
     const requestRender = () => {
       if (!frame) frame = requestAnimationFrame(render);
     };
     controls.addEventListener("change", requestRender);
+    controls.addEventListener("start", () => {
+      dragging = true;
+      requestRender();
+    });
+    controls.addEventListener("end", () => {
+      dragging = false;
+      requestRender();
+    });
+    const onEnter = () => {
+      hover = true;
+      requestRender();
+    };
+    const onLeave = () => {
+      hover = false;
+      requestRender();
+    };
+    renderer.domElement.addEventListener("pointerenter", onEnter);
+    renderer.domElement.addEventListener("pointerleave", onLeave);
+
+    // Double-click: the view turns around the point under the pointer from now on. The
+    // camera moves along, so the view slides until the point is in the middle.
+    let pivotAnimation = 0;
+    const movePivot = (to: THREE.Vector3) => {
+      cancelAnimationFrame(pivotAnimation);
+      const from = controls.target.clone();
+      const eye = camera.position.clone();
+      const delta = to.clone().sub(from);
+      const start = performance.now();
+      const step = (now: number) => {
+        const k = Math.min(1, (now - start) / 250);
+        const eased = k * (2 - k);
+        controls.target.copy(from).addScaledVector(delta, eased);
+        camera.position.copy(eye).addScaledVector(delta, eased);
+        controls.update();
+        requestRender();
+        if (k < 1) pivotAnimation = requestAnimationFrame(step);
+      };
+      pivotAnimation = requestAnimationFrame(step);
+    };
+    const onDoubleClick = (e: MouseEvent) => {
+      if (!controls.enabled) return;
+      const r = renderer.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((e.clientX - r.left) / r.width) * 2 - 1,
+        -((e.clientY - r.top) / r.height) * 2 + 1,
+      );
+      const point = pickPoint(camera, ndc, content, state.sky, controls.target.y);
+      if (!point) return;
+      userMoved.current = true;
+      movePivot(point);
+    };
+    renderer.domElement.addEventListener("dblclick", onDoubleClick);
     // Textures of model materials (MTL, Collada, 3DS) load after the model: redraw when
     // each of them arrives, otherwise they stay black until the next interaction
     const manager = THREE.DefaultLoadingManager;
@@ -229,7 +316,12 @@ export default function View3D() {
     return () => {
       ro.disconnect();
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(pivotAnimation);
+      renderer.domElement.removeEventListener("pointerenter", onEnter);
+      renderer.domElement.removeEventListener("pointerleave", onLeave);
+      renderer.domElement.removeEventListener("dblclick", onDoubleClick);
       controls.dispose();
+      disposeObject(pivotMarker.group);
       visitor.dispose();
       disposeObject(content);
       disposeObject(lamps);
@@ -587,21 +679,14 @@ export default function View3D() {
       c.camera.position.set(a.x, a.z, a.y);
       const pitch = Math.min(a.pitch, MAX_AERIAL_PITCH);
       const dir = cameraDirection(a.yaw, pitch);
-      // Orbit around the point where the view hits the ground (or a point in front)
-      const distance = dir.y < -0.05 ? Math.min(a.z / -dir.y, 5000) : 300;
+      // Turn around the point of the view line nearest to the middle of the home
+      const distance = orbitDistance(c.camera.position, dir, homeBox(c.content));
       c.controls.target.copy(c.camera.position).addScaledVector(dir, distance);
       c.hfov = a.field_of_view;
     } else {
-      // Fit to walls and rooms (the ground plane is huge and must not count)
-      const box = new THREE.Box3();
-      for (const child of c.content.children) {
-        if (child.name === "walls" || child.name === "rooms") box.expandByObject(child);
-      }
-      if (box.isEmpty()) box.set(new THREE.Vector3(0, 0, 0), new THREE.Vector3(500, 250, 500));
-      const center = box.getCenter(new THREE.Vector3());
-      const size = Math.max(box.getSize(new THREE.Vector3()).length(), 500);
-      c.camera.position.set(center.x, center.y + size * 0.7, center.z + size * 0.8);
-      c.controls.target.copy(center);
+      const view = fittedView(homeBox(c.content));
+      c.camera.position.copy(view.position);
+      c.controls.target.copy(view.target);
       c.hfov = Math.PI / 3;
     }
     c.camera.fov = verticalFov(c.hfov, c.camera.aspect);
@@ -860,15 +945,47 @@ export default function View3D() {
     };
   }, []);
 
+  /** Shows the whole home in the aerial view from the current direction, turning around its middle. */
+  const fitAerial = () => {
+    const c = ctx.current;
+    if (!c) return;
+    const dir = c.controls.target.clone().sub(c.camera.position).normalize();
+    const view = fittedView(homeBox(c.content), dir);
+    userMoved.current = true;
+    c.camera.position.copy(view.position);
+    c.controls.target.copy(view.target);
+    c.controls.update();
+    c.requestRender();
+  };
+
   return (
     <>
       <div className="view3d-canvas" ref={containerRef} />
+      <div className="view3d-pivot" ref={pivotRef}>
+        <Icon name="zoomfit" size={22} />
+      </div>
       {opened && viewMode === "observer" && (
         <div className="view3d-hint">
           {t(
             "Drag to look around · W A S D: walk · Q / E: down / up · Shift: faster · wheel: zoom",
           )}
         </div>
+      )}
+      {opened && viewMode !== "observer" && (
+        <div className="view3d-hint">
+          {t("Drag: turn · right-drag: move · wheel: zoom · double-click: turn around this point")}
+        </div>
+      )}
+      {opened && viewMode !== "observer" && (
+        <button
+          type="button"
+          className="overlay-button icon-button"
+          onClick={fitAerial}
+          title={t("Fit the home in the view and turn around its middle")}
+          aria-label={t("Fit the home in the view and turn around its middle")}
+        >
+          <Icon name="zoomfit" size={18} />
+        </button>
       )}
       {opened && (
         <ViewpointsMenu

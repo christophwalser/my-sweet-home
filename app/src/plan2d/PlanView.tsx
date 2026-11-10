@@ -28,6 +28,7 @@ import {
   usePreferences,
 } from "../preferences";
 import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../store";
+import Icon from "../ui/Icon";
 import { registerPlanActions } from "../ui/planBridge";
 import { useDarkMode } from "../ui/uiStore";
 import { fromUnit, unitSymbol } from "../units";
@@ -1825,11 +1826,12 @@ export default function PlanView() {
         {opened && (
           <button
             type="button"
-            className="overlay-button"
+            className="overlay-button icon-button"
             onClick={refit}
             title={t("Fit plan to window")}
+            aria-label={t("Fit plan to window")}
           >
-            {t("Fit")}
+            <Icon name="zoomfit" size={18} />
           </button>
         )}
       </div>

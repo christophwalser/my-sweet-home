@@ -11,6 +11,7 @@ import { language, t } from "../i18n";
 import Splitter from "../layout/Splitter";
 import ContextMenu, { type MenuItem } from "../plan2d/ContextMenu";
 import { useStore } from "../store";
+import Icon from "../ui/Icon";
 import { useUi } from "../ui/uiStore";
 import { formatPrecise } from "../units";
 import { disposeObject, loadModelUncached } from "../view3d/models";
@@ -1004,7 +1005,7 @@ export default function LibraryEditor({
             aria-label={frame.maximized ? t("Restore") : t("Maximize")}
             title={frame.maximized ? t("Restore") : t("Maximize")}
           >
-            {frame.maximized ? "❐" : "□"}
+            <Icon name={frame.maximized ? "restore" : "maximize"} size={16} />
           </button>
           <button type="button" onClick={onClose} aria-label={t("Close")} title={t("Close")}>
             ×

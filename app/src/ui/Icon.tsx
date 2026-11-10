@@ -234,8 +234,30 @@ const PATHS = {
   ),
   zoomfit: (
     <>
-      <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />
-      <rect x="8" y="8" width="8" height="8" />
+      <circle cx="12" cy="12" r="7" />
+      <path d="M12 2v5M12 17v5M2 12h5M17 12h5M12 12h.01" />
+    </>
+  ),
+  maximize: (
+    <>
+      <path d="M14 4h6v6M10 20H4v-6M20 4l-6 6M4 20l6-6" />
+    </>
+  ),
+  restore: (
+    <>
+      <path d="M4 14h6v6M20 10h-6V4M14 10l6-6M10 14l-6 6" />
+    </>
+  ),
+  collapseup: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 9h18M9 15.5l3-3 3 3" />
+    </>
+  ),
+  collapsedown: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 15h18M9 8.5l3 3 3-3" />
     </>
   ),
   rulers: (
