@@ -108,6 +108,10 @@ impl Document {
                 msh_format::FormatError::Structure("no file path given for saving".into())
             })?;
         self.prune_contents();
+        // Like Sweet Home 3D, the home is named after its file: after "Save as" the new one
+        if let Some(file_name) = target.file_name() {
+            self.file.home.attrs.name = Some(file_name.to_string_lossy().into_owned());
+        }
         if self.contents_changed {
             // The digests no longer match the resources; Sweet Home 3D accepts files without them
             self.file.content_digests = None;

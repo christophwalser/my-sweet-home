@@ -485,10 +485,13 @@ export default function App() {
   );
 }
 
-/** Name of a home for titles: its name, else its file name, else t("Untitled"). */
+/**
+ * Name of a home for titles: the file it is saved in (after "Save as" the new one), else the
+ * name stored in the home, else t("Untitled").
+ */
 function homeTitle(name: string | null, path: string | null): string {
-  if (name) return name.replace(/\.sh3d$/i, "");
   if (path) return (path.split(/[\\/]/).pop() ?? path).replace(/\.sh3d$/i, "");
+  if (name) return (name.split(/[\\/]/).pop() ?? name).replace(/\.sh3d$/i, "");
   return t("Untitled");
 }
 
