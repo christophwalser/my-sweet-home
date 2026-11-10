@@ -113,6 +113,32 @@ struct UpdateParams {
     materials: Option<Vec<MaterialParams>>,
     /// Remove all material changes: the model shows its own materials again
     reset_materials: Option<bool>,
+    /// Catalog ID of a texture for the whole piece (replaces its color), "" to remove it
+    texture: Option<String>,
+    /// Shininess of the whole piece from 0 (matt) to 1; Sweet Home 3D's "shiny" is 0.25. A
+    /// negative value restores the model's own
+    shininess: Option<f32>,
+    /// Description of the piece, "" to remove it
+    description: Option<String>,
+    /// Price (in `currency`); a negative value removes it
+    price: Option<f64>,
+    /// Value added tax in percent of the price (e.g. 8.1); a negative value removes it
+    vat_percent: Option<f64>,
+    /// ISO 4217 code of the price, "" to remove it
+    currency: Option<String>,
+    /// Part of the base plan (not movable, locked with the base plan); doors and windows
+    /// always are
+    base_plan_item: Option<bool>,
+}
+
+/// A decimal for the file: at most `digits` decimals, without trailing zeros.
+fn decimal_string(v: f64, digits: usize) -> String {
+    let s = format!("{v:.digits$}");
+    if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_owned()
+    } else {
+        s
+    }
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -359,6 +385,25 @@ pub(super) fn register(r: &mut Registry) {
                 // Sweet Home 3D writes material textures without a role attribute
                 material_textures.push(tex.map(|t| msh_model::Texture { role: None, ..t }));
             }
+            // The texture of the whole piece (written without a role, like Sweet Home 3D)
+            let piece_texture = match &p.texture {
+                Some(_) => Some(
+                    super::wall::texture_for(doc, super::non_empty(&p.texture), "")?
+                        .map(|t| msh_model::Texture { role: None, ..t }),
+                ),
+                None => None,
+            };
+            for (name, v) in [("price", p.price), ("vat_percent", p.vat_percent)] {
+                if v.is_some_and(|v| !v.is_finite()) {
+                    return Err(CommandError::failed(format!("{name} must be a number")));
+                }
+            }
+            if p.vat_percent.is_some_and(|v| v >= 100.0) {
+                return Err(CommandError::failed("vat_percent must be below 100"));
+            }
+            if p.shininess.is_some_and(|v| !v.is_finite()) {
+                return Err(CommandError::failed("shininess must be a number"));
+            }
             let targets = target_ids(p.id.clone(), p.ids.clone())?;
             if targets.len() > 1 && (p.x.is_some() || p.y.is_some()) {
                 return Err(CommandError::failed(
@@ -461,6 +506,38 @@ pub(super) fn register(r: &mut Registry) {
                 }
                 if let Some(changes) = &p.materials {
                     apply_materials(piece, changes, &material_textures)?;
+                }
+                // Color and texture of the whole piece exclude each other, as in Sweet Home 3D
+                if let Some(tex) = &piece_texture {
+                    piece.texture = tex.clone();
+                    if piece.texture.is_some() {
+                        piece.attrs.color = None;
+                    }
+                } else if p.color.as_deref().is_some_and(|c| !c.is_empty()) {
+                    piece.texture = None;
+                }
+                let a = &mut piece.attrs;
+                if let Some(v) = p.shininess {
+                    a.shininess = (v >= 0.0).then(|| v.clamp(0.0, 1.0));
+                }
+                if let Some(v) = &p.description {
+                    a.description = (!v.is_empty()).then(|| v.clone());
+                }
+                if let Some(v) = p.price {
+                    a.price = (v >= 0.0).then(|| decimal_string(v, 2));
+                }
+                if let Some(v) = p.vat_percent {
+                    // Sweet Home 3D stores the VAT as a fraction of the price (0.2 = 20 %)
+                    a.value_added_tax_percentage = (v >= 0.0).then(|| decimal_string(v / 100.0, 6));
+                }
+                if let Some(v) = &p.currency {
+                    a.currency = (!v.is_empty()).then(|| v.to_ascii_uppercase());
+                }
+                // Movable is the default; the file only says so when it is not
+                if let Some(v) = p.base_plan_item
+                    && piece.kind != PieceKind::DoorOrWindow
+                {
+                    a.movable = v.then_some(false);
                 }
             }
             Ok(updated(&targets))

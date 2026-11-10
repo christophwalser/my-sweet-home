@@ -6,6 +6,8 @@ import { docResourceUrl } from "../api";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Wall } from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
+import { usePreferences } from "../preferences";
+import { formatMoney, piecePrice } from "../prices";
 import { currentVisitor, setVisitor, useStore, VISITOR_ID } from "../store";
 import { formatArea, formatLength } from "../units";
 import { spotAngle } from "../view3d/lights";
@@ -306,6 +308,68 @@ function CompassSection({
         value={deg(c?.longitude)}
         onCommit={set("longitude_deg")}
       />
+    </>
+  );
+}
+
+/** Shininess Sweet Home 3D gives to "shiny" pieces (its furniture dialog). */
+const SHINY = 0.25;
+
+/**
+ * Price and VAT of a piece, shown like Sweet Home 3D only when a currency is chosen in the
+ * preferences; VAT only when prices with VAT are switched on.
+ */
+function PriceFields({
+  piece,
+  run,
+}: {
+  piece: Piece;
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const currency = usePreferences((s) => s.currency);
+  const vatEnabled = usePreferences((s) => s.vatEnabled);
+  const defaultVat = usePreferences((s) => s.defaultVatPercent);
+  if (!currency) return null;
+  const id = piece.attrs.id;
+  const { price, vatFraction, withVat } = piecePrice(piece);
+  const shown = piece.attrs.currency || currency;
+  return (
+    <>
+      <Field
+        label={t("Price")}
+        type="number"
+        unit={shown}
+        value={price}
+        onCommit={(v) => {
+          const n = v === "" ? -1 : Number(v);
+          if (!Number.isFinite(n)) return;
+          const params: Record<string, unknown> = { id, price: n, currency };
+          // A new price gets the default VAT, like Sweet Home 3D
+          if (n >= 0 && vatEnabled && vatFraction === null && defaultVat > 0) {
+            params.vat_percent = defaultVat;
+          }
+          void run("furniture_update", params);
+        }}
+      />
+      {vatEnabled && (
+        <>
+          <Field
+            label={t("VAT")}
+            type="number"
+            unit="%"
+            value={vatFraction === null ? null : Math.round(vatFraction * 10000) / 100}
+            onCommit={(v) => {
+              const n = v === "" ? -1 : Number(v);
+              if (Number.isFinite(n)) void run("furniture_update", { id, vat_percent: n });
+            }}
+          />
+          {withVat !== null && (
+            <p className="muted small">
+              {t("Price incl. VAT: {amount}", { amount: formatMoney(withVat, shown) })}
+            </p>
+          )}
+        </>
+      )}
     </>
   );
 }
@@ -694,11 +758,18 @@ export default function PropertiesPanel() {
         <h2>
           {p.kind === "DoorOrWindow"
             ? t("Door or window")
-            : p.kind === t("Light")
+            : p.kind === "Light"
               ? t("Light")
               : t("Furniture")}
         </h2>
         <Field label={t("Name")} type="text" value={a.name} onCommit={set("name")} />
+        <Field
+          label={t("Description")}
+          type="text"
+          value={a.description ?? ""}
+          onCommit={set("description")}
+        />
+        <PriceFields piece={p} run={run} />
         <Field label="X" type="number" unit="cm" value={a.x} onCommit={set("x")} />
         <Field label="Y" type="number" unit="cm" value={a.y} onCommit={set("y")} />
         <Field
@@ -743,7 +814,7 @@ export default function PropertiesPanel() {
           value={a.height}
           onCommit={set("height")}
         />
-        {p.kind === t("Light") && (
+        {p.kind === "Light" && (
           <>
             <Field
               label={t("Light power")}
@@ -772,6 +843,31 @@ export default function PropertiesPanel() {
             {t("Restore model colors")}
           </button>
         )}
+        <TextureField
+          label={t("Texture")}
+          current={p.texture}
+          onCommit={(v) => set("texture")(v)}
+        />
+        <label className="prop-row">
+          <span className="prop-label">{t("Surface")}</span>
+          <select
+            value={
+              a.shininess === null || a.shininess === undefined
+                ? "model"
+                : a.shininess > 0
+                  ? "shiny"
+                  : "matt"
+            }
+            onChange={(e) => {
+              const v = e.currentTarget.value;
+              set("shininess")(v === "model" ? -1 : v === "shiny" ? SHINY : 0);
+            }}
+          >
+            <option value="model">{t("Like the model")}</option>
+            <option value="matt">{t("Matt")}</option>
+            <option value="shiny">{t("Shiny")}</option>
+          </select>
+        </label>
         <Field
           label={t("Mirrored")}
           type="checkbox"
@@ -784,6 +880,14 @@ export default function PropertiesPanel() {
           value={a.visible !== false}
           onCommit={set("visible")}
         />
+        {p.kind !== "DoorOrWindow" && (
+          <Field
+            label={t("Part of the base plan")}
+            type="checkbox"
+            value={a.movable === false}
+            onCommit={(v) => set("base_plan_item")(v)}
+          />
+        )}
         <Field
           label={t("Name in plan")}
           type="checkbox"
@@ -803,6 +907,13 @@ export default function PropertiesPanel() {
         {a.catalog_id && (
           <p className="muted small">
             {t("Catalog ID:")} {a.catalog_id}
+          </p>
+        )}
+        {(a.creator || a.license || a.information) && (
+          <p className="muted small">
+            {a.creator && <>{t("Creator: {name}", { name: a.creator })} </>}
+            {a.license && <>{t("License: {name}", { name: a.license })} </>}
+            {a.information && <span className="selectable">{a.information}</span>}
           </p>
         )}
         {actions}

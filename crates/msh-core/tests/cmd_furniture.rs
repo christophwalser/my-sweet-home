@@ -802,3 +802,143 @@ fn the_same_model_is_stored_once() {
     let model = pieces[0].attrs.model.clone().unwrap();
     assert_eq!(names.iter().filter(|n| **n == model).count(), 1);
 }
+
+/// Texture, shininess, description, price, VAT, currency and base plan of a piece, as Sweet
+/// Home 3D's furniture dialog sets them; kept when saved.
+#[test]
+fn update_sets_the_fields_of_the_furniture_dialog() {
+    let Some(root) = isolated_catalog("update_sets_the_fields_of_the_furniture_dialog") else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let sofa = import_box(
+        &r,
+        &mut doc,
+        &root,
+        "Dialog sofa Qp3",
+        [200.0, 80.0, 90.0],
+        json!({}),
+    );
+    let png = root.join("Dialog fabric Qp3.png");
+    std::fs::write(&png, png_bytes(8, 8)).unwrap();
+    let fabric = run(&r, &mut doc, "texture_import", json!({ "path": png }))["catalog_id"].clone();
+    let id = run(
+        &r,
+        &mut doc,
+        "furniture_add",
+        json!({ "catalog_id": sofa, "x": 0, "y": 0 }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let piece = |doc: &Document| -> Piece {
+        let mut found = None;
+        doc.home().for_each_piece(|p| {
+            if p.attrs.id.as_deref() == Some(id.as_str()) {
+                found = Some(p.clone());
+            }
+        });
+        found.unwrap()
+    };
+
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": id, "color": "#336699" }),
+    );
+    let before = snapshot(&doc);
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": id, "texture": fabric, "shininess": 0.25, "description": "Corner sofa",
+                "price": 1299.5, "vat_percent": 8.1, "currency": "chf", "base_plan_item": true }),
+    );
+    let after = snapshot(&doc);
+    let p = piece(&doc);
+    assert_eq!(
+        p.texture.as_ref().map(|t| t.name.as_str()),
+        Some("Dialog fabric Qp3")
+    );
+    assert_eq!(p.texture.as_ref().unwrap().role, None);
+    // A texture replaces the color
+    assert_eq!(p.attrs.color, None);
+    assert_eq!(p.attrs.shininess, Some(0.25));
+    assert_eq!(p.attrs.description.as_deref(), Some("Corner sofa"));
+    assert_eq!(p.attrs.price.as_deref(), Some("1299.5"));
+    assert_eq!(p.attrs.value_added_tax_percentage.as_deref(), Some("0.081"));
+    assert_eq!(p.attrs.currency.as_deref(), Some("CHF"));
+    assert_eq!(p.attrs.movable, Some(false));
+    check_undo_redo(&r, &mut doc, &before, &after);
+
+    // Saved and read again with the same values
+    let reopened = save_and_reopen(
+        &r,
+        &mut doc,
+        "update_sets_the_fields_of_the_furniture_dialog",
+    );
+    let mut q = None;
+    reopened.home().for_each_piece(|x| {
+        if x.attrs.id.as_deref() == Some(id.as_str()) {
+            q = Some(x.clone());
+        }
+    });
+    let q = q.unwrap();
+    assert_eq!(
+        q.texture.as_ref().map(|t| t.name.as_str()),
+        Some("Dialog fabric Qp3")
+    );
+    assert_eq!(q.attrs.price, p.attrs.price);
+    assert_eq!(
+        q.attrs.value_added_tax_percentage,
+        p.attrs.value_added_tax_percentage
+    );
+    assert_eq!(q.attrs.movable, Some(false));
+
+    // A color replaces the texture; negative and empty values remove the fields
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": id, "color": "#aa0000", "shininess": -1, "description": "",
+                "price": -1, "vat_percent": -1, "currency": "", "base_plan_item": false }),
+    );
+    let p = piece(&doc);
+    assert!(p.texture.is_none());
+    assert!(p.attrs.color.is_some());
+    assert_eq!(p.attrs.shininess, None);
+    assert_eq!(p.attrs.description, None);
+    assert_eq!(p.attrs.price, None);
+    assert_eq!(p.attrs.value_added_tax_percentage, None);
+    assert_eq!(p.attrs.currency, None);
+    assert_eq!(p.attrs.movable, None);
+    // Removing the texture keeps everything else
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": id, "texture": fabric }),
+    );
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": id, "texture": "" }),
+    );
+    assert!(piece(&doc).texture.is_none());
+
+    run_err(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": id, "vat_percent": 120 }),
+    );
+    run_err(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": id, "texture": "no#such" }),
+    );
+}

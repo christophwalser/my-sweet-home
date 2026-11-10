@@ -11,6 +11,21 @@ import { type ThemeChoice, useUi } from "./ui/uiStore";
 import { UNITS } from "./units";
 
 type Tab = "plan" | "new" | "view3d" | "general" | "catalogs";
+/** Currencies offered for furniture prices (ISO 4217), as in Sweet Home 3D's list. */
+const CURRENCIES = [
+  "CHF",
+  "EUR",
+  "USD",
+  "GBP",
+  "CAD",
+  "AUD",
+  "JPY",
+  "SEK",
+  "NOK",
+  "DKK",
+  "PLN",
+  "CZK",
+];
 const TABS: { id: Tab; label: string }[] = [
   { id: "general", label: t("General") },
   { id: "plan", label: t("Plan") },
@@ -384,6 +399,49 @@ export default function PreferencesDialog({
                 <p className="muted small">
                   {t(
                     "Autosave keeps copies of changed homes to recover them after a crash. Window sizes and positions are remembered.",
+                  )}
+                </p>
+              </Group>
+            )}
+            {tab === "general" && (
+              <Group title={t("Prices")}>
+                <Choice<string>
+                  label={t("Currency")}
+                  value={p.currency}
+                  options={[
+                    ["", t("None (prices hidden)")],
+                    ...CURRENCIES.map((c): [string, string] => [c, c]),
+                  ]}
+                  onChange={(currency) => set({ currency })}
+                />
+                {p.currency !== "" && (
+                  <>
+                    <Check
+                      label={t("Value added tax")}
+                      hint={t(
+                        "VAT in the furniture properties and VAT columns in the furniture list",
+                      )}
+                      checked={p.vatEnabled}
+                      onChange={(vatEnabled) => set({ vatEnabled })}
+                    />
+                    {p.vatEnabled && (
+                      <Field
+                        label={t("Default VAT")}
+                        type="number"
+                        unit="%"
+                        value={p.defaultVatPercent}
+                        onCommit={(v) => {
+                          const n = Number(v);
+                          if (Number.isFinite(n) && n >= 0 && n < 100)
+                            set({ defaultVatPercent: n });
+                        }}
+                      />
+                    )}
+                  </>
+                )}
+                <p className="muted small">
+                  {t(
+                    "Like Sweet Home 3D, prices are shown in the furniture properties and the furniture list only when a currency is chosen.",
                   )}
                 </p>
               </Group>

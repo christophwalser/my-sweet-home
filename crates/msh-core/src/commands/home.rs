@@ -43,6 +43,12 @@ struct SetParams {
     /// Lock the base plan (walls, rooms, dimensions, labels, polylines, doors, windows and
     /// fixed furniture) so that only movable furniture can be selected in the plan
     base_plan_locked: Option<bool>,
+    /// Columns of the furniture list, in order (Sweet Home 3D's names: NAME, WIDTH, DEPTH,
+    /// HEIGHT, X, Y, ELEVATION, ANGLE, LEVEL, CATALOG_ID, CREATOR, DESCRIPTION, LICENSE,
+    /// MODEL_SIZE, COLOR, TEXTURE, MOVABLE, DOOR_OR_WINDOW, VISIBLE, PRICE,
+    /// VALUE_ADDED_TAX_PERCENTAGE, VALUE_ADDED_TAX, PRICE_VALUE_ADDED_TAX_INCLUDED); stored
+    /// in the home like Sweet Home 3D does. An empty list restores the default columns
+    furniture_columns: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -156,6 +162,22 @@ pub(super) fn register(r: &mut Registry) {
         "Changes home settings such as name, default wall height and the lock of the base plan.",
         true,
         |doc, p: SetParams| {
+            if let Some(columns) = p.furniture_columns {
+                let mut list: Vec<String> = Vec::new();
+                for c in columns {
+                    let c = c.to_ascii_uppercase();
+                    if !msh_export::FURNITURE_COLUMNS.contains(&c.as_str()) {
+                        return Err(CommandError::failed(format!(
+                            "unknown furniture column '{c}'; known columns: {}",
+                            msh_export::FURNITURE_COLUMNS.join(", ")
+                        )));
+                    }
+                    if !list.contains(&c) {
+                        list.push(c);
+                    }
+                }
+                doc.home_mut().furniture_visible_properties = list;
+            }
             let a = &mut doc.home_mut().attrs;
             if let Some(n) = p.name {
                 a.name = Some(n);

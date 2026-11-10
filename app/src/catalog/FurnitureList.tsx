@@ -1,127 +1,88 @@
-// Furniture of the open home as a sortable table (like Sweet Home 3D's furniture
-// list). Clicking a row selects the piece (and its level); the visible checkbox
-// shows or hides it. Groups are listed as one row.
+// Furniture of the open home as a sortable table (like Sweet Home 3D's furniture list).
+// Clicking a row selects the piece (and its level); the Visible column shows or hides it.
+// Groups are listed as one row. The columns are chosen per home (stored like Sweet Home 3D's
+// `furnitureVisibleProperty`); price columns need a currency in the preferences.
 
 import { useMemo, useState } from "react";
-import { formatNumber, t } from "../i18n";
-import type { Furniture, Home } from "../model";
+import { t } from "../i18n";
+import type { Furniture } from "../model";
+import { usePreferences } from "../preferences";
+import { formatMoney } from "../prices";
 import { useStore } from "../store";
-import { formatFieldValue, toUnit, unitSymbol } from "../units";
+import { unitSymbol } from "../units";
+import {
+  available,
+  COLUMNS,
+  type ColumnId,
+  cellText,
+  cellValue,
+  compareCells,
+  shownColumns,
+  toggled,
+} from "./furnitureColumns";
 
-type Column = "name" | "width" | "depth" | "height" | "elevation" | "level" | "price";
+const PRICE_COLUMNS: ColumnId[] = ["PRICE", "VALUE_ADDED_TAX", "PRICE_VALUE_ADDED_TAX_INCLUDED"];
 
-type Row = {
-  id: string;
-  name: string;
-  group: number | null;
-  width: number;
-  depth: number;
-  height: number;
-  elevation: number;
-  levelId: string | null;
-  level: string;
-  visible: boolean;
-  price: number | null;
-};
-
-function rowOf(item: Furniture, home: Home): Row | null {
-  const levelId = item.attrs.level;
-  const level = home.levels.find((l) => l.attrs.id === levelId)?.attrs.name ?? "";
-  if (item.type === "group") {
-    if (!item.attrs.id) return null;
-    return {
-      id: item.attrs.id,
-      name: item.attrs.name,
-      group: item.items.length,
-      width: item.attrs.width ?? 0,
-      depth: item.attrs.depth ?? 0,
-      height: item.attrs.height ?? 0,
-      elevation: item.attrs.elevation ?? 0,
-      levelId,
-      level,
-      visible: item.attrs.visible !== false,
-      price: null,
-    };
-  }
-  const a = item.attrs;
-  if (!a.id) return null;
-  const price = a.price ? Number.parseFloat(a.price) : null;
-  return {
-    id: a.id,
-    name: a.name,
-    group: null,
-    width: a.width,
-    depth: a.depth,
-    height: a.height,
-    elevation: a.elevation ?? 0,
-    levelId,
-    level,
-    visible: a.visible !== false,
-    price: price !== null && Number.isFinite(price) ? price : null,
-  };
+/** CSS class of a header or cell: check box, amount (wider), number or text. */
+function cellClass(id: ColumnId, numeric: boolean): string {
+  if (id === "VISIBLE") return "check";
+  if (PRICE_COLUMNS.includes(id)) return "num money";
+  return numeric ? "num" : "";
 }
-
-/** A length in cm in the unit and number format of the preferences. */
-const fmt = (cm: number) => formatFieldValue(toUnit(cm));
 
 export default function FurnitureList({ query }: { query: string }) {
   const opened = useStore((s) => s.opened);
   const selection = useStore((s) => s.selection);
   const run = useStore((s) => s.run);
-  const [sort, setSort] = useState<{ column: Column; desc: boolean }>({
-    column: "name",
+  const currency = usePreferences((s) => s.currency);
+  const vatEnabled = usePreferences((s) => s.vatEnabled);
+  const [sort, setSort] = useState<{ column: ColumnId; desc: boolean }>({
+    column: "NAME",
     desc: false,
   });
+  const [choosing, setChoosing] = useState(false);
 
   const home = opened?.home ?? null;
+  const prices = { currency, vatEnabled };
+  const columns = home ? shownColumns(home, prices) : [];
   const rows = useMemo(() => {
     if (!home) return [];
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const list = home.furniture
-      .map((f) => rowOf(f, home))
-      .filter((r): r is Row => r !== null)
-      .filter((r) => words.every((w) => r.name.toLowerCase().includes(w)));
+      .filter((f): f is Furniture & { attrs: { id: string } } => !!f.attrs.id)
+      .filter((f) => words.every((w) => f.attrs.name.toLowerCase().includes(w)));
     const { column, desc } = sort;
     list.sort((a, b) => {
-      const va = a[column];
-      const vb = b[column];
-      const cmp =
-        typeof va === "string" && typeof vb === "string"
-          ? va.localeCompare(vb)
-          : ((va as number | null) ?? -1) - ((vb as number | null) ?? -1);
+      const cmp = compareCells(cellValue(a, home, column), cellValue(b, home, column));
       return desc ? -cmp : cmp;
     });
     return list;
   }, [home, query, sort]);
 
   if (!home) return <p className="muted small catalog-empty">{t("No home open")}</p>;
-  const hasLevels = home.levels.length > 0;
-  const hasPrices = rows.some((r) => r.price !== null);
-  const total = rows.reduce((sum, r) => sum + (r.price ?? 0), 0);
+  const hasTotals = columns.some((c) => PRICE_COLUMNS.includes(c.id));
 
-  const header = (column: Column, label: string, numeric = true, full = label) => (
-    <th className={numeric ? "num" : ""}>
-      <button
-        type="button"
-        onClick={() => setSort((s) => ({ column, desc: s.column === column ? !s.desc : false }))}
-        title={`${full} · ${t("Sort")}`}
-      >
-        {label}
-        {sort.column === column ? (sort.desc ? " ▾" : " ▴") : ""}
-      </button>
-    </th>
-  );
-
-  const select = (r: Row, add: boolean) => {
+  const select = (f: Furniture, add: boolean) => {
+    const id = f.attrs.id as string;
     const state = useStore.getState();
-    if (r.levelId && r.levelId !== state.selectedLevel) state.selectLevel(r.levelId);
+    const level = f.attrs.level;
+    if (level && level !== state.selectedLevel) state.selectLevel(level);
     state.setSelection(
       add
-        ? selection.includes(r.id)
-          ? selection.filter((s) => s !== r.id)
-          : [...selection, r.id]
-        : [r.id],
+        ? selection.includes(id)
+          ? selection.filter((s) => s !== id)
+          : [...selection, id]
+        : [id],
     );
+  };
+
+  const total = (id: ColumnId) => {
+    let sum: number | null = null;
+    for (const f of rows) {
+      const v = cellValue(f, home, id);
+      if (typeof v === "number") sum = (sum ?? 0) + v;
+    }
+    return sum;
   };
 
   return (
@@ -129,55 +90,112 @@ export default function FurnitureList({ query }: { query: string }) {
       <table>
         <thead>
           <tr>
-            <th className="check" title={t("Visible")} />
-            {header("name", t("Name"), false)}
-            {header("width", t("W"), true, t("Width"))}
-            {header("depth", t("D"), true, t("Depth"))}
-            {header("height", t("H"), true, t("Height"))}
-            {header("elevation", t("Elev."), true, t("Elevation"))}
-            {hasLevels && header("level", t("Level"), false)}
-            {hasPrices && header("price", t("Price"))}
+            {columns.map((c) => (
+              <th key={c.id} className={cellClass(c.id, c.numeric)}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSort((s) => ({ column: c.id, desc: s.column === c.id ? !s.desc : false }))
+                  }
+                  title={`${c.full()} · ${t("Sort")}`}
+                >
+                  {c.id === "VISIBLE" ? "" : c.label()}
+                  {sort.column === c.id ? (sort.desc ? " ▾" : " ▴") : ""}
+                </button>
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr
-              key={r.id}
-              className={`${selection.includes(r.id) ? "selected" : ""} ${r.visible ? "" : "hidden-row"}`}
-              onClick={(e) => select(r, e.shiftKey || e.ctrlKey)}
-            >
-              <td className="check">
-                <input
-                  type="checkbox"
-                  checked={r.visible}
-                  title={t("Visible")}
-                  disabled={r.group !== null}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) =>
-                    void run("furniture_update", { id: r.id, visible: e.currentTarget.checked })
+          {rows.map((f) => {
+            const id = f.attrs.id as string;
+            const visible = f.attrs.visible !== false;
+            return (
+              <tr
+                key={id}
+                className={`${selection.includes(id) ? "selected" : ""} ${visible ? "" : "hidden-row"}`}
+                onClick={(e) => select(f, e.shiftKey || e.ctrlKey)}
+              >
+                {columns.map((c) => {
+                  if (c.id === "VISIBLE") {
+                    return (
+                      <td key={c.id} className="check">
+                        <input
+                          type="checkbox"
+                          checked={visible}
+                          title={t("Visible")}
+                          disabled={f.type === "group"}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) =>
+                            void run("furniture_update", { id, visible: e.currentTarget.checked })
+                          }
+                        />
+                      </td>
+                    );
                   }
-                />
-              </td>
-              <td className="name" title={r.name}>
-                {r.name}
-                {r.group !== null && <span className="muted"> ({r.group})</span>}
-              </td>
-              <td className="num">{fmt(r.width)}</td>
-              <td className="num">{fmt(r.depth)}</td>
-              <td className="num">{fmt(r.height)}</td>
-              <td className="num">{fmt(r.elevation)}</td>
-              {hasLevels && <td className="name">{r.level}</td>}
-              {hasPrices && (
-                <td className="num">{r.price !== null ? formatNumber(r.price, 2, 2) : ""}</td>
-              )}
-            </tr>
-          ))}
+                  const text = cellText(cellValue(f, home, c.id), c.id, currency);
+                  return (
+                    <td
+                      key={c.id}
+                      className={c.numeric ? cellClass(c.id, true) : "name"}
+                      title={c.numeric ? undefined : text}
+                    >
+                      {text}
+                      {c.id === "NAME" && f.type === "group" && (
+                        <span className="muted"> ({f.items.length})</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
+        {hasTotals && (
+          <tfoot>
+            <tr>
+              {columns.map((c, i) => (
+                <td key={c.id} className={c.numeric ? cellClass(c.id, true) : "name"}>
+                  {PRICE_COLUMNS.includes(c.id)
+                    ? formatMoney(total(c.id), currency)
+                    : i === columns.findIndex((x) => !x.numeric && x.id !== "VISIBLE")
+                      ? t("Total")
+                      : ""}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        )}
       </table>
-      <p className="muted small catalog-empty">
-        {t("{n} items · sizes in {unit}", { n: rows.length, unit: unitSymbol() })}
-        {hasPrices ? t(" · total {total}", { total: formatNumber(total, 2, 2) }) : ""}
-      </p>
+      <div className="furniture-list-footer muted small">
+        <span>{t("{n} items · sizes in {unit}", { n: rows.length, unit: unitSymbol() })}</span>
+        <button
+          type="button"
+          className="link-button"
+          aria-expanded={choosing}
+          onClick={() => setChoosing(!choosing)}
+        >
+          {t("Columns…")}
+        </button>
+      </div>
+      {choosing && (
+        <fieldset className="furniture-columns">
+          <legend>{t("Columns of the furniture list")}</legend>
+          {COLUMNS.filter((c) => available(c.id, prices)).map((c) => (
+            <label key={c.id} className="prefs-option">
+              <input
+                type="checkbox"
+                checked={columns.some((x) => x.id === c.id)}
+                onChange={() => void run("home_set", { furniture_columns: toggled(home, c.id) })}
+              />
+              <span>{c.full()}</span>
+            </label>
+          ))}
+          {!currency && (
+            <p className="muted small">{t("Price columns need a currency in the preferences.")}</p>
+          )}
+        </fieldset>
+      )}
     </div>
   );
 }

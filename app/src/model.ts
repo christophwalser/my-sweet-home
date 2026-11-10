@@ -157,6 +157,15 @@ export type Piece = {
     power: number | null;
     /** `false`: part of the base plan (fixed furniture) */
     movable: boolean | null;
+    description?: string | null;
+    /** Link to more information (from the catalog) */
+    information?: string | null;
+    creator?: string | null;
+    license?: string | null;
+    /** VAT as a fraction of the price, as a decimal string ("0.2" = 20 %) */
+    value_added_tax_percentage?: string | null;
+    /** ISO 4217 code of the price */
+    currency?: string | null;
   };
   sashes?: Sash[];
   light_sources?: LightSource[];
@@ -318,6 +327,8 @@ export type Home = {
     /** Walls, rooms, texts, doors, windows and fixed furniture cannot be selected */
     base_plan_locked: boolean | null;
   };
+  /** Columns of the furniture list (Sweet Home 3D's property names), empty: defaults */
+  furniture_visible_properties?: string[];
   environment: {
     attrs: {
       ground_color: number | null;

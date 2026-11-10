@@ -421,7 +421,18 @@ function applyPieceMaterials(
       .map((m) => [m.attrs.name, m.texture as Texture]),
   );
   const side = a.back_face_shown ? THREE.DoubleSide : THREE.FrontSide;
-  if (a.color === null && overrides.size === 0 && side === THREE.FrontSide && !a.model_mirrored)
+  // Like Sweet Home 3D: a color replaces everything, else a texture of the whole piece, else
+  // the changes of single materials; a shininess of the piece applies to all its materials
+  const pieceTexture = a.color === null || a.color === undefined ? piece.texture : null;
+  const pieceShininess = a.shininess ?? null;
+  if (
+    a.color === null &&
+    !pieceTexture &&
+    pieceShininess === null &&
+    overrides.size === 0 &&
+    side === THREE.FrontSide &&
+    !a.model_mirrored
+  )
     return;
   obj.traverse((o) => {
     const mesh = o as THREE.Mesh;
@@ -434,15 +445,20 @@ function applyPieceMaterials(
       const c = m.clone() as THREE.MeshPhongMaterial;
       // Mirroring flips the winding order; show both sides to stay visible
       c.side = a.model_mirrored ? THREE.DoubleSide : side;
-      const o = overrides.get(m.name);
-      const color = o?.color ?? a.color;
+      // A texture or color of the whole piece hides the changes of single materials
+      const o =
+        pieceTexture || (a.color !== null && a.color !== undefined)
+          ? undefined
+          : overrides.get(m.name);
+      const color = a.color ?? o?.color;
       if (color !== null && color !== undefined) {
         c.color = new THREE.Color(color & 0xffffff);
         c.map = null;
       }
-      // A texture of the material editor replaces the model's texture and color
-      if (o && texturesByName.has(m.name)) {
-        const t = texturesByName.get(m.name) as Texture;
+      // A texture of the piece or of the material editor replaces the model's texture and color
+      const textured = pieceTexture ?? (o && texturesByName.get(m.name)) ?? null;
+      if (textured) {
+        const t = textured;
         const tex = cachedTexture(docResourceUrl(docId, t.image), onLoaded);
         tex.wrapS = THREE.RepeatWrapping;
         tex.wrapT = THREE.RepeatWrapping;
@@ -456,8 +472,11 @@ function applyPieceMaterials(
         c.map = tex;
         c.color = new THREE.Color(0xffffff);
       }
-      if (o?.shininess !== null && o?.shininess !== undefined && "shininess" in c) {
-        c.shininess = o.shininess * 128;
+      const shininess = o?.shininess ?? pieceShininess;
+      if (shininess !== null && shininess !== undefined && "shininess" in c) {
+        c.shininess = shininess * 128;
+        // Matt also loses the highlight color of the model
+        if (shininess === 0 && c.specular) c.specular = new THREE.Color(0x000000);
       }
       return c;
     };

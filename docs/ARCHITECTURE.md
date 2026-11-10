@@ -1069,6 +1069,30 @@ Measured over CDP on the release build (median of 10 edits, time until the chang
 drawn): example home 226 → 66 ms, a real home with 47 pieces and 48 walls 152 → 40 ms; the
 3D images before and after are identical.
 
+### 4.46 Furniture dialog and furniture list like Sweet Home 3D (2026-11-10)
+
+- `furniture_update` takes the rest of Sweet Home 3D's furniture dialog: `texture` (catalog
+  ID of a texture for the whole piece, written without a role; it and a color exclude each
+  other), `shininess` (0 matt, Sweet Home 3D's "shiny" 0.25, negative = the model's),
+  `description`, `price`, `vat_percent` (stored as Sweet Home 3D's fraction,
+  `valueAddedTaxPercentage` 0.081 = 8.1 %), `currency` and `base_plan_item` (`movable`
+  false; doors and windows always belong to the base plan).
+- The 3D view follows Sweet Home 3D's order: a color of the piece replaces everything, else
+  its texture, else the changes of single materials; a shininess of the piece applies to all
+  its materials (matt also drops the highlight color).
+- Preferences › General › Prices: currency (none by default; like Sweet Home 3D, prices are
+  shown only with a currency), value added tax on or off, default VAT for pieces whose price
+  is set without one (`app/src/prices.ts` formats amounts with `Intl.NumberFormat`).
+- The properties panel shows description, price, VAT and the price with VAT, texture and
+  surface (like the model, matt, shiny) for the whole piece, "Part of the base plan", and
+  creator, license and information link. The light power and cone fields were hidden in the
+  German interface (the kind was compared with a translated word); fixed.
+- Furniture list (`catalog/furnitureColumns.ts`): all of Sweet Home 3D's columns, chosen per
+  home with `home_set furniture_columns` and stored as `furnitureVisibleProperty` (so Sweet
+  Home 3D shows the same columns); defaults when a home stores none. Price columns need a
+  currency, VAT columns VAT switched on; a totals row sums price, VAT and price with VAT.
+  Groups count the prices of their pieces.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

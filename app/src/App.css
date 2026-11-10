@@ -1112,6 +1112,52 @@ input[type="search"]:focus {
   font-style: italic;
 }
 
+.furniture-list th.num {
+  width: 38px;
+}
+
+.furniture-list th.check {
+  width: 22px;
+}
+
+.furniture-list th.money,
+.furniture-list td.money {
+  width: 78px;
+}
+
+.furniture-list tfoot td {
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+}
+
+.furniture-list-footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+}
+
+.furniture-columns {
+  margin: 0 6px 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 2px 8px;
+}
+
+.furniture-columns legend {
+  padding: 0 4px;
+}
+
+.furniture-columns p {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+}
+
 .catalog-empty {
   padding: 8px;
 }

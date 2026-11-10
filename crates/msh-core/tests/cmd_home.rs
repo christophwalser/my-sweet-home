@@ -348,3 +348,35 @@ fn compass_update_rejects_a_non_positive_diameter() {
     );
     assert!(err.contains("diameter"), "{err}");
 }
+
+#[test]
+fn home_set_chooses_the_columns_of_the_furniture_list() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let before = snapshot(&doc);
+    run(
+        &r,
+        &mut doc,
+        "home_set",
+        json!({ "furniture_columns": ["name", "PRICE", "NAME", "VALUE_ADDED_TAX"] }),
+    );
+    let after = snapshot(&doc);
+    assert_eq!(
+        doc.home().furniture_visible_properties,
+        vec!["NAME", "PRICE", "VALUE_ADDED_TAX"]
+    );
+    check_undo_redo(&r, &mut doc, &before, &after);
+    let reopened = save_and_reopen(&r, &mut doc, "home_set_chooses_the_columns");
+    assert_eq!(
+        reopened.home().furniture_visible_properties,
+        vec!["NAME", "PRICE", "VALUE_ADDED_TAX"]
+    );
+    run_err(
+        &r,
+        &mut doc,
+        "home_set",
+        json!({ "furniture_columns": ["NAME", "COLOUR"] }),
+    );
+    run(&r, &mut doc, "home_set", json!({ "furniture_columns": [] }));
+    assert!(doc.home().furniture_visible_properties.is_empty());
+}

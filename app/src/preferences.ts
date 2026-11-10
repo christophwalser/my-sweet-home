@@ -56,6 +56,13 @@ export type Preferences = {
   // Files
   /** Minutes between autosaves of changed homes; 0: off */
   autosaveMinutes: number;
+  // Prices (like Sweet Home 3D: without a currency, prices are not shown)
+  /** ISO 4217 code of the currency of furniture prices, "" for none */
+  currency: string;
+  /** Prices with value added tax: VAT % in the furniture dialog and VAT columns in the list */
+  vatEnabled: boolean;
+  /** VAT in percent given to pieces whose price is set without one */
+  defaultVatPercent: number;
 };
 
 const KEY = "msh.preferences";
@@ -83,6 +90,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   quality3d: "high",
   walkingSpeed: 5,
   autosaveMinutes: 5,
+  currency: "",
+  vatEnabled: false,
+  defaultVatPercent: 0,
 };
 
 function load(): Preferences {
