@@ -697,3 +697,108 @@ fn pieces_inside_groups_can_be_updated() {
     );
     assert_eq!(piece(&doc, "table").attrs.name, "Grouped table");
 }
+
+/// The same catalog piece placed several times shares its model and icons in the home; the
+/// saved file keeps one copy that every piece finds. Also written to
+/// `MSH_MODEL_SCENARIO_OUT` when set (for comparing files with the Sweet Home 3D reader).
+#[test]
+fn the_same_model_is_stored_once() {
+    let Some(root) = isolated_catalog("the_same_model_is_stored_once") else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let chair = import_box(
+        &r,
+        &mut doc,
+        &root,
+        "Shared chair Mz7",
+        [45.0, 90.0, 50.0],
+        json!({}),
+    );
+    let table = import_box(
+        &r,
+        &mut doc,
+        &root,
+        "Other table Mz7",
+        [120.0, 75.0, 80.0],
+        json!({}),
+    );
+    let add = |doc: &mut Document, id: &str, x: i32| {
+        run(
+            &r,
+            doc,
+            "furniture_add",
+            json!({ "catalog_id": id, "x": x, "y": 0 }),
+        )["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let before = doc.file.contents.len();
+    add(&mut doc, &chair, 0);
+    let after_first = doc.file.contents.len();
+    add(&mut doc, &chair, 100);
+    add(&mut doc, &chair, 200);
+    let after_chairs = doc.file.contents.len();
+    add(&mut doc, &table, 400);
+    let after_table = doc.file.contents.len();
+    // Undo and placing again still finds the resources
+    run(&r, &mut doc, "edit_undo", json!({}));
+    add(&mut doc, &table, 400);
+    let after_again = doc.file.contents.len();
+
+    let path = common::out_dir("the_same_model_is_stored_once").join("home.sh3d");
+    run(&r, &mut doc, "home_save", json!({ "path": path }));
+    if let Some(copy) = std::env::var_os("MSH_MODEL_SCENARIO_OUT") {
+        std::fs::copy(&path, copy).unwrap();
+    }
+
+    let pieces: Vec<Piece> = doc
+        .home()
+        .furniture
+        .iter()
+        .filter_map(|f| match f {
+            Furniture::Piece(p) => Some((**p).clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(pieces.len(), 4);
+    let refs = |p: &Piece| {
+        (
+            p.attrs.model.clone(),
+            p.attrs.icon.clone(),
+            p.attrs.plan_icon.clone(),
+        )
+    };
+    assert!(pieces[0].attrs.model.is_some());
+    assert_eq!(refs(&pieces[0]), refs(&pieces[1]));
+    assert_eq!(refs(&pieces[0]), refs(&pieces[2]));
+    assert_ne!(pieces[0].attrs.model, pieces[3].attrs.model);
+    assert!(after_first > before);
+    assert_eq!(
+        after_chairs, after_first,
+        "placing the chair again added resources"
+    );
+    assert!(after_table > after_chairs);
+    assert_eq!(after_again, after_table);
+
+    // The saved file: every reference resolves, the chair's model files are there once
+    let reopened = Document::open(&path).unwrap();
+    let names: Vec<&str> = reopened
+        .file
+        .contents
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
+    for p in &pieces {
+        for name in [&p.attrs.model, &p.attrs.icon].into_iter().flatten() {
+            assert!(
+                names.contains(&name.as_str()),
+                "{name} missing in {names:?}"
+            );
+        }
+    }
+    let model = pieces[0].attrs.model.clone().unwrap();
+    assert_eq!(names.iter().filter(|n| **n == model).count(), 1);
+}

@@ -150,41 +150,30 @@ pub(crate) fn embed_furniture_resources(
     let mut model_size = None;
     let model = match &item.model {
         None => None,
+        // A model, icon or plan icon the home already has (the same piece placed again) is
+        // reused, so the file keeps one copy and the views load it once
         Some(model) => {
-            let index = doc.next_content_index();
             if item.multi_part_model {
                 // All files of the model folder, keeping the folder structure
                 let (dir, file) = model.rsplit_once('/').unwrap_or(("", model));
                 let parts = msh_catalog::read_resource_dir(lib, dir)
                     .map_err(|e| CommandError::failed(e.to_string()))?;
-                let mut size = 0;
-                for (rel, data) in parts {
-                    size += data.len();
-                    doc.add_content(format!("{index}/{rel}"), data);
-                }
-                model_size = Some(size as i64);
-                Some(format!("{index}/{file}"))
+                model_size = Some(parts.iter().map(|(_, d)| d.len()).sum::<usize>() as i64);
+                let folder = doc.add_or_reuse_folder(parts);
+                Some(format!("{folder}/{file}"))
             } else {
                 let data = read(model)?;
                 model_size = Some(data.len() as i64);
-                Some(doc.add_content(index.to_string(), data))
+                Some(doc.add_or_reuse_content(data))
             }
         }
     };
     let icon = match &item.icon {
-        Some(icon) => {
-            let data = read(icon)?;
-            let index = doc.next_content_index();
-            Some(doc.add_content(index.to_string(), data))
-        }
+        Some(icon) => Some(doc.add_or_reuse_content(read(icon)?)),
         None => None,
     };
     let plan_icon = match &item.plan_icon {
-        Some(p) => {
-            let data = read(p)?;
-            let index = doc.next_content_index();
-            Some(doc.add_content(index.to_string(), data))
-        }
+        Some(p) => Some(doc.add_or_reuse_content(read(p)?)),
         None => None,
     };
     Ok(EmbeddedResources {

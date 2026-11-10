@@ -125,7 +125,9 @@ fn set_replaces_the_image_of_the_selected_level_only() {
         set_params(json!({ "scale_distance": 1000 })),
     );
     assert_eq!(third["cm_per_pixel"], json!(1.0));
-    assert_ne!(third["image"], second["image"], "a new resource");
+    // The same image again: the home keeps one resource for it
+    assert_eq!(third["image"], second["image"]);
+    assert_eq!(first["image"], second["image"]);
     let home = doc.home();
     assert_eq!(
         home.levels[1]

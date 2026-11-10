@@ -1060,6 +1060,10 @@ shader programs again; the GPU needs 1–8 ms per frame and is not the limit.
   users. Before, every assignment added a copy; a home with its rooms and walls textured
   one by one grew from 3 to 59 MB instead of 5 MB, and the views loaded each copy again
   because they cache resources by name.
+- The same holds for furniture (`embed_furniture_resources`): a piece placed again reuses
+  its model (a single file, or a model folder with exactly the same files through
+  `Document::add_or_reuse_folder`), icon and plan icon; background images too. Sweet Home 3D
+  reads such files with the same content bytes as files with copies.
 
 Measured over CDP on the release build (median of 10 edits, time until the changed view is
 drawn): example home 226 → 66 ms, a real home with 47 pieces and 48 walls 152 → 40 ms; the

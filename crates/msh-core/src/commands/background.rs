@@ -91,8 +91,8 @@ pub(super) fn register(r: &mut Registry) {
             }
             check_scale(p.scale_distance, [p.x_start, p.y_start, p.x_end, p.y_end])?;
             let target = Target::resolve(doc, p.level)?;
-            let index = doc.next_content_index();
-            let image = doc.add_content(index.to_string(), data);
+            // The same image on several levels is stored once
+            let image = doc.add_or_reuse_content(data);
             let background = BackgroundImage {
                 image,
                 scale_distance: p.scale_distance,

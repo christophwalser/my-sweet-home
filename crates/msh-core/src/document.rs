@@ -214,6 +214,38 @@ impl Document {
         self.add_content(index.to_string(), data)
     }
 
+    /// Adds the files of a multi-part resource (a model with its MTL and textures, paths
+    /// relative to its folder) under a new numeric folder and returns the folder name, or
+    /// returns the folder of a resource with exactly the same files that the file already has
+    /// (same relative paths, same bytes), as Sweet Home 3D shares a model between its pieces.
+    pub(crate) fn add_or_reuse_folder(&mut self, parts: Vec<(String, Vec<u8>)>) -> String {
+        let mut folders: std::collections::BTreeMap<&str, Vec<&ContentEntry>> =
+            std::collections::BTreeMap::new();
+        for c in &self.file.contents {
+            if let Some((top, _)) = c.name.split_once('/') {
+                folders.entry(top).or_default().push(c);
+            }
+        }
+        let same = |entries: &Vec<&ContentEntry>| {
+            entries.len() == parts.len()
+                && parts.iter().all(|(rel, data)| {
+                    entries.iter().any(|e| {
+                        e.name.split_once('/').map(|(_, r)| r) == Some(rel.as_str())
+                            && e.data.len() == data.len()
+                            && e.data == *data
+                    })
+                })
+        };
+        if let Some((top, _)) = folders.iter().find(|(_, entries)| same(entries)) {
+            return (*top).to_owned();
+        }
+        let index = self.next_content_index().to_string();
+        for (rel, data) in parts {
+            self.add_content(format!("{index}/{rel}"), data);
+        }
+        index
+    }
+
     /// Next free numeric resource prefix (`0`, `1`, … as Sweet Home 3D uses).
     pub(crate) fn next_content_index(&self) -> u32 {
         self.file
