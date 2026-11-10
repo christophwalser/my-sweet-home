@@ -64,6 +64,9 @@ export function cachedTexture(url: string, onLoad?: () => void): THREE.Texture {
   tex.userData.pending = true;
   loadSource(url)
     .then((source) => {
+      // The GPU memory of an uploaded texture keeps the size of its first image (the 1×1
+      // placeholder): free it, so that the real image is uploaded at its own size
+      tex.dispose();
       tex.image = source.data;
       tex.needsUpdate = true;
       onLoad?.();

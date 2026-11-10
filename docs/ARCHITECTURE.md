@@ -1029,7 +1029,9 @@ furniture is read by its home reader.
 - Texture images of the 3D view are loaded once per open home and shared
   (`cachedTexture`). Rebuilding the scene after a change no longer renders all textured
   surfaces black until their images load again; a new image shows a white placeholder
-  until it is there. The top view icons and the OBJ export wait for or skip such textures.
+  until it is there. When it arrives, the texture's GPU memory is freed first: three.js
+  allocates it at the size of the first upload (the 1×1 placeholder), and a larger image
+  would otherwise not show until the next rebuild. The top view icons and the OBJ export wait for or skip such textures.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

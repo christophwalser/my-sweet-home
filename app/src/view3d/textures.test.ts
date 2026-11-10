@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { boxProjectedUvs, cachedTexture, texturePending } from "./textures";
 
 /** UV of vertex `i` of a geometry. */
@@ -55,5 +55,25 @@ describe("cachedTexture", () => {
     expect(a).not.toBe(b);
     expect(texturePending(a)).toBe(true);
     expect(texturePending(new THREE.Texture())).toBe(false);
+  });
+
+  it("frees the placeholder's GPU memory when the image arrives", async () => {
+    const image = { width: 64, height: 32 };
+    const spy = vi
+      .spyOn(THREE.ImageLoader.prototype, "loadAsync")
+      .mockResolvedValue(image as unknown as HTMLImageElement);
+    let loaded = false;
+    const tex = cachedTexture("http://localhost/loaded-b.png", () => {
+      loaded = true;
+    });
+    let disposed = false;
+    tex.addEventListener("dispose", () => {
+      disposed = true;
+    });
+    await vi.waitFor(() => expect(loaded).toBe(true));
+    expect(disposed).toBe(true);
+    expect(tex.image).toBe(image);
+    await vi.waitFor(() => expect(texturePending(tex)).toBe(false));
+    spy.mockRestore();
   });
 });
