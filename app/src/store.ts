@@ -200,8 +200,8 @@ export function applyHome(next: OpenedHome): void {
   });
 }
 
-/** Stores the current cameras of the 3D view in the home (before saving). */
-async function syncCameras(): Promise<void> {
+/** Stores the current cameras of the 3D view in the home (before saving, or before photos). */
+export async function syncCameras(): Promise<void> {
   const { cameraSync, visitorPose, viewMode, opened } = useStore.getState();
   try {
     if (cameraSync) {

@@ -850,5 +850,12 @@
   "Total": "Summe",
   "Columns…": "Spalten…",
   "Columns of the furniture list": "Spalten der Möbelliste",
-  "Price columns need a currency in the preferences.": "Preisspalten brauchen eine Währung in den Einstellungen."
+  "Price columns need a currency in the preferences.": "Preisspalten brauchen eine Währung in den Einstellungen.",
+  "Folder for the photos": "Ordner für die Fotos",
+  "Photo {i} of {n}: {name}": "Foto {i} von {n}: {name}",
+  "Saved {saved} photos to {dir} in {seconds} s.": "{saved} Fotos in {seconds} s nach {dir} gespeichert.",
+  "Cancelled after {saved} photos.": "Nach {saved} Fotos abgebrochen.",
+  "Photos of points of view": "Fotos von Blickpunkten",
+  "Each chosen point of view gets its own photo with these settings, saved into a folder.": "Jeder gewählte Blickpunkt bekommt mit diesen Einstellungen ein eigenes Foto, gespeichert in einem Ordner.",
+  "Render {n} photos…": "{n} Fotos rendern…"
 }

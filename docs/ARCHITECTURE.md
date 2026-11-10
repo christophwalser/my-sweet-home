@@ -1096,6 +1096,12 @@ drawn): example home 226 → 66 ms, a real home with 47 pieces and 48 walls 152 
   right_side_shininess`, `room_update floor_shininess / ceiling_shininess` (Sweet Home 3D's
   attributes; "shiny" = 0.25), a "Surface" choice in the panels; the 3D view uses a Phong
   material with a highlight for shiny surfaces (`surfaceMaterial`).
+- Photos of points of view (like Sweet Home 3D's "Create photos at points of view"): the
+  photo dialog lists the stored points of view; for the chosen ones it goes to each with
+  `viewpoint_go`, renders a photo with the dialog's settings and saves it into a chosen
+  folder as "<home> - <point of view>.png" (`view3d/photoSeries.ts`), then returns to the
+  view it started from (`syncCameras`, `camera_get`, `camera_set`). CLI and MCP get the same
+  with `viewpoint_go` and `msh photo`.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

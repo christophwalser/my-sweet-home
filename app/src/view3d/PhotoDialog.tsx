@@ -1,12 +1,13 @@
 // "Create photo" dialog of the 3D view: size, quality, progress with preview, save as PNG.
 
-import { save } from "@tauri-apps/plugin-dialog";
-import { useEffect, useRef, useState } from "react";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
-import { useStore } from "../store";
+import { syncCameras, useStore } from "../store";
 import type { Lens } from "./lens";
 import { PHOTO_SAMPLES, type PhotoJob, type PhotoQuality } from "./photo";
+import { frames, seriesFilePath } from "./photoSeries";
 import type { SunInfo } from "./View3D";
 
 const LENSES: { value: Lens; label: string; hint: string }[] = [
@@ -74,7 +75,19 @@ export default function PhotoDialog({
   const job = useRef<PhotoJob | null>(null);
   const preview = useRef<HTMLDivElement>(null);
   const started = useRef(0);
-  const rendering = progress !== null && photo === null;
+  /** Stored points of view of the home, and those chosen for a series of photos */
+  const cameras = useStore((s) => s.opened?.home.cameras);
+  const views = useMemo(
+    () =>
+      (cameras ?? [])
+        .filter((c) => c.attrs.role === "storedCamera" && c.attrs.name)
+        .map((c) => c.attrs.name as string),
+    [cameras],
+  );
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [series, setSeries] = useState(false);
+  const cancelSeries = useRef(false);
+  const rendering = series || (progress !== null && photo === null);
 
   // Stop rendering when the dialog closes
   useEffect(() => () => job.current?.cancel(), []);
@@ -131,6 +144,66 @@ export default function PhotoDialog({
         job.current = null;
       },
     );
+  };
+
+  /** One photo of the current view, resolved with its PNG data URL. */
+  const renderOne = (): Promise<string> => {
+    setProgress(0);
+    const j = start(width, height, quality, lens, setProgress);
+    job.current = j;
+    preview.current?.replaceChildren(j.canvas);
+    return j.done.finally(() => {
+      job.current = null;
+    });
+  };
+
+  /**
+   * Photos of the chosen points of view, saved into a folder; the 3D view goes to each point
+   * of view in turn and back to where it was.
+   */
+  const renderSeries = async () => {
+    const dir = await open({ directory: true, title: t("Folder for the photos") });
+    if (typeof dir !== "string") return;
+    setSeries(true);
+    setPhoto(null);
+    cancelSeries.current = false;
+    started.current = performance.now();
+    const used = new Set<string>();
+    let saved = 0;
+    // The view as it is now, to come back to
+    await syncCameras();
+    const before = (await run("camera_get")) as {
+      active?: string;
+      observer?: Record<string, number>;
+      aerial?: Record<string, number>;
+    } | null;
+    try {
+      for (const [i, name] of chosen.entries()) {
+        if (cancelSeries.current) break;
+        setMessage(t("Photo {i} of {n}: {name}", { i: i + 1, n: chosen.length, name }));
+        await run("viewpoint_go", { name });
+        // Let the view take the camera (and rebuild for another level) before rendering
+        await frames(3);
+        await new Promise((r) => setTimeout(r, 400));
+        const url = await renderOne();
+        await api.saveImage(seriesFilePath(dir, baseName, name, used), url);
+        saved++;
+      }
+      const seconds = ((performance.now() - started.current) / 1000).toFixed(1);
+      setMessage(t("Saved {saved} photos to {dir} in {seconds} s.", { saved, dir, seconds }));
+    } catch (e) {
+      setMessage(
+        String(e).includes("cancelled")
+          ? t("Cancelled after {saved} photos.", { saved })
+          : t("Rendering failed: {v0}", { v0: String(e) }),
+      );
+    } finally {
+      setProgress(null);
+      setSeries(false);
+      const mode = before?.active === "observer" ? "observer" : "aerial";
+      const pose = before?.[mode];
+      if (pose) await run("camera_set", { mode, ...pose, activate: true });
+    }
   };
 
   const savePhoto = async () => {
@@ -288,6 +361,32 @@ export default function PhotoDialog({
         <p className="muted small">
           {t("The photo shows the current view of the 3D view (aerial view or virtual visit).")}
         </p>
+        {views.length > 0 && (
+          <fieldset className="photo-quality photo-views" disabled={rendering}>
+            <legend>{t("Photos of points of view")}</legend>
+            {views.map((name) => (
+              <label key={name}>
+                <input
+                  type="checkbox"
+                  checked={chosen.includes(name)}
+                  onChange={(e) =>
+                    setChosen(
+                      e.currentTarget.checked
+                        ? views.filter((v) => v === name || chosen.includes(v))
+                        : chosen.filter((v) => v !== name),
+                    )
+                  }
+                />
+                <span>{name}</span>
+              </label>
+            ))}
+            <p className="muted small">
+              {t(
+                "Each chosen point of view gets its own photo with these settings, saved into a folder.",
+              )}
+            </p>
+          </fieldset>
+        )}
         <div className="photo-preview" ref={preview} />
         {progress !== null && (
           <progress className="photo-progress" value={progress} max={1}>
@@ -303,6 +402,11 @@ export default function PhotoDialog({
               {photo ? t("Render again") : t("Render")}
             </button>
           )}
+          {!rendering && chosen.length > 0 && (
+            <button type="button" onClick={() => void renderSeries()}>
+              {t("Render {n} photos…", { n: chosen.length })}
+            </button>
+          )}
           {rendering && quality !== "draft" && (
             <button
               type="button"
@@ -313,7 +417,13 @@ export default function PhotoDialog({
             </button>
           )}
           {rendering && (
-            <button type="button" onClick={() => job.current?.cancel()}>
+            <button
+              type="button"
+              onClick={() => {
+                cancelSeries.current = true;
+                job.current?.cancel();
+              }}
+            >
               {t("Cancel")}
             </button>
           )}
