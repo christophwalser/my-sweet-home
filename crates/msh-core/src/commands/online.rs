@@ -200,29 +200,29 @@ fn parse_sh3d_rss(xml: &str, words: &[String]) -> Vec<Found> {
     loop {
         match reader.read_event() {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => match e.local_name().as_ref() {
-                b"item" => {
+                "item" => {
                     title.clear();
                     size = None;
                 }
-                b"title" => in_title = true,
-                b"content" => {
+                "title" => in_title = true,
+                "content" => {
                     size = e.attributes().flatten().find_map(|a| {
-                        (a.key.local_name().as_ref() == b"filesize")
-                            .then(|| String::from_utf8_lossy(&a.value).parse().ok())
+                        (a.key.local_name().as_ref() == "filesize")
+                            .then(|| a.value.parse().ok())
                             .flatten()
                     });
                 }
                 _ => {}
             },
             Ok(Event::CData(t)) if in_title => {
-                title.push_str(&String::from_utf8_lossy(&t.into_inner()));
+                title.push_str(&t.into_inner());
             }
             Ok(Event::Text(t)) if in_title => {
-                title.push_str(&String::from_utf8_lossy(&t.into_inner()));
+                title.push_str(&t.into_inner());
             }
             Ok(Event::End(e)) => match e.local_name().as_ref() {
-                b"title" => in_title = false,
-                b"item" => items.push((title.trim().to_owned(), size)),
+                "title" => in_title = false,
+                "item" => items.push((title.trim().to_owned(), size)),
                 _ => {}
             },
             Ok(Event::Eof) | Err(_) => break,
@@ -304,7 +304,10 @@ fn extract_library(data: Vec<u8>, dir: &std::path::Path) -> Result<Value, Comman
         let mut entry = archive
             .by_index(i)
             .map_err(|e| failed("cannot read the ZIP file", e))?;
-        let name = entry.name().replace('\\', "/");
+        let name = entry
+            .name()
+            .map_err(|e| failed("cannot read the ZIP file", e))?
+            .replace('\\', "/");
         let lower = name.to_ascii_lowercase();
         if !(lower.ends_with(".sh3f") || lower.ends_with(".sh3t")) {
             continue;
@@ -313,7 +316,16 @@ fn extract_library(data: Vec<u8>, dir: &std::path::Path) -> Result<Value, Comman
         let target = dir.join(&file);
         let mut out =
             std::fs::File::create(&target).map_err(|e| failed("cannot write the library", e))?;
-        std::io::copy(&mut entry, &mut out).map_err(|e| failed("cannot write the library", e))?;
+        let limit = msh_format::limits::MAX_ENTRY_SIZE;
+        let copied = std::io::copy(&mut (&mut entry).take(limit + 1), &mut out)
+            .map_err(|e| failed("cannot write the library", e))?;
+        if copied > limit {
+            drop(out);
+            let _ = std::fs::remove_file(&target);
+            return Err(CommandError::failed(
+                "the library in the ZIP file is too large",
+            ));
+        }
         return Ok(json!({ "path": target, "type": "library", "name": file }));
     }
     Err(CommandError::failed("the ZIP file contains no library"))

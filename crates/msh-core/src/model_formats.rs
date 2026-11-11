@@ -342,15 +342,23 @@ pub(crate) fn convert_3mf(data: &[u8]) -> Result<ModelPackage, ModelError> {
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data))
         .map_err(|e| invalid("3MF", &e.to_string()))?;
     let name = (0..archive.len())
-        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_owned()))
+        .filter_map(|i| {
+            archive
+                .by_index(i)
+                .ok()?
+                .name()
+                .ok()
+                .map(|n| n.into_owned())
+        })
         .find(|n| n.to_ascii_lowercase().ends_with(".model"))
         .ok_or_else(|| invalid("3MF", "no 3D model inside"))?;
-    let mut xml = String::new();
-    archive
+    let mut entry = archive
         .by_name(&name)
-        .map_err(|e| invalid("3MF", &e.to_string()))?
-        .read_to_string(&mut xml)
         .map_err(|e| invalid("3MF", &e.to_string()))?;
+    let declared = entry.size();
+    let bytes = msh_format::limits::read_entry(&mut entry, declared)
+        .map_err(|e| invalid("3MF", &e.to_string()))?;
+    let xml = String::from_utf8(bytes).map_err(|e| invalid("3MF", &e.to_string()))?;
     let (mesh, cm_per_unit) = parse_3mf_model(&xml)?;
     mesh.into_package(true, cm_per_unit)
 }
@@ -434,8 +442,8 @@ fn parse_3mf_model(xml: &str) -> Result<(Mesh, f32), ModelError> {
             Event::End(e) => {
                 let local = e.local_name();
                 match local.as_ref() {
-                    b"object" => current_object = None,
-                    b"basematerials" | b"colorgroup" => current_palette = None,
+                    "object" => current_object = None,
+                    "basematerials" | "colorgroup" => current_palette = None,
                     _ => {}
                 }
                 continue;
@@ -445,13 +453,12 @@ fn parse_3mf_model(xml: &str) -> Result<(Mesh, f32), ModelError> {
         };
         let attr = |name: &str| -> Option<String> {
             e.attributes().flatten().find_map(|a| {
-                (a.key.local_name().as_ref() == name.as_bytes())
-                    .then(|| String::from_utf8_lossy(&a.value).into_owned())
+                (a.key.local_name().as_ref() == name).then(|| a.value.clone().into_owned())
             })
         };
         let local = e.local_name();
         match local.as_ref() {
-            b"model" => {
+            "model" => {
                 cm_per_unit = match attr("unit").as_deref() {
                     Some("micron") => 0.0001,
                     Some("centimeter") => 1.0,
@@ -461,13 +468,13 @@ fn parse_3mf_model(xml: &str) -> Result<(Mesh, f32), ModelError> {
                     _ => 0.1,
                 }
             }
-            b"basematerials" | b"colorgroup" => {
+            "basematerials" | "colorgroup" => {
                 if let Some(id) = attr("id") {
                     palettes.entry(id.clone()).or_default();
                     current_palette = (!empty).then_some(id);
                 }
             }
-            b"base" | b"color" => {
+            "base" | "color" => {
                 if let Some(p) = &current_palette {
                     let c = attr("displaycolor")
                         .or_else(|| attr("color"))
@@ -476,7 +483,7 @@ fn parse_3mf_model(xml: &str) -> Result<(Mesh, f32), ModelError> {
                     palettes.entry(p.clone()).or_default().push(c);
                 }
             }
-            b"object" => {
+            "object" => {
                 if let Some(id) = attr("id") {
                     let o = objects.entry(id.clone()).or_default();
                     if let (Some(pid), Some(pi)) = (attr("pid"), attr("pindex")) {
@@ -485,13 +492,13 @@ fn parse_3mf_model(xml: &str) -> Result<(Mesh, f32), ModelError> {
                     current_object = (!empty).then_some(id);
                 }
             }
-            b"vertex" => {
+            "vertex" => {
                 if let Some(o) = current_object.as_ref().and_then(|id| objects.get_mut(id)) {
                     let g = |k: &str| attr(k).and_then(|v| v.parse().ok()).unwrap_or(0.0);
                     o.vertices.push([g("x"), g("y"), g("z")]);
                 }
             }
-            b"triangle" => {
+            "triangle" => {
                 if let Some(o) = current_object.as_ref().and_then(|id| objects.get_mut(id)) {
                     let g = |k: &str| attr(k).and_then(|v| v.parse().ok()).unwrap_or(0u32);
                     let color = attr("pid")
@@ -500,7 +507,7 @@ fn parse_3mf_model(xml: &str) -> Result<(Mesh, f32), ModelError> {
                     o.triangles.push(([g("v1"), g("v2"), g("v3")], color));
                 }
             }
-            b"component" => {
+            "component" => {
                 if let (Some(o), Some(target)) = (
                     current_object.as_ref().and_then(|id| objects.get_mut(id)),
                     attr("objectid"),
@@ -509,7 +516,7 @@ fn parse_3mf_model(xml: &str) -> Result<(Mesh, f32), ModelError> {
                     o.components.push((target, m));
                 }
             }
-            b"item" => {
+            "item" => {
                 if let Some(target) = attr("objectid") {
                     let m = attr("transform").map_or(IDENTITY_3MF, |t| parse_transform(&t));
                     builds.push((target, m));
@@ -618,12 +625,13 @@ fn unpack(data: &[u8], dir: &Path) -> Result<Vec<PathBuf>, ModelError> {
         if entry.is_dir() {
             continue;
         }
-        let rel = PathBuf::from(entry.name().replace('\\', "/"));
+        let name = entry.name().map_err(|e| invalid("ZIP", &e.to_string()))?;
+        let rel = PathBuf::from(name.replace('\\', "/"));
         if !rel.components().all(|c| matches!(c, Component::Normal(_))) {
             continue;
         }
-        total += entry.size();
-        if total > MAX_ARCHIVE_BYTES {
+        // The declared size rejects large archives early; the bytes actually copied count
+        if total.saturating_add(entry.size()) > MAX_ARCHIVE_BYTES {
             return Err(ModelError::TooLarge);
         }
         let target = dir.join(&rel);
@@ -631,7 +639,11 @@ fn unpack(data: &[u8], dir: &Path) -> Result<Vec<PathBuf>, ModelError> {
             std::fs::create_dir_all(parent).map_err(io)?;
         }
         let mut out = std::fs::File::create(&target).map_err(io)?;
-        std::io::copy(&mut entry, &mut out).map_err(io)?;
+        let remaining = MAX_ARCHIVE_BYTES - total;
+        total += std::io::copy(&mut (&mut entry).take(remaining + 1), &mut out).map_err(io)?;
+        if total > MAX_ARCHIVE_BYTES {
+            return Err(ModelError::TooLarge);
+        }
         files.push(rel);
     }
     Ok(files)

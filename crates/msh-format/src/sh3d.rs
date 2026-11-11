@@ -9,6 +9,7 @@
 //!
 //! We write `Home.xml` + resources, without the `Home` entry.
 
+use crate::limits::SizeBudget;
 use crate::{FormatError, home_xml, xml};
 use msh_model::Home;
 use std::io::{Read, Seek, Write};
@@ -68,19 +69,20 @@ impl Sh3dDocument {
         let mut contents = Vec::new();
         let mut content_digests = None;
         let mut had_serialized = false;
+        let mut budget = SizeBudget::default();
 
         for i in 0..zip.len() {
             let mut entry = zip.by_index(i).map_err(zip_err)?;
             if entry.is_dir() {
                 continue;
             }
-            let name = entry.name().to_owned();
+            let name = entry.name().map_err(zip_err)?.into_owned();
             if name == HOME_ENTRY {
                 had_serialized = true;
                 continue;
             }
-            let mut data = Vec::with_capacity(entry.size() as usize);
-            entry.read_to_end(&mut data)?;
+            let declared = entry.size();
+            let data = budget.read_entry(&mut entry, declared)?;
             match name.as_str() {
                 HOME_XML_ENTRY => home_xml = Some(data),
                 DIGESTS_ENTRY => content_digests = Some(data),
@@ -102,19 +104,21 @@ impl Sh3dDocument {
         })
     }
 
-    /// Saves the document. It is written to a temporary file first and then
-    /// renamed, so the old file survives if writing fails.
+    /// Saves the document. It is written to a temporary file first, flushed to disk and
+    /// then renamed, so the old file survives if writing fails.
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), FormatError> {
         let path = path.as_ref();
         let tmp = path.with_extension("sh3d.tmp");
-        {
-            let file = std::fs::File::create(&tmp)?;
-            self.write(std::io::BufWriter::new(file))?;
-        }
-        std::fs::rename(&tmp, path).inspect_err(|_| {
-            let _ = std::fs::remove_file(&tmp);
-        })?;
-        Ok(())
+        let written = std::fs::File::create(&tmp)
+            .map_err(FormatError::from)
+            .and_then(|file| self.write(std::io::BufWriter::new(file)))
+            .and_then(|writer| writer.into_inner().map_err(|e| e.into_error().into()))
+            .and_then(|file| file.sync_all().map_err(FormatError::from));
+        written
+            .and_then(|()| std::fs::rename(&tmp, path).map_err(FormatError::from))
+            .inspect_err(|_| {
+                let _ = std::fs::remove_file(&tmp);
+            })
     }
 
     /// Writes the document as `.sh3d` to a writer.

@@ -10,6 +10,7 @@ pub mod library_edit;
 pub mod properties;
 pub mod user_library;
 
+use msh_format::limits::{SizeBudget, read_entry};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -116,7 +117,7 @@ pub fn open_library(path: &Path, locale: Option<&str>) -> Result<Vec<Catalog>, C
             message: e.to_string(),
         })?;
 
-    let names: Vec<String> = zip.file_names().map(str::to_owned).collect();
+    let names: Vec<String> = zip.file_names().flatten().map(|n| n.into_owned()).collect();
     let mains: Vec<&String> = names
         .iter()
         .filter(|n| main_catalog_kind(n).is_some())
@@ -160,14 +161,11 @@ pub fn read_resource(library: &Path, resource: &str) -> Result<Vec<u8>, CatalogE
             path: library.to_owned(),
             resource: resource.to_owned(),
         })?;
-    let mut data = Vec::with_capacity(entry.size() as usize);
-    entry
-        .read_to_end(&mut data)
-        .map_err(|source| CatalogError::Io {
-            path: library.to_owned(),
-            source,
-        })?;
-    Ok(data)
+    let declared = entry.size();
+    read_entry(&mut entry, declared).map_err(|source| CatalogError::Io {
+        path: library.to_owned(),
+        source,
+    })
 }
 
 /// Reads all files below the folder `dir` of a library (e.g. the parts of a
@@ -188,18 +186,20 @@ pub fn read_resource_dir(
     let prefix = format!("{}/", dir.trim_start_matches('/').trim_end_matches('/'));
     let names: Vec<String> = zip
         .file_names()
+        .flatten()
         .filter(|n| n.starts_with(&prefix) && !n.ends_with('/'))
-        .map(str::to_owned)
+        .map(|n| n.into_owned())
         .collect();
     let mut out = Vec::with_capacity(names.len());
+    let mut budget = SizeBudget::default();
     for name in names {
         let mut entry = zip.by_name(&name).map_err(|e| CatalogError::Zip {
             path: library.to_owned(),
             message: e.to_string(),
         })?;
-        let mut data = Vec::with_capacity(entry.size() as usize);
-        entry
-            .read_to_end(&mut data)
+        let declared = entry.size();
+        let data = budget
+            .read_entry(&mut entry, declared)
             .map_err(|source| CatalogError::Io {
                 path: library.to_owned(),
                 source,
@@ -242,13 +242,11 @@ fn read_properties<R: Read + std::io::Seek>(
         path: path.to_owned(),
         message: e.to_string(),
     })?;
-    let mut bytes = Vec::new();
-    entry
-        .read_to_end(&mut bytes)
-        .map_err(|source| CatalogError::Io {
-            path: path.to_owned(),
-            source,
-        })?;
+    let declared = entry.size();
+    let bytes = read_entry(&mut entry, declared).map_err(|source| CatalogError::Io {
+        path: path.to_owned(),
+        source,
+    })?;
     Ok(properties::parse(&bytes))
 }
 
@@ -440,9 +438,9 @@ pub fn find_all_libraries(extra_dirs: &[PathBuf]) -> Vec<PathBuf> {
 /// File names of Sweet Home 3D's default catalogs.
 pub const DEFAULT_CATALOG_FILES: [&str; 2] = ["Furniture.jar", "Textures.jar"];
 
-/// Folder of the default catalog bundled with My Sweet Home, if it exists: the folder
-/// named by `MSH_CATALOG_DIR`, otherwise `catalog` next to the executable (where the
-/// installer puts it for the app and the CLI).
+/// Folder of a default catalog provided with My Sweet Home, if it exists: the folder
+/// named by `MSH_CATALOG_DIR`, otherwise `catalog` next to the executable (e.g. in a
+/// portable setup; the installer does not bundle a catalog).
 pub fn bundled_catalog_dir() -> Option<PathBuf> {
     let dir = match std::env::var_os("MSH_CATALOG_DIR") {
         Some(dir) => PathBuf::from(dir),

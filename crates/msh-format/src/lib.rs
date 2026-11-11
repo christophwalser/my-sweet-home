@@ -7,6 +7,7 @@
 //! versions are not damaged when saved.
 
 mod home_xml;
+pub mod limits;
 mod sh3d;
 pub mod xml;
 

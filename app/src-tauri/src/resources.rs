@@ -12,7 +12,7 @@
 use crate::state::AppState;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use tauri::http::{Request, Response, StatusCode};
@@ -54,9 +54,8 @@ impl LibraryStore {
         let archive = self.archive(index)?;
         let mut archive = archive.lock().ok()?;
         let mut file = archive.by_name(entry.trim_start_matches('/')).ok()?;
-        let mut data = Vec::with_capacity(file.size() as usize);
-        file.read_to_end(&mut data).ok()?;
-        Some(data)
+        let declared = file.size();
+        msh_format::limits::read_entry(&mut file, declared).ok()
     }
 
     /// Finds an entry in any library (first match wins).
@@ -72,8 +71,8 @@ impl LibraryStore {
             if let Some(archive) = self.archive(i)
                 && let Ok(archive) = archive.lock()
             {
-                for name in archive.file_names() {
-                    map.insert(name.to_owned(), i);
+                for name in archive.file_names().flatten() {
+                    map.insert(name.into_owned(), i);
                 }
             }
         }

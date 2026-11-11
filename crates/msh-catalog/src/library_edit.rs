@@ -9,8 +9,9 @@
 use crate::properties;
 use crate::user_library::{escape, new_catalog_id};
 use crate::{CatalogError, CatalogKind, is_user_library};
+use msh_format::limits::read_entry;
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -101,8 +102,9 @@ impl EditableLibrary {
         let mut zip = zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(zip_err(path))?;
         let names: Vec<String> = zip
             .file_names()
+            .flatten()
             .filter(|n| !n.ends_with('/'))
-            .map(str::to_owned)
+            .map(|n| n.into_owned())
             .collect();
         let (main, kind) = names
             .iter()
@@ -113,9 +115,8 @@ impl EditableLibrary {
         let stem = main.trim_end_matches(".properties").to_owned();
         let mut read = |name: &str| -> Result<Vec<u8>, CatalogError> {
             let mut f = zip.by_name(name).map_err(zip_err(path))?;
-            let mut data = Vec::new();
-            f.read_to_end(&mut data).map_err(io_err(path))?;
-            Ok(data)
+            let declared = f.size();
+            read_entry(&mut f, declared).map_err(io_err(path))
         };
         let mut props = BTreeMap::new();
         let mut localized = BTreeMap::new();
@@ -153,9 +154,8 @@ impl EditableLibrary {
                 let mut zip =
                     zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(zip_err(source))?;
                 let mut f = zip.by_name(name).map_err(zip_err(source))?;
-                let mut data = Vec::new();
-                f.read_to_end(&mut data).map_err(io_err(source))?;
-                Ok(data)
+                let declared = f.size();
+                read_entry(&mut f, declared).map_err(io_err(source))
             }
             None => Err(CatalogError::ResourceNotFound {
                 path: self.path.clone(),
@@ -191,8 +191,18 @@ impl EditableLibrary {
             std::fs::create_dir_all(dir).map_err(io_err(path))?;
         }
         let tmp = path.with_extension("msh-tmp");
+        self.write_to(&tmp)
+            .and_then(|()| std::fs::rename(&tmp, path).map_err(io_err(path)))
+            .inspect_err(|_| {
+                let _ = std::fs::remove_file(&tmp);
+            })
+    }
+
+    /// Writes the library to `tmp` and flushes it to disk.
+    fn write_to(&self, tmp: &Path) -> Result<(), CatalogError> {
+        let path = &self.path;
         {
-            let out = std::fs::File::create(&tmp).map_err(io_err(path))?;
+            let out = std::fs::File::create(tmp).map_err(io_err(path))?;
             let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(out));
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated);
@@ -231,9 +241,14 @@ impl EditableLibrary {
                     (None, None) => {}
                 }
             }
-            zip.finish().map_err(zip_err(path))?;
+            let file = zip
+                .finish()
+                .map_err(zip_err(path))?
+                .into_inner()
+                .map_err(|e| io_err(path)(e.into_error()))?;
+            file.sync_all().map_err(io_err(path))?;
         }
-        std::fs::rename(&tmp, path).map_err(io_err(path))
+        Ok(())
     }
 
     /// Indexes of the items, ascending.

@@ -2,7 +2,6 @@
 //! are converted to PNG, SVG is rendered to PNG, and from PBR material packages (ZIP) the
 //! color map is taken.
 
-use std::io::Read;
 use std::path::Path;
 
 /// Width in pixels of rendered SVG textures.
@@ -120,7 +119,14 @@ fn from_package(data: &[u8]) -> Result<TextureImage, String> {
     let mut archive =
         zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|e| e.to_string())?;
     let images: Vec<String> = (0..archive.len())
-        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_owned()))
+        .filter_map(|i| {
+            archive
+                .by_index(i)
+                .ok()?
+                .name()
+                .ok()
+                .map(|n| n.into_owned())
+        })
         .filter(|n| {
             matches!(
                 extension(n).as_str(),
@@ -142,12 +148,10 @@ fn from_package(data: &[u8]) -> Result<TextureImage, String> {
         })
         .ok_or("the ZIP file contains no color map (an image named like *_Color or *_BaseColor)")?
         .clone();
-    let mut bytes = Vec::new();
-    archive
-        .by_name(&chosen)
-        .map_err(|e| e.to_string())?
-        .read_to_end(&mut bytes)
-        .map_err(|e| e.to_string())?;
+    let mut entry = archive.by_name(&chosen).map_err(|e| e.to_string())?;
+    let declared = entry.size();
+    let bytes = msh_format::limits::read_entry(&mut entry, declared).map_err(|e| e.to_string())?;
+    drop(entry);
     let mut image = convert(bytes, &extension(&chosen))?;
     image.inner_name = Some(chosen);
     Ok(image)

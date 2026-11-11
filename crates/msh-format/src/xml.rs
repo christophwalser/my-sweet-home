@@ -29,19 +29,14 @@ pub fn parse(bytes: &[u8]) -> Result<RawElement, FormatError> {
                 attach(&mut stack, &mut root, el);
             }
             Event::Text(t) => {
-                let s = t.decode().map_err(xml_err)?;
-                push_text(&mut stack, &s);
+                push_text(&mut stack, &t);
             }
-            Event::CData(t) => {
-                let s = String::from_utf8_lossy(&t).into_owned();
-                push_text(&mut stack, &s);
-            }
+            Event::CData(t) => push_text(&mut stack, &t),
             Event::GeneralRef(r) => {
                 let resolved = if let Some(c) = r.resolve_char_ref().map_err(xml_err)? {
                     c.to_string()
                 } else {
-                    let name = r.decode().map_err(xml_err)?;
-                    match name.as_ref() {
+                    match &*r {
                         "amp" => "&".into(),
                         "lt" => "<".into(),
                         "gt" => ">".into(),
@@ -72,12 +67,16 @@ fn xml_err(e: impl std::fmt::Display) -> FormatError {
 }
 
 fn start_element(e: &BytesStart<'_>) -> Result<RawElement, FormatError> {
-    let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+    let name = e.name().as_ref().to_owned();
     let mut attrs = Attrs::new();
     for a in e.attributes() {
         let a = a.map_err(xml_err)?;
-        let key = String::from_utf8_lossy(a.key.as_ref()).into_owned();
-        let value = a.unescape_value().map_err(xml_err)?.into_owned();
+        let key = a.key.as_ref().to_owned();
+        // Entities and character references only, without attribute value normalization,
+        // so values read back exactly as written
+        let value = quick_xml::escape::unescape(&a.value)
+            .map_err(xml_err)?
+            .into_owned();
         attrs.0.push((key, value));
     }
     Ok(RawElement {
