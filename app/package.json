@@ -28,12 +28,12 @@
     "react-dom": "^19.1.0",
     "three": "^0.187.0",
     "three-bvh-csg": "^0.0.18",
-    "three-gpu-pathtracer": "0.0.27",
+    "three-gpu-pathtracer": "0.0.28",
     "three-mesh-bvh": "^0.9.18",
-    "zustand": "^5.0.16"
+    "zustand": "^5.1.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.5",
+    "@biomejs/biome": "^2.6.6",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
