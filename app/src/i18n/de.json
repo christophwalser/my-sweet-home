@@ -864,5 +864,17 @@
   "User guide": "Handbuch",
   "Topics": "Themen",
   "Search the guide": "Handbuch durchsuchen",
-  "{name} could not be shown.": "{name} konnte nicht angezeigt werden."
+  "{name} could not be shown.": "{name} konnte nicht angezeigt werden.",
+  "Selected elements ({n})": "Ausgewählte Elemente ({n})",
+  "Select only this element": "Nur dieses Element auswählen",
+  "Remove from the selection": "Aus der Auswahl entfernen",
+  "Remove {name} from the selection": "{name} aus der Auswahl entfernen",
+  "Ruler": "Lineal",
+  "A guide for placing elements; it is saved with the home but not printed or exported. Drag it to move it, drag its ends to change it.": "Eine Hilfslinie zum Platzieren von Elementen; sie wird mit dem Haus gespeichert, aber nicht gedruckt oder exportiert. Zum Verschieben ziehen, zum Ändern ihre Enden ziehen.",
+  "Click the end point of the ruler · Shift: 1° steps · {alt}": "Endpunkt des Lineals klicken · Umschalt: 1°-Schritte · {alt}",
+  "Click the start point of a ruler, or drag · it stays as a guide; select it and press Del to remove it · {alt}": "Startpunkt eines Lineals klicken oder ziehen · es bleibt als Hilfslinie; zum Entfernen auswählen und Entf drücken · {alt}",
+  "Draw a guide line that stays in the plan for placing elements; select it and press Del to remove it": "Eine Hilfslinie zeichnen, die zum Platzieren von Elementen im Plan bleibt; zum Entfernen auswählen und Entf drücken",
+  "Delete rulers of this level": "Lineale dieser Ebene löschen",
+  "New rulers get these values; change a ruler in its properties.": "Neue Lineale erhalten diese Werte; ein einzelnes Lineal wird in seinen Eigenschaften geändert.",
+  "Drag to move this end of the ruler": "Ziehen, um dieses Ende des Lineals zu verschieben"
 }

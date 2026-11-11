@@ -62,6 +62,8 @@ export type PlanOverlay = {
   accent: string;
   /** Color of guides */
   guide: string;
+  /** Color of the measuring tool (default: the guide color) */
+  measureColor?: string;
 };
 
 /** Radius around the visitor that selects it (cm). */
@@ -349,7 +351,14 @@ export function drawOverlay(
   if (overlay.note && cursor)
     drawTag(ctx, overlay.note, cursor[0] + 14 * px, cursor[1] - 18 * px, px);
 
-  if (overlay.measure) drawMeasure(ctx, overlay.measure[0], overlay.measure[1], overlay.guide, px);
+  if (overlay.measure)
+    drawMeasure(
+      ctx,
+      overlay.measure[0],
+      overlay.measure[1],
+      overlay.measureColor ?? overlay.guide,
+      px,
+    );
   for (const [a, b] of overlay.gaps) drawGap(ctx, a, b, overlay.guide, px);
   for (const d of overlay.autoDims) drawDimensionPreview(ctx, d, overlay.accent, px);
   if (overlay.dimensionDraft) {

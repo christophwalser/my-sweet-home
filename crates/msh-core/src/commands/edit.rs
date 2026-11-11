@@ -121,7 +121,9 @@ pub(super) fn register(r: &mut Registry) {
          their touching end moves along.",
         true,
         |doc, p: MoveParams| {
-            let moved = move_elements(doc.home_mut(), &p.ids, p.dx, p.dy);
+            let home = doc.home_mut();
+            let moved = move_elements(home, &p.ids, p.dx, p.dy)
+                + super::guide::move_guides(home, &p.ids, p.dx, p.dy);
             if moved == 0 {
                 return Err(CommandError::failed(format!(
                     "no element found for {:?}",
@@ -139,7 +141,7 @@ pub(super) fn register(r: &mut Registry) {
             let home = doc.home_mut();
             let mut deleted = Vec::new();
             for id in &p.ids {
-                if delete(home, id) {
+                if delete(home, id) || super::guide::delete(home, id) {
                     deleted.push(id.clone());
                 }
             }

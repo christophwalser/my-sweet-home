@@ -32,6 +32,13 @@ export type Preferences = {
   catalogPreview: boolean;
   /** Unit of lengths shown and typed (internally always cm) */
   unit: LengthUnit;
+  // Tools
+  /** Color of new ruler guides (#RRGGBB, "" for the default of the theme) */
+  rulerColor: string;
+  /** Dash style of new ruler guides (SOLID, DOT, DASH, DASH_DOT, DASH_DOT_DOT) */
+  rulerDashStyle: string;
+  /** Color of the measuring tool (#RRGGBB, "" for the default of the theme) */
+  measureColor: string;
   // New elements
   /** Thickness of new walls in cm */
   newWallThickness: number;
@@ -79,6 +86,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   onlineSources: true,
   catalogs: [],
   unit: "cm",
+  rulerColor: "",
+  rulerDashStyle: "DASH",
+  measureColor: "",
   newWallThickness: 10,
   newWallHeight: 250,
   newWallPattern: "hatchUp",

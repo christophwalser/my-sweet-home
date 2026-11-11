@@ -864,5 +864,17 @@
   "User guide": "Guide de l’utilisateur",
   "Topics": "Sujets",
   "Search the guide": "Rechercher dans le guide",
-  "{name} could not be shown.": "Impossible d’afficher : {name}."
+  "{name} could not be shown.": "Impossible d’afficher : {name}.",
+  "Selected elements ({n})": "Éléments sélectionnés ({n})",
+  "Select only this element": "Sélectionner uniquement cet élément",
+  "Remove from the selection": "Retirer de la sélection",
+  "Remove {name} from the selection": "Retirer {name} de la sélection",
+  "Ruler": "Règle",
+  "A guide for placing elements; it is saved with the home but not printed or exported. Drag it to move it, drag its ends to change it.": "Un guide pour placer des éléments ; il est enregistré avec la maison mais ni imprimé ni exporté. Faites-le glisser pour le déplacer, faites glisser ses extrémités pour le modifier.",
+  "Click the end point of the ruler · Shift: 1° steps · {alt}": "Cliquez sur l’extrémité de la règle · Maj : pas de 1° · {alt}",
+  "Click the start point of a ruler, or drag · it stays as a guide; select it and press Del to remove it · {alt}": "Cliquez sur le début d’une règle, ou faites glisser · elle reste comme repère ; sélectionnez-la et appuyez sur Suppr pour la retirer · {alt}",
+  "Draw a guide line that stays in the plan for placing elements; select it and press Del to remove it": "Tracer un repère qui reste dans le plan pour placer les éléments ; sélectionnez-le et appuyez sur Suppr pour le retirer",
+  "Delete rulers of this level": "Supprimer les règles de ce niveau",
+  "New rulers get these values; change a ruler in its properties.": "Les nouvelles règles reçoivent ces valeurs ; une règle se modifie dans ses propriétés.",
+  "Drag to move this end of the ruler": "Faire glisser pour déplacer cette extrémité de la règle"
 }

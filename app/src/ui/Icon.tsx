@@ -202,6 +202,12 @@ const PATHS = {
       <path d="m7 13 2 2M10 10l2 2M13 7l2 2" />
     </>
   ),
+  guide: (
+    <>
+      <path d="M4 7v10M20 7v10" />
+      <path d="M7 12h2.5M11 12h2M14.5 12H17" />
+    </>
+  ),
   joinwalls: (
     <>
       <path d="M4 4v16h16" />

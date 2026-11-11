@@ -7,6 +7,7 @@ import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
 import { language } from "./i18n";
 import { forEachGroup, forEachPiece, type OpenedHome } from "./model";
+import { homeGuides } from "./plan2d/guides";
 import { usePreferences } from "./preferences";
 import type { CameraPose } from "./view3d/camera";
 
@@ -27,7 +28,9 @@ export type Tool =
   | "dimension"
   | "heightdim"
   | "label"
-  | "measure";
+  | "measure"
+  /** Ruler: a guide line that stays in the plan (measuring tool without the length) */
+  | "ruler";
 
 type State = {
   opened: OpenedHome | null;
@@ -266,6 +269,7 @@ function allIds(opened: OpenedHome): Set<string> {
     const id = (x.attrs as { id?: string | null }).id;
     if (id) ids.add(id);
   }
+  for (const g of homeGuides(h)) ids.add(g.id);
   // The compass is selectable in the plan while it is visible, the visitor in the visit
   if (h.compass && h.compass.attrs.visible !== false) ids.add("compass");
   ids.add(VISITOR_ID);

@@ -1143,6 +1143,40 @@ the process tree (the app and its WebView2 processes; Sweet Home 3D 7.6.1 is one
 - Working set without "private" double-counts pages shared between the WebView2 processes
   and is therefore not compared.
 
+### 4.48 Selection list, tool keys, rulers, arrow keys (2026-11-11)
+
+- Several selected elements are listed under the common properties
+  (`panels/selectionItems.ts`): × takes one out of the selection, a click on its name selects
+  only it.
+- Keys 1–6 choose the tools in the order of the tool bar: walls, rooms, lines, dimension,
+  text, measure.
+- Rulers (second mode of the measure tool, split button "Measure / Ruler"): a guide line that
+  stays in the plan to help place elements, drawn like a measurement but without its length.
+  Kept in the home property `mySweetHome.guides` (JSON list of id, level, start, end), which
+  Sweet Home 3D keeps without showing; commands `guide_add`, `guide_list`, `guide_clear`
+  (msh-core `commands/guide.rs`), moved with `edit_move` and deleted with `edit_delete` like
+  other elements. Selectable by click and rectangle, drawn on screen only (`plan2d/guides.ts`),
+  never printed or exported. Each ruler may have its own `color` and `dash_style` (the dash
+  styles of polylines; `guide_update`); new rulers get the defaults of Preferences › Tools,
+  which also holds the color of the measure tool. A ruler follows the pointer while it is
+  moved (`movedGuides`), and a selected ruler has handles at both ends (`guide-start`,
+  `guide-end`, snapping like dimensions) that change it with `guide_update`.
+- Arrow keys: while a move runs, further presses (also the repeats of a held key) add up and
+  go as one move when it is done (`plan2d/nudge.ts`); before, every repeat queued a command
+  and the plan kept moving after the key was released.
+- The plan keeps the icons, floor textures and background images it has loaded for a home;
+  it reloaded all of them after every change and drew floors grey until they arrived.
+- Not done on purpose: skipping the 3D scene while the 3D view is minimized. A rebuild costs
+  5–15 ms since 4.45 and a hidden view draws next to nothing; photos, videos, printing,
+  screenshots and the OBJ export would all need the scene built on demand.
+- Ceiling pieces: catalog elevations assume a 250 cm ceiling, so a ceiling spot put on a
+  lower level of 238 cm ended inside the floor of the level above and showed on that floor
+  (Sweet Home 3D does the same: a piece of a lower level shows on the level above when its
+  top is higher than that level's elevation). `furniture_add` without an elevation now lowers
+  pieces whose top is above the ceiling of their level until they touch it (not doors and
+  windows), and `level_update` keeps pieces touching the ceiling at the ceiling when the level
+  height changes. Pieces placed before are not changed.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

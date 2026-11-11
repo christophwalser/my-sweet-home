@@ -6,6 +6,7 @@ import { docResourceUrl } from "../api";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Wall } from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
+import { homeGuides } from "../plan2d/guides";
 import { usePreferences } from "../preferences";
 import { formatMoney, piecePrice } from "../prices";
 import { currentVisitor, setVisitor, useStore, VISITOR_ID } from "../store";
@@ -1141,6 +1142,42 @@ export default function PropertiesPanel() {
         />
         <SurfaceField value={a.ceiling_shininess} onCommit={set("ceiling_shininess")} />
         {actions}
+      </div>
+    );
+  }
+
+  const guide = homeGuides(home).find((g) => g.id === id);
+  if (guide) {
+    const prefs = usePreferences.getState();
+    const set = (field: string) => (v: string | number | boolean) =>
+      void run("guide_update", { id: guide.id, [field]: v });
+    return (
+      <div className="props">
+        <h2>{t("Ruler")}</h2>
+        <p className="muted small">
+          {t("Length:")}{" "}
+          {formatLength(Math.hypot(guide.x_end - guide.x_start, guide.y_end - guide.y_start))}
+        </p>
+        <Field
+          label={t("Color")}
+          type="color"
+          value={guide.color ?? (prefs.rulerColor || "#b0267e")}
+          onCommit={set("color")}
+        />
+        <SelectField
+          label={t("Dashes")}
+          value={guide.dash_style ?? prefs.rulerDashStyle}
+          options={DASH_STYLES}
+          onCommit={set("dash_style")}
+        />
+        <p className="muted small">
+          {t(
+            "A guide for placing elements; it is saved with the home but not printed or exported. Drag it to move it, drag its ends to change it.",
+          )}
+        </p>
+        <button type="button" onClick={() => void run("edit_delete", { ids: [guide.id] })}>
+          {t("Delete")}
+        </button>
       </div>
     );
   }

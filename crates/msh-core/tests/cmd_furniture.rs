@@ -942,3 +942,69 @@ fn update_sets_the_fields_of_the_furniture_dialog() {
         json!({ "id": id, "texture": "no#such" }),
     );
 }
+
+#[test]
+fn furniture_add_keeps_ceiling_pieces_under_the_ceiling_of_their_level() {
+    let Some(root) =
+        isolated_catalog("furniture_add_keeps_ceiling_pieces_under_the_ceiling_of_their_level")
+    else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    // A ceiling spot whose catalog elevation assumes a 250 cm ceiling
+    let spot = import_box(
+        &r,
+        &mut doc,
+        &root,
+        "Spot Vx8",
+        [10.0, 0.3, 10.0],
+        json!({ "elevation": 249.7 }),
+    );
+    let lamp = import_box(
+        &r,
+        &mut doc,
+        &root,
+        "Wall lamp Vx8",
+        [20.0, 10.0, 10.0],
+        json!({ "elevation": 150 }),
+    );
+    let level = run(
+        &r,
+        &mut doc,
+        "level_add",
+        json!({ "name": "Basement", "elevation": 0, "height": 238 }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let add = |doc: &mut Document, id: &str, extra: Value| {
+        let mut params = json!({ "catalog_id": id, "x": 0, "y": 0, "level": level });
+        params
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().cloned().unwrap_or_default());
+        run(&r, doc, "furniture_add", params)["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let s = add(&mut doc, &spot, json!({}));
+    let a = piece(&doc, &s).attrs;
+    assert!(close(a.elevation.unwrap(), 237.7), "{:?}", a.elevation);
+    // Pieces below the ceiling and explicit elevations stay as they are
+    let l = add(&mut doc, &lamp, json!({}));
+    assert_eq!(piece(&doc, &l).attrs.elevation, Some(150.0));
+    let e = add(&mut doc, &spot, json!({ "elevation": 249.7 }));
+    assert_eq!(piece(&doc, &e).attrs.elevation, Some(249.7));
+
+    // Changing the level height keeps ceiling pieces at the ceiling
+    run(
+        &r,
+        &mut doc,
+        "level_update",
+        json!({ "id": level, "height": 230 }),
+    );
+    assert!(close(piece(&doc, &s).attrs.elevation.unwrap(), 229.7));
+    assert_eq!(piece(&doc, &l).attrs.elevation, Some(150.0));
+}

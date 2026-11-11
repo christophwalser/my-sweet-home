@@ -864,5 +864,17 @@
   "User guide": "Guida utente",
   "Topics": "Argomenti",
   "Search the guide": "Cerca nella guida",
-  "{name} could not be shown.": "Impossibile mostrare: {name}."
+  "{name} could not be shown.": "Impossibile mostrare: {name}.",
+  "Selected elements ({n})": "Elementi selezionati ({n})",
+  "Select only this element": "Seleziona solo questo elemento",
+  "Remove from the selection": "Rimuovi dalla selezione",
+  "Remove {name} from the selection": "Rimuovi {name} dalla selezione",
+  "Ruler": "Righello",
+  "A guide for placing elements; it is saved with the home but not printed or exported. Drag it to move it, drag its ends to change it.": "Una guida per posizionare gli elementi; viene salvata con la casa ma non stampata né esportata. Trascinala per spostarla, trascina le estremità per modificarla.",
+  "Click the end point of the ruler · Shift: 1° steps · {alt}": "Fai clic sul punto finale del righello · Maiusc: passi di 1° · {alt}",
+  "Click the start point of a ruler, or drag · it stays as a guide; select it and press Del to remove it · {alt}": "Fai clic sul punto iniziale di un righello, o trascina · resta come linea guida; selezionalo e premi Canc per rimuoverlo · {alt}",
+  "Draw a guide line that stays in the plan for placing elements; select it and press Del to remove it": "Disegna una linea guida che resta nella piantina per posizionare gli elementi; selezionala e premi Canc per rimuoverla",
+  "Delete rulers of this level": "Elimina i righelli di questo livello",
+  "New rulers get these values; change a ruler in its properties.": "I nuovi righelli ricevono questi valori; un righello si modifica nelle sue proprietà.",
+  "Drag to move this end of the ruler": "Trascina per spostare questa estremità del righello"
 }

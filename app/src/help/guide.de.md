@@ -13,7 +13,7 @@ Jede Änderung lässt sich mit **Strg+Z** rückgängig machen und mit **Strg+Y**
 
 # Plan zeichnen
 
-Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in den Plan.
+Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in den Plan. Die Tasten **1** bis **6** wählen Wände, Räume, Linien, Bemaßung, Text und das Messwerkzeug, in der Reihenfolge der Werkzeugleiste.
 
 ## Wände
 
@@ -32,7 +32,7 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 
 - Das Bemaßungswerkzeug misst zwischen zwei Klicks; ein dritter Klick platziert die Maßlinie.
 - Texte und Polylinien (gerade oder gebogen) haben eigene Werkzeuge; ihren Stil legst du in den Eigenschaften fest.
-- Das Messwerkzeug zeigt einen Abstand, ohne etwas zum Plan hinzuzufügen.
+- Das Messwerkzeug zeigt einen Abstand, ohne etwas zum Plan hinzuzufügen. Sein zweiter Modus, das **Lineal**, zeichnet eine Hilfslinie, die zum Platzieren von Elementen im Plan bleibt; sie wird mit dem Haus gespeichert, aber nicht gedruckt. Zum Entfernen ein Lineal auswählen und **Entf** drücken, oder **Plan › Lineale dieser Ebene löschen**. Farbe und Strichart eines Lineals stehen in seinen Eigenschaften; die Vorgaben für neue Lineale und die Farbe des Messwerkzeugs unter **Einstellungen › Werkzeuge**.
 
 ## Hintergrundbild
 
@@ -62,6 +62,7 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 - Ziehe ein Möbel, um es zu verschieben; mit seinen Griffen drehst du es und änderst Höhe über Boden, Höhe und Größe. Die Pfeiltasten verschieben die Auswahl um 1 cm (mit **Umschalt** 10 cm).
 - In den Eigenschaften legst du Name, Beschreibung, Position, Winkel, Neigung, Größe, Farbe oder Textur des ganzen Möbels, Oberfläche (wie das Modell, matt, glänzend), Spiegelung, Sichtbarkeit und Zugehörigkeit zum Grundplan fest.
 - **Materialien** ändert Farbe, Textur und Glanz einzelner Teile des Modells.
+- Sind mehrere Elemente ausgewählt, listen die Eigenschaften sie unter den gemeinsamen Werten auf: **×** nimmt eines aus der Auswahl, ein Klick auf den Namen wählt nur dieses.
 - Mehrere Möbel lassen sich gruppieren, ausrichten und verteilen (Menü **Möbel**). **Stil einfügen** gibt der Auswahl die Farben und Texturen des kopierten Elements.
 
 ## Möbelliste

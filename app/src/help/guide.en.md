@@ -13,7 +13,7 @@ Every change can be undone with **Ctrl+Z** and redone with **Ctrl+Y**. **Ctrl+K*
 
 # Drawing the plan
 
-Choose a tool in the tool bar or in the **Plan** menu, then click in the plan.
+Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. The keys **1** to **6** choose walls, rooms, lines, dimensions, texts and the measure tool, in the order of the tool bar.
 
 ## Walls
 
@@ -32,7 +32,7 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan.
 
 - The dimension tool measures between two clicks; a third click places the dimension line.
 - Texts and polylines (straight or curved) have their own tools; their style is set in the properties.
-- The measure tool shows a distance without adding anything to the plan.
+- The measure tool shows a distance without adding anything to the plan. Its second mode, the **ruler**, draws a guide line that stays in the plan to help place elements; it is saved with the home but not printed. Select a ruler and press **Del** to remove it, or use **Plan › Delete rulers of this level**. Color and dashes of a ruler are set in its properties; the defaults for new rulers and the color of the measure tool are under **Preferences › Tools**.
 
 ## Background image
 
@@ -62,6 +62,7 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan.
 - Drag a piece to move it, use its handles to rotate it, change its elevation, height and size. Arrow keys move the selection by 1 cm (with **Shift** 10 cm).
 - The properties set name, description, position, angle, tilt, size, color or texture of the whole piece, surface (like the model, matt, shiny), mirror image, visibility and whether it belongs to the base plan.
 - **Materials** changes the color, texture and shininess of single parts of the model.
+- When several elements are selected, the properties list them below the common values: **×** takes one out of the selection, a click on its name selects only it.
 - Several pieces can be grouped, aligned and distributed (**Furniture** menu). **Paste style** gives the selection the colors and textures of the copied element.
 
 ## Furniture list

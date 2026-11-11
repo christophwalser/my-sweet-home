@@ -13,6 +13,7 @@ import {
   type View3DAction,
 } from "../layout/view3dWindow";
 import { forEachPiece } from "../model";
+import { levelGuides } from "../plan2d/guides";
 import { newHomeParams, prefs, usePreferences } from "../preferences";
 import { clearRecentHomes, recentHomes, recentLabel, removeRecentHome } from "../recentHomes";
 import { type Tool, useStore, VISITOR_ID } from "../store";
@@ -475,23 +476,38 @@ const LIST: Command[] = [
     t("Lines"),
     "polyline",
     t("Click to add points, double-click to finish"),
-    "5",
+    "3",
   ),
-  toolCommand("dimension", t("Dimension"), "dimension", t("Click start and end point"), "3"),
+  toolCommand("dimension", t("Dimension"), "dimension", t("Click start and end point"), "4"),
   toolCommand(
     "heightdim",
     t("Height dimension"),
     "heightdim",
     t("Click where the height of the level is measured"),
   ),
-  toolCommand("label", t("Text"), "text", t("Click to place a text"), "6"),
+  toolCommand("label", t("Text"), "text", t("Click to place a text"), "5"),
   toolCommand(
     "measure",
     t("Measure"),
     "measure",
     t("Measure a distance without adding anything"),
-    "4",
+    "6",
   ),
+  toolCommand(
+    "ruler",
+    t("Ruler"),
+    "guide",
+    t(
+      "Draw a guide line that stays in the plan for placing elements; select it and press Del to remove it",
+    ),
+  ),
+  {
+    id: "plan.clearGuides",
+    label: t("Delete rulers of this level"),
+    icon: "delete",
+    enabled: () => guidesOfLevel().length > 0,
+    run: () => void run("guide_clear", levelParam()),
+  },
   // Plan: walls
   {
     id: "wall.join",
@@ -880,6 +896,13 @@ function currentBackground() {
   return level ? (level.background_image ?? null) : (opened.home.background_image ?? null);
 }
 
+/** Ruler guides of the shown level. */
+function guidesOfLevel() {
+  const opened = store().opened;
+  if (!opened) return [];
+  return levelGuides(opened.home, currentLevel()?.attrs.id ?? null);
+}
+
 function levelParam(): Record<string, unknown> {
   const level = currentLevel();
   return level ? { level: level.attrs.id } : {};
@@ -997,6 +1020,8 @@ export const MENUS: Menu[] = [
       cmd("tool.heightdim"),
       cmd("tool.label"),
       cmd("tool.measure"),
+      cmd("tool.ruler"),
+      cmd("plan.clearGuides"),
       sep,
       {
         kind: "submenu",

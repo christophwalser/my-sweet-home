@@ -2165,6 +2165,60 @@ body.moving-dialog * {
   width: min(860px, calc(100vw - 32px));
 }
 
+/* Selected elements in the properties of a multiple selection */
+.selection-list {
+  margin-top: 12px;
+}
+
+.selection-list ul {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.selection-list li {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.selection-list li:last-child {
+  border-bottom: 0;
+}
+
+.selection-list .selection-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selection-list .selection-name:hover,
+.selection-list .selection-remove:hover {
+  background: var(--panel-2);
+}
+
+.selection-list .selection-remove {
+  width: 28px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 15px;
+}
+
 /* User guide: topics on the left, the topic on the right */
 .help-dialog {
   width: min(960px, calc(100vw - 32px));

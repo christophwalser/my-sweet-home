@@ -4,7 +4,7 @@ use super::{deg, new_id, parse_color, rad, resolve_level, round2, target_ids, up
 use crate::catalog::{CatalogIndex, EmbeddedResources, FurnitureEntry, embed_furniture_resources};
 use crate::document::Document;
 use crate::registry::{CommandError, Registry};
-use msh_model::{Color, Furniture, LightSource, Piece, PieceAttrs, PieceKind, Sash};
+use msh_model::{Color, Furniture, Home, LightSource, Piece, PieceAttrs, PieceKind, Sash};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -295,9 +295,14 @@ pub(super) fn register(r: &mut Registry) {
             a.y = p.y;
             a.angle = p.angle_deg.map(rad).filter(|v| *v != 0.0);
             apply_size(a, p.width, p.depth, p.height);
-            if let Some(e) = p.elevation {
-                a.elevation = Some(e);
+            match p.elevation {
+                Some(e) => a.elevation = Some(e),
+                None if piece.kind != PieceKind::DoorOrWindow => {
+                    fit_under_ceiling(doc.home(), &mut piece.attrs)
+                }
+                None => {}
             }
+            let a = &mut piece.attrs;
             if let Some(n) = p.name {
                 a.name = n;
             }
@@ -543,6 +548,32 @@ pub(super) fn register(r: &mut Registry) {
             Ok(updated(&targets))
         },
     );
+}
+
+/// Catalog elevations of ceiling pieces (spots, ceiling lamps) assume Sweet Home 3D's 250 cm
+/// rooms. On a lower level such a piece would stick out of the ceiling into the floor of the
+/// level above and show there. A piece above the floor whose top is above the ceiling of its
+/// level is lowered until its top touches the ceiling.
+fn fit_under_ceiling(home: &Home, a: &mut PieceAttrs) {
+    let elevation = a.elevation.unwrap_or(0.0);
+    if elevation <= 0.0 {
+        return;
+    }
+    let ceiling = match &a.level {
+        Some(id) => home
+            .levels
+            .iter()
+            .find(|l| &l.attrs.id == id)
+            .map(|l| l.attrs.height),
+        None => Some(home.attrs.wall_height.unwrap_or(250.0)),
+    };
+    let Some(ceiling) = ceiling.filter(|c| *c > 0.0) else {
+        return;
+    };
+    let height = a.height_in_plan.unwrap_or(a.height);
+    if elevation + height > ceiling + 0.01 {
+        a.elevation = Some((ceiling - height).max(0.0)).filter(|e| *e > 0.0);
+    }
 }
 
 fn catalog_entry(id: &str) -> Result<FurnitureEntry, CommandError> {

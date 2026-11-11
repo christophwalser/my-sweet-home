@@ -4,13 +4,13 @@
 import { type ReactNode, useEffect, useState } from "react";
 import CatalogFeedsPage from "./CatalogFeedsPage";
 import { LANGUAGES, type LanguageChoice, languageChoice, setLanguage, t } from "./i18n";
-import { Field, WALL_PATTERNS } from "./panels/fields";
+import { DASH_STYLES, Field, WALL_PATTERNS } from "./panels/fields";
 import { type Preferences, usePreferences } from "./preferences";
 import { useStore } from "./store";
 import { type ThemeChoice, useUi } from "./ui/uiStore";
 import { UNITS } from "./units";
 
-type Tab = "plan" | "new" | "view3d" | "general" | "catalogs";
+type Tab = "plan" | "tools" | "new" | "view3d" | "general" | "catalogs";
 /** Currencies offered for furniture prices (ISO 4217), as in Sweet Home 3D's list. */
 const CURRENCIES = [
   "CHF",
@@ -29,6 +29,7 @@ const CURRENCIES = [
 const TABS: { id: Tab; label: string }[] = [
   { id: "general", label: t("General") },
   { id: "plan", label: t("Plan") },
+  { id: "tools", label: t("Tools") },
   { id: "new", label: t("New elements") },
   { id: "view3d", label: t("3D view") },
   { id: "catalogs", label: t("Catalogs") },
@@ -283,6 +284,33 @@ export default function PreferencesDialog({
                     label={t("Right wall side")}
                     value={p.rightSideColor}
                     onChange={(rightSideColor) => set({ rightSideColor })}
+                  />
+                </Group>
+              </>
+            )}
+            {tab === "tools" && (
+              <>
+                <Group title={t("Ruler")}>
+                  <OptionalColor
+                    label={t("Color")}
+                    value={p.rulerColor}
+                    onChange={(rulerColor) => set({ rulerColor })}
+                  />
+                  <Choice
+                    label={t("Dashes")}
+                    value={p.rulerDashStyle}
+                    options={DASH_STYLES}
+                    onChange={(rulerDashStyle) => set({ rulerDashStyle })}
+                  />
+                  <p className="muted small">
+                    {t("New rulers get these values; change a ruler in its properties.")}
+                  </p>
+                </Group>
+                <Group title={t("Measure")}>
+                  <OptionalColor
+                    label={t("Color")}
+                    value={p.measureColor}
+                    onChange={(measureColor) => set({ measureColor })}
                   />
                 </Group>
               </>

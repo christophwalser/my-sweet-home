@@ -16,6 +16,7 @@ mod export;
 mod flip;
 mod furniture;
 mod group;
+mod guide;
 mod home;
 mod import;
 mod level;
@@ -47,6 +48,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     room::register(r);
     furniture::register(r);
     group::register(r);
+    guide::register(r);
     annotate::register(r);
     edit::register(r);
     flip::register(r);

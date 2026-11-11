@@ -3,7 +3,7 @@
 use super::{new_id, ok_id};
 use crate::document::DEFAULT_WALL_HEIGHT;
 use crate::registry::{CommandError, Registry};
-use msh_model::{Furniture, Home, Level, LevelAttrs};
+use msh_model::{Furniture, Home, Level, LevelAttrs, PieceKind};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
@@ -100,8 +100,16 @@ pub(super) fn register(r: &mut Registry) {
         "Changes name, elevation, height, floor thickness or 3D visibility of a level.",
         true,
         |doc, p: UpdateParams| {
-            let l = doc
-                .home_mut()
+            let home = doc.home_mut();
+            let old_height = home
+                .levels
+                .iter()
+                .find(|l| l.attrs.id == p.id)
+                .map(|l| l.attrs.height);
+            if let (Some(old), Some(new)) = (old_height, p.height) {
+                follow_ceiling(home, &p.id, old, new);
+            }
+            let l = home
                 .levels
                 .iter_mut()
                 .find(|l| l.attrs.id == p.id)
@@ -156,6 +164,31 @@ fn level(id: &str, name: &str, elevation: f32, height: f32, floor: f32, index: i
 }
 
 /// Puts all elements without level on `id` (used when the first level is created).
+/// Keeps ceiling-mounted pieces (top at the old ceiling) at the ceiling when the height of
+/// their level changes, so they do not end up inside the floor of the level above.
+fn follow_ceiling(home: &mut Home, level: &str, old: f32, new: f32) {
+    if (old - new).abs() < 0.001 {
+        return;
+    }
+    for item in &mut home.furniture {
+        let Furniture::Piece(piece) = item else {
+            continue;
+        };
+        if piece.kind == PieceKind::DoorOrWindow {
+            continue;
+        }
+        let a = &mut piece.attrs;
+        let elevation = a.elevation.unwrap_or(0.0);
+        let height = a.height_in_plan.unwrap_or(a.height);
+        if a.level.as_deref() == Some(level)
+            && elevation > 0.0
+            && (elevation + height - old).abs() < 0.5
+        {
+            a.elevation = Some((new - height).max(0.0)).filter(|e| *e > 0.0);
+        }
+    }
+}
+
 fn assign_level(home: &mut Home, id: &str) {
     let set = |l: &mut Option<String>| {
         if l.is_none() {

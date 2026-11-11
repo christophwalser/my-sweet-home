@@ -4,8 +4,10 @@
 
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Room, type Texture, type Wall } from "../model";
+import { useStore, VISITOR_ID } from "../store";
 import { formatArea, formatLength } from "../units";
 import { byRole, Field, SelectField, SideSection, toHex, WALL_PATTERNS } from "./fields";
+import { selectionItems } from "./selectionItems";
 import TextureField from "./TextureField";
 
 type Run = (command: string, params: Record<string, unknown>) => Promise<unknown>;
@@ -374,6 +376,46 @@ export default function MultiPanel({
       {walls.length > 0 && <WallsSection walls={walls} home={home} run={run} />}
       {rooms.length > 0 && <RoomsSection rooms={rooms} run={run} />}
       {pieces.length > 0 && <FurnitureSection pieces={pieces} run={run} />}
+      <SelectionList home={home} selection={selection} />
     </>
+  );
+}
+
+/**
+ * The selected elements, one per row: × takes an element out of the selection (e.g. one
+ * caught by mistake in a selection rectangle), a click on its name selects only it.
+ */
+function SelectionList({ home, selection }: { home: Home; selection: string[] }) {
+  const setSelection = useStore((s) => s.setSelection);
+  const items = selectionItems(home, selection, VISITOR_ID);
+  return (
+    <section className="selection-list">
+      <h3>{t("Selected elements ({n})", { n: items.length })}</h3>
+      <ul>
+        {items.map((item) => (
+          <li key={item.id}>
+            <button
+              type="button"
+              className="selection-name"
+              title={t("Select only this element")}
+              onClick={() => setSelection([item.id])}
+            >
+              <span className="muted">{item.kind}</span> {item.name}
+            </button>
+            <button
+              type="button"
+              className="selection-remove"
+              title={t("Remove from the selection")}
+              aria-label={t("Remove {name} from the selection", {
+                name: `${item.kind} ${item.name}`.trim(),
+              })}
+              onClick={() => setSelection(selection.filter((id) => id !== item.id))}
+            >
+              ×
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

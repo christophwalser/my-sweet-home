@@ -334,6 +334,8 @@ export type Home = {
   };
   /** Columns of the furniture list (Sweet Home 3D's property names), empty: defaults */
   furniture_visible_properties?: string[];
+  /** Free properties of the home (e.g. `mySweetHome.guides`) */
+  properties?: { name: string; value: string }[];
   environment: {
     attrs: {
       ground_color: number | null;

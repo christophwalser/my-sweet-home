@@ -66,7 +66,7 @@ struct HeightDimensionParams {
 
 #[derive(Deserialize, JsonSchema, Clone, Copy)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-enum DashStyle {
+pub(super) enum DashStyle {
     Solid,
     Dot,
     Dash,
@@ -84,7 +84,7 @@ enum ArrowStyle {
 }
 
 impl DashStyle {
-    fn as_str(self) -> &'static str {
+    pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::Solid => "SOLID",
             Self::Dot => "DOT",

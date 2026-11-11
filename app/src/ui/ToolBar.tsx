@@ -211,7 +211,7 @@ export default function ToolBar() {
         <ToolButton id="tool.polyline" />
         <SplitButton button="dimensions" variants={["tool.dimension", "tool.heightdim"]} />
         <ToolButton id="tool.label" />
-        <ToolButton id="tool.measure" />
+        <SplitButton button="measure" variants={["tool.measure", "tool.ruler"]} />
       </Group>
       <Group label={t("Levels")}>
         <MenuButton

@@ -1,0 +1,168 @@
+// Ruler guides: help lines in the plan, kept in the home property `mySweetHome.guides`
+// (written by the core commands guide_add / guide_clear, moved and deleted with edit_move and
+// edit_delete). Drawn only on screen, never printed or exported.
+
+import type { Home, Pt } from "../model";
+
+export type Guide = {
+  id: string;
+  level: string | null;
+  x_start: number;
+  y_start: number;
+  x_end: number;
+  y_end: number;
+  /** Line color "#RRGGBB"; missing: the ruler color of the preferences */
+  color?: string;
+  /** SOLID, DOT, DASH, DASH_DOT or DASH_DOT_DOT; missing: the preferences */
+  dash_style?: string;
+};
+
+/** Dash pattern of a guide in screen pixels. */
+export function guideDash(style: string | undefined): number[] {
+  switch (style) {
+    case "SOLID":
+      return [];
+    case "DOT":
+      return [1.5, 4];
+    case "DASH_DOT":
+      return [8, 4, 1.5, 4];
+    case "DASH_DOT_DOT":
+      return [8, 4, 1.5, 4, 1.5, 4];
+    default:
+      return [8, 5];
+  }
+}
+
+export const GUIDES_PROPERTY = "mySweetHome.guides";
+
+/** All guides of a home (none if the property is missing or unreadable). */
+export function homeGuides(home: Home): Guide[] {
+  const raw = home.properties?.find((p) => p.name === GUIDES_PROPERTY)?.value;
+  if (!raw) return [];
+  try {
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? (list as Guide[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Guides of a level (homes without levels: all). */
+export function levelGuides(home: Home, level: string | null): Guide[] {
+  const all = homeGuides(home);
+  return home.levels.length === 0 ? all : all.filter((g) => g.level === level);
+}
+
+/** Distance from `p` to the guide line. */
+export function guideDistance(g: Guide, p: Pt): number {
+  const ax = g.x_start;
+  const ay = g.y_start;
+  const dx = g.x_end - ax;
+  const dy = g.y_end - ay;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / len2));
+  return Math.hypot(p[0] - (ax + t * dx), p[1] - (ay + t * dy));
+}
+
+/** The guide under `p` within `tolerance` cm, nearest first. */
+export function guideAt(home: Home, level: string | null, p: Pt, tolerance: number): Guide | null {
+  let best: Guide | null = null;
+  let bestD = tolerance;
+  for (const g of levelGuides(home, level)) {
+    const d = guideDistance(g, p);
+    if (d <= bestD) {
+      best = g;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/** Guides lying completely inside the rectangle from `a` to `b`. */
+export function guidesInRect(home: Home, level: string | null, a: Pt, b: Pt): Guide[] {
+  const [x0, x1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
+  const [y0, y1] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
+  const inside = (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+  return levelGuides(home, level).filter(
+    (g) => inside(g.x_start, g.y_start) && inside(g.x_end, g.y_end),
+  );
+}
+
+/**
+ * The guides as shown while the selection is moved by `offset` (the selected ones move) and
+ * while an end is dragged (`edit`: the parameters of the pending guide_update).
+ */
+export function movedGuides(
+  guides: Guide[],
+  selection: string[],
+  offset: Pt,
+  edit: Record<string, unknown> | null,
+): Guide[] {
+  const [dx, dy] = offset;
+  return guides.map((g) => {
+    let out = g;
+    if ((dx !== 0 || dy !== 0) && selection.includes(g.id)) {
+      out = {
+        ...g,
+        x_start: g.x_start + dx,
+        y_start: g.y_start + dy,
+        x_end: g.x_end + dx,
+        y_end: g.y_end + dy,
+      };
+    }
+    if (edit && edit.id === g.id) {
+      const num = (k: keyof Guide) => (typeof edit[k] === "number" ? (edit[k] as number) : null);
+      out = {
+        ...out,
+        x_start: num("x_start") ?? out.x_start,
+        y_start: num("y_start") ?? out.y_start,
+        x_end: num("x_end") ?? out.x_end,
+        y_end: num("y_end") ?? out.y_end,
+      };
+    }
+    return out;
+  });
+}
+
+/**
+ * Draws the guides of the plan: thin lines with short end marks in their own color and dash
+ * style (else `color` and `dashStyle`), in the accent color when selected. `px` is one screen
+ * pixel in plan units.
+ */
+export function drawGuides(
+  ctx: CanvasRenderingContext2D,
+  guides: Guide[],
+  selection: string[],
+  color: string,
+  accent: string,
+  px: number,
+  dashStyle = "DASH",
+): void {
+  ctx.save();
+  ctx.lineCap = "round";
+  for (const g of guides) {
+    const selected = selection.includes(g.id);
+    ctx.strokeStyle = selected ? accent : (g.color ?? color);
+    ctx.lineWidth = (selected ? 2 : 1.25) * px;
+    ctx.setLineDash(guideDash(g.dash_style ?? dashStyle).map((v) => v * px));
+    ctx.beginPath();
+    ctx.moveTo(g.x_start, g.y_start);
+    ctx.lineTo(g.x_end, g.y_end);
+    ctx.stroke();
+    // End marks across the line
+    ctx.setLineDash([]);
+    const len = Math.hypot(g.x_end - g.x_start, g.y_end - g.y_start) || 1;
+    const nx = (-(g.y_end - g.y_start) / len) * 6 * px;
+    const ny = ((g.x_end - g.x_start) / len) * 6 * px;
+    ctx.beginPath();
+    for (const [x, y] of [
+      [g.x_start, g.y_start],
+      [g.x_end, g.y_end],
+    ]) {
+      ctx.moveTo(x - nx, y - ny);
+      ctx.lineTo(x + nx, y + ny);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}

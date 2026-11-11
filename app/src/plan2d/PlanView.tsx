@@ -42,6 +42,7 @@ import {
   planBounds,
   type ViewTransform,
 } from "./drawPlan";
+import { drawGuides, guideAt, guidesInRect, levelGuides, movedGuides } from "./guides";
 import {
   dragHandle,
   elementHandles,
@@ -60,6 +61,7 @@ import {
   selectionJoints,
   slideInWall,
 } from "./moving";
+import { type NudgeQueue, newNudgeQueue, nudgeDone, queueNudge } from "./nudge";
 import {
   type DraftKind,
   drawOverlay,
@@ -142,7 +144,7 @@ const draftKind = (t: Tool): DraftKind => (t === "arcwall" ? "wall" : (t as Draf
 /** Arc of the walls drawn with the round wall tool, in degrees. */
 const ARC_WALL_EXTENT_DEG = 90;
 /** Tools whose clicks snap to the plan: drawing tools and the measuring tool. */
-const isSnapTool = (t: Tool) => isPathTool(t) || t === "measure";
+const isSnapTool = (t: Tool) => isPathTool(t) || t === "measure" || t === "ruler";
 
 /** Real depth of a piece from its catalog item, if that is loaded. */
 function catalogDepth(piece: Piece): number | undefined {
@@ -229,6 +231,7 @@ const cursorStyle: Record<Tool, string> = {
   dimension: "crosshair",
   label: "text",
   measure: "crosshair",
+  ruler: "crosshair",
 };
 
 const FINISH = t(
@@ -271,6 +274,9 @@ export default function PlanView() {
   const rightSideColor = usePreferences((s) => s.rightSideColor);
   const magnetism = usePreferences((s) => s.magnetism);
   const furnitureTopView = usePreferences((s) => s.furnitureTopView);
+  const rulerColorPref = usePreferences((s) => s.rulerColor);
+  const rulerDashStyle = usePreferences((s) => s.rulerDashStyle);
+  const measureColorPref = usePreferences((s) => s.measureColor);
   /** Redraw once per frame when top views of furniture become ready */
   const redrawFrame = useRef(0);
   const drawRef = useRef<() => void>(() => {});
@@ -292,6 +298,10 @@ export default function PlanView() {
   const rulerColors = dark ? DARK_RULER : LIGHT_RULER;
   const accent = dark ? "#5b8ff0" : "#2f6fde";
   const guideColor = dark ? "#e0a030" : "#d07a00";
+  /** Color of the ruler guides (not the orange of the snap guides) */
+  const rulerColor = rulerColorPref || (dark ? "#e879c6" : "#b0267e");
+  /** Color of the measuring tool (by default the one of the snap guides) */
+  const measureColor = measureColorPref || guideColor;
 
   const gesture = useRef<Gesture | null>(null);
   const draft = useRef<Pt[]>([]);
@@ -323,13 +333,29 @@ export default function PlanView() {
   }, [opened, levelId, icons, furnitureTopView]);
   const effectiveLevel = input?.levelId ?? null;
 
-  // Load furniture icons and floor textures of the home
+  // Load furniture icons and floor textures of the home. Images loaded for an earlier state of
+  // the same home are kept: reloading them after every change drew the floors grey until
+  // they arrived again (e.g. while moving furniture with the arrow keys).
+  const imageCache = useRef<{ doc: number | null; images: Map<string, HTMLImageElement> }>({
+    doc: null,
+    images: new Map(),
+  });
   useEffect(() => {
     if (!opened) return;
+    const cache = imageCache.current;
+    if (cache.doc !== opened.id) {
+      cache.doc = opened.id;
+      cache.images = new Map();
+    }
     const map = new Map<string, HTMLImageElement>();
     let pending = 0;
     const load = (key: string) => {
       if (map.has(key)) return;
+      const known = cache.images.get(key);
+      if (known) {
+        map.set(key, known);
+        return;
+      }
       const img = new Image();
       img.crossOrigin = "anonymous";
       pending++;
@@ -345,6 +371,7 @@ export default function PlanView() {
       };
       img.src = docResourceUrl(opened.id, key);
       map.set(key, img);
+      cache.images.set(key, img);
     };
     forEachPiece(opened.home.furniture, (p) => {
       const key = p.attrs.plan_icon ?? p.attrs.icon;
@@ -361,7 +388,10 @@ export default function PlanView() {
     ]) {
       if (b) load(b.image);
     }
-    setIcons(map);
+    // The same images as before: keep the map, so the plan input does not change for it
+    setIcons((prev) =>
+      prev.size === map.size && [...map].every(([k, v]) => prev.get(k) === v) ? prev : map,
+    );
   }, [opened]);
 
   const pxToCm = (px: number) => (px * devicePixelRatio) / viewRef.current.scale;
@@ -395,6 +425,15 @@ export default function PlanView() {
         if (m && !m.done) return t("Click the end point · Shift: 1° steps · {alt}", { alt });
         if (m?.done) return t("Click to measure again · Esc: clear · nothing is added to the plan");
         return t("Click the start point, or drag · {alt}", { alt });
+      }
+      case "ruler": {
+        const m = measure.current;
+        if (m && !m.done)
+          return t("Click the end point of the ruler · Shift: 1° steps · {alt}", { alt });
+        return t(
+          "Click the start point of a ruler, or drag · it stays as a guide; select it and press Del to remove it · {alt}",
+          { alt },
+        );
       }
       case "wall":
         return drawing
@@ -487,6 +526,8 @@ export default function PlanView() {
     const sel = useStore.getState().selection;
     const snap = isSnapTool(tool) ? snapState.current : null;
     const m = tool === "measure" ? measure.current : null;
+    // A ruler being drawn shows like a guide, without its length
+    const rulerDraft = tool === "ruler" ? measure.current : null;
     const handleDrag = g?.kind === "handle" && g.drag ? { drag: g.drag, cursor: g.cursor } : null;
     const overlay: PlanOverlay = {
       selection: sel,
@@ -541,8 +582,36 @@ export default function PlanView() {
       })(),
       accent,
       guide: guideColor,
+      measureColor,
     };
     drawOverlay(ctx, viewRef.current, input.home, input.wallShapes, overlay);
+    // Rulers follow a move of the selection and the drag of one of their ends
+    const shownGuides = movedGuides(
+      levelGuides(input.home, effectiveLevel),
+      g?.kind === "move" && !g.dock && !g.slide ? sel : [],
+      g?.kind === "move" ? g.offset : [0, 0],
+      handleDrag?.drag.command === "guide_update" ? handleDrag.drag.params : null,
+    );
+    if (rulerDraft?.b) {
+      const [a, b] = [rulerDraft.a, rulerDraft.b];
+      shownGuides.push({
+        id: "",
+        level: null,
+        x_start: a[0],
+        y_start: a[1],
+        x_end: b[0],
+        y_end: b[1],
+      });
+    }
+    drawGuides(
+      ctx,
+      shownGuides,
+      sel,
+      rulerColor,
+      accent,
+      1 / viewRef.current.scale,
+      rulerDashStyle,
+    );
     drawRulers();
   }, [
     input,
@@ -550,6 +619,9 @@ export default function PlanView() {
     tool,
     accent,
     guideColor,
+    rulerColor,
+    rulerDashStyle,
+    measureColor,
     wallThickness,
     highlightSide,
     showGrid,
@@ -653,10 +725,11 @@ export default function PlanView() {
       return p;
     }
     const m = measure.current;
-    const path = tool === "measure" ? (m && !m.done ? [m.a] : []) : draft.current;
+    const measuring = tool === "measure" || tool === "ruler";
+    const path = measuring ? (m && !m.done ? [m.a] : []) : draft.current;
     const previous = path.length > 0 ? path[path.length - 1] : null;
     const ctx = snapContext(
-      (tool === "measure" ? "dimension" : tool) as SnapPurpose,
+      (measuring ? "dimension" : tool) as SnapPurpose,
       input.home,
       input.wallShapes,
       effectiveLevel,
@@ -898,10 +971,13 @@ export default function PlanView() {
         draw();
         return;
       }
-      // The visitor stands on top of the plan
+      // The visitor stands on top of the plan, the ruler guides above the elements
+      const guide = onVisitor ? null : guideAt(input.home, effectiveLevel, p, pxToCm(PICK_PX));
       const hit = onVisitor
         ? { id: VISITOR_ID }
-        : hitTest(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+        : guide
+          ? { id: guide.id }
+          : hitTest(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
       gesture.current = {
         kind: "press",
         start: p,
@@ -909,7 +985,7 @@ export default function PlanView() {
         hitId: hit?.id ?? null,
         shift: e.shiftKey && hit?.id !== VISITOR_ID,
       };
-    } else if (tool === "measure") {
+    } else if (tool === "measure" || tool === "ruler") {
       const s = snapped(p, e.altKey, e.shiftKey);
       const m = measure.current;
       if (!m || m.done) {
@@ -918,6 +994,7 @@ export default function PlanView() {
       } else {
         m.b = s;
         m.done = true;
+        if (tool === "ruler") addRuler();
       }
       draw();
     } else if (tool === "roomauto") {
@@ -1092,7 +1169,7 @@ export default function PlanView() {
       const s = snapped(p, e.altKey, e.shiftKey);
       cursor.current = draft.current.length > 0 ? s : null;
       draw();
-    } else if (tool === "measure") {
+    } else if (tool === "measure" || tool === "ruler") {
       const s = snapped(p, e.altKey, e.shiftKey);
       const m = measure.current;
       if (m && !m.done) m.b = s;
@@ -1113,18 +1190,19 @@ export default function PlanView() {
       if (!g.moved) {
         if (tool === "select" && e.button === 2) openMenu(e.clientX, e.clientY);
         else if (isPathTool(tool) && draft.current.length > 0) void finishDraft();
-        else if (tool === "measure" && measure.current) {
+        else if ((tool === "measure" || tool === "ruler") && measure.current) {
           measure.current = null;
           draw();
         } else if (tool !== "select") useStore.getState().setTool("select");
       }
       return;
     }
-    if (g.kind === "draw" && tool === "measure") {
-      // Press, drag, release measures the dragged distance
+    if (g.kind === "draw" && (tool === "measure" || tool === "ruler")) {
+      // Press, drag, release measures the dragged distance (or draws a ruler)
       const m = measure.current;
       if (g.dragged && m && !m.done && m.b) {
         m.done = true;
+        if (tool === "ruler") addRuler();
         draw();
       }
       return;
@@ -1208,7 +1286,10 @@ export default function PlanView() {
       }
       draw();
     } else if (g.kind === "band") {
-      const ids = elementsInRect(input.home, effectiveLevel, g.start, g.end);
+      const ids = [
+        ...elementsInRect(input.home, effectiveLevel, g.start, g.end),
+        ...guidesInRect(input.home, effectiveLevel, g.start, g.end).map((x) => x.id),
+      ];
       setSelection(ids);
       draw();
     }
@@ -1640,6 +1721,40 @@ export default function PlanView() {
     return true;
   };
 
+  /** Stores the ruler just drawn as a guide of the shown level; the tool stays for the next. */
+  const addRuler = () => {
+    const m = measure.current;
+    measure.current = null;
+    if (!m?.b || Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1]) < 1) return;
+    void run("guide_add", {
+      x_start: m.a[0],
+      y_start: m.a[1],
+      x_end: m.b[0],
+      y_end: m.b[1],
+      ...(effectiveLevel ? { level: effectiveLevel } : {}),
+      // The defaults of the preferences become the ruler's own values
+      ...(rulerColorPref ? { color: rulerColorPref } : {}),
+      dash_style: rulerDashStyle,
+    });
+  };
+
+  /**
+   * Moves the selection with the arrow keys. While a move is running, further key presses
+   * (also the repeats of a held key) add up and go as one move when it is done, so the plan
+   * follows the keys instead of working off a queue of moves after they are released.
+   */
+  const nudges = useRef<NudgeQueue>(newNudgeQueue());
+  const nudge = (ids: string[], dx: number, dy: number) => {
+    const next = queueNudge(nudges.current, ids, dx, dy);
+    if (next) sendNudge(next);
+  };
+  const sendNudge = (move: { ids: string[]; dx: number; dy: number }) => {
+    void run("edit_move", move).finally(() => {
+      const next = nudgeDone(nudges.current);
+      if (next) sendNudge(next);
+    });
+  };
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: handlers read current state on each key
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1682,7 +1797,11 @@ export default function PlanView() {
         e.preventDefault();
         return;
       }
-      if (state.tool === "measure" && e.key === "Escape" && measure.current) {
+      if (
+        (state.tool === "measure" || state.tool === "ruler") &&
+        e.key === "Escape" &&
+        measure.current
+      ) {
         measure.current = null;
         draw();
         e.preventDefault();
@@ -1714,7 +1833,7 @@ export default function PlanView() {
         const d = e.shiftKey ? 10 : 1;
         const dx = e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0;
         const dy = e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0;
-        void run("edit_move", { ids: sel, dx, dy });
+        nudge(sel, dx, dy);
       } else {
         return;
       }

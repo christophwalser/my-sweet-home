@@ -10,6 +10,7 @@ import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Pt, type WallShape } from "../model";
 import { formatArea, formatLength, formatPrecise } from "../units";
 import { boundsCenter, DEFAULT_ROOM_FONT, labelCenter, roomLabelPositions } from "./drawPlan";
+import { homeGuides } from "./guides";
 import { editedWallJoints, type Joint } from "./moving";
 import {
   offsetOutline,
@@ -31,6 +32,8 @@ export type HandleKind =
   | "polyline-point"
   | "dimension-start"
   | "dimension-end"
+  | "guide-start"
+  | "guide-end"
   | "piece-resize"
   | "piece-rotate"
   | "piece-elevation"
@@ -62,6 +65,8 @@ export const HANDLE_SHAPE: Record<HandleKind, HandleShape> = {
   "polyline-point": "square",
   "dimension-start": "square",
   "dimension-end": "square",
+  "guide-start": "square",
+  "guide-end": "square",
   "piece-resize": "resize",
   "piece-rotate": "rotate",
   "piece-elevation": "elevation",
@@ -83,6 +88,8 @@ export const HANDLE_HINT: Record<HandleKind, string> = {
   "polyline-point": t("Drag to move this point"),
   "dimension-start": t("Drag to move the start of the dimension"),
   "dimension-end": t("Drag to move the end of the dimension"),
+  "guide-start": t("Drag to move this end of the ruler"),
+  "guide-end": t("Drag to move this end of the ruler"),
   "piece-resize": t("Drag to resize (the opposite corner stays)"),
   "piece-rotate": t("Drag to rotate · Shift: 1° steps"),
   "piece-elevation": t("Drag up or down to change the elevation above the floor"),
@@ -243,6 +250,13 @@ export function elementHandles(home: Home, id: string, cmPerPx: number): Handle[
     return [
       { id, kind: "dimension-start", index: 0, pos: [a.x_start, a.y_start] },
       { id, kind: "dimension-end", index: 0, pos: [a.x_end, a.y_end] },
+    ];
+  }
+  const guide = homeGuides(home).find((g) => g.id === id);
+  if (guide) {
+    return [
+      { id, kind: "guide-start", index: 0, pos: [guide.x_start, guide.y_start] },
+      { id, kind: "guide-end", index: 0, pos: [guide.x_end, guide.y_end] },
     ];
   }
   const compass = home.compass?.attrs;
@@ -569,6 +583,31 @@ export function dragHandle(
         guides: s.guides,
         info: lengthText(Math.hypot(s.pt[0] - fixed[0], s.pt[1] - fixed[1])),
         command: "dimension_update",
+        params: isStart
+          ? { id, x_start: s.pt[0], y_start: s.pt[1] }
+          : { id, x_end: s.pt[0], y_end: s.pt[1] },
+      };
+    }
+    case "guide-start":
+    case "guide-end": {
+      const guide = homeGuides(home).find((g) => g.id === id);
+      if (!guide) return null;
+      const isStart = handle.kind === "guide-start";
+      const fixed: Pt = isStart ? [guide.x_end, guide.y_end] : [guide.x_start, guide.y_start];
+      const s = magnetism
+        ? snapDraw(
+            p,
+            fixed,
+            snapContext("dimension", home, wallShapes, levelId, snapRadius, { near: p }),
+          )
+        : { pt: p, marker: null, guides: [], note: null };
+      return {
+        // The ruler itself shows the change (movedGuides), so no outline
+        preview: [],
+        snap: s.marker,
+        guides: s.guides,
+        info: lengthText(Math.hypot(s.pt[0] - fixed[0], s.pt[1] - fixed[1])),
+        command: "guide_update",
         params: isStart
           ? { id, x_start: s.pt[0], y_start: s.pt[1] }
           : { id, x_end: s.pt[0], y_end: s.pt[1] },
