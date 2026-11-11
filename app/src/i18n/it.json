@@ -443,7 +443,6 @@
   "No stored points of view": "Nessun punto di vista salvato",
   "None": "Nessuno",
   "Normal": "Normale",
-  "North": "Nord",
   "North direction": "Direzione del nord",
   "North {deg}°": "Nord {deg}°",
   "Nothing found.": "Nessun risultato.",
@@ -876,5 +875,10 @@
   "Draw a guide line that stays in the plan for placing elements; select it and press Del to remove it": "Disegna una linea guida che resta nella piantina per posizionare gli elementi; selezionala e premi Canc per rimuoverla",
   "Delete rulers of this level": "Elimina i righelli di questo livello",
   "New rulers get these values; change a ruler in its properties.": "I nuovi righelli ricevono questi valori; un righello si modifica nelle sue proprietà.",
-  "Drag to move this end of the ruler": "Trascina per spostare questa estremità del righello"
+  "Drag to move this end of the ruler": "Trascina per spostare questa estremità del righello",
+  "Set the location first.": "Imposta prima la posizione.",
+  "Align north with the map…": "Allinea il nord alla mappa…",
+  "Align north with the map": "Allinea il nord alla mappa",
+  "Turn the walls with the mouse wheel (Shift: finer) or the field until they match the building on the map; drag them to compare.": "Ruota i muri con la rotella del mouse (Maiusc: più fine) o con il campo finché non coincidono con l'edificio sulla mappa; trascinali per confrontare.",
+  "Loading the map…": "Caricamento della mappa…"
 }

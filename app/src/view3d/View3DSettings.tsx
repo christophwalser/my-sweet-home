@@ -1,11 +1,11 @@
-// Settings of the 3D view: ground and sky, light, walls transparency, and the sun
-// (location of the home found by address search, date and time). Not modal: the 3D
-// view shows each change at once.
+// Settings of the 3D view: ground and sky, light, walls transparency, the location of the
+// home (LocationFields) and the date and time of the sun. Not modal: the 3D view shows each
+// change at once.
 
-import { useEffect, useState } from "react";
-import { api } from "../api";
+import { useEffect } from "react";
 import { t } from "../i18n";
 import { Field, toHex } from "../panels/fields";
+import LocationFields from "../panels/LocationFields";
 import TextureField from "../panels/TextureField";
 import { useStore } from "../store";
 import type { SunInfo } from "./View3D";
@@ -14,14 +14,6 @@ type Props = {
   sun: SunInfo | null;
   onClose: () => void;
 };
-
-type Found = { name: string; latitude: number; longitude: number };
-
-/** IANA time zones known to the WebView (offline). */
-function timeZones(): string[] {
-  const intl = Intl as unknown as { supportedValuesOf?: (key: string) => string[] };
-  return intl.supportedValuesOf?.("timeZone") ?? ["UTC"];
-}
 
 /** Date and time "now" in a time zone, as the date and time inputs expect them. */
 function nowIn(timeZone: string): { date: string; time: string } {
@@ -46,10 +38,6 @@ const DEFAULT_LIGHT_GRAY = 0xd0;
 export default function View3DSettings({ sun, onClose }: Props) {
   const opened = useStore((s) => s.opened);
   const run = useStore((s) => s.run);
-  const [query, setQuery] = useState("");
-  const [found, setFound] = useState<Found[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -69,38 +57,6 @@ export default function View3DSettings({ sun, onClose }: Props) {
       : Math.round((((a.light_color >> 8) & 0xff) / DEFAULT_LIGHT_GRAY) * 100);
   const transparency = Math.round((a?.walls_alpha ?? 0) * 100);
   const update = (params: Record<string, unknown>) => void run("view3d_update", params);
-  const north = opened.home.compass?.attrs.north_direction ?? 0;
-
-  const search = async () => {
-    const q = query.trim();
-    if (!q) return;
-    setSearching(true);
-    setSearchError(null);
-    try {
-      // Errors are shown here, next to the search field
-      const r = (await api.execute("location_search", { query: q, limit: 6 })) as {
-        results: Found[];
-      };
-      setFound(r.results);
-    } catch (e) {
-      setSearchError(String(e));
-      setFound(null);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const choose = (f: Found) => {
-    void run("location_set", {
-      latitude: f.latitude,
-      longitude: f.longitude,
-      // The time zone cannot be derived offline from the position: the home's one (or
-      // this computer's) is kept and can be changed below
-      time_zone: sun?.time_zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-    });
-    setFound(null);
-    setQuery(f.name.split(",").slice(0, 3).join(","));
-  };
 
   return (
     <div className="settings3d-panel" role="dialog" aria-label={t("3D view settings")}>
@@ -171,78 +127,7 @@ export default function View3DSettings({ sun, onClose }: Props) {
 
       <fieldset className="settings3d-group">
         <legend>{t("Location")}</legend>
-        <form
-          className="settings3d-search"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void search();
-          }}
-        >
-          <input
-            value={query}
-            placeholder={t("Address or place")}
-            onChange={(e) => setQuery(e.currentTarget.value)}
-            onKeyDown={(e) => e.stopPropagation()}
-          />
-          <button type="submit" disabled={searching || !query.trim()}>
-            {searching ? t("Searching…") : t("Search")}
-          </button>
-        </form>
-        <p className="muted small">{t("Searched online with OpenStreetMap Nominatim.")}</p>
-        {searchError && <p className="settings3d-error">{searchError}</p>}
-        {found && found.length === 0 && <p className="muted small">{t("Nothing found.")}</p>}
-        {found && found.length > 0 && (
-          <ul className="settings3d-results">
-            {found.map((f) => (
-              <li key={`${f.latitude},${f.longitude},${f.name}`}>
-                <button
-                  type="button"
-                  onClick={() => choose(f)}
-                  title={`${f.latitude}, ${f.longitude}`}
-                >
-                  {f.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <Field
-          label={t("Latitude")}
-          type="number"
-          unit="°"
-          value={sun ? String(sun.latitude) : null}
-          onCommit={(v) => void run("location_set", { latitude: Number(v) })}
-        />
-        <Field
-          label={t("Longitude")}
-          type="number"
-          unit="°"
-          value={sun ? String(sun.longitude) : null}
-          onCommit={(v) => void run("location_set", { longitude: Number(v) })}
-        />
-        <label className="prop-row">
-          <span className="prop-label">{t("Time zone")}</span>
-          <select
-            value={sun?.time_zone ?? "UTC"}
-            onChange={(e) => void run("location_set", { time_zone: e.currentTarget.value })}
-          >
-            {[...new Set([sun?.time_zone ?? "UTC", ...timeZones()])].map((z) => (
-              <option key={z} value={z}>
-                {z}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Field
-          label={t("North direction")}
-          type="number"
-          unit="°"
-          value={Math.round(((north * 180) / Math.PI) * 10) / 10}
-          onCommit={(v) => void run("compass_update", { north_direction_deg: Number(v) })}
-        />
-        {sun && !sun.location_set && (
-          <p className="muted small">{t("No location set yet: the sun is computed for Paris.")}</p>
-        )}
+        <LocationFields />
       </fieldset>
 
       <fieldset className="settings3d-group">

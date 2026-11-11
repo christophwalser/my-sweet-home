@@ -195,7 +195,7 @@ type PieceType = "furniture" | "door" | "stairs" | "light" | "shelf";
 function pieceType(v: Record<string, string>): PieceType {
   if (v.doorOrWindow === "true") return "door";
   if (v.staircaseCutOutShape) return "stairs";
-  if (v.lightSourceX) return "light";
+  if (v.lightSourceX || v.lightSourceMaterialName) return "light";
   if (v.shelfElevations || v.shelfBoxes) return "shelf";
   return "furniture";
 }
@@ -856,6 +856,7 @@ export default function LibraryEditor({
       lightSourceZ: null,
       lightSourceColor: null,
       lightSourceDiameter: null,
+      lightSourceMaterialName: null,
       shelfElevations: null,
     };
     const w = Number(v.width) || 50;

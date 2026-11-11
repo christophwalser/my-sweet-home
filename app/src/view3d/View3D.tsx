@@ -32,7 +32,15 @@ import {
 } from "./buildScene";
 import { applyPose, type CameraPose, cameraDirection, cameraPose, verticalFov } from "./camera";
 import type { Lens } from "./lens";
-import { buildCeilingLights, buildLampLights, lampLights, MAX_PHOTO_LIGHTS } from "./lights";
+import {
+  buildCeilingLights,
+  buildLampLights,
+  LAMP_SHADOWS,
+  lampLights,
+  MAX_LAMP_LIGHTS,
+  MAX_PHOTO_LIGHTS,
+  refreshLampShadows,
+} from "./lights";
 import { clearModelCache, createPieceObject, disposeObject, waitForModels } from "./models";
 import { buildObj } from "./objExport";
 import PhotoDialog from "./PhotoDialog";
@@ -114,6 +122,30 @@ function anisotropy(quality: "low" | "medium" | "high", max: number): number {
 
 /** Size of the sun's shadow map for a quality preference. */
 const SHADOW_MAP_SIZE = { low: 1024, medium: 2048, high: 4096 } as const;
+
+/**
+ * Shadow maps are drawn for the sun (when its shadows are on) and for the lamps nearest to
+ * the visitor. Materials compiled without shadow support are rebuilt when this changes (new
+ * materials of a rebuilt scene are compiled for the current state anyway).
+ */
+function syncShadowMap(c: {
+  renderer: THREE.WebGLRenderer;
+  scene: THREE.Scene;
+  sun: THREE.DirectionalLight;
+  lamps: THREE.Group;
+}): void {
+  let lampShadows = false;
+  c.lamps.traverse((o) => {
+    if ((o as THREE.Light).isLight && o.castShadow) lampShadows = true;
+  });
+  const enabled = c.sun.castShadow || lampShadows;
+  if (c.renderer.shadowMap.enabled === enabled) return;
+  c.renderer.shadowMap.enabled = enabled;
+  c.scene.traverse((o) => {
+    const mats = (o as THREE.Mesh).material;
+    for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) m.needsUpdate = true;
+  });
+}
 
 /** The view is shown in the separate 3D window (which has no tool bar). */
 const IN_OWN_WINDOW = getCurrentWebviewWindow().label.startsWith(VIEW3D_PREFIX);
@@ -405,7 +437,11 @@ export default function View3D() {
     forEachPiece(home.furniture, (p) => {
       if (!shown.has(p.attrs.level)) return;
       const base = (levels.get(p.attrs.level) ?? levels.get(null))?.elevation ?? 0;
-      const object = createPieceObject(p, opened.id, base, c.requestRender);
+      const object = createPieceObject(p, opened.id, base, () => {
+        // Loaded furniture also stops the light of lamps
+        refreshLampShadows(c.lamps);
+        c.requestRender();
+      });
       if (p.attrs.staircase_cut_out_shape && p.attrs.visible !== false) stairObjects.push(object);
       furniture.add(object);
     });
@@ -483,9 +519,8 @@ export default function View3D() {
       : DEFAULT_SUN_DIRECTION;
     // Below the horizon there are no shadows (and the light is off)
     const castShadow = shadows && (!sun || sun.elevation > 0);
-    const shadowsChanged = c.renderer.shadowMap.enabled !== castShadow;
-    c.renderer.shadowMap.enabled = castShadow;
     c.sun.castShadow = castShadow;
+    syncShadowMap(c);
     // Fit the shadow camera around the walls of the shown levels
     const walls = c.content.getObjectByName("walls");
     const box = walls ? new THREE.Box3().setFromObject(walls) : new THREE.Box3();
@@ -504,14 +539,6 @@ export default function View3D() {
     cam.near = radius * 0.5;
     cam.far = radius * 3.5;
     cam.updateProjectionMatrix();
-    // Materials compiled without shadow support must be rebuilt when shadows are switched
-    // (new materials of a rebuilt scene are compiled for the current state anyway)
-    if (shadowsChanged) {
-      c.scene.traverse((o) => {
-        const mats = (o as THREE.Mesh).material;
-        for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) m.needsUpdate = true;
-      });
-    }
     c.requestRender();
   }, [shadows, opened, levelId, sun]);
 
@@ -562,8 +589,9 @@ export default function View3D() {
           ? new THREE.Vector3(observer.attrs.x, observer.attrs.z, observer.attrs.y)
           : c.camera.position.clone();
       const lights = lampLights(home, levelInfos(home), visibleLevels(home, levelId));
-      c.lamps.add(buildLampLights(lights, viewer));
+      c.lamps.add(buildLampLights(lights, viewer, MAX_LAMP_LIGHTS, LAMP_SHADOWS));
     }
+    syncShadowMap(c);
     c.requestRender();
   }, [opened, levelId, viewMode]);
 

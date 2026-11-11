@@ -1177,6 +1177,26 @@ the process tree (the app and its WebView2 processes; Sweet Home 3D 7.6.1 is one
   windows), and `level_update` keeps pieces touching the ceiling at the ceiling when the level
   height changes. Pieces placed before are not changed.
 
+### 4.49 Location in the home, north from a map, lamp lights (2026-11-11)
+
+- One location component (`panels/LocationFields.tsx`: address search, latitude and longitude
+  with four decimals, time zone, north direction) is shown in the 3D settings and in the
+  compass section of the home properties; both read the compass, so each shows changes made
+  in the other at once.
+- North from a map: `location_map` downloads the OpenStreetMap tiles around the location
+  (zoom 19, 3 × 3 tiles, same user agent as the address search, one download per opening of
+  the dialog) and joins them into one PNG in msh-core, so the WebView's CSP stays as it is.
+  The dialog draws the wall outlines over it (`panels/northMap.ts`) at the map's scale; the
+  angle that puts the walls onto the building becomes the compass's north direction. The map
+  shows the required attribution.
+- Lamps whose light comes from materials of their model (Sweet Home 3D 7
+  `lightSourceMaterialName`, e.g. the contributed "Mini spot") were placed as plain pieces
+  without light; they are now lights with their `lightSourceMaterial`s, and the 3D view gives
+  them one white light in the middle of the piece. Pieces placed before stay plain pieces.
+- Lamp lights in the virtual visit passed through walls (no shadows). The four lamps nearest
+  to the visitor now cast shadows (512 px maps, drawn once and again when models are loaded,
+  not every frame); lamp models themselves cast none, since their light source lies inside.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

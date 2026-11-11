@@ -87,7 +87,8 @@ Everything you import is stored in Sweet Home 3D's library folders, so both prog
 - **Aerial view**: drag to turn around the home, right-drag to move, the wheel zooms. Double-click a surface to turn around that point.
 - **Virtual visit**: drag to look around, **W A S D** or the arrow keys to walk, **Q / E** down and up, **Shift** faster. Walls stop you; open doors let you through. The visitor is shown in the plan and can be moved there.
 - **Points of view** stores and recalls camera positions.
-- **3D settings** set ground and sky, light and wall transparency, the location (search by address) and the date and time of the sun.
+- **3D settings** set ground and sky, light and wall transparency, the location (search by address) and the date and time of the sun. The location can also be set in the properties of the home. **Align north with the map** shows the walls over a map of the location: turn them until they match the building, and the compass points north.
+- Lamps light the virtual visit; walls stop the light of the lamps nearest to you.
 
 # Photos and videos
 

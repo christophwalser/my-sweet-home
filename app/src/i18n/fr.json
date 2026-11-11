@@ -443,7 +443,6 @@
   "No stored points of view": "Aucun point de vue enregistré",
   "None": "Aucun",
   "Normal": "Normal",
-  "North": "Nord",
   "North direction": "Direction du nord",
   "North {deg}°": "Nord {deg}°",
   "Nothing found.": "Rien trouvé.",
@@ -876,5 +875,10 @@
   "Draw a guide line that stays in the plan for placing elements; select it and press Del to remove it": "Tracer un repère qui reste dans le plan pour placer les éléments ; sélectionnez-le et appuyez sur Suppr pour le retirer",
   "Delete rulers of this level": "Supprimer les règles de ce niveau",
   "New rulers get these values; change a ruler in its properties.": "Les nouvelles règles reçoivent ces valeurs ; une règle se modifie dans ses propriétés.",
-  "Drag to move this end of the ruler": "Faire glisser pour déplacer cette extrémité de la règle"
+  "Drag to move this end of the ruler": "Faire glisser pour déplacer cette extrémité de la règle",
+  "Set the location first.": "Définissez d'abord l'emplacement.",
+  "Align north with the map…": "Aligner le nord sur la carte…",
+  "Align north with the map": "Aligner le nord sur la carte",
+  "Turn the walls with the mouse wheel (Shift: finer) or the field until they match the building on the map; drag them to compare.": "Tournez les murs avec la molette (Maj : plus fin) ou le champ jusqu'à ce qu'ils correspondent au bâtiment sur la carte ; faites-les glisser pour comparer.",
+  "Loading the map…": "Chargement de la carte…"
 }
