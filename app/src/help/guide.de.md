@@ -110,6 +110,7 @@ Die **Einstellungen** (Zahnrad in der Werkzeugleiste) legen Einheiten (cm, mm, m
 - **Datei › Neu**, **Öffnen** und **Speichern** arbeiten mit Dateien von Sweet Home 3D. Jedes Haus öffnet in einem eigenen Fenster; **Zuletzt geöffnet** listet die letzten Häuser.
 - Alle paar Minuten wird eine Kopie geänderter Häuser gesichert. Nach einem Absturz bietet der nächste Start an, diese Kopien zu öffnen.
 - Hier gespeicherte Häuser öffnen sich in Sweet Home 3D 7 und behalten alles, was Sweet Home 3D speichert, auch das, was dieses Programm nicht anzeigt.
+- **Keine Planungs- oder Baugarantie:** Maße, Flächen, Mengen und Preise sind nicht geprüft und können ungenau sein, und nichts wird auf Statik, Bauvorschriften oder Genehmigungen geprüft. Lass Pläne von Fachleuten prüfen, bevor du baust, kaufst oder bestellst. My Sweet Home ist freie Software ohne Gewährleistung (GNU GPL 3 oder neuer) und steht in keiner Verbindung zu den Herstellern von Sweet Home 3D.
 
 # Automatisierung
 

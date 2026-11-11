@@ -21,6 +21,13 @@ app/src-tauri/gen/schemas
 Thumbs.db
 .DS_Store
 
-# Installer inputs copied at build time (third-party files, see scripts/build-installer.ps1)
-/app/src-tauri/resources/catalog/*.jar
+# Installer inputs generated at build time (see scripts/build-installer.ps1)
 /app/src-tauri/binaries/
+/app/src-tauri/resources/legal/
+# Sweet Home 3D catalog copied by older versions of the installer script (never commit)
+/app/src-tauri/resources/catalog/
+# Release artifacts collected by .github/workflows/release.yml
+/dist-release/
+
+# Local AI agent state (CLAUDE.md in the root stays tracked)
+.claude/

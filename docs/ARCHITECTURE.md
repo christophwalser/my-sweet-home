@@ -36,9 +36,9 @@ Store libraries (`…\WindowsApps\eTeks.SweetHome3D_7.9.27.0_x86__…\Sweet Home
 |---|---|---|
 | D1 | Technology | Rewrite: **Rust core + Tauri 2 + TypeScript/React + three.js (WebGPU, WebGL2 fallback)** |
 | D2 | AI control | **MCP server** (no built-in chat) + **CLI** |
-| D3 | Distribution | Undecided. Therefore libraries are **never embedded in the repository or the application**; they are loaded from configurable folders or imported. |
+| D3 | Distribution | Open source on GitHub (decided 2026-11-11). Libraries are **never embedded in the repository or the release artifacts**; they are loaded from configurable folders, imported or downloaded through the online catalog. |
 | D4 | Platform | **Windows 11** only (WebView2 is preinstalled) |
-| D5 | Code license | Porting algorithms from the Java code (wall geometry, format details) creates a derivative work → **GPL v2 or later**. This is unproblematic while the app stays private. If published, the source code must be GPL. |
+| D5 | Code license | Porting algorithms from the Java code (wall geometry, format details) creates a derivative work of Sweet Home 3D (GPL v2 or later). My Sweet Home is licensed **GPL-3.0-or-later** (decided 2026-11-11): dependencies licensed only under Apache-2.0 are compatible with GPL v3 but not with GPL v2. See `LICENSE` and `NOTICE.md`. |
 | D6 | Language | Chat with the user in German; code, comments, docs, commits and UI strings in English (see `CLAUDE.md`). |
 
 ## 4. Architecture
@@ -837,8 +837,8 @@ furniture is read by its home reader.
 
 ### 4.35 Catalog management (2026-11-08)
 
-- Where catalog content lives: the default catalog comes with the installation (Sweet Home
-  3D's default catalog `Furniture.jar` / `Textures.jar`, bundled by the installer since P12f).
+- Where catalog content lives: the default catalog of an installed Sweet Home 3D
+  (`Furniture.jar` / `Textures.jar`); the installer does not bundle it (see 4.36).
   Everything the user adds — imported libraries, single imported models and textures, items
   from online catalogs — is written to Sweet Home 3D's user library folders
   (`%APPDATA%\eTeks\Sweet Home 3D\furniture` / `textures`, "My furniture.sh3f",
@@ -857,22 +857,22 @@ furniture is read by its home reader.
 
 ### 4.36 Status after P12f (2026-11-09)
 
-- `scripts/build-installer.ps1` builds the MSI: it copies Sweet Home 3D's `Furniture.jar` /
-  `Textures.jar` from a Sweet Home 3D installation (Program Files, Store version or
-  `-Sh3dDir`) into `app/src-tauri/resources/catalog/` (git-ignored, next to the committed
-  `NOTICE.txt` with source and licenses), builds the CLI as Tauri external binary
+- `scripts/build-installer.ps1` builds the MSI: it collects `LICENSE`, `NOTICE.md` and the
+  generated `THIRD-PARTY-NOTICES.txt` (`scripts/third-party-notices.mjs`) into
+  `app/src-tauri/resources/legal/` (git-ignored), builds the CLI as Tauri external binary
   (`app/src-tauri/binaries/msh-<target triple>.exe`, git-ignored) and runs
   `pnpm tauri build` with `tauri.installer.conf.json` merged in. Normal builds
   (`cargo build`, `pnpm tauri dev`) do not need these inputs.
 - The installer (per machine, `C:\Program Files\My Sweet Home`) contains the app, `msh.exe`,
-  the default catalog in `catalog\` and its notice; it adds the folder to the system `PATH`
+  and the license files in `legal\`; it adds the folder to the system `PATH`
   (WiX fragment `wix/cli-path.wxs`, removed on uninstall), registers `.sh3d` files and embeds
   the WebView2 bootstrapper (WebView2 is part of Windows 11; on systems without it the
   bootstrapper downloads it).
-- Library discovery (`msh_catalog::find_libraries`): the bundled catalog
-  (`MSH_CATALOG_DIR`, otherwise `catalog` next to the executable, so app and CLI find it)
-  comes first; an installed Sweet Home 3D only adds default catalog files the bundle lacks,
-  so no item appears twice. User libraries and the Store version's libraries are found as
+- Library discovery (`msh_catalog::find_libraries`): a catalog folder given by
+  `MSH_CATALOG_DIR` (or `catalog` next to the executable, e.g. in a portable setup) comes
+  first; an installed Sweet Home 3D only adds default catalog files that folder lacks, so no
+  item appears twice. Since 2026-11-11 the installer no longer bundles Sweet Home 3D's
+  default catalog (license and attribution duties of redistributing it; see D3). User libraries and the Store version's libraries are found as
   before.
 - Single instance (`tauri-plugin-single-instance`): starting the app again, e.g. by double
   clicking a `.sh3d` file, opens the file in a new window of the running app (or brings the
@@ -1290,10 +1290,10 @@ the feature matrix). Features marked "no" stay as they are. Agreed details:
     APIs, no account). License and source are kept with each item; network access can be
     turned off in the preferences.
 - P12f (done, see 4.36) Stand-alone installer without dependencies on other programs: MSI via Tauri with the
-  WebView2 runtime, `.sh3d` file association, the CLI `msh`, and the freely licensed Sweet
-  Home 3D default catalog (furniture GPL / CC-BY, textures CC-BY, with attribution; taken
-  from a Sweet Home 3D installation at build time, never committed). Installed Sweet Home 3D
-  libraries are still found. Auto-update prepared (Tauri updater, signing keys), the update
+  WebView2 runtime, `.sh3d` file association and the CLI `msh`. The Sweet Home 3D default
+  catalog was bundled at first and removed again for the public release (2026-11-11, see
+  D3). Installed Sweet Home 3D libraries are still found. Release builds run on GitHub
+  Actions (`.github/workflows/release.yml`). Auto-update prepared (Tauri updater, signing keys), the update
   source is decided later.
 - P12g Plugins: TypeScript plugins inside the app (folder with manifest and permissions; use
   the command registry like CLI / MCP, add menu entries, tools and panels, run isolated) and

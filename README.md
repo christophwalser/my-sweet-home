@@ -1,14 +1,51 @@
 # My Sweet Home
 
-Modern, resource-friendly home design for Windows, compatible with the file formats of
-Sweet Home 3D (`.sh3d`, `.sh3f`, `.sh3t`). Controllable through the UI, a CLI (`msh`) and MCP.
+[![CI](https://github.com/christophwalser/my-sweet-home/actions/workflows/ci.yml/badge.svg)](https://github.com/christophwalser/my-sweet-home/actions/workflows/ci.yml)
+[![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 
-Architecture and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
-Rules for AI agents (incl. language policy): [CLAUDE.md](CLAUDE.md)
+Modern, resource-friendly home design for Windows: plan walls, rooms, doors and windows in 2D,
+furnish and walk through the home in 3D. My Sweet Home reads and writes the file formats of
+[Sweet Home 3D](https://www.sweethome3d.com) (`.sh3d`, `.sh3f`, `.sh3t`) and can be controlled
+through the UI, a CLI (`msh`) and an MCP server for AI assistants.
 
-## Requirements
+> **Status:** early release (0.x). File compatibility with Sweet Home 3D is tested
+> continuously, but keep backups of important homes.
 
-- Windows 11 (WebView2 is preinstalled)
+> [!IMPORTANT]
+> **No planning or building guarantee.** My Sweet Home is a design and visualization tool.
+> Dimensions, areas, quantities and prices it shows are not verified and may be inaccurate. It
+> does not check structural safety, building codes, permits or any other legal requirement.
+> Have plans checked by qualified professionals (architect, structural engineer, authorities)
+> before you build, buy or order anything. The software is provided without warranty; see
+> [LICENSE](LICENSE).
+
+My Sweet Home is an independent project and **not affiliated with eTeks or the Sweet Home 3D
+project**; see [NOTICE.md](NOTICE.md).
+
+## Download and installation
+
+1. Download the latest `My Sweet Home_<version>_x64_en-US.msi` from the
+   [releases page](https://github.com/christophwalser/my-sweet-home/releases).
+2. Optional: check it against `SHA256SUMS.txt` of the release
+   (`Get-FileHash .\My*.msi -Algorithm SHA256`) or verify its build provenance with the
+   GitHub CLI: `gh attestation verify <file> --repo christophwalser/my-sweet-home`.
+3. Run the installer. The installers are not code-signed yet, so Windows SmartScreen may show
+   "Windows protected your PC": choose "More info" → "Run anyway".
+
+The installer adds the app, the CLI `msh` (on the `PATH`) and the `.sh3d` file association.
+Requirements: Windows 11, 64-bit (Windows 10 is expected to work but is not tested; WebView2
+is installed automatically if missing). macOS and Linux are not supported yet.
+
+**Furniture and textures:** no libraries are bundled. My Sweet Home finds the libraries of an
+installed Sweet Home 3D (including the Microsoft Store version) automatically. Without it, use
+"Libraries…" to import `.sh3f` / `.sh3t` files, or the online catalog to download the free
+libraries of sweethome3d.com and CC0 models and textures of ambientCG and Poly Haven.
+
+## Building from source
+
+Requirements:
+
+- Windows 11
 - Rust (stable, via rustup) with `clippy` and `rustfmt`
 - Visual Studio Build Tools 2022 with the "Desktop development with C++" workload (incl. Windows SDK)
 - Node.js ≥ 22 and pnpm
@@ -115,7 +152,7 @@ bar at the bottom of the plan explains the next step.
 
 ```powershell
 cd app
-..\scripts\build-installer.ps1  # MSI with default catalog and CLI in target\release\bundle\msi
+..\scripts\build-installer.ps1  # MSI with app, CLI and license files in target\release\bundle\msi
 node scripts\build-icons.mjs    # all icons from the SVG masters in src-tauri\icons\source
 ```
 
@@ -166,7 +203,8 @@ returns the plan as an image so the AI can check its result.
 Claude Code:
 
 ```powershell
-claude mcp add my-sweet-home -- D:\Data\Programming\_repos\my-sweet-home\target\debug\msh.exe mcp
+claude mcp add my-sweet-home -- msh mcp
+# or, with a build from source: -- <repository>\target\debug\msh.exe mcp
 ```
 
 Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`):
@@ -175,7 +213,7 @@ Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`):
 {
   "mcpServers": {
     "my-sweet-home": {
-      "command": "D:\\Data\\Programming\\_repos\\my-sweet-home\\target\\debug\\msh.exe",
+      "command": "C:\\Program Files\\My Sweet Home\\msh.exe",
       "args": ["mcp"]
     }
   }
@@ -208,7 +246,7 @@ msh mcp --live                                    # MCP server controlling the a
 Claude Code with live control:
 
 ```powershell
-claude mcp add my-sweet-home-live -- D:\Data\Programming\_repos\my-sweet-home\target\debug\msh.exe mcp --live
+claude mcp add my-sweet-home-live -- msh mcp --live
 ```
 
 `.\scripts\live-demo.ps1` builds a house in the running app through the CLI and the MCP server.
@@ -231,7 +269,16 @@ claude mcp add my-sweet-home-live -- D:\Data\Programming\_repos\my-sweet-home\ta
 | `docs/` | Architecture and decisions |
 | `crates/msh-ipc` | Live connection protocol and named pipe client |
 
+## Contributing
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Code of Conduct](CODE_OF_CONDUCT.md). Architecture and roadmap:
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); rules for AI coding agents: [CLAUDE.md](CLAUDE.md).
+Security issues: please report them privately as described in [SECURITY.md](SECURITY.md).
+
 ## License
 
-GPL-2.0-or-later (derived from Sweet Home 3D, © eTeks / Space Mushrooms). Furniture and texture
-libraries are not included and have their own licenses.
+My Sweet Home is free software under the [GNU General Public License v3.0 or later](LICENSE).
+It is derived from Sweet Home 3D (© Space Mushrooms / eTeks, GPL-2.0-or-later). Copyright,
+attribution and third-party notices: [NOTICE.md](NOTICE.md). Furniture and texture libraries
+are not included and keep their own licenses.

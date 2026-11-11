@@ -110,6 +110,7 @@ The same dialog exports the plan as PDF, SVG or PNG, the furniture list as CSV a
 - **File › New**, **Open** and **Save** work with Sweet Home 3D files. Each home opens in its own window; **Open recent** lists the last homes.
 - Every few minutes a copy of changed homes is kept. After a crash the next start offers to open these copies.
 - Homes saved here open in Sweet Home 3D 7 and keep everything Sweet Home 3D stores, also what this program does not show.
+- **No planning or building guarantee:** dimensions, areas, quantities and prices are not verified and may be inaccurate, and nothing is checked against structural safety, building codes or permits. Have plans checked by qualified professionals before you build, buy or order anything. My Sweet Home is free software without warranty (GNU GPL 3 or later) and not affiliated with the makers of Sweet Home 3D.
 
 # Automation
 
