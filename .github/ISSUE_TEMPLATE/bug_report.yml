@@ -1,0 +1,55 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please do **not** report security problems here; see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: e.g. 0.1.0 (see the installer file name or Windows Settings › Apps › Installed apps), or the commit if built from source
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - 2D plan
+        - 3D view, photos, videos
+        - Catalog, libraries, import
+        - Opening or saving files
+        - Print and export
+        - CLI or MCP server
+        - Installer
+        - Other
+  - type: textarea
+    id: files
+    attributes:
+      label: Files and screenshots
+      description: Attach a small .sh3d file or screenshots if they help. Only share files you are allowed to publish.
