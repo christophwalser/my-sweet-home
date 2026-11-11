@@ -6,6 +6,19 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- The location of the home can also be set in the home properties.
+- "Align north with the map": turn the walls over an OpenStreetMap map of the location to set
+  the north direction of the compass.
+
+### Fixed
+
+- Lamps whose light comes from a material of their model (e.g. the contributed "Mini spot")
+  are placed as lights and light the 3D view.
+- Walls stop the light of the lamps nearest to the visitor in the virtual visit.
+- Latitude and longitude are shown with four decimals instead of one.
+
 ## [0.1.0] - 2026-11-11
 
 First public release.
