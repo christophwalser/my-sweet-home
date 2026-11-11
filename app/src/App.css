@@ -1757,6 +1757,40 @@ body.resizing-horizontal {
   font-size: 12px;
 }
 
+/* Turning the plan to match a map (north direction) */
+.north-map {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.north-map-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.north-map-stage canvas {
+  width: min(700px, calc(100vh - 260px));
+  aspect-ratio: 1;
+  cursor: move;
+  touch-action: none;
+}
+
+.north-map .dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.north-map .dialog-actions .prop-row {
+  margin-right: auto;
+}
+
+.north-map .dialog-actions input {
+  width: 80px;
+}
+
 /* A part of the window that failed (see ErrorBoundary) */
 .error-boundary {
   display: flex;

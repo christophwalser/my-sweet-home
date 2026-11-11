@@ -25,6 +25,7 @@ import {
   toHex,
   WALL_PATTERNS,
 } from "./fields";
+import LocationFields from "./LocationFields";
 import MultiPanel from "./MultiPanel";
 import OpeningDistances from "./OpeningDistances";
 import TextStyleFields from "./TextStyleFields";
@@ -186,7 +187,6 @@ function WallSide({
   );
 }
 
-/** Compass of the home: position, size, north direction and geographic position. */
 /** Position, eye height and view of the virtual visitor (Sweet Home 3D's observer). */
 function VisitorSection() {
   const opened = useStore((s) => s.opened);
@@ -262,6 +262,7 @@ function VisitorSection() {
   );
 }
 
+/** Compass of the home: position, size, and the location with its north direction. */
 function CompassSection({
   home,
   run,
@@ -272,8 +273,6 @@ function CompassSection({
   const c = home.compass?.attrs;
   const set = (field: string) => (v: string | number | boolean) =>
     void run("compass_update", { [field]: v });
-  const deg = (rad: number | null | undefined) =>
-    rad == null ? null : Math.round(((rad * 180) / Math.PI) * 100) / 100;
   return (
     <>
       <h2>{t("Compass")}</h2>
@@ -292,27 +291,8 @@ function CompassSection({
         value={c?.diameter ?? 100}
         onCommit={set("diameter")}
       />
-      <Field
-        label={t("North")}
-        type="number"
-        unit="°"
-        value={deg(c?.north_direction) ?? 0}
-        onCommit={set("north_direction_deg")}
-      />
-      <Field
-        label={t("Latitude")}
-        type="number"
-        unit="°"
-        value={deg(c?.latitude)}
-        onCommit={set("latitude_deg")}
-      />
-      <Field
-        label={t("Longitude")}
-        type="number"
-        unit="°"
-        value={deg(c?.longitude)}
-        onCommit={set("longitude_deg")}
-      />
+      <h3>{t("Location")}</h3>
+      <LocationFields />
     </>
   );
 }
