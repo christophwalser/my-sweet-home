@@ -17,6 +17,7 @@ import PreferencesDialog from "./PreferencesDialog";
 import BackgroundImageWizard from "./panels/BackgroundImageWizard";
 import PropertiesPanel from "./panels/PropertiesPanel";
 import PlanView from "./plan2d/PlanView";
+import StatusBar from "./plan2d/StatusBar";
 import { collectTopViews } from "./plan2d/topView";
 import { addRecentHome } from "./recentHomes";
 import { applyHome, subscribeToHomeChanges, useStore } from "./store";
@@ -420,6 +421,7 @@ export default function App() {
             </div>
           )}
           <PlanView />
+          {opened && <StatusBar />}
           {!opened && !loading && (
             <div className="empty-hint">
               <p>{t("Open a Sweet Home 3D project (.sh3d) to get started.")}</p>

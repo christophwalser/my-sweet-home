@@ -574,10 +574,39 @@ const LIST: Command[] = [
     id: "plan.magnetism",
     label: t("Magnetism"),
     icon: "grid",
+    shortcut: "F9",
     hint: t("Snap to walls, angles and lengths while drawing and moving; Alt inverts it"),
     checked: () => usePreferences.getState().magnetism,
     run: () =>
       usePreferences.getState().update({ magnetism: !usePreferences.getState().magnetism }),
+  },
+  {
+    id: "plan.snapAngles",
+    label: t("Snap to angles"),
+    icon: "grid",
+    enabled: () => usePreferences.getState().magnetism,
+    checked: () => usePreferences.getState().snapAngles,
+    run: () =>
+      usePreferences.getState().update({ snapAngles: !usePreferences.getState().snapAngles }),
+  },
+  {
+    id: "plan.snapObjects",
+    label: t("Snap to objects"),
+    icon: "grid",
+    shortcut: "F3",
+    enabled: () => usePreferences.getState().magnetism,
+    checked: () => usePreferences.getState().snapObjects,
+    run: () =>
+      usePreferences.getState().update({ snapObjects: !usePreferences.getState().snapObjects }),
+  },
+  {
+    id: "plan.snapRulers",
+    label: t("Snap to rulers"),
+    icon: "grid",
+    enabled: () => usePreferences.getState().magnetism,
+    checked: () => usePreferences.getState().snapToRulers,
+    run: () =>
+      usePreferences.getState().update({ snapToRulers: !usePreferences.getState().snapToRulers }),
   },
   {
     id: "plan.backgroundImport",
@@ -1036,6 +1065,9 @@ export const MENUS: Menu[] = [
       cmd("plan.rulers"),
       cmd("plan.grid"),
       cmd("plan.magnetism"),
+      cmd("plan.snapAngles"),
+      cmd("plan.snapObjects"),
+      cmd("plan.snapRulers"),
     ],
   },
   {

@@ -23,6 +23,7 @@ import {
   currentCatalogDrag,
   docResourceUrl,
 } from "../api";
+import { evalLength } from "../expression";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
 import {
@@ -37,7 +38,7 @@ import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../
 import Icon from "../ui/Icon";
 import { registerPlanActions } from "../ui/planBridge";
 import { useDarkMode, useUi } from "../ui/uiStore";
-import { fromUnit, unitSymbol } from "../units";
+import { unitSymbol } from "../units";
 import { levelOfEye } from "../view3d/visitor";
 import { autoDimensions } from "./autoDims";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
@@ -49,7 +50,7 @@ import {
   planBounds,
   type ViewTransform,
 } from "./drawPlan";
-import { type DropPreview, dropPreview } from "./dropPreview";
+import { type Dock, type DropPreview, dropPreview } from "./dropPreview";
 import { drawGuides, guideAt, guidesInRect, levelGuides, movedGuides } from "./guides";
 import {
   dragHandle,
@@ -60,6 +61,7 @@ import {
   handleAt,
 } from "./handles";
 import { distanceToSegment, elementsInRect, hitTest, nearestWall } from "./interaction";
+import { dragStep, lockAxis, moveAxis, nudgeStep, roundTo } from "./moveStep";
 import {
   constrainMove,
   type Docked,
@@ -78,6 +80,7 @@ import {
   visitorHandlePos,
 } from "./overlay";
 import { drawRuler, type RulerColors } from "./rulers";
+import { usePointer } from "./StatusBar";
 import {
   projectOnSegment,
   type SnapPurpose,
@@ -130,7 +133,8 @@ const DARK_RULER: RulerColors = {
 
 /** Pick and snap radius in screen pixels. */
 const PICK_PX = 6;
-const SNAP_PX = 10;
+/** Radius of the magnetism in screen pixels (preference). */
+const snapPx = () => usePreferences.getState().snapRadius;
 /** Pointer movement in screen pixels before a press becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
 
@@ -749,7 +753,7 @@ export default function PlanView() {
       input.home,
       input.wallShapes,
       effectiveLevel,
-      pxToCm(SNAP_PX),
+      pxToCm(snapPx()),
       {
         path,
         near: p,
@@ -873,7 +877,7 @@ export default function PlanView() {
   /** Adds the point at the typed length in the direction of the cursor. */
   const addTypedPoint = () => {
     const pts = draft.current;
-    const length = fromUnit(Number.parseFloat((typed.current ?? "").replace(",", ".")));
+    const length = evalLength(typed.current ?? "", usePreferences.getState().unit) ?? Number.NaN;
     typed.current = null;
     if (dimOffset.current !== null) {
       // Placing a dimension: the typed distance on the side of the mouse
@@ -1052,6 +1056,7 @@ export default function PlanView() {
   const onPointerMove = (e: React.PointerEvent) => {
     const g = gesture.current;
     mouseWorld.current = toWorld(e.clientX, e.clientY);
+    usePointer.setState({ pt: mouseWorld.current });
     if (g?.kind === "pan") {
       if (Math.hypot(e.clientX - g.screen[0], e.clientY - g.screen[1]) >= DRAG_THRESHOLD_PX) {
         g.moved = true;
@@ -1088,7 +1093,7 @@ export default function PlanView() {
         effectiveLevel,
         g.handle,
         p,
-        pxToCm(SNAP_PX),
+        pxToCm(snapPx()),
         magnetismActive(e.altKey),
         e.shiftKey,
         useUi.getState().keepProportions,
@@ -1129,7 +1134,8 @@ export default function PlanView() {
         // Dragging an unselected element selects it first
         const sel = useStore.getState().selection;
         if (g.hitId === VISITOR_ID) setSelection([VISITOR_ID]);
-        else if (!sel.includes(g.hitId)) setSelection(g.shift ? [...sel, g.hitId] : [g.hitId]);
+        // (Shift while dragging locks the move to an axis; Shift+click extends the selection)
+        else if (!sel.includes(g.hitId)) setSelection([g.hitId]);
         gesture.current = { kind: "move", start: g.start, offset: [0, 0], dock: null, slide: null };
       } else {
         gesture.current = { kind: "band", start: g.start, end: p };
@@ -1138,7 +1144,11 @@ export default function PlanView() {
     const g2 = gesture.current;
     if (g2?.kind === "move" && input) {
       const sel = useStore.getState().selection;
-      let offset: Pt = [Math.round(p[0] - g2.start[0]), Math.round(p[1] - g2.start[1])];
+      let raw: Pt = [p[0] - g2.start[0], p[1] - g2.start[1]];
+      if (e.shiftKey) raw = lockAxis(raw, moveAxis(input.home, sel));
+      // Finer steps when zoomed in, 1 cm at most
+      const step = dragStep(pxToCm(1), magnetismActive(e.altKey));
+      let offset: Pt = [roundTo(raw[0], step), roundTo(raw[1], step)];
       g2.dock = null;
       g2.slide = null;
       const single = sel.length === 1 ? findPiece(sel[0]) : null;
@@ -1151,7 +1161,7 @@ export default function PlanView() {
           single,
           [single.attrs.x + offset[0], single.attrs.y + offset[1]],
           pxToCm(30),
-          pxToCm(SNAP_PX),
+          pxToCm(snapPx()),
           magnetismActive(e.altKey),
           catalogDepth(single),
         );
@@ -1165,7 +1175,7 @@ export default function PlanView() {
             effectiveLevel,
             piece,
             [piece.attrs.x + offset[0], piece.attrs.y + offset[1]],
-            pxToCm(SNAP_PX),
+            pxToCm(snapPx()),
           );
         }
       }
@@ -1765,8 +1775,13 @@ export default function PlanView() {
     const drawing = draft.current.length > 0;
     if (drawing && /^[0-9]$/.test(e.key)) {
       typed.current = (typed.current ?? "") + e.key;
-    } else if (drawing && (e.key === "." || e.key === ",") && !typed.current?.includes(".")) {
+    } else if (drawing && (e.key === "." || e.key === ",")) {
       typed.current = `${typed.current ?? "0"}.`;
+    } else if (drawing && typed.current === null && e.key === "(") {
+      typed.current = "(";
+    } else if (typed.current !== null && /^[-+*/() '"mcinft]$/.test(e.key)) {
+      // Units and arithmetic once a length is being typed: 3.5m, 240+11.5, 5'3"
+      typed.current += e.key;
     } else if (e.key === "Backspace" && typed.current !== null) {
       typed.current = typed.current.length > 1 ? typed.current.slice(0, -1) : null;
     } else if (e.key === "Backspace" && drawing) {
@@ -1903,7 +1918,8 @@ export default function PlanView() {
         if (walls.length < 2) return;
         void run("wall_join", { ids: walls.map((w) => w.attrs.id) });
       } else if (e.key.startsWith("Arrow") && sel.length > 0) {
-        const d = e.shiftKey ? 10 : 1;
+        // Alt: 1 mm, Shift: 10 cm, else 1 cm
+        const d = nudgeStep(e.altKey, e.shiftKey);
         const dx = e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0;
         const dy = e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0;
         nudge(sel, dx, dy);
@@ -1941,6 +1957,23 @@ export default function PlanView() {
 
   // ---------------------------------------------------------------- drag & drop from the catalog
 
+  /** Docks a catalog piece dropped near a wall with its back to it (with magnetism). */
+  const catalogDock =
+    (altKey: boolean): Dock | null =>
+    (center, width, depth) => {
+      if (!input || !magnetismActive(altKey)) return null;
+      const piece = { kind: "Piece", attrs: { width, depth } } as unknown as Piece;
+      const d = dockToWall(
+        input.home,
+        input.wallShapes,
+        effectiveLevel,
+        piece,
+        center,
+        pxToCm(2 * snapPx()),
+      );
+      return d && { x: d.x, y: d.y, angleDeg: d.angleDeg };
+    };
+
   const onDragOver = (e: React.DragEvent) => {
     if (e.dataTransfer.types.includes(CATALOG_DRAG_TYPE) && input) {
       e.preventDefault();
@@ -1950,7 +1983,14 @@ export default function PlanView() {
       if (drag) {
         const p = toWorld(e.clientX, e.clientY);
         drop.current = {
-          preview: dropPreview(input.home, effectiveLevel, drag.data, p, pxToCm(40)),
+          preview: dropPreview(
+            input.home,
+            effectiveLevel,
+            drag.data,
+            p,
+            pxToCm(40),
+            catalogDock(e.altKey),
+          ),
           icon: drag.icon,
         };
         draw();
@@ -1988,11 +2028,22 @@ export default function PlanView() {
         ...(side < 0 ? { flip: true } : {}),
       });
     } else {
+      // Where the preview showed it: at the cursor, or docked to a wall
+      const at = dropPreview(
+        input.home,
+        effectiveLevel,
+        item,
+        p,
+        pxToCm(40),
+        catalogDock(e.altKey),
+      );
+      const angleDeg = Math.round(((at.angle * 180) / Math.PI) * 100) / 100;
       result = await run("furniture_add", {
         catalog_id: item.catalogId,
         name: item.name,
-        x: Math.round(p[0]),
-        y: Math.round(p[1]),
+        x: at.center[0],
+        y: at.center[1],
+        ...(angleDeg ? { angle_deg: angleDeg } : {}),
         ...levelParam(),
       });
     }
@@ -2022,6 +2073,7 @@ export default function PlanView() {
           onPointerLeave={() => {
             cursor.current = null;
             mouseWorld.current = null;
+            usePointer.setState({ pt: null });
             draw();
           }}
           onDoubleClick={onDoubleClick}

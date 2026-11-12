@@ -1,5 +1,5 @@
 // Outline of a catalog piece dragged over the plan: at its size where it will be dropped, a
-// door or window in the wall it will be placed in.
+// door or window in the wall it will be placed in, another piece docked to a nearby wall.
 
 import type { Home, Pt } from "../model";
 import { nearestWall } from "./interaction";
@@ -13,6 +13,13 @@ export type DropPreview = {
   width: number;
   depth: number;
 };
+
+/** A piece docked to a wall: its center and angle in degrees (see `dockToWall`). */
+export type Dock = (
+  center: Pt,
+  width: number,
+  depth: number,
+) => { x: number; y: number; angleDeg: number } | null;
 
 /** Rectangle of `width` × `depth` centered at `center`, turned by `angle`. */
 export function rectangle(center: Pt, width: number, depth: number, angle: number): Pt[] {
@@ -28,7 +35,8 @@ export function rectangle(center: Pt, width: number, depth: number, angle: numbe
 
 /**
  * Where a dragged piece lands at `p`: a door or window near a wall sits in it (turned like the
- * wall, as deep as the wall is thick), as the drop places it; other pieces are centered at `p`.
+ * wall, as deep as the wall is thick), as the drop places it; other pieces are centered at `p`,
+ * or docked with their back to a wall by `dock` (magnetism).
  */
 export function dropPreview(
   home: Home,
@@ -36,6 +44,7 @@ export function dropPreview(
   item: { width: number; depth: number; doorOrWindow: boolean },
   p: Pt,
   wallDistance: number,
+  dock: Dock | null = null,
 ): DropPreview {
   const wall = item.doorOrWindow ? nearestWall(home, levelId, p, wallDistance) : null;
   const w = wall ? home.walls.find((x) => x.attrs.id === wall.id)?.attrs : undefined;
@@ -53,6 +62,18 @@ export function dropPreview(
       angle,
       width: item.width,
       depth: w.thickness,
+    };
+  }
+  const docked = item.doorOrWindow ? null : dock?.(p, item.width, item.depth);
+  if (docked) {
+    const angle = (docked.angleDeg * Math.PI) / 180;
+    const center: Pt = [docked.x, docked.y];
+    return {
+      corners: rectangle(center, item.width, item.depth, angle),
+      center,
+      angle,
+      width: item.width,
+      depth: item.depth,
     };
   }
   const center: Pt = [Math.round(p[0]), Math.round(p[1])];
