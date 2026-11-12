@@ -22,10 +22,21 @@ All notable changes to this project are documented in this file. The format foll
 - Joining two collinear walls whose ends meet, e.g. the parts of a split wall, makes one wall.
 - The list of selected elements can be filtered by kind, and a kind removed from the selection.
 - Polylines can be shown in the 3D view ("Visible in 3D").
+- Status bar under the plan with switches for the magnetism (F9), angles, objects (F3) and
+  rulers, the snap radius and angle step (right click) and the mouse position.
+- Walls, rooms, lines, dimensions and rulers snap to the ends, middles, lines and crossings of
+  rulers.
+- Number fields calculate (`240+11.5`, `3m - 12cm`) and change values relatively (`+5`, `*2`);
+  arrow keys and the mouse wheel step them. Typed lengths in the plan accept units too.
+- Alt+arrow keys move the selection by 1 mm; Shift while dragging keeps the move on one axis.
+- A piece dragged from the catalog near a wall turns with its back to it before it is dropped.
 
 ### Changed
 
 - Error messages are shown in the chosen language with a clearer explanation.
+- Dragged elements move in steps that get finer when zoomed in (down to 1 mm) instead of always
+  1 cm, and freely with Alt. Shift+drag no longer adds the element to the selection
+  (Shift+click does).
 - The furniture properties are ordered: name, description, size, elevation, position, angle,
   then color, texture, surface and materials.
 

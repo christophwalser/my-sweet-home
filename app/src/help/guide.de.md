@@ -17,9 +17,9 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 
 ## Wände
 
-- Klicke den Startpunkt, dann jede Ecke. **Doppelklick** oder **Enter** beendet die Wand, **Esc** bricht ab, **Rücktaste** entfernt den letzten Punkt.
-- Tippe eine Länge und drücke **Enter**, um die nächste Wand auf diese Länge festzulegen.
-- Der Magnetismus rastet an rechten Winkeln, 45°, parallelen Wänden und Wandenden ein; halte **Umschalt** für 1°-Schritte und **Alt**, um ihn kurz auszuschalten.
+- Klicke den Startpunkt, dann jede Ecke. **Doppelklick**, **Enter** oder **Esc** beendet die Wand, **Rücktaste** entfernt den letzten Punkt.
+- Tippe eine Länge und drücke **Enter**, um die nächste Wand auf diese Länge festzulegen. Einheiten und Rechnen gehen auch: `3.5m`, `5'3"`, `240+11.5`.
+- Der Magnetismus rastet an rechten Winkeln, 45°, parallelen Wänden, Wandenden und Linealen ein; halte **Umschalt** für 1°-Schritte und **Alt**, um ihn kurz auszuschalten.
 - Wähle eine Wand, um Dicke, Höhe (auch verschieden an beiden Enden), Länge, Farben, Texturen, Oberfläche (matt oder glänzend), Sockelleisten und Muster zu ändern. **Auf 90° stellen** richtet die Ecke zur nächsten Wand aus.
 - Runde Wände zeichnest du mit dem Pfeil neben dem Wandwerkzeug.
 
@@ -34,6 +34,14 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 - Texte und Polylinien (gerade oder gebogen) haben eigene Werkzeuge; ihren Stil legst du in den Eigenschaften fest.
 - Einen Text tippst du direkt an der geklickten Stelle im Plan; **Enter** beendet, **Umschalt+Enter** beginnt eine neue Zeile. Ein **Doppelklick** auf einen Text ändert ihn dort.
 - Das Messwerkzeug zeigt einen Abstand, ohne etwas zum Plan hinzuzufügen. Sein zweiter Modus, das **Lineal**, zeichnet eine Hilfslinie, die zum Platzieren von Elementen im Plan bleibt; sie wird mit dem Haus gespeichert, aber nicht gedruckt. Zum Entfernen ein Lineal auswählen und **Entf** drücken, oder **Plan › Lineale dieser Ebene löschen**. Farbe und Strichart eines Lineals stehen in seinen Eigenschaften; die Vorgaben für neue Lineale und die Farbe des Messwerkzeugs unter **Einstellungen › Werkzeuge**.
+
+## Präzision und Magnetismus
+
+- Die Statusleiste unter dem Plan schaltet den Magnetismus ein und aus (**F9**) und getrennt davon Winkel, Objekte (**F3**: Enden, Mitten, Flächen und Ecken von Wänden, Räumen und Möbeln) und Lineale. Ein Rechtsklick darauf wählt Fangradius und Winkelschritt. Sie zeigt auch die Position der Maus.
+- Elemente rasten an Enden, Mitten und Linien von Linealen ein und an deren Schnittpunkten mit Wänden und anderen Linealen.
+- Gezogene Elemente bewegen sich in Schritten von 1 cm, beim Hineinzoomen feiner (bis 1 mm); mit **Alt** frei. **Umschalt** beim Ziehen hält die Bewegung auf einer Achse (bei einem einzelnen Möbel oder einer Wand entlang ihrer eigenen Richtung).
+- Die Pfeiltasten verschieben die Auswahl um 1 cm, mit **Umschalt** um 10 cm und mit **Alt** um 1 mm.
+- Zahlenfelder in den Eigenschaften rechnen: `240+11.5`, `3m - 12cm`, und ändern den Wert relativ mit `+5`, `+-5`, `*2` oder `/2`. Pfeiltasten und Mausrad ändern den Wert im Feld schrittweise (mit **Umschalt** um 10 Schritte); **Enter** übernimmt ihn.
 
 ## Hintergrundbild
 
@@ -54,13 +62,13 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 
 ## Möbel platzieren
 
-- Ziehe ein Möbel aus dem Katalog in den Plan.
+- Ziehe ein Möbel aus dem Katalog in den Plan. In der Nähe einer Wand dreht es sich schon beim Ziehen mit dem Rücken zur Wand.
 - Türen und Fenster rasten in der nächsten Wand ein, übernehmen ihre Dicke und zeigen die Abstände zu den Wandenden und anderen Öffnungen.
 - Möbel, die auf einem Tisch, einem Regal oder einem anderen Möbel abgelegt werden, landen obendrauf.
 
 ## Möbel ändern
 
-- Ziehe ein Möbel, um es zu verschieben; mit seinen Griffen drehst du es und änderst Höhe über Boden, Höhe und Größe. Die Pfeiltasten verschieben die Auswahl um 1 cm (mit **Umschalt** 10 cm).
+- Ziehe ein Möbel, um es zu verschieben; mit seinen Griffen drehst du es und änderst Höhe über Boden, Höhe und Größe. Die Pfeiltasten verschieben die Auswahl um 1 cm (mit **Umschalt** 10 cm, mit **Alt** 1 mm). **Umschalt+Klick** nimmt ein Element zur Auswahl hinzu oder heraus.
 - In den Eigenschaften legst du Name, Beschreibung, Position, Winkel, Neigung, Größe, Farbe oder Textur des ganzen Möbels, Oberfläche (wie das Modell, matt, glänzend), Spiegelung, Sichtbarkeit und Zugehörigkeit zum Grundplan fest.
 - **Materialien** ändert Farbe, Textur und Glanz einzelner Teile des Modells.
 - Sind mehrere Elemente ausgewählt, listen die Eigenschaften sie unter den gemeinsamen Werten auf: **×** nimmt eines aus der Auswahl, ein Klick auf den Namen wählt nur dieses.
