@@ -549,11 +549,28 @@ function drawMeasure(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, color: string,
       false,
     );
   }
+  drawMeasureTag(ctx, a, b, px, true);
+}
+
+/**
+ * Tag beside the segment a→b with its length and direction (degrees, clockwise from the x axis
+ * like the plan); with `parts` also its horizontal and vertical parts.
+ */
+export function drawMeasureTag(
+  ctx: CanvasRenderingContext2D,
+  a: Pt,
+  b: Pt,
+  px: number,
+  parts = false,
+): void {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy);
   if (len < 0.05) return;
   // Rounded first, so that -0.01° shows as 0°, not 360°
   const angle = (((Math.round((Math.atan2(dy, dx) * 1800) / Math.PI) / 10) % 360) + 360) % 360;
   let text = `${formatPrecise(len)} · ${oneDecimal(angle)}°`;
-  if (Math.abs(dx) >= 0.05 && Math.abs(dy) >= 0.05) {
+  if (parts && Math.abs(dx) >= 0.05 && Math.abs(dy) >= 0.05) {
     text += ` · Δx ${oneDecimal(Math.abs(dx))} · Δy ${oneDecimal(Math.abs(dy))}`;
   }
   drawCenteredTag(ctx, text, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);

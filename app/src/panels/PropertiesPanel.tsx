@@ -6,7 +6,7 @@ import { docResourceUrl } from "../api";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Wall } from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
-import { homeGuides } from "../plan2d/guides";
+import { guideAngle, guideEnd, guideLength, homeGuides } from "../plan2d/guides";
 import { usePreferences } from "../preferences";
 import { formatMoney, piecePrice } from "../prices";
 import { currentVisitor, setVisitor, useStore, VISITOR_ID } from "../store";
@@ -1134,10 +1134,28 @@ export default function PropertiesPanel() {
     return (
       <div className="props">
         <h2>{t("Ruler")}</h2>
-        <p className="muted small">
-          {t("Length:")}{" "}
-          {formatLength(Math.hypot(guide.x_end - guide.x_start, guide.y_end - guide.y_start))}
-        </p>
+        <Field
+          label={t("Length")}
+          type="number"
+          unit="cm"
+          value={guideLength(guide)}
+          onCommit={(v) => {
+            const length = Number(v);
+            if (!(length >= 0.1)) return;
+            const [x_end, y_end] = guideEnd(guide, length, guideAngle(guide));
+            void run("guide_update", { id: guide.id, x_end, y_end });
+          }}
+        />
+        <Field
+          label={t("Angle")}
+          type="number"
+          unit="°"
+          value={guideAngle(guide)}
+          onCommit={(v) => {
+            const [x_end, y_end] = guideEnd(guide, guideLength(guide), Number(v));
+            void run("guide_update", { id: guide.id, x_end, y_end });
+          }}
+        />
         <Field
           label={t("Color")}
           type="color"
