@@ -1296,6 +1296,12 @@ export default function PropertiesPanel() {
           value={a.join_style === "CURVED"}
           onCommit={set("curved")}
         />
+        <Field
+          label={t("Visible in 3D")}
+          type="checkbox"
+          value={a.elevation !== null && a.elevation !== undefined}
+          onCommit={set("visible_in_3d")}
+        />
         {!a.closed_path && (
           <>
             <SelectField

@@ -136,6 +136,8 @@ struct PolylineUpdateParams {
     end_arrow: Option<ArrowStyle>,
     /// Smooth curve through the points instead of straight segments
     curved: Option<bool>,
+    /// Show the polyline in the 3D view, lying on the floor of its level (Sweet Home 3D 6.0+)
+    visible_in_3d: Option<bool>,
 }
 
 /// Join style of polylines drawn as curves (Sweet Home 3D's `CURVED`).
@@ -211,7 +213,8 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "polyline_update",
-        "Changes points, thickness, color, dash style, arrows or curving of a polyline.",
+        "Changes points, thickness, color, dash style, arrows, curving or the visibility in 3D \
+         of a polyline.",
         true,
         |doc, p: PolylineUpdateParams| {
             let pl = doc
@@ -248,6 +251,12 @@ pub(super) fn register(r: &mut Registry) {
             }
             if let Some(v) = p.curved {
                 a.join_style = Some(join_style(v));
+            }
+            // Sweet Home 3D shows polylines with an elevation in 3D
+            match p.visible_in_3d {
+                Some(true) => a.elevation = Some(a.elevation.unwrap_or(0.0)),
+                Some(false) => a.elevation = None,
+                None => {}
             }
             Ok(json!({ "id": p.id }))
         },
