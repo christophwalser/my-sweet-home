@@ -934,5 +934,12 @@
   "Remove height dimension": "Rimuovi la quota d'altezza",
   "The selected walls are joined already.": "I muri selezionati sono già uniti.",
   "The walls cross each other. Split one of them at the crossing first.": "I muri si incrociano. Dividi prima uno dei due all'incrocio.",
-  "J or Join walls: connect the walls at the intersections of their axes · Shift+click: change the selection": "J o Unisci muri: collega i muri alle intersezioni dei loro assi · Maiusc+clic: cambia la selezione"
+  "J or Join walls: connect the walls at the intersections of their axes · Shift+click: change the selection": "J o Unisci muri: collega i muri alle intersezioni dei loro assi · Maiusc+clic: cambia la selezione",
+  "Texts": "Testi",
+  "Dimensions": "Quote",
+  "Other": "Altri",
+  "All": "Tutti",
+  "Show only": "Mostra solo",
+  "Remove {kind} from the selection": "Togli {kind} dalla selezione",
+  "Select only {kind}": "Seleziona solo {kind}"
 }

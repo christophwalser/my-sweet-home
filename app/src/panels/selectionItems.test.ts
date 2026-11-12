@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeHome, makePiece, makeRoom, makeWall } from "../testFixtures";
-import { selectionItems } from "./selectionItems";
+import { selectionGroups, selectionItems } from "./selectionItems";
 
 describe("selectionItems", () => {
   it("names the selected elements in selection order", () => {
@@ -29,6 +29,12 @@ describe("selectionItems", () => {
       ["p1", "Furniture", "Sofa"],
       ["observer", "Visitor", ""],
       ["x", "Element", "x"],
+    ]);
+    expect(selectionGroups(items)).toEqual([
+      { group: "wall", label: "Walls", count: 1 },
+      { group: "room", label: "Rooms", count: 1 },
+      { group: "furniture", label: "Furniture", count: 2 },
+      { group: "other", label: "Other", count: 2 },
     ]);
   });
 });

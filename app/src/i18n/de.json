@@ -934,5 +934,12 @@
   "Remove height dimension": "Höhenmaß entfernen",
   "The selected walls are joined already.": "Die gewählten Wände sind schon verbunden.",
   "The walls cross each other. Split one of them at the crossing first.": "Die Wände kreuzen sich. Teile zuerst eine davon an der Kreuzung.",
-  "J or Join walls: connect the walls at the intersections of their axes · Shift+click: change the selection": "J oder Wände verbinden: verbindet die Wände an den Schnittpunkten ihrer Achsen · Umschalt+Klick: Auswahl ändern"
+  "J or Join walls: connect the walls at the intersections of their axes · Shift+click: change the selection": "J oder Wände verbinden: verbindet die Wände an den Schnittpunkten ihrer Achsen · Umschalt+Klick: Auswahl ändern",
+  "Texts": "Texte",
+  "Dimensions": "Bemaßungen",
+  "Other": "Andere",
+  "All": "Alle",
+  "Show only": "Nur zeigen",
+  "Remove {kind} from the selection": "{kind} aus der Auswahl nehmen",
+  "Select only {kind}": "Nur {kind} auswählen"
 }

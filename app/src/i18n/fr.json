@@ -934,5 +934,12 @@
   "Remove height dimension": "Supprimer la cote de hauteur",
   "The selected walls are joined already.": "Les murs sélectionnés sont déjà joints.",
   "The walls cross each other. Split one of them at the crossing first.": "Les murs se croisent. Divisez d'abord l'un d'eux au croisement.",
-  "J or Join walls: connect the walls at the intersections of their axes · Shift+click: change the selection": "J ou Joindre les murs : relie les murs aux intersections de leurs axes · Maj+clic : modifier la sélection"
+  "J or Join walls: connect the walls at the intersections of their axes · Shift+click: change the selection": "J ou Joindre les murs : relie les murs aux intersections de leurs axes · Maj+clic : modifier la sélection",
+  "Texts": "Textes",
+  "Dimensions": "Cotes",
+  "Other": "Autres",
+  "All": "Tous",
+  "Show only": "Afficher seulement",
+  "Remove {kind} from the selection": "Retirer {kind} de la sélection",
+  "Select only {kind}": "Sélectionner seulement {kind}"
 }
