@@ -32,6 +32,7 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. T
 
 - The dimension tool measures between two clicks; a third click places the dimension line.
 - Texts and polylines (straight or curved) have their own tools; their style is set in the properties.
+- A text is typed right where you click in the plan; **Enter** finishes, **Shift+Enter** starts a new line. **Double-click** a text to change it in place.
 - The measure tool shows a distance without adding anything to the plan. Its second mode, the **ruler**, draws a guide line that stays in the plan to help place elements; it is saved with the home but not printed. Select a ruler and press **Del** to remove it, or use **Plan › Delete rulers of this level**. Color and dashes of a ruler are set in its properties; the defaults for new rulers and the color of the measure tool are under **Preferences › Tools**.
 
 ## Background image

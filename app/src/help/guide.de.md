@@ -32,6 +32,7 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 
 - Das Bemaßungswerkzeug misst zwischen zwei Klicks; ein dritter Klick platziert die Maßlinie.
 - Texte und Polylinien (gerade oder gebogen) haben eigene Werkzeuge; ihren Stil legst du in den Eigenschaften fest.
+- Einen Text tippst du direkt an der geklickten Stelle im Plan; **Enter** beendet, **Umschalt+Enter** beginnt eine neue Zeile. Ein **Doppelklick** auf einen Text ändert ihn dort.
 - Das Messwerkzeug zeigt einen Abstand, ohne etwas zum Plan hinzuzufügen. Sein zweiter Modus, das **Lineal**, zeichnet eine Hilfslinie, die zum Platzieren von Elementen im Plan bleibt; sie wird mit dem Haus gespeichert, aber nicht gedruckt. Zum Entfernen ein Lineal auswählen und **Entf** drücken, oder **Plan › Lineale dieser Ebene löschen**. Farbe und Strichart eines Lineals stehen in seinen Eigenschaften; die Vorgaben für neue Lineale und die Farbe des Messwerkzeugs unter **Einstellungen › Werkzeuge**.
 
 ## Hintergrundbild

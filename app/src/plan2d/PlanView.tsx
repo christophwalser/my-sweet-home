@@ -25,6 +25,7 @@ import {
   newLabelParams,
   newRoomParams,
   newWallParams,
+  prefs,
   usePreferences,
 } from "../preferences";
 import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../store";
@@ -79,6 +80,7 @@ import {
   snapDraw,
 } from "./snapping";
 import { dropElevation } from "./support";
+import TextEditor, { type TextEdit } from "./TextEditor";
 import { topView } from "./topView";
 
 const LIGHT: PlanColors = {
@@ -293,6 +295,8 @@ export default function PlanView() {
   const [hint, setHint] = useState("");
   /** Open context menu: position in CSS pixels in the plan area and its items */
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  /** Text typed in the plan */
+  const [textEdit, setTextEdit] = useState<TextEdit | null>(null);
   const dark = useDarkMode();
   const colors = dark ? DARK : LIGHT;
   const rulerColors = dark ? DARK_RULER : LIGHT_RULER;
@@ -479,7 +483,9 @@ export default function PlanView() {
           ? t("Click the end point, or type a length + Enter · Esc to cancel")
           : t("Click the start point, or drag");
       case "label":
-        return t("Click to place a text");
+        return t(
+          "Click where the text goes and type it · Enter: finish · Shift+Enter: new line · Esc: cancel",
+        );
       default:
         if (hoverHandle.current) return HANDLE_HINT[hoverHandle.current.kind];
         if (selectedWallCount() === 2)
@@ -1012,19 +1018,15 @@ export default function PlanView() {
         if (id) setSelection([id]);
       });
     } else if (tool === "label") {
-      const text = window.prompt(t("Label text"));
-      if (text?.trim()) {
-        void run("label_add", {
-          text,
-          ...newLabelParams(),
-          x: Math.round(p[0]),
-          y: Math.round(p[1]),
-          ...levelParam(),
-        }).then((r) => {
-          const id = (r as { id?: string } | undefined)?.id;
-          if (id) setSelection([id]);
-        });
-      }
+      // Typed at the clicked position (the click finishes a text being typed elsewhere first)
+      e.preventDefault();
+      (document.activeElement as HTMLElement | null)?.blur();
+      setTextEdit({
+        at: [Math.round(p[0]), Math.round(p[1])],
+        id: null,
+        text: "",
+        size: prefs().newTextSize,
+      });
     } else if (tool === "dimension" && dimOffset.current !== null) {
       dimOffset.current = offsetAt(p);
       void finishDraft();
@@ -1302,9 +1304,44 @@ export default function PlanView() {
     } else if (isPathTool(tool)) {
       // The second click of the double-click added no point (same position)
       void finishDraft();
-    } else if (tool === "select" && useStore.getState().selection.length === 0) {
-      refit();
+    } else if (tool === "select" && input) {
+      // Double-click on a text: change it where it is
+      const p = toWorld(e.clientX, e.clientY);
+      const hit = hitTest(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+      const label = hit ? input.home.labels.find((l) => l.attrs.id === hit.id) : undefined;
+      if (label?.attrs.id) {
+        setTextEdit({
+          at: [label.attrs.x, label.attrs.y],
+          id: label.attrs.id,
+          text: label.text,
+          size: label.text_style?.font_size ?? 18,
+        });
+      } else if (useStore.getState().selection.length === 0) {
+        refit();
+      }
     }
+  };
+
+  /** Adds the typed text, or changes (or deletes, when emptied) the edited one. */
+  const commitText = (edit: TextEdit, text: string) => {
+    setTextEdit(null);
+    if (edit.id) {
+      if (text === edit.text) return;
+      if (!text.trim()) void run("edit_delete", { ids: [edit.id] });
+      else void run("label_update", { id: edit.id, text });
+      return;
+    }
+    if (!text.trim()) return;
+    void run("label_add", {
+      text,
+      ...newLabelParams(),
+      x: edit.at[0],
+      y: edit.at[1],
+      ...levelParam(),
+    }).then((r) => {
+      const id = (r as { id?: string } | undefined)?.id;
+      if (id) setSelection([id]);
+    });
   };
 
   // ---------------------------------------------------------------- context menu
@@ -1941,6 +1978,21 @@ export default function PlanView() {
         {opened && hint && <div className="plan-hint">{hint}</div>}
         {menu && (
           <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+        )}
+        {textEdit && (
+          <TextEditor
+            key={`${textEdit.id ?? "new"}-${textEdit.at.join(",")}`}
+            left={
+              (textEdit.at[0] * viewRef.current.scale + viewRef.current.offsetX) / devicePixelRatio
+            }
+            top={
+              (textEdit.at[1] * viewRef.current.scale + viewRef.current.offsetY) / devicePixelRatio
+            }
+            fontPx={(textEdit.size * viewRef.current.scale) / devicePixelRatio}
+            initial={textEdit.text}
+            onCommit={(text) => commitText(textEdit, text)}
+            onCancel={() => setTextEdit(null)}
+          />
         )}
         {opened && (
           <button

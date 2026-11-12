@@ -516,6 +516,25 @@ input[type="search"]:focus {
   padding: 2px 6px;
 }
 
+.plan-text-editor {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  min-width: 6em;
+  padding: 0 4px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: sans-serif;
+  line-height: 1.2;
+  text-align: center;
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+  outline: none;
+  box-shadow: var(--shadow);
+}
+
 .plan-hint {
   position: absolute;
   left: 8px;
