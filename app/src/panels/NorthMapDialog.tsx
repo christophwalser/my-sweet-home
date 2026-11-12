@@ -295,7 +295,7 @@ export default function NorthMapDialog({ onClose }: { onClose: () => void }) {
             onPointerUp={() => {
               const d = drag.current;
               drag.current = null;
-              if (!d || d.kind !== "map" || !d.moved || !map) return;
+              if (d?.kind !== "map" || !d.moved || !map) return;
               // A new map once the shown part leaves the downloaded one
               const [mx, my] = toScreen(map.east, map.south);
               const s = 2 ** (view.zoom - map.zoom);

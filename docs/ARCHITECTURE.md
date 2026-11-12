@@ -247,7 +247,8 @@ Implemented:
   smallest hole of the union of the wall outlines (`msh_geometry::enclosed_area`, boolean ops
   of the `geo` crate) that contains the point.
 - Polylines: tool "Line", `polyline_add` / `polyline_update` (thickness, color, dash style,
-  arrows, closed); arrows are drawn in the plan.
+  arrows, closed, `visible_in_3d`: an elevation, as SH3D 6.0 shows such polylines in 3D);
+  arrows are drawn in the plan.
 - `wall_update`: baseboards per side (height 0 removes), pattern, "" removes colors/textures,
   joined walls follow moved end points. `room_update`: "" removes colors/textures.
   `dimension_update`.
@@ -285,10 +286,12 @@ Based on user feedback; Sweet Home 3D's interaction is the baseline, with additi
   Home 3D's magnetism; Alt disables it.
 - `wall_add_path` joins an open path to a free wall end at its first or last point (mitered
   corner instead of two overlapping walls).
-- Joining and separating walls: `wall_join` (two walls; their axes are extended or shortened to
+- Joining and separating walls: `wall_join` (two or more walls; their axes are extended or shortened to
   the intersection: mitered corner near both ends, T junction if the intersection lies inside
   one wall, end-to-end for collinear walls), `wall_detach`, `wall_split` (at a point or the
-  middle). UI: "Join walls" (or J) for two selected walls, "Detach", "Split". Moving a free wall
+  middle). With more than two walls, each one not yet joined to another of them is joined to the
+  nearest one without breaking the joins between them. UI: "Join walls" (or J) for two or more
+  selected walls, "Detach", "Split". Moving a free wall
   end onto a free end of another wall (`wall_update`, handles) joins them.
 - Placing a wall against an existing one: near a wall, the wall tool shows its snap points (ends
   and middle as circles, "flush" points as crosses) and names the point the cursor snaps to.
@@ -1184,8 +1187,8 @@ the process tree (the app and its WebView2 processes; Sweet Home 3D 7.6.1 is one
   compass section of the home properties; both read the compass, so each shows changes made
   in the other at once.
 - North from a map: `location_map` downloads the OpenStreetMap tiles around the location
-  (zoom 19, 3 × 3 tiles, same user agent as the address search, one download per opening of
-  the dialog) and joins them into one PNG in msh-core, so the WebView's CSP stays as it is.
+  (zoom 15 to 19, 3 × 3 tiles, same user agent as the address search, one download per
+  opening, zoom step or move of the map beyond the downloaded part) and joins them into one PNG in msh-core, so the WebView's CSP stays as it is.
   The dialog draws the wall outlines over it (`panels/northMap.ts`) at the map's scale; the
   angle that puts the walls onto the building becomes the compass's north direction. The map
   shows the required attribution.
