@@ -1829,6 +1829,7 @@ body.resizing-horizontal {
 }
 
 .north-map-stage {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1838,8 +1839,24 @@ body.resizing-horizontal {
 .north-map-stage canvas {
   width: min(700px, calc(100vh - 260px));
   aspect-ratio: 1;
-  cursor: move;
   touch-action: none;
+}
+
+.north-map-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.north-map-zoom .icon-button {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
 }
 
 .north-map .dialog-actions {

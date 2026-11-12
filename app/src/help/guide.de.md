@@ -88,7 +88,7 @@ Alles Importierte liegt in den Bibliotheksordnern von Sweet Home 3D, so nutzen e
 - **Luftbild**: Ziehen dreht um das Haus, Ziehen mit der rechten Maustaste verschiebt, das Mausrad zoomt. Ein Doppelklick auf eine Fläche dreht künftig um diesen Punkt.
 - **Rundgang**: Ziehen schaut umher, **W A S D** oder die Pfeiltasten gehen, **Q / E** runter und rauf, **Umschalt** schneller. Wände halten dich auf, offene Türen lassen dich durch. Der Besucher erscheint im Plan und lässt sich dort verschieben.
 - **Blickpunkte** speichert Kamerapositionen und ruft sie wieder auf.
-- **3D-Einstellungen** legen Boden und Himmel, Licht und Wandtransparenz, den Standort (Suche nach Adresse) sowie Datum und Uhrzeit der Sonne fest. Den Standort kannst du auch in den Eigenschaften des Hauses festlegen. **Norden an der Karte ausrichten** zeigt die Wände über einer Karte des Standorts: Drehe sie, bis sie auf das Gebäude passen, dann zeigt der Kompass nach Norden.
+- **3D-Einstellungen** legen Boden und Himmel, Licht und Wandtransparenz, den Standort (Suche nach Adresse) sowie Datum und Uhrzeit der Sonne fest. Den Standort kannst du auch in den Eigenschaften des Hauses festlegen. **Norden an der Karte ausrichten** zeigt die Wände über einer Karte des Standorts: Drehe sie mit dem Mausrad, bis sie auf das Gebäude passen, dann zeigt der Kompass nach Norden. Ziehen an den Wänden verschiebt sie, Ziehen daneben verschiebt die Karte; **Strg+Mausrad** oder die Knöpfe zoomen.
 - Lampen beleuchten den Rundgang; Wände halten das Licht der Lampen in deiner Nähe auf.
 
 # Fotos und Videos

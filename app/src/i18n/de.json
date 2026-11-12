@@ -878,7 +878,6 @@
   "Set the location first.": "Lege zuerst den Standort fest.",
   "Align north with the map…": "Norden an der Karte ausrichten…",
   "Align north with the map": "Norden an der Karte ausrichten",
-  "Turn the walls with the mouse wheel (Shift: finer) or the field until they match the building on the map; drag them to compare.": "Drehe die Wände mit dem Mausrad (Umschalt: feiner) oder dem Feld, bis sie auf das Gebäude in der Karte passen; zum Vergleichen kannst du sie verschieben.",
   "Loading the map…": "Karte wird geladen…",
   "There is nothing to undo.": "Es gibt nichts rückgängig zu machen.",
   "There is nothing to redo.": "Es gibt nichts zu wiederholen.",
@@ -941,5 +940,7 @@
   "All": "Alle",
   "Show only": "Nur zeigen",
   "Remove {kind} from the selection": "{kind} aus der Auswahl nehmen",
-  "Select only {kind}": "Nur {kind} auswählen"
+  "Select only {kind}": "Nur {kind} auswählen",
+  "Turn the walls with the mouse wheel (Shift: finer) or the field until they match the building on the map. Drag the walls to move them, drag beside them to move the map; Ctrl+wheel or the buttons zoom.": "Drehe die Wände mit dem Mausrad (Umschalt: feiner) oder mit dem Feld, bis sie auf das Gebäude der Karte passen. Ziehen an den Wänden verschiebt sie, Ziehen daneben verschiebt die Karte; Strg+Mausrad oder die Knöpfe zoomen.",
+  "Show the walls in the middle": "Wände in die Mitte holen"
 }

@@ -126,8 +126,8 @@ pub(super) fn register(r: &mut Registry) {
         "location_map",
         "Downloads a map (OpenStreetMap, north up) around the location of the home or the \
          given position, e.g. to turn the plan so its north direction matches the map. \
-         Returns a PNG as data URL, its size in pixels, the pixel of the position and the \
-         meters per pixel.",
+         Returns a PNG as data URL, its size in pixels, the position (latitude, longitude) \
+         and its pixel, the zoom and the meters per pixel.",
         false,
         |doc, p: MapParams| {
             let (lat, lon) = match (p.latitude, p.longitude) {
@@ -618,6 +618,8 @@ fn map(lat: f64, lon: f64, zoom: u32) -> Result<Value, CommandError> {
         "y": r2(py - origin(ty)),
         "meters_per_pixel": meters_per_pixel,
         "zoom": zoom,
+        "latitude": lat,
+        "longitude": lon,
         "attribution": "© OpenStreetMap contributors",
     }))
 }
