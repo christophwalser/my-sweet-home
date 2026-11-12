@@ -19,6 +19,7 @@ import { clearRecentHomes, recentHomes, recentLabel, removeRecentHome } from "..
 import { type Tool, useStore, VISITOR_ID } from "../store";
 import type { IconName } from "./Icon";
 import { planActions } from "./planBridge";
+import { type ToolKeyState, toolForDigit, toolShortcut } from "./toolKeys";
 import { type DialogName, isDark, useUi } from "./uiStore";
 
 export type Command = {
@@ -283,7 +284,7 @@ const toolCommand = (
   label,
   icon,
   hint,
-  shortcut,
+  shortcut: shortcut ?? toolShortcut(`tool.${tool}`),
   enabled: hasHome,
   checked: () => store().tool === tool,
   run: () => chooseTool(tool),
@@ -455,7 +456,6 @@ const LIST: Command[] = [
     t("Straight walls"),
     "wall",
     t("Click to add points, double-click to finish"),
-    "1",
   ),
   toolCommand("arcwall", t("Round walls"), "arcwall", t("Walls drawn as quarter circle arcs")),
   toolCommand(
@@ -463,7 +463,6 @@ const LIST: Command[] = [
     t("Room by corners"),
     "room",
     t("Click the corners, double-click to finish"),
-    "2",
   ),
   toolCommand(
     "roomauto",
@@ -476,22 +475,20 @@ const LIST: Command[] = [
     t("Lines"),
     "polyline",
     t("Click to add points, double-click to finish"),
-    "3",
   ),
-  toolCommand("dimension", t("Dimension"), "dimension", t("Click start and end point"), "4"),
+  toolCommand("dimension", t("Dimension"), "dimension", t("Click start and end point")),
   toolCommand(
     "heightdim",
     t("Height dimension"),
     "heightdim",
     t("Click where the height of the level is measured"),
   ),
-  toolCommand("label", t("Text"), "text", t("Click to place a text"), "5"),
+  toolCommand("label", t("Text"), "text", t("Click to place a text")),
   toolCommand(
     "measure",
     t("Measure"),
     "measure",
     t("Measure a distance without adding anything"),
-    "6",
   ),
   toolCommand(
     "ruler",
@@ -1165,6 +1162,9 @@ export function eventShortcut(e: KeyboardEvent): string {
   return [...mods.filter(Boolean), key].join("+");
 }
 
+/** Digit typed last, for choosing an entry of a tool group with a second digit. */
+let toolKeys: ToolKeyState = null;
+
 /** Further shortcuts of commands: typed shortcut → shortcut shown in the menus. */
 const SHORTCUT_ALIASES: Record<string, string> = { "Ctrl+Shift+Z": "Ctrl+Y" };
 
@@ -1182,7 +1182,17 @@ export function handleGlobalShortcut(e: KeyboardEvent): void {
   if (typing && !/^F\d+$/.test(shortcut) && shortcut !== "Ctrl+K") return;
   // Digits choose plan tools, except while a drawing takes a typed length
   const digit = /^\d$/.test(shortcut);
-  if (digit && (planActions()?.isDrawing() ?? true)) return;
+  if (digit) {
+    if (planActions()?.isDrawing() ?? true) return;
+    const chosen = toolForDigit(toolKeys, shortcut, performance.now());
+    toolKeys = chosen.state;
+    const c = chosen.command ? COMMANDS.get(chosen.command) : undefined;
+    if (c) {
+      e.preventDefault();
+      runCommand(c);
+    }
+    return;
+  }
   // Plain letters and Del belong to the plan view (rotate, join, delete, ...)
   if (!digit && !shortcut.includes("Ctrl+") && !/^F\d+$/.test(shortcut)) return;
   for (const c of COMMANDS.values()) {

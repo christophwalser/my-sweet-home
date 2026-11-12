@@ -13,7 +13,7 @@ Jede Änderung lässt sich mit **Strg+Z** rückgängig machen und mit **Strg+Y**
 
 # Plan zeichnen
 
-Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in den Plan. Die Tasten **1** bis **6** wählen Wände, Räume, Linien, Bemaßung, Text und das Messwerkzeug, in der Reihenfolge der Werkzeugleiste.
+Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in den Plan. Die Tasten **1** bis **6** wählen Wände, Räume, Linien, Bemaßung, Text und das Messwerkzeug, in der Reihenfolge der Werkzeugleiste. Eine zweite Ziffer direkt danach wählt diesen Eintrag aus dem Menü des Knopfs: **2** und dann **2** wählt **Raum aus Wänden**, **6** und dann **2** das Lineal.
 
 ## Wände
 

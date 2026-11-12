@@ -13,7 +13,7 @@ Every change can be undone with **Ctrl+Z** and redone with **Ctrl+Y**. **Ctrl+K*
 
 # Drawing the plan
 
-Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. The keys **1** to **6** choose walls, rooms, lines, dimensions, texts and the measure tool, in the order of the tool bar.
+Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. The keys **1** to **6** choose walls, rooms, lines, dimensions, texts and the measure tool, in the order of the tool bar. A second digit right after it chooses that entry of the button's drop-down: **2** then **2** chooses **Room from walls**, **6** then **2** the ruler.
 
 ## Walls
 
