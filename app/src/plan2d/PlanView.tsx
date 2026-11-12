@@ -17,7 +17,12 @@
 // from the CLI or MCP.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api";
+import {
+  CATALOG_DRAG_TYPE,
+  type CatalogDragData,
+  currentCatalogDrag,
+  docResourceUrl,
+} from "../api";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
 import {
@@ -43,6 +48,7 @@ import {
   planBounds,
   type ViewTransform,
 } from "./drawPlan";
+import { type DropPreview, dropPreview } from "./dropPreview";
 import { drawGuides, guideAt, guidesInRect, levelGuides, movedGuides } from "./guides";
 import {
   dragHandle,
@@ -297,6 +303,8 @@ export default function PlanView() {
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   /** Text typed in the plan */
   const [textEdit, setTextEdit] = useState<TextEdit | null>(null);
+  /** Catalog piece dragged over the plan */
+  const drop = useRef<{ preview: DropPreview; icon: HTMLImageElement | null } | null>(null);
   const dark = useDarkMode();
   const colors = dark ? DARK : LIGHT;
   const rulerColors = dark ? DARK_RULER : LIGHT_RULER;
@@ -586,6 +594,7 @@ export default function PlanView() {
           ? visitorHandlePos(v, pxToCm(1))
           : null;
       })(),
+      dropPreview: drop.current,
       accent,
       guide: guideColor,
       measureColor,
@@ -1909,10 +1918,28 @@ export default function PlanView() {
     if (e.dataTransfer.types.includes(CATALOG_DRAG_TYPE) && input) {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
+      // The piece at its size where it will land
+      const drag = currentCatalogDrag();
+      if (drag) {
+        const p = toWorld(e.clientX, e.clientY);
+        drop.current = {
+          preview: dropPreview(input.home, effectiveLevel, drag.data, p, pxToCm(40)),
+          icon: drag.icon,
+        };
+        draw();
+      }
     }
   };
 
+  const onDragLeave = () => {
+    if (!drop.current) return;
+    drop.current = null;
+    draw();
+  };
+
   const onDrop = async (e: React.DragEvent) => {
+    drop.current = null;
+    draw();
     const raw = e.dataTransfer.getData(CATALOG_DRAG_TYPE);
     if (!raw || !input) return;
     e.preventDefault();
@@ -1973,6 +2000,7 @@ export default function PlanView() {
           onDoubleClick={onDoubleClick}
           onContextMenu={(e) => e.preventDefault()}
           onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
           onDrop={(e) => void onDrop(e)}
         />
         {opened && hint && <div className="plan-hint">{hint}</div>}
