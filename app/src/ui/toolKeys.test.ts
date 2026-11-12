@@ -11,21 +11,22 @@ describe("tool keys", () => {
     expect(toolForDigit(null, "9", 0)).toEqual({ command: null, state: null });
   });
 
-  it("chooses an entry of the group with a second digit typed right after", () => {
+  it("chooses a further variant of the group with a second digit typed right after", () => {
     const first = toolForDigit(null, "2", 1000);
-    expect(toolForDigit(first.state, "2", 1500)).toEqual({
+    expect(toolForDigit(first.state, "1", 1500)).toEqual({
       command: "tool.roomauto",
       state: null,
     });
-    expect(toolForDigit(first.state, "1", 1500).command).toBe("tool.room");
-    // Too late, or no such entry: the digit chooses its own group
-    expect(toolForDigit(first.state, "2", 1000 + SECOND_KEY_MS + 1).command).toBe("tool.room");
+    // Too late, or no such variant: the digit chooses its own group
+    expect(toolForDigit(first.state, "1", 1000 + SECOND_KEY_MS + 1).command).toBe("tool.wall");
+    expect(toolForDigit(first.state, "2", 1500).command).toBe("tool.room");
     expect(toolForDigit(first.state, "4", 1500).command).toBe("tool.dimension");
+    expect(toolForDigit(first.state, "0", 1500).command).toBeNull();
   });
 
   it("names the shortcuts of the tools", () => {
     expect(toolShortcut("tool.wall")).toBe("1");
-    expect(toolShortcut("tool.ruler")).toBe("6, 2");
+    expect(toolShortcut("tool.ruler")).toBe("6, 1");
     expect(toolShortcut("tool.select")).toBeUndefined();
   });
 });

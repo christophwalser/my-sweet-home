@@ -1,6 +1,6 @@
 // Digit keys of the plan tools. A digit chooses the first tool of its group in the tool bar; a
-// second digit typed right after it chooses that entry of the group's drop-down, e.g. 2 then 2
-// for "Room from walls".
+// second digit typed right after it chooses a further variant of the group, counted from 1,
+// e.g. 2 then 1 for "Room from walls".
 
 /** Tool command IDs per digit, in the order of the drop-down of their tool bar button. */
 export const TOOL_GROUPS: Record<string, string[]> = {
@@ -18,12 +18,12 @@ export const SECOND_KEY_MS = 1000;
 /** Digit typed last and when, while a second digit may still follow it. */
 export type ToolKeyState = { group: string; at: number } | null;
 
-/** Shortcut of a tool command as shown in the menus ("2" or "2, 2"), if it has one. */
+/** Shortcut of a tool command as shown in the menus ("2" or "2, 1"), if it has one. */
 export function toolShortcut(id: string): string | undefined {
   for (const [digit, ids] of Object.entries(TOOL_GROUPS)) {
     const i = ids.indexOf(id);
     if (i === 0) return digit;
-    if (i > 0) return `${digit}, ${i + 1}`;
+    if (i > 0) return `${digit}, ${i}`;
   }
   return undefined;
 }
@@ -38,7 +38,8 @@ export function toolForDigit(
   now: number,
 ): { command: string | null; state: ToolKeyState } {
   if (state && now - state.at <= SECOND_KEY_MS) {
-    const entry = TOOL_GROUPS[state.group]?.[Number(digit) - 1];
+    const n = Number(digit);
+    const entry = n > 0 ? TOOL_GROUPS[state.group]?.[n] : undefined;
     if (entry) return { command: entry, state: null };
   }
   const group = TOOL_GROUPS[digit];
