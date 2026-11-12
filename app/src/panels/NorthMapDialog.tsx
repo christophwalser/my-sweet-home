@@ -292,6 +292,8 @@ export default function NorthMapDialog({ onClose }: { onClose: () => void }) {
                 setView({ ...d.view, east: d.view.east - dx, south: d.view.south - dy });
               }
             }}
+            // No browser menu ("Save image as…") after dragging with the right button
+            onContextMenu={(e) => e.preventDefault()}
             onPointerUp={() => {
               const d = drag.current;
               drag.current = null;

@@ -187,9 +187,8 @@ export function drawGuides(
     }
     ctx.stroke();
   }
-  // Length and direction of the selected guides and of the one being drawn (without ID)
+  // Length and direction of every guide, also of the one being drawn
   for (const g of guides) {
-    if (g.id && !selection.includes(g.id)) continue;
     drawMeasureTag(ctx, [g.x_start, g.y_start], [g.x_end, g.y_end], px);
   }
   ctx.restore();
