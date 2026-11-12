@@ -194,6 +194,20 @@ input[type="search"]:focus {
   flex: 1;
 }
 
+.error-bar .error-close {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.error-bar .error-close:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.15));
+  border-radius: 4px;
+}
+
 .catalog {
   grid-area: catalog;
 }

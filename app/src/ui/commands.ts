@@ -5,6 +5,7 @@
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { ask, message, open } from "@tauri-apps/plugin-dialog";
 import { api } from "../api";
+import { errorText } from "../errorText";
 import { t } from "../i18n";
 import {
   closeView3DWindow,
@@ -458,24 +459,14 @@ const LIST: Command[] = [
     t("Click to add points, double-click to finish"),
   ),
   toolCommand("arcwall", t("Round walls"), "arcwall", t("Walls drawn as quarter circle arcs")),
-  toolCommand(
-    "room",
-    t("Room by corners"),
-    "room",
-    t("Click the corners, double-click to finish"),
-  ),
+  toolCommand("room", t("Room by corners"), "room", t("Click the corners, double-click to finish")),
   toolCommand(
     "roomauto",
     t("Room from walls"),
     "roomauto",
     t("Click inside walls to create the room of that area"),
   ),
-  toolCommand(
-    "polyline",
-    t("Lines"),
-    "polyline",
-    t("Click to add points, double-click to finish"),
-  ),
+  toolCommand("polyline", t("Lines"), "polyline", t("Click to add points, double-click to finish")),
   toolCommand("dimension", t("Dimension"), "dimension", t("Click start and end point")),
   toolCommand(
     "heightdim",
@@ -484,12 +475,7 @@ const LIST: Command[] = [
     t("Click where the height of the level is measured"),
   ),
   toolCommand("label", t("Text"), "text", t("Click to place a text")),
-  toolCommand(
-    "measure",
-    t("Measure"),
-    "measure",
-    t("Measure a distance without adding anything"),
-  ),
+  toolCommand("measure", t("Measure"), "measure", t("Measure a distance without adding anything")),
   toolCommand(
     "ruler",
     t("Ruler"),
@@ -923,7 +909,7 @@ export function runCommand(c: Command): void {
   if (!isEnabled(c)) return;
   Promise.resolve()
     .then(() => c.run())
-    .catch((e) => useStore.setState({ error: String(e) }));
+    .catch((e) => useStore.setState({ error: errorText(e) }));
 }
 
 // ---------------------------------------------------------------- menus

@@ -5,6 +5,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
+import { errorText } from "./errorText";
 import { language } from "./i18n";
 import { forEachGroup, forEachPiece, type OpenedHome } from "./model";
 import { homeGuides } from "./plan2d/guides";
@@ -115,7 +116,7 @@ export const useStore = create<State>((set, get) => ({
       // The backend also emits HOME_CHANGED_EVENT; applying the result here avoids waiting for it
       applyHome(await api.openHome(path));
     } catch (e) {
-      set({ error: String(e) });
+      set({ error: errorText(e) });
     } finally {
       set({ loading: false });
     }
@@ -125,7 +126,7 @@ export const useStore = create<State>((set, get) => ({
     try {
       return await api.execute(command, params);
     } catch (e) {
-      set({ error: String(e) });
+      set({ error: errorText(e) });
       return undefined;
     }
   },
@@ -173,7 +174,7 @@ export const useStore = create<State>((set, get) => ({
         },
       });
     } catch (e) {
-      set({ error: String(e) });
+      set({ error: errorText(e) });
     } finally {
       set({ catalogLoading: false });
     }
@@ -218,7 +219,7 @@ export async function syncCameras(): Promise<void> {
       });
     }
   } catch (e) {
-    useStore.setState({ error: String(e) });
+    useStore.setState({ error: errorText(e) });
   }
 }
 
