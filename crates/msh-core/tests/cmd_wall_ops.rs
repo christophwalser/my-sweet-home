@@ -375,6 +375,60 @@ fn detach_with_an_unknown_wall_changes_nothing() {
     );
 }
 
+#[test]
+fn join_merges_the_parts_of_a_split_wall() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let w = path(&r, &mut doc, json!([[0, 0], [400, 0], [400, 300]]));
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "ids": [w[0]], "height": 300, "height_at_end": 200 }),
+    );
+    let parts = ids(
+        &run(
+            &r,
+            &mut doc,
+            "wall_split",
+            json!({ "id": w[0], "at": [100, 0] }),
+        ),
+        "ids",
+    );
+    let before = snapshot(&doc);
+    // Selected in reverse order: the second part stays and reaches the start of the first
+    let res = run(
+        &r,
+        &mut doc,
+        "wall_join",
+        json!({ "ids": [parts[1], parts[0]] }),
+    );
+    assert_eq!(res["joined"], "merged");
+    assert_eq!(res["removed"], json!(parts[0]));
+    assert_eq!(doc.home().walls.len(), 2);
+    let m = wall(&doc, &parts[1]);
+    assert_eq!(
+        (m.x_start, m.y_start, m.x_end, m.y_end),
+        (0.0, 0.0, 400.0, 0.0)
+    );
+    assert_eq!((m.height, m.height_at_end), (Some(300.0), Some(200.0)));
+    assert_eq!(m.wall_at_start, None);
+    assert_eq!(m.wall_at_end.as_deref(), Some(w[1].as_str()));
+    assert_eq!(
+        wall(&doc, &w[1]).wall_at_start.as_deref(),
+        Some(parts[1].as_str())
+    );
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+
+    // Collinear walls with a gap or of different thickness are joined, not merged
+    let a = add_wall(&r, &mut doc, [0.0, 500.0], [100.0, 500.0]);
+    let b = add_wall(&r, &mut doc, [150.0, 500.0], [300.0, 500.0]);
+    let res = run(&r, &mut doc, "wall_join", json!({ "ids": [a, b] }));
+    assert_eq!(res["joined"], "corner");
+    assert_eq!(doc.home().walls.len(), 4);
+}
+
 // ---------------------------------------------------------------- wall_split
 
 #[test]

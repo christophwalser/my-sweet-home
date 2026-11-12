@@ -259,6 +259,90 @@ fn apply_join(home: &mut Home, ia: usize, ib: usize, join: &Join) -> serde_json:
     }
 }
 
+/// Height of wall `a` at its start or end.
+fn height_at(a: &WallAttrs, at_start: bool) -> Option<f32> {
+    if at_start {
+        a.height
+    } else {
+        a.height_at_end.or(a.height)
+    }
+}
+
+/// Merges two straight, collinear walls of the same thickness whose ends meet (e.g. the parts
+/// of a split wall) into wall `ia`, which then reaches the far end of wall `ib` and takes over
+/// its join there; wall `ib` is removed. Returns `None` (nothing changed) for other walls.
+fn merge_collinear(home: &mut Home, ia: usize, ib: usize) -> Option<serde_json::Value> {
+    let (a, b) = (home.walls[ia].attrs.clone(), home.walls[ib].attrs.clone());
+    if ia == ib || !is_straight(&a) || !is_straight(&b) || a.level != b.level {
+        return None;
+    }
+    if (a.thickness - b.thickness).abs() > 0.01 {
+        return None;
+    }
+    let da = [a.x_end - a.x_start, a.y_end - a.y_start];
+    let db = [b.x_end - b.x_start, b.y_end - b.y_start];
+    let (la, lb) = (da[0].hypot(da[1]), db[0].hypot(db[1]));
+    if la < 1e-3 || lb < 1e-3 || (da[0] * db[1] - da[1] * db[0]).abs() > 1e-4 * la * lb {
+        return None;
+    }
+    // The meeting ends (start or end of each wall)
+    let (a_start, b_start) = [(true, true), (true, false), (false, true), (false, false)]
+        .into_iter()
+        .min_by(|x, y| {
+            let d = |(sa, sb): (bool, bool)| {
+                let pa = if sa { start(&a) } else { end(&a) };
+                let pb = if sb { start(&b) } else { end(&b) };
+                dist(pa, pb)
+            };
+            d(*x).total_cmp(&d(*y))
+        })?;
+    let pa = if a_start { start(&a) } else { end(&a) };
+    let pb = if b_start { start(&b) } else { end(&b) };
+    // The walls must continue each other, not overlap
+    let far_b = if b_start { end(&b) } else { start(&b) };
+    let far_a = if a_start { end(&a) } else { start(&a) };
+    if dist(pa, pb) > 1.0 || dist(far_a, far_b) < la.max(lb) {
+        return None;
+    }
+    let (a_id, b_id) = (a.id.clone(), b.id.clone());
+    let far_join = joined_at(&b, !b_start)
+        .filter(|j| *j != a_id)
+        .map(str::to_string);
+    let far_height = height_at(&b, !b_start);
+    {
+        let w = &mut home.walls[ia].attrs;
+        set_end(w, a_start, far_b);
+        if a_start {
+            w.wall_at_start = far_join;
+        } else {
+            w.wall_at_end = far_join;
+        }
+        // Sloping walls keep the heights of both far ends
+        let (h0, h1) = if a_start {
+            (far_height, height_at(&a, false))
+        } else {
+            (height_at(&a, true), far_height)
+        };
+        if h0 != h1 || a.height_at_end.is_some() {
+            (w.height, w.height_at_end) = (h0, h1);
+        }
+    }
+    // Walls joined to the removed wall are joined to the merged one
+    for w in &mut home.walls {
+        if w.attrs.id == a_id {
+            continue;
+        }
+        if w.attrs.wall_at_start.as_deref() == Some(b_id.as_str()) {
+            w.attrs.wall_at_start = Some(a_id.clone());
+        }
+        if w.attrs.wall_at_end.as_deref() == Some(b_id.as_str()) {
+            w.attrs.wall_at_end = Some(a_id.clone());
+        }
+    }
+    home.walls.remove(ib);
+    Some(json!({ "joined": "merged", "id": a_id, "removed": b_id }))
+}
+
 /// The wall joined at one end of `a` (start or end).
 fn joined_at(a: &WallAttrs, at_start: bool) -> Option<&str> {
     if at_start {
@@ -423,7 +507,9 @@ pub(super) fn register(r: &mut Registry) {
         "wall_join",
         "Connects two walls. Their axes are extended or shortened to their intersection: if it \
          is near an end of both walls, they get a mitered corner; if it lies inside one wall, \
-         the other one ends on its axis (T junction). Collinear walls are joined end to end. \
+         the other one ends on its axis (T junction). Two collinear walls of the same \
+         thickness whose ends meet (e.g. the parts of a split wall) become one wall, the first \
+         one; other collinear walls are joined end to end. \
          With more than two walls, each one not yet joined to another of them is joined to the \
          nearest one, keeping the joins between them (e.g. a third wall added to two joined \
          walls).",
@@ -439,6 +525,9 @@ pub(super) fn register(r: &mut Registry) {
                 ));
             };
             let (ia, ib) = (index_of(home, a_id)?, index_of(home, b_id)?);
+            if let Some(merged) = merge_collinear(home, ia, ib) {
+                return Ok(merged);
+            }
             let join = plan_join(home, ia, ib)?;
             Ok(apply_join(home, ia, ib, &join))
         },

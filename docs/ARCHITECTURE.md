@@ -288,7 +288,8 @@ Based on user feedback; Sweet Home 3D's interaction is the baseline, with additi
   corner instead of two overlapping walls).
 - Joining and separating walls: `wall_join` (two or more walls; their axes are extended or shortened to
   the intersection: mitered corner near both ends, T junction if the intersection lies inside
-  one wall, end-to-end for collinear walls), `wall_detach`, `wall_split` (at a point or the
+  one wall, end-to-end for collinear walls; two collinear walls of the same thickness whose ends
+  meet, e.g. the parts of a split wall, become one wall again), `wall_detach`, `wall_split` (at a point or the
   middle). With more than two walls, each one not yet joined to another of them is joined to the
   nearest one without breaking the joins between them. UI: "Join walls" (or J) for two or more
   selected walls, "Detach", "Split". Moving a free wall
