@@ -424,6 +424,39 @@ input[type="search"]:focus {
   gap: 6px;
 }
 
+.texture-picker-bar .search-box {
+  position: relative;
+  display: flex;
+  flex: 1 1 100%;
+}
+
+.search-box .search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  padding: 2px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.search-box .search-clear:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.texture-heading {
+  margin: 6px 0 2px;
+}
+
+.texture-picker-bar .search-box input {
+  padding-right: 22px;
+}
+
 .texture-picker-bar input {
   flex: 1 1 100%;
   min-width: 0;
