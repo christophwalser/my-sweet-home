@@ -497,9 +497,9 @@ export default function PlanView() {
         );
       default:
         if (hoverHandle.current) return HANDLE_HINT[hoverHandle.current.kind];
-        if (selectedWallCount() === 2)
+        if (selectedWallCount() >= 2)
           return t(
-            "J or Join walls: connect both walls at the intersection of their axes · Shift+click: change the selection",
+            "J or Join walls: connect the walls at the intersections of their axes · Shift+click: change the selection",
           );
         return useStore.getState().selection.length > 0
           ? t(
@@ -1583,7 +1583,7 @@ export default function PlanView() {
             }).then(selectNew),
         });
       }
-      if (walls.length === 2) {
+      if (walls.length >= 2) {
         items.push({
           label: t("Join walls"),
           shortcut: "J",
@@ -1898,9 +1898,9 @@ export default function PlanView() {
           }
         });
       } else if ((e.key === "j" || e.key === "J") && state.opened) {
-        // Join the two selected walls
+        // Join the selected walls
         const walls = state.opened.home.walls.filter((w) => sel.includes(w.attrs.id));
-        if (walls.length !== 2) return;
+        if (walls.length < 2) return;
         void run("wall_join", { ids: walls.map((w) => w.attrs.id) });
       } else if (e.key.startsWith("Arrow") && sel.length > 0) {
         const d = e.shiftKey ? 10 : 1;

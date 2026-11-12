@@ -32,6 +32,11 @@ const RULES: Rule[] = [
     () => t("The walls are on different levels. Select walls of one level."),
   ],
   [/^wall_join needs/, () => t("Select the walls to join.")],
+  [/^the selected walls are joined already$/, () => t("The selected walls are joined already.")],
+  [
+    /^the walls cross each other/,
+    () => t("The walls cross each other. Split one of them at the crossing first."),
+  ],
   [
     /^this end of the wall is not joined$/,
     () => t("This end of the wall is not joined to another wall."),

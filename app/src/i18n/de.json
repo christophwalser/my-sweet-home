@@ -337,7 +337,6 @@
   "Inch / foot": "Zoll / Fuß",
   "Invert magnetism": "Magnetismus umkehren",
   "Italic": "Kursiv",
-  "J or Join walls: connect both walls at the intersection of their axes · Shift+click: change the selection": "J oder „Wände verbinden“: beide Wände am Schnittpunkt ihrer Achsen verbinden · Umschalt+Klick: Auswahl ändern",
   "Join walls": "Wände verbinden",
   "Join walls connects both walls at the intersection of their axes (corner or T junction).": "„Wände verbinden“ verbindet beide Wände am Schnittpunkt ihrer Achsen (Ecke oder T-Stoss).",
   "JPEG, PNG, BMP, GIF, WebP, TIFF or SVG images, or a PBR material package (ZIP, its color map is used). The texture is added to your library \"My textures\", which Sweet Home 3D uses too. Files can also be dropped onto the catalog.": "JPEG-, PNG-, BMP-, GIF-, WebP-, TIFF- oder SVG-Bilder oder ein PBR-Materialpaket (ZIP, seine Farb-Map wird verwendet). Die Textur wird zu deiner Bibliothek „My textures“ hinzugefügt, die auch Sweet Home 3D nutzt. Dateien lassen sich auch auf den Katalog ziehen.",
@@ -932,5 +931,8 @@
   "All textures": "Alle Texturen",
   "Remove dimensions of the wall": "Maße der Wand entfernen",
   "Remove dimensions of the piece": "Maße des Möbels entfernen",
-  "Remove height dimension": "Höhenmaß entfernen"
+  "Remove height dimension": "Höhenmaß entfernen",
+  "The selected walls are joined already.": "Die gewählten Wände sind schon verbunden.",
+  "The walls cross each other. Split one of them at the crossing first.": "Die Wände kreuzen sich. Teile zuerst eine davon an der Kreuzung.",
+  "J or Join walls: connect the walls at the intersections of their axes · Shift+click: change the selection": "J oder Wände verbinden: verbindet die Wände an den Schnittpunkten ihrer Achsen · Umschalt+Klick: Auswahl ändern"
 }

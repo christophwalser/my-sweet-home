@@ -201,6 +201,36 @@ fn join_makes_a_t_junction_when_the_point_lies_inside_a_wall() {
 }
 
 #[test]
+fn join_adds_a_third_wall_to_two_joined_walls() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    // a and b form a corner at (300, 0); c starts near the free end of b
+    let w = path(&r, &mut doc, json!([[0, 0], [300, 0], [300, 200]]));
+    let (a, b) = (w[0].clone(), w[1].clone());
+    let c = add_wall(&r, &mut doc, [310.0, 210.0], [500.0, 210.0]);
+    let before = snapshot(&doc);
+    let res = run(&r, &mut doc, "wall_join", json!({ "ids": [a, b, c] }));
+    assert_eq!(res["joined"].as_array().map(Vec::len), Some(1), "{res}");
+    let (wa, wb, wc) = (wall(&doc, &a), wall(&doc, &b), wall(&doc, &c));
+    assert_eq!(
+        wa.wall_at_end.as_deref(),
+        Some(b.as_str()),
+        "the corner a-b stays"
+    );
+    assert_eq!(wb.wall_at_start.as_deref(), Some(a.as_str()));
+    assert_eq!(wb.wall_at_end.as_deref(), Some(c.as_str()));
+    assert_eq!(wc.wall_at_start.as_deref(), Some(b.as_str()));
+    assert_eq!((wb.x_end, wb.y_end), (300.0, 210.0));
+    assert_eq!((wc.x_start, wc.y_start), (300.0, 210.0));
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+
+    // Nothing left to join
+    let err = run_err(&r, &mut doc, "wall_join", json!({ "ids": [a, b, c] }));
+    assert!(err.contains("joined already"), "{err}");
+}
+
+#[test]
 fn join_connects_collinear_walls_in_the_middle_of_the_gap() {
     let r = Registry::standard();
     let mut doc = new_doc(&r);
@@ -259,8 +289,7 @@ fn join_rejects_invalid_pairs() {
         .unwrap()
         .to_owned();
     let cases = [
-        (json!([a]), "exactly two"),
-        (json!([a, parallel, crossing]), "exactly two"),
+        (json!([a]), "at least two"),
         (json!([a, a]), "itself"),
         (json!([a, "wall-nope"]), "unknown wall"),
         (json!([a, parallel]), "parallel"),

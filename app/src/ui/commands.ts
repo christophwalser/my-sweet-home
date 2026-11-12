@@ -498,7 +498,7 @@ const LIST: Command[] = [
     icon: "joinwalls",
     shortcut: "J",
     shortcutElsewhere: true,
-    enabled: () => selectedWalls().length === 2,
+    enabled: () => selectedWalls().length >= 2,
     run: () => void run("wall_join", { ids: selectedWalls() }),
   },
   {
