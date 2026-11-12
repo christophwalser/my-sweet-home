@@ -925,5 +925,6 @@
   "The file is damaged or not a Sweet Home 3D file.": "Il file è danneggiato o non è un file di Sweet Home 3D.",
   "The file could not be read or written. Check that it exists and is not open elsewhere. ({reason})": "Non è stato possibile leggere o scrivere il file. Controlla che esista e che non sia aperto altrove. ({reason})",
   "The action failed: {reason}": "L'azione non è riuscita: {reason}",
-  "Click where the text goes and type it · Enter: finish · Shift+Enter: new line · Esc: cancel": "Fai clic dove va il testo e digitalo · Invio: termina · Maiusc+Invio: nuova riga · Esc: annulla"
+  "Click where the text goes and type it · Enter: finish · Shift+Enter: new line · Esc: cancel": "Fai clic dove va il testo e digitalo · Invio: termina · Maiusc+Invio: nuova riga · Esc: annulla",
+  "The model of this piece may only be resized proportionally": "Il modello di questo mobile può essere ridimensionato solo in proporzione"
 }

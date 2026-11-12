@@ -369,6 +369,15 @@ describe("dragHandle on furniture and the compass", () => {
     expect(d?.params).toMatchObject({ width: 120, depth: 60, height: 96 });
   });
 
+  it("keeps the proportions of any piece when asked to", () => {
+    const home = makeHome({ furniture: [piece] });
+    const h = handleOf(home, "p", "piece-resize");
+    const offset: Pt = [h.pos[0] - 50, h.pos[1] - 25];
+    const p: Pt = [70 + offset[0], 25 + offset[1]];
+    const d = dragHandle(home, [], null, h, p, 10, true, false, true);
+    expect(d?.params).toMatchObject({ width: 120, depth: 60, height: 96 });
+  });
+
   it("changes the height by the vertical drag distance", () => {
     const home = makeHome({ furniture: [piece] });
     const h = handleOf(home, "p", "piece-height");

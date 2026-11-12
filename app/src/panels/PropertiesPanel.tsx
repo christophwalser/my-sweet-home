@@ -10,6 +10,7 @@ import { guideAngle, guideEnd, guideLength, homeGuides } from "../plan2d/guides"
 import { usePreferences } from "../preferences";
 import { formatMoney, piecePrice } from "../prices";
 import { currentVisitor, setVisitor, useStore, VISITOR_ID } from "../store";
+import { useUi } from "../ui/uiStore";
 import { formatArea, formatLength } from "../units";
 import { spotAngle } from "../view3d/lights";
 import { modelMaterialNames } from "../view3d/models";
@@ -28,6 +29,7 @@ import {
 import LocationFields from "./LocationFields";
 import MultiPanel from "./MultiPanel";
 import OpeningDistances from "./OpeningDistances";
+import { type Dimension, resizedPiece } from "./pieceSize";
 import TextStyleFields from "./TextStyleFields";
 import TextureField from "./TextureField";
 
@@ -319,6 +321,73 @@ function SurfaceField({
         <option value="shiny">{t("Shiny")}</option>
       </select>
     </label>
+  );
+}
+
+/**
+ * Width, depth and height of a piece, and whether a change keeps its proportions (also for
+ * the handles in the plan). Models that may not be deformed always keep them.
+ */
+function SizeFields({
+  piece,
+  run,
+}: {
+  piece: Piece;
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const keepChosen = useUi((s) => s.keepProportions);
+  const setKeep = useUi((s) => s.setKeepProportions);
+  const a = piece.attrs;
+  const fixed = a.deformable === false;
+  const keep = fixed || keepChosen;
+  const change = (dimension: Dimension) => (v: string | number | boolean) => {
+    const value = Number(v);
+    if (!(value > 0)) return;
+    const size = resizedPiece(
+      { width: a.width, depth: a.depth, height: a.height },
+      dimension,
+      value,
+      keep,
+      a.width_depth_deformable === false,
+    );
+    void run("furniture_update", { id: a.id, ...size });
+  };
+  return (
+    <>
+      <Field
+        label={t("Width")}
+        type="number"
+        unit="cm"
+        value={a.width}
+        onCommit={change("width")}
+      />
+      <Field
+        label={t("Depth")}
+        type="number"
+        unit="cm"
+        value={a.depth}
+        onCommit={change("depth")}
+      />
+      <Field
+        label={t("Height")}
+        type="number"
+        unit="cm"
+        value={a.height}
+        onCommit={change("height")}
+      />
+      <label
+        className="prop-row prop-check"
+        title={fixed ? t("The model of this piece may only be resized proportionally") : undefined}
+      >
+        <input
+          type="checkbox"
+          checked={keep}
+          disabled={fixed}
+          onChange={(e) => setKeep(e.currentTarget.checked)}
+        />
+        <span>{t("Keep proportions")}</span>
+      </label>
+    </>
   );
 }
 
@@ -776,9 +845,7 @@ export default function PropertiesPanel() {
           value={a.description ?? ""}
           onCommit={set("description")}
         />
-        <PriceFields piece={p} run={run} />
-        <Field label="X" type="number" unit="cm" value={a.x} onCommit={set("x")} />
-        <Field label="Y" type="number" unit="cm" value={a.y} onCommit={set("y")} />
+        <SizeFields piece={p} run={run} />
         <Field
           label={t("Elevation")}
           type="number"
@@ -786,6 +853,8 @@ export default function PropertiesPanel() {
           value={a.elevation ?? 0}
           onCommit={set("elevation")}
         />
+        <Field label="X" type="number" unit="cm" value={a.x} onCommit={set("x")} />
+        <Field label="Y" type="number" unit="cm" value={a.y} onCommit={set("y")} />
         <Field
           label={t("Angle")}
           type="angle"
@@ -812,38 +881,6 @@ export default function PropertiesPanel() {
           </>
         )}
         {p.kind === "DoorOrWindow" && <OpeningDistances piece={p} />}
-        <Field label={t("Width")} type="number" unit="cm" value={a.width} onCommit={set("width")} />
-        <Field label={t("Depth")} type="number" unit="cm" value={a.depth} onCommit={set("depth")} />
-        <Field
-          label={t("Height")}
-          type="number"
-          unit="cm"
-          value={a.height}
-          onCommit={set("height")}
-        />
-        {p.kind === "Light" && (
-          <>
-            <Field
-              label={t("Light power")}
-              type="number"
-              unit="%"
-              value={Math.round((a.power ?? 0.5) * 100)}
-              onCommit={set("power")}
-            />
-            <Field
-              label={t("Light cone")}
-              type="number"
-              unit="°"
-              value={spotAngle(p) ?? 0}
-              onCommit={set("spot_angle_deg")}
-            />
-            <p className="muted small">
-              {t(
-                "Light cone 0: the lamp lights in all directions; otherwise downwards through its bottom (tilt the lamp to aim it).",
-              )}
-            </p>
-          </>
-        )}
         <Field label={t("Color")} type="color" value={toHex(a.color)} onCommit={set("color")} />
         {a.color !== null && (
           <button type="button" className="link-button" onClick={() => set("color")("")}>
@@ -875,6 +912,31 @@ export default function PropertiesPanel() {
             <option value="shiny">{t("Shiny")}</option>
           </select>
         </label>
+        <MaterialsSection piece={p} docId={opened.id} run={run} />
+        {p.kind === "Light" && (
+          <>
+            <Field
+              label={t("Light power")}
+              type="number"
+              unit="%"
+              value={Math.round((a.power ?? 0.5) * 100)}
+              onCommit={set("power")}
+            />
+            <Field
+              label={t("Light cone")}
+              type="number"
+              unit="°"
+              value={spotAngle(p) ?? 0}
+              onCommit={set("spot_angle_deg")}
+            />
+            <p className="muted small">
+              {t(
+                "Light cone 0: the lamp lights in all directions; otherwise downwards through its bottom (tilt the lamp to aim it).",
+              )}
+            </p>
+          </>
+        )}
+        <PriceFields piece={p} run={run} />
         <Field
           label={t("Mirrored")}
           type="checkbox"
@@ -910,7 +972,6 @@ export default function PropertiesPanel() {
             onChange={(params) => void run("furniture_update", { id, ...params })}
           />
         )}
-        <MaterialsSection piece={p} docId={opened.id} run={run} />
         {a.catalog_id && (
           <p className="muted small">
             {t("Catalog ID:")} {a.catalog_id}

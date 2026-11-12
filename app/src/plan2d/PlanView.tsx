@@ -36,7 +36,7 @@ import {
 import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../store";
 import Icon from "../ui/Icon";
 import { registerPlanActions } from "../ui/planBridge";
-import { useDarkMode } from "../ui/uiStore";
+import { useDarkMode, useUi } from "../ui/uiStore";
 import { fromUnit, unitSymbol } from "../units";
 import { levelOfEye } from "../view3d/visitor";
 import { autoDimensions } from "./autoDims";
@@ -1090,6 +1090,7 @@ export default function PlanView() {
         pxToCm(SNAP_PX),
         magnetismActive(e.altKey),
         e.shiftKey,
+        useUi.getState().keepProportions,
       );
       draw();
       return;

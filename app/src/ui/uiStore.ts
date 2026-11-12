@@ -63,10 +63,14 @@ type UiState = {
   /** Variant last chosen per split button of the tool bar (button ID → command ID) */
   variants: Record<string, string>;
   setVariant: (button: string, command: string) => void;
+  /** Furniture keeps its proportions when its size changes (properties and plan handles) */
+  keepProportions: boolean;
+  setKeepProportions: (on: boolean) => void;
 };
 
 const THEME_KEY = "msh.theme";
 const VARIANTS_KEY = "msh.toolVariants";
+const PROPORTIONS_KEY = "msh.keepProportions";
 
 function loadJson<T>(key: string, fallback: T): T {
   try {
@@ -117,6 +121,11 @@ export const useUi = create<UiState>((set, get) => ({
     const variants = { ...get().variants, [button]: command };
     set({ variants });
     saveJson(VARIANTS_KEY, variants);
+  },
+  keepProportions: loadJson<boolean>(PROPORTIONS_KEY, false),
+  setKeepProportions: (keepProportions) => {
+    set({ keepProportions });
+    saveJson(PROPORTIONS_KEY, keepProportions);
   },
 }));
 
