@@ -929,5 +929,8 @@
   "The model of this piece may only be resized proportionally": "Das Modell dieses Möbels lässt sich nur proportional skalieren",
   "Clear the search": "Suche leeren",
   "Used last": "Zuletzt verwendet",
-  "All textures": "Alle Texturen"
+  "All textures": "Alle Texturen",
+  "Remove dimensions of the wall": "Maße der Wand entfernen",
+  "Remove dimensions of the piece": "Maße des Möbels entfernen",
+  "Remove height dimension": "Höhenmaß entfernen"
 }

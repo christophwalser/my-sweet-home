@@ -41,6 +41,7 @@ import { fromUnit, unitSymbol } from "../units";
 import { levelOfEye } from "../view3d/visitor";
 import { autoDimensions } from "./autoDims";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
+import { existingDimensions, existingHeightDimension } from "./dimensionMatch";
 import {
   drawPlan,
   type PlanColors,
@@ -1598,7 +1599,15 @@ export default function PlanView() {
       const dims = autoDimensions(home, input.wallShapes, sel[0]);
       const r = (v: number) => Math.round(v * 10) / 10;
       items.push({ separator: true });
-      if (dims.length > 0) {
+      const existing = existingDimensions(home, effectiveLevel, dims);
+      if (existing) {
+        items.push({
+          label: walls.length
+            ? t("Remove dimensions of the wall")
+            : t("Remove dimensions of the piece"),
+          action: () => void run("edit_delete", { ids: existing }),
+        });
+      } else if (dims.length > 0) {
         items.push({
           label: walls.length ? t("Add dimensions of the wall") : t("Add dimensions of the piece"),
           action: () => {
@@ -1615,36 +1624,53 @@ export default function PlanView() {
           },
         });
       }
-      items.push({
-        label: t("Add height dimension"),
-        action: () => {
-          if (walls.length) {
-            const a = walls[0].attrs;
-            void run("dimension_add_height", {
-              x: r(a.x_start),
-              y: r(a.y_start),
-              elevation_end: a.height ?? home.attrs.wall_height ?? 250,
-              ...levelParam(),
-            });
-            return;
-          }
-          let piece: Piece | null = null;
-          forEachPiece(home.furniture, (q) => {
-            if (q.attrs.id === sel[0]) piece = q;
-          });
-          if (!piece) return;
+      // Height dimension: at the wall start, or at the front right corner of the piece
+      let height: { at: Pt; bottom: number; top: number } | null = null;
+      if (walls.length) {
+        const a = walls[0].attrs;
+        height = {
+          at: [r(a.x_start), r(a.y_start)],
+          bottom: 0,
+          top: a.height ?? home.attrs.wall_height ?? 250,
+        };
+      } else {
+        let piece: Piece | null = null;
+        forEachPiece(home.furniture, (q) => {
+          if (q.attrs.id === sel[0]) piece = q;
+        });
+        if (piece) {
           const a = (piece as Piece).attrs;
           const corner = dims[1]?.end ?? [a.x, a.y];
           const bottom = a.elevation ?? 0;
-          void run("dimension_add_height", {
-            x: r(corner[0]),
-            y: r(corner[1]),
-            elevation_start: bottom,
-            elevation_end: bottom + (a.height_in_plan ?? a.height),
-            ...levelParam(),
-          });
-        },
-      });
+          height = {
+            at: [r(corner[0]), r(corner[1])],
+            bottom,
+            top: bottom + (a.height_in_plan ?? a.height),
+          };
+        }
+      }
+      if (height) {
+        const h = height;
+        const existing = existingHeightDimension(home, effectiveLevel, h.at, h.bottom, h.top);
+        items.push(
+          existing
+            ? {
+                label: t("Remove height dimension"),
+                action: () => void run("edit_delete", { ids: [existing] }),
+              }
+            : {
+                label: t("Add height dimension"),
+                action: () =>
+                  void run("dimension_add_height", {
+                    x: h.at[0],
+                    y: h.at[1],
+                    ...(h.bottom ? { elevation_start: h.bottom } : {}),
+                    elevation_end: h.top,
+                    ...levelParam(),
+                  }),
+              },
+        );
+      }
     }
     if (rooms.length === 1 && sel.length === 1) {
       const room = rooms[0];

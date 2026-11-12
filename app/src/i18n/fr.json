@@ -929,5 +929,8 @@
   "The model of this piece may only be resized proportionally": "Le modèle de ce meuble ne peut être redimensionné que proportionnellement",
   "Clear the search": "Effacer la recherche",
   "Used last": "Utilisées récemment",
-  "All textures": "Toutes les textures"
+  "All textures": "Toutes les textures",
+  "Remove dimensions of the wall": "Supprimer les cotes du mur",
+  "Remove dimensions of the piece": "Supprimer les cotes du meuble",
+  "Remove height dimension": "Supprimer la cote de hauteur"
 }
