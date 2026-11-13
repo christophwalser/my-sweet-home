@@ -18,14 +18,15 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 ## Wände
 
 - Klicke den Startpunkt, dann jede Ecke. **Doppelklick**, **Enter** oder **Esc** beendet die Wand, **Rücktaste** entfernt den letzten Punkt.
-- Tippe eine Länge und drücke **Enter**, um die nächste Wand auf diese Länge festzulegen. Einheiten und Rechnen gehen auch: `3.5m`, `5'3"`, `240+11.5`.
-- Der Magnetismus rastet an rechten Winkeln, 45°, parallelen Wänden, Wandenden und Linealen ein; halte **Umschalt** für 1°-Schritte und **Alt**, um ihn kurz auszuschalten.
+- Tippe eine Länge und drücke **Enter**, um die nächste Wand auf diese Länge festzulegen. Einheiten und Rechnen gehen auch: `3.5m`, `5'3"`, `240+11.5`. **Tab** wechselt zum Winkel (Grad, im Uhrzeigersinn ab der x-Achse); der nicht getippte Wert folgt der Maus. `@dx,dy` setzt den Punkt relativ zum letzten, `#x,y` auf absolute Koordinaten, `300<45` gibt Länge und Winkel auf einmal.
+- Der Magnetismus rastet an rechten Winkeln, 45°, parallelen Wänden, Wandenden, Wandflächen, dem Lotfußpunkt auf einer nahen Wand und Linealen ein; halte **Umschalt** für 1°-Schritte und **Alt**, um ihn kurz auszuschalten.
 - Wähle eine Wand, um Dicke, Höhe (auch verschieden an beiden Enden), Länge, Farben, Texturen, Oberfläche (matt oder glänzend), Sockelleisten und Muster zu ändern. **Auf 90° stellen** richtet die Ecke zur nächsten Wand aus.
 - Runde Wände zeichnest du mit dem Pfeil neben dem Wandwerkzeug.
 
 ## Räume
 
-- Klicke die Ecken eines Raums, oder **doppelklicke** zwischen Wände, um einen Raum zu erzeugen, der sie ausfüllt.
+- Klicke die Ecken eines Raums, oder **doppelklicke** zwischen Wände, um einen Raum zu erzeugen, der sie ausfüllt. Wände, die schon einen Raum umschließen, ergeben keinen zweiten.
+- Ein ausgewählter Raum hat in der Mitte jeder Kante einen Griff: Ziehen fügt eine Ecke ein, mit **Umschalt** verschiebt es die ganze Kante parallel. Gezogene Ecken rasten rechtwinklig und in Flucht mit den Nachbarkanten ein.
 - In den Eigenschaften legst du Namen, Boden und Decke (Farbe, Textur, matt oder glänzend) fest und ob die Fläche angezeigt wird. Name und Fläche lassen sich im Plan verschieben.
 
 ## Bemaßungen, Texte und Linien
@@ -33,12 +34,15 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 - Das Bemaßungswerkzeug misst zwischen zwei Klicks; ein dritter Klick platziert die Maßlinie.
 - Texte und Polylinien (gerade oder gebogen) haben eigene Werkzeuge; ihren Stil legst du in den Eigenschaften fest.
 - Einen Text tippst du direkt an der geklickten Stelle im Plan; **Enter** beendet, **Umschalt+Enter** beginnt eine neue Zeile. Ein **Doppelklick** auf einen Text ändert ihn dort.
-- Das Messwerkzeug zeigt einen Abstand, ohne etwas zum Plan hinzuzufügen. Sein zweiter Modus, das **Lineal**, zeichnet eine Hilfslinie, die zum Platzieren von Elementen im Plan bleibt; sie wird mit dem Haus gespeichert, aber nicht gedruckt. Zum Entfernen ein Lineal auswählen und **Entf** drücken, oder **Plan › Lineale dieser Ebene löschen**. Farbe und Strichart eines Lineals stehen in seinen Eigenschaften; die Vorgaben für neue Lineale und die Farbe des Messwerkzeugs unter **Einstellungen › Werkzeuge**.
+- Das Messwerkzeug zeigt einen Abstand, ohne etwas zum Plan hinzuzufügen. Wie bei Wänden lässt sich sein Endpunkt (und der eines Lineals) tippen: eine Länge, **Tab** für den Winkel, oder `@dx,dy`. Sein zweiter Modus, das **Lineal**, zeichnet eine Hilfslinie, die zum Platzieren von Elementen im Plan bleibt; sie wird mit dem Haus gespeichert, aber nicht gedruckt. Zum Entfernen ein Lineal auswählen und **Entf** drücken, oder **Plan › Lineale dieser Ebene löschen**. Farbe und Strichart eines Lineals stehen in seinen Eigenschaften; die Vorgaben für neue Lineale und die Farbe des Messwerkzeugs unter **Einstellungen › Werkzeuge**. **Lineal im Abstand…** im Kontextmenü einer Wand oder eines Lineals fügt ein paralleles Lineal hinzu: Maus auf seine Seite bewegen und klicken, oder den Abstand (ab der Wandfläche) tippen und **Enter** drücken.
 
 ## Präzision und Magnetismus
 
-- Die Statusleiste unter dem Plan schaltet den Magnetismus ein und aus (**F9**) und getrennt davon Winkel, Objekte (**F3**: Enden, Mitten, Flächen und Ecken von Wänden, Räumen und Möbeln) und Lineale. Ein Rechtsklick darauf wählt Fangradius und Winkelschritt. Sie zeigt auch die Position der Maus.
+- Die Statusleiste unter dem Plan schaltet den Magnetismus ein und aus (**F9**) und getrennt davon Winkel, Objekte (**F3**: Enden, Mitten, Flächen und Ecken von Wänden, Räumen und Möbeln) und Lineale. Der Knopf mit Fangradius und Winkelschritt (oder ein Rechtsklick auf die Leiste) ändert sie. Sie zeigt auch die Position der Maus.
 - Elemente rasten an Enden, Mitten und Linien von Linealen ein und an deren Schnittpunkten mit Wänden und anderen Linealen.
+- Die Markierung zeigt, woran ein Punkt einrastet: ein Quadrat für Enden und Ecken, ein Dreieck für Mitten, ein Kreuz für Schnittpunkte, ⊥ für den Lotfußpunkt, eine Raute für Linealpunkte, ein Kreis für einen Punkt auf einer Linie.
+- Verschobene Möbel und andere Elemente richten sich an Kanten und Mitten naher Möbel und an Wandflächen aus; eine gestrichelte Linie zeigt den Partner. Zwischen zwei Möbeln rasten sie auf gleiche Abstände ein („= 60“). Ein einzelnes Möbel zeigt seine Abstände zur nächsten Wand oder zum nächsten Möbel in jede Richtung.
+- Ist ein Möbel ausgewählt, klicke einen seiner Abstände an und tippe einen Wert: Das Möbel rückt genau auf diesen Abstand.
 - Gezogene Elemente bewegen sich in Schritten von 1 cm, beim Hineinzoomen feiner (bis 1 mm); mit **Alt** frei. **Umschalt** beim Ziehen hält die Bewegung auf einer Achse (bei einem einzelnen Möbel oder einer Wand entlang ihrer eigenen Richtung).
 - Die Pfeiltasten verschieben die Auswahl um 1 cm, mit **Umschalt** um 10 cm und mit **Alt** um 1 mm.
 - Zahlenfelder in den Eigenschaften rechnen: `240+11.5`, `3m - 12cm`, und ändern den Wert relativ mit `+5`, `+-5`, `*2` oder `/2`. Pfeiltasten und Mausrad ändern den Wert im Feld schrittweise (mit **Umschalt** um 10 Schritte); **Enter** übernimmt ihn.
@@ -68,7 +72,7 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 
 ## Möbel ändern
 
-- Ziehe ein Möbel, um es zu verschieben; mit seinen Griffen drehst du es und änderst Höhe über Boden, Höhe und Größe. Die Pfeiltasten verschieben die Auswahl um 1 cm (mit **Umschalt** 10 cm, mit **Alt** 1 mm). **Umschalt+Klick** nimmt ein Element zur Auswahl hinzu oder heraus.
+- Ziehe ein Möbel, um es zu verschieben; mit seinen Griffen drehst du es und änderst Höhe über Boden, Höhe und Größe. Die Pfeiltasten verschieben die Auswahl um 1 cm (mit **Umschalt** 10 cm, mit **Alt** 1 mm). **Umschalt+Klick** nimmt ein Element zur Auswahl hinzu oder heraus. **Tab** wählt das nächste Element unter der Maus, z. B. einen Raum unter einem Möbel. Ein Auswahlrechteck von links nach rechts wählt, was ganz darin liegt; von rechts nach links (gestrichelt) auch, was es berührt.
 - In den Eigenschaften legst du Name, Beschreibung, Position, Winkel, Neigung, Größe, Farbe oder Textur des ganzen Möbels, Oberfläche (wie das Modell, matt, glänzend), Spiegelung, Sichtbarkeit und Zugehörigkeit zum Grundplan fest.
 - **Materialien** ändert Farbe, Textur und Glanz einzelner Teile des Modells.
 - Sind mehrere Elemente ausgewählt, listen die Eigenschaften sie unter den gemeinsamen Werten auf: **×** nimmt eines aus der Auswahl, ein Klick auf den Namen wählt nur dieses.

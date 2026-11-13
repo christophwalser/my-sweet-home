@@ -4,6 +4,7 @@
 
 import type { Home, Pt } from "../model";
 import { type Guide, levelGuides } from "./guideData";
+import { rectSelection } from "./interaction";
 import { drawMeasureTag } from "./overlay";
 
 export { GUIDES_PROPERTY, type Guide, homeGuides, levelGuides } from "./guideData";
@@ -72,12 +73,16 @@ export function guideAt(home: Home, level: string | null, p: Pt, tolerance: numb
 }
 
 /** Guides lying completely inside the rectangle from `a` to `b`. */
-export function guidesInRect(home: Home, level: string | null, a: Pt, b: Pt): Guide[] {
-  const [x0, x1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
-  const [y0, y1] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
-  const inside = (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
-  return levelGuides(home, level).filter(
-    (g) => inside(g.x_start, g.y_start) && inside(g.x_end, g.y_end),
+export function guidesInRect(
+  home: Home,
+  level: string | null,
+  a: Pt,
+  b: Pt,
+  crossing = false,
+): Guide[] {
+  const rect = rectSelection(a, b, crossing);
+  return levelGuides(home, level).filter((g) =>
+    rect.segment([g.x_start, g.y_start], [g.x_end, g.y_end]),
   );
 }
 

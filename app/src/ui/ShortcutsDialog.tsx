@@ -12,7 +12,11 @@ const VIEW_KEYS: [string, string][] = [
   [t("Backspace"), t("Remove the last point while drawing")],
   [
     t("Digits + Enter (while drawing)"),
-    t("Length of the next wall or line segment, also with units and arithmetic"),
+    t("Length of the next segment, also with units and arithmetic; @dx,dy relative, #x,y absolute"),
+  ],
+  [
+    "Tab",
+    t("While drawing: switch between length and angle; otherwise: next element under the mouse"),
   ],
   [t("Alt (held)"), t("Invert magnetism")],
   [t("Shift (held)"), t("Angles in 1° steps while drawing; move on one axis while dragging")],

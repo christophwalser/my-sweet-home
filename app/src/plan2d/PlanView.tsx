@@ -38,10 +38,11 @@ import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../
 import Icon from "../ui/Icon";
 import { registerPlanActions } from "../ui/planBridge";
 import { useDarkMode, useUi } from "../ui/uiStore";
-import { unitSymbol } from "../units";
+import { formatFieldValue, toUnit, unitSymbol } from "../units";
 import { levelOfEye } from "../view3d/visitor";
 import { autoDimensions } from "./autoDims";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
+import { type CursorInput, inputKey, inputPoint, inputText } from "./cursorInput";
 import { existingDimensions, existingHeightDimension } from "./dimensionMatch";
 import {
   drawPlan,
@@ -60,7 +61,18 @@ import {
   type HandleDrag,
   handleAt,
 } from "./handles";
-import { distanceToSegment, elementsInRect, hitTest, nearestWall } from "./interaction";
+import { distanceToSegment, elementsInRect, hitTest, hitTestAll, nearestWall } from "./interaction";
+import {
+  type Box,
+  type Distance,
+  type Gap,
+  type MoveSnap,
+  type MoveTargets,
+  moveTargets,
+  pieceDistances,
+  selectionBox,
+  snapMove,
+} from "./moveSnap";
 import { dragStep, lockAxis, moveAxis, nudgeStep, roundTo } from "./moveStep";
 import {
   constrainMove,
@@ -79,6 +91,7 @@ import {
   VISITOR_PICK_RADIUS,
   visitorHandlePos,
 } from "./overlay";
+import { edgeOffset } from "./roomEdit";
 import { drawRuler, type RulerColors } from "./rulers";
 import { usePointer } from "./StatusBar";
 import {
@@ -141,7 +154,20 @@ const DRAG_THRESHOLD_PX = 4;
 type Gesture =
   | { kind: "pan"; last: [number, number]; screen: [number, number]; moved: boolean }
   | { kind: "press"; start: Pt; screen: [number, number]; hitId: string | null; shift: boolean }
-  | { kind: "move"; start: Pt; offset: Pt; dock: Docked | null; slide: Slid | null }
+  | {
+      kind: "move";
+      start: Pt;
+      offset: Pt;
+      dock: Docked | null;
+      slide: Slid | null;
+      /** Smart guides: what the selection snapped to */
+      snap?: MoveSnap | null;
+      /** Distances of a single moved piece to its neighbors */
+      distances?: Gap[];
+      /** Targets and box of the selection, collected when the drag starts */
+      targets?: MoveTargets;
+      box?: Box | null;
+    }
   | { kind: "band"; start: Pt; end: Pt }
   | { kind: "handle"; handle: Handle; drag: HandleDrag | null; cursor: Pt }
   /** The handle in front of the visitor is dragged: its new direction */
@@ -325,7 +351,18 @@ export default function PlanView() {
   const cursor = useRef<Pt | null>(null);
   const snapState = useRef<Snapped | null>(null);
   const snapHints = useRef<{ pt: Pt; label: string }[] | null>(null);
-  const typed = useRef<string | null>(null);
+  /**
+   * "Ruler at a distance": the line (axis of a wall or a ruler) the new ruler runs parallel
+   * to, half the wall thickness (the distance counts from the face) and the current offset
+   * along the left normal of the line.
+   */
+  const offsetFrom = useRef<{ a: Pt; b: Pt; half: number; offset: number } | null>(null);
+  /** Distance of the selected piece being typed (clicked on its label) */
+  const [distanceEdit, setDistanceEdit] = useState<{ id: string; d: Distance } | null>(null);
+  /** Distances of the selected piece to its neighbors, kept while home and selection stay */
+  const distanceCache = useRef<{ home: unknown; id: string; value: Distance[] } | null>(null);
+  /** Length, angle or point typed at the cursor while drawing or measuring */
+  const typed = useRef<CursorInput | null>(null);
   /** Dimension tool: offset of the dimension line while it is placed (after two points) */
   const dimOffset = useRef<number | null>(null);
   const hoverHandle = useRef<Handle | null>(null);
@@ -439,14 +476,21 @@ export default function PlanView() {
     switch (tool) {
       case "measure": {
         const m = measure.current;
-        if (m && !m.done) return t("Click the end point · Shift: 1° steps · {alt}", { alt });
+        if (m && !m.done)
+          return t(
+            "Click the end point, or type a length (Tab: angle) + Enter · Shift: 1° steps · {alt}",
+            { alt },
+          );
         if (m?.done) return t("Click to measure again · Esc: clear · nothing is added to the plan");
         return t("Click the start point, or drag · {alt}", { alt });
       }
       case "ruler": {
         const m = measure.current;
         if (m && !m.done)
-          return t("Click the end point of the ruler · Shift: 1° steps · {alt}", { alt });
+          return t(
+            "Click the end point of the ruler, or type a length (Tab: angle) + Enter · Shift: 1° steps · {alt}",
+            { alt },
+          );
         return t(
           "Click the start point of a ruler, or drag · it stays as a guide; select it and press Del to remove it · {alt}",
           { alt },
@@ -455,7 +499,7 @@ export default function PlanView() {
       case "wall":
         return drawing
           ? t(
-              "Click the next point, or type a length + Enter · click the first point to close · {FINISH}",
+              "Click the next point, or type a length (Tab: angle) + Enter · click the first point to close · {FINISH}",
               { FINISH },
             )
           : t("Click the start point, or drag to draw a single wall · Shift: 1° steps · {alt}", {
@@ -483,7 +527,7 @@ export default function PlanView() {
       case "polyline":
         return drawing
           ? t(
-              "Click the next point, or type a length + Enter · click the first point to close · {FINISH}",
+              "Click the next point, or type a length (Tab: angle) + Enter · click the first point to close · {FINISH}",
               { FINISH },
             )
           : t("Click the first point");
@@ -493,7 +537,7 @@ export default function PlanView() {
             "Move the mouse to place the dimension line, click to finish · or type its distance + Enter · Esc to cancel",
           );
         return drawing
-          ? t("Click the end point, or type a length + Enter · Esc to cancel")
+          ? t("Click the end point, or type a length (Tab: angle) + Enter · Esc to cancel")
           : t("Click the start point, or drag");
       case "label":
         return t(
@@ -507,10 +551,10 @@ export default function PlanView() {
           );
         return useStore.getState().selection.length > 0
           ? t(
-              "Drag to move · drag the handles to edit · Del: delete · Ctrl+C/V: copy/paste · Ctrl+D: duplicate",
+              "Drag to move · drag the handles to edit · click a distance to type it · Del: delete · Ctrl+C/V: copy/paste · Ctrl+D: duplicate",
             )
           : t(
-              "Click to select, drag for a rubber band · Shift: add to the selection · double-click: fit",
+              "Click to select, drag for a rubber band (to the left: also what it touches) · Shift+click: add to the selection · Tab: next element under the mouse · double-click: fit",
             );
     }
   };
@@ -541,12 +585,17 @@ export default function PlanView() {
     });
     const g = gesture.current;
     const drawing = isPathTool(tool);
-    const points = cursor.current && drawing ? [...draft.current, cursor.current] : draft.current;
+    // A complete typed input shows where the next point lands
+    const typedAt = typedPoint();
+    const points =
+      cursor.current && drawing ? [...draft.current, typedAt ?? cursor.current] : draft.current;
     const sel = useStore.getState().selection;
     const snap = isSnapTool(tool) ? snapState.current : null;
     const m = tool === "measure" ? measure.current : null;
     // A ruler being drawn shows like a guide, without its length
     const rulerDraft = tool === "ruler" ? measure.current : null;
+    const measureEnd = (mm: { a: Pt; b: Pt | null }) => typedAt ?? mm.b ?? mm.a;
+    const parallel = offsetFrom.current ? offsetGuide(offsetFrom.current) : null;
     const handleDrag = g?.kind === "handle" && g.drag ? { drag: g.drag, cursor: g.cursor } : null;
     const overlay: PlanOverlay = {
       selection: sel,
@@ -557,7 +606,14 @@ export default function PlanView() {
         g?.kind === "move" && !g.dock && !g.slide
           ? movePreview(input.home, input.wallShapes, sel, g.offset[0], g.offset[1])
           : null,
-      gaps: g?.kind === "move" && g.slide ? g.slide.gaps : [],
+      gaps:
+        g?.kind === "move"
+          ? g.slide
+            ? g.slide.gaps
+            : [...(g.snap?.gaps ?? []), ...(g.distances ?? [])]
+          : !g
+            ? selectedDistances().map((d): Gap => [d.a, d.b])
+            : [],
       // Size of the selected wall or piece while nothing is dragged
       autoDims:
         tool === "select" && sel.length === 1 && !g
@@ -575,22 +631,30 @@ export default function PlanView() {
           ? { points, kind: draftKind(tool), thickness: wallThickness }
           : null,
       guides:
-        g?.kind === "move" && g.slide
-          ? g.slide.guides
+        g?.kind === "move"
+          ? (g.slide?.guides ?? g.snap?.guides ?? [])
           : (handleDrag?.drag.guides ?? snap?.guides ?? []),
-      note: g?.kind === "move" && g.slide ? g.slide.note : (snap?.note ?? null),
+      note: g?.kind === "move" ? (g.slide?.note ?? g.snap?.note ?? null) : (snap?.note ?? null),
       // At the pointer: beside the wall the distances already take the space
       noteAt:
         g?.kind === "move" && g.slide
           ? (mouseWorld.current ?? [g.slide.x, g.slide.y])
-          : (snap?.pt ?? null),
+          : g?.kind === "move"
+            ? mouseWorld.current
+            : (snap?.pt ?? null),
       hints: isSnapTool(tool) ? (snapHints.current ?? []) : [],
-      typedLength: drawing ? typed.current : null,
+      typedLength: typedText(),
+      typedAt:
+        !drawing && typed.current
+          ? measure.current
+            ? measureEnd(measure.current)
+            : (parallel?.distance[1] ?? null)
+          : null,
       handles:
         tool === "select" && sel.length === 1 ? elementHandles(input.home, sel[0], pxToCm(1)) : [],
       handleDrag,
       rubberBand: g?.kind === "band" ? [g.start, g.end] : null,
-      measure: m ? [m.a, m.b ?? m.a] : null,
+      measure: m ? [m.a, measureEnd(m)] : (parallel?.distance ?? null),
       snap: snap?.marker ?? null,
       visitor: shownVisitor(g),
       visitorHandle: (() => {
@@ -612,8 +676,19 @@ export default function PlanView() {
       g?.kind === "move" ? g.offset : [0, 0],
       handleDrag?.drag.command === "guide_update" ? handleDrag.drag.params : null,
     );
+    if (parallel) {
+      const [a, b] = parallel.line;
+      shownGuides.push({
+        id: "",
+        level: null,
+        x_start: a[0],
+        y_start: a[1],
+        x_end: b[0],
+        y_end: b[1],
+      });
+    }
     if (rulerDraft?.b) {
-      const [a, b] = [rulerDraft.a, rulerDraft.b];
+      const [a, b] = [rulerDraft.a, measureEnd(rulerDraft)];
       shownGuides.push({
         id: "",
         level: null,
@@ -876,8 +951,9 @@ export default function PlanView() {
 
   /** Adds the point at the typed length in the direction of the cursor. */
   const addTypedPoint = () => {
-    const pts = draft.current;
-    const length = evalLength(typed.current ?? "", usePreferences.getState().unit) ?? Number.NaN;
+    const length =
+      evalLength(typed.current?.length ?? "", usePreferences.getState().unit) ?? Number.NaN;
+    const p = typedPoint();
     typed.current = null;
     if (dimOffset.current !== null) {
       // Placing a dimension: the typed distance on the side of the mouse
@@ -887,17 +963,36 @@ export default function PlanView() {
       } else draw();
       return;
     }
-    if (pts.length === 0 || !Number.isFinite(length) || length <= 0) {
-      draw();
-      return;
-    }
-    const last = pts[pts.length - 1];
-    const c = cursor.current ?? [last[0] + 1, last[1]];
-    const len = Math.hypot(c[0] - last[0], c[1] - last[1]);
-    const dir: Pt = len > 1e-6 ? [(c[0] - last[0]) / len, (c[1] - last[1]) / len] : [1, 0];
-    const round = (v: number) => Math.round(v * 100) / 100;
-    void addDraftPoint([round(last[0] + dir[0] * length), round(last[1] + dir[1] * length)]);
+    if (p) void addDraftPoint(p);
+    else draw();
   };
+
+  /**
+   * Point the typed input gives from the last point (or the start of the measure) toward the
+   * cursor; null without a complete input.
+   */
+  const typedPoint = (): Pt | null => {
+    const i = typed.current;
+    if (!i) return null;
+    const unit = usePreferences.getState().unit;
+    if (isPathTool(tool)) {
+      const pts = draft.current;
+      if (pts.length === 0 || dimOffset.current !== null) return null;
+      return inputPoint(i, pts[pts.length - 1], cursor.current, unit);
+    }
+    const m = measure.current;
+    return m && !m.done ? inputPoint(i, m.a, m.b, unit) : null;
+  };
+
+  /** Text of the typed input shown at the cursor. */
+  const typedText = (): string | null =>
+    typed.current
+      ? inputText(typed.current, unitSymbol(), {
+          length: t("Length"),
+          angle: t("Angle"),
+          point: t("Point"),
+        })
+      : null;
 
   // ---------------------------------------------------------------- mouse
 
@@ -976,7 +1071,17 @@ export default function PlanView() {
     }
     if (e.button !== 0 || !input) return;
     const p = toWorld(e.clientX, e.clientY);
+    if (offsetFrom.current) {
+      finishOffsetGuide();
+      return;
+    }
     if (tool === "select") {
+      const dist = distanceUnder(p);
+      const selId = useStore.getState().selection[0];
+      if (dist && selId) {
+        setDistanceEdit({ id: selId, d: dist });
+        return;
+      }
       const onVisitor = visitorUnder(p);
       if (onVisitor === "handle") {
         userMoved.current = true;
@@ -1010,10 +1115,12 @@ export default function PlanView() {
       const m = measure.current;
       if (!m || m.done) {
         measure.current = { a: s, b: null, done: false };
+        typed.current = null;
         gesture.current = { kind: "draw", screen: [e.clientX, e.clientY], dragged: false };
       } else {
-        m.b = s;
+        m.b = typedPoint() ?? s;
         m.done = true;
+        typed.current = null;
         if (tool === "ruler") addRuler();
       }
       draw();
@@ -1057,6 +1164,16 @@ export default function PlanView() {
     const g = gesture.current;
     mouseWorld.current = toWorld(e.clientX, e.clientY);
     usePointer.setState({ pt: mouseWorld.current });
+    const o = offsetFrom.current;
+    if (o && !g) {
+      // The side and distance of the parallel ruler follow the mouse (whole cm with magnetism)
+      const raw = edgeOffset(o.a, o.b, mouseWorld.current);
+      const d = Math.max(0, Math.abs(raw) - o.half);
+      const snappedD = magnetismActive(e.altKey) ? Math.round(d) : Math.round(d * 10) / 10;
+      o.offset = (raw < 0 ? -1 : 1) * (snappedD + o.half);
+      draw();
+      return;
+    }
     if (g?.kind === "pan") {
       if (Math.hypot(e.clientX - g.screen[0], e.clientY - g.screen[1]) >= DRAG_THRESHOLD_PX) {
         g.moved = true;
@@ -1167,6 +1284,18 @@ export default function PlanView() {
         );
       } else if (magnetismActive(e.altKey) && !sel.includes(VISITOR_ID)) {
         offset = constrainMove(input.home, sel, offset);
+        const singleWall = sel.length === 1 && input.home.walls.some((w) => w.attrs.id === sel[0]);
+        // Smart guides: edges and middles to nearby furniture and wall faces, equal gaps
+        // (not for a single wall, which keeps its straight move, nor with the axis lock)
+        g2.snap = null;
+        if (!singleWall && !e.shiftKey && usePreferences.getState().snapObjects) {
+          g2.targets ??= moveTargets(input.home, input.wallShapes, effectiveLevel, sel);
+          if (g2.box === undefined) g2.box = selectionBox(input.home, input.wallShapes, sel);
+          if (g2.box) {
+            g2.snap = snapMove(g2.box, g2.targets, offset, pxToCm(snapPx()));
+            offset = g2.snap.offset;
+          }
+        }
         const piece = sel.length === 1 ? findPiece(sel[0]) : null;
         if (piece) {
           g2.dock = dockToWall(
@@ -1177,7 +1306,21 @@ export default function PlanView() {
             [piece.attrs.x + offset[0], piece.attrs.y + offset[1]],
             pxToCm(snapPx()),
           );
+          if (g2.dock) g2.snap = null;
         }
+      }
+      // A single piece shows its distances to the next wall or piece in every direction
+      g2.distances = [];
+      const lone = sel.length === 1 ? findPiece(sel[0]) : null;
+      if (lone && lone.kind !== "DoorOrWindow") {
+        g2.targets ??= moveTargets(input.home, input.wallShapes, effectiveLevel, sel);
+        const at: Pt = g2.dock
+          ? [g2.dock.x, g2.dock.y]
+          : [lone.attrs.x + offset[0], lone.attrs.y + offset[1]];
+        const angle = g2.dock ? (g2.dock.angleDeg * Math.PI) / 180 : (lone.attrs.angle ?? 0);
+        g2.distances = pieceDistances(lone, at, angle, g2.targets.segments, 500).map(
+          (d): Gap => [d.a, d.b],
+        );
       }
       g2.offset = offset;
       draw();
@@ -1211,7 +1354,12 @@ export default function PlanView() {
       // A right click without dragging opens the context menu (select mode), finishes the
       // drawing, or leaves the tool
       if (!g.moved) {
-        if (tool === "select" && e.button === 2) openMenu(e.clientX, e.clientY);
+        if (offsetFrom.current) {
+          offsetFrom.current = null;
+          typed.current = null;
+          setHint(hintText());
+          draw();
+        } else if (tool === "select" && e.button === 2) openMenu(e.clientX, e.clientY);
         else if (isPathTool(tool) && draft.current.length > 0) void finishDraft();
         else if ((tool === "measure" || tool === "ruler") && measure.current) {
           measure.current = null;
@@ -1309,9 +1457,11 @@ export default function PlanView() {
       }
       draw();
     } else if (g.kind === "band") {
+      // Dragged from right to left: also what the band only touches
+      const crossing = g.end[0] < g.start[0];
       const ids = [
-        ...elementsInRect(input.home, effectiveLevel, g.start, g.end),
-        ...guidesInRect(input.home, effectiveLevel, g.start, g.end).map((x) => x.id),
+        ...elementsInRect(input.home, effectiveLevel, g.start, g.end, crossing),
+        ...guidesInRect(input.home, effectiveLevel, g.start, g.end, crossing).map((x) => x.id),
       ];
       setSelection(ids);
       draw();
@@ -1390,7 +1540,11 @@ export default function PlanView() {
       (room && outline(room.points, true)) ||
       (line && outline(line.points, !!line.attrs.closed_path));
     if (!keep) {
-      const hit = hitTest(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+      // Rulers lie above the elements, as for a click
+      const guide = guideAt(input.home, effectiveLevel, p, pxToCm(PICK_PX));
+      const hit = guide
+        ? { id: guide.id }
+        : hitTest(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
       if (hit && !sel.includes(hit.id)) sel = [hit.id];
       else if (!hit) sel = [];
     }
@@ -1575,6 +1729,22 @@ export default function PlanView() {
           },
         );
       }
+    }
+    // A ruler parallel to the selected wall or ruler, at a typed or dragged distance
+    const guide =
+      sel.length === 1 ? levelGuides(home, effectiveLevel).find((g) => g.id === sel[0]) : undefined;
+    if (sel.length === 1 && (walls.length === 1 || guide)) {
+      items.push({
+        label: t("Ruler at a distance…"),
+        action: () => {
+          if (guide) {
+            startOffsetGuide([guide.x_start, guide.y_start], [guide.x_end, guide.y_end], 0);
+          } else {
+            const w = walls[0].attrs;
+            startOffsetGuide([w.x_start, w.y_start], [w.x_end, w.y_end], (w.thickness ?? 0) / 2);
+          }
+        },
+      });
     }
     if (walls.length > 0) {
       const wallIds = walls.map((w) => w.attrs.id);
@@ -1773,17 +1943,10 @@ export default function PlanView() {
   /** Keys while drawing; returns false for keys it does not handle. */
   const onDrawingKey = (e: KeyboardEvent): boolean => {
     const drawing = draft.current.length > 0;
-    if (drawing && /^[0-9]$/.test(e.key)) {
-      typed.current = (typed.current ?? "") + e.key;
-    } else if (drawing && (e.key === "." || e.key === ",")) {
-      typed.current = `${typed.current ?? "0"}.`;
-    } else if (drawing && typed.current === null && e.key === "(") {
-      typed.current = "(";
-    } else if (typed.current !== null && /^[-+*/() '"mcinft]$/.test(e.key)) {
-      // Units and arithmetic once a length is being typed: 3.5m, 240+11.5, 5'3"
-      typed.current += e.key;
-    } else if (e.key === "Backspace" && typed.current !== null) {
-      typed.current = typed.current.length > 1 ? typed.current.slice(0, -1) : null;
+    // Length (Tab: angle) or point typed at the cursor, with units and arithmetic
+    const next = drawing ? inputKey(typed.current, e.key) : undefined;
+    if (next !== undefined) {
+      typed.current = next;
     } else if (e.key === "Backspace" && drawing) {
       draft.current.pop();
       if (draft.current.length === 0) cursor.current = null;
@@ -1809,16 +1972,172 @@ export default function PlanView() {
     return true;
   };
 
+  /**
+   * Tab: selects the next of the elements under the mouse (Shift+Tab the previous one), so an
+   * element covered by another one can be selected.
+   */
+  const cycleSelection = (back: boolean): boolean => {
+    const p = mouseWorld.current;
+    if (!input || !p) return false;
+    const hits = hitTestAll(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+    const guide = guideAt(input.home, effectiveLevel, p, pxToCm(PICK_PX));
+    const ids = [...hits.map((h) => h.id), ...(guide ? [guide.id] : [])];
+    if (ids.length === 0) return false;
+    const sel = useStore.getState().selection;
+    const i = sel.length === 1 ? ids.indexOf(sel[0]) : -1;
+    const next = i < 0 ? 0 : (i + (back ? ids.length - 1 : 1)) % ids.length;
+    setSelection([ids[next]]);
+    draw();
+    return true;
+  };
+
+  /** Keys while measuring or drawing a ruler: the typed length, angle or end point. */
+  const onMeasureKey = (e: KeyboardEvent): boolean => {
+    const m = measure.current;
+    if (!m) return false;
+    if (e.key === "Enter" && typed.current) {
+      const p = typedPoint();
+      typed.current = null;
+      if (p) {
+        m.b = p;
+        m.done = true;
+        if (tool === "ruler") addRuler();
+      }
+    } else if (e.key === "Escape" && typed.current) {
+      typed.current = null;
+    } else {
+      const next = inputKey(typed.current, e.key);
+      if (next === undefined) return false;
+      typed.current = next;
+    }
+    draw();
+    setHint(hintText());
+    return true;
+  };
+
   /** Stores the ruler just drawn as a guide of the shown level; the tool stays for the next. */
   const addRuler = () => {
     const m = measure.current;
     measure.current = null;
-    if (!m?.b || Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1]) < 1) return;
+    if (m?.b) addGuide(m.a, m.b);
+  };
+
+  /**
+   * The parallel ruler of "Ruler at a distance" and the measured distance from the face of
+   * the wall (or the ruler) to it; a typed distance wins over the mouse.
+   */
+  const offsetGuide = (o: { a: Pt; b: Pt; half: number; offset: number }) => {
+    const len = Math.hypot(o.b[0] - o.a[0], o.b[1] - o.a[1]) || 1;
+    const n: Pt = [(o.b[1] - o.a[1]) / len, -(o.b[0] - o.a[0]) / len];
+    const side = o.offset < 0 ? -1 : 1;
+    const typedDistance = typed.current
+      ? evalLength(typed.current.length, usePreferences.getState().unit)
+      : null;
+    const offset =
+      typedDistance !== null && typedDistance >= 0 ? side * (typedDistance + o.half) : o.offset;
+    const at = (q: Pt, k: number): Pt => [q[0] + n[0] * k, q[1] + n[1] * k];
+    const mid: Pt = [(o.a[0] + o.b[0]) / 2, (o.a[1] + o.b[1]) / 2];
+    return {
+      line: [at(o.a, offset), at(o.b, offset)] as [Pt, Pt],
+      distance: [at(mid, side * o.half), at(mid, offset)] as [Pt, Pt],
+    };
+  };
+
+  /**
+   * Distances of the single selected piece to the next wall or piece in its four directions;
+   * a click on one of them types it.
+   */
+  const selectedDistances = (): Distance[] => {
+    const sel = useStore.getState().selection;
+    if (!input || tool !== "select" || sel.length !== 1) return [];
+    const c = distanceCache.current;
+    if (c && c.home === input.home && c.id === sel[0]) return c.value;
+    const piece = findPiece(sel[0]);
+    const value =
+      piece && piece.kind !== "DoorOrWindow"
+        ? pieceDistances(
+            piece,
+            [piece.attrs.x, piece.attrs.y],
+            piece.attrs.angle ?? 0,
+            moveTargets(input.home, input.wallShapes, effectiveLevel, sel).segments,
+            500,
+          )
+        : [];
+    distanceCache.current = { home: input.home, id: sel[0], value };
+    return value;
+  };
+
+  /** The distance whose label is at `p` (where drawGap draws it), if any. */
+  const distanceUnder = (p: Pt): Distance | null => {
+    const px = pxToCm(1);
+    for (const d of selectedDistances()) {
+      const len = Math.hypot(d.b[0] - d.a[0], d.b[1] - d.a[1]) || 1;
+      const n: Pt = [(d.b[1] - d.a[1]) / len, -(d.b[0] - d.a[0]) / len];
+      const label: Pt = [
+        (d.a[0] + d.b[0]) / 2 + n[0] * 18 * px,
+        (d.a[1] + d.b[1]) / 2 + n[1] * 18 * px,
+      ];
+      const mid: Pt = [(d.a[0] + d.b[0]) / 2, (d.a[1] + d.b[1]) / 2];
+      if (
+        Math.min(
+          Math.hypot(p[0] - label[0], p[1] - label[1]),
+          Math.hypot(p[0] - mid[0], p[1] - mid[1]),
+        ) <
+        16 * px
+      ) {
+        return d;
+      }
+    }
+    return null;
+  };
+
+  /** Moves the selected piece so that the edited distance gets the typed value. */
+  const commitDistance = (edit: { id: string; d: Distance }, text: string) => {
+    setDistanceEdit(null);
+    const v = evalLength(text, usePreferences.getState().unit, edit.d.value);
+    if (v === null || v < 0) return;
+    const delta = edit.d.value - v;
+    const r = (x: number) => Math.round(x * 100) / 100;
+    if (Math.abs(delta) > 0.001) {
+      void run("edit_move", {
+        ids: [edit.id],
+        dx: r(edit.d.dir[0] * delta),
+        dy: r(edit.d.dir[1] * delta),
+      });
+    }
+  };
+
+  /** Starts "Ruler at a distance" from the line a→b (`half`: half the wall thickness). */
+  const startOffsetGuide = (a: Pt, b: Pt, half: number) => {
+    offsetFrom.current = { a, b, half, offset: half + 50 };
+    typed.current = null;
+    setHint(
+      t(
+        "Move the mouse to the side of the new ruler and click, or type the distance + Enter · Esc: cancel",
+      ),
+    );
+    draw();
+  };
+
+  /** Finishes "Ruler at a distance": adds the parallel ruler. */
+  const finishOffsetGuide = () => {
+    const o = offsetFrom.current;
+    if (o) addGuide(...offsetGuide(o).line);
+    offsetFrom.current = null;
+    typed.current = null;
+    setHint(hintText());
+    draw();
+  };
+
+  /** Adds a ruler from a to b on the shown level, with the defaults of the preferences. */
+  const addGuide = (a: Pt, b: Pt) => {
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1) return;
+    const r = (v: number) => Math.round(v * 100) / 100;
     void run("guide_add", {
-      x_start: m.a[0],
-      y_start: m.a[1],
-      x_end: m.b[0],
-      y_end: m.b[1],
+      x_start: r(a[0]),
+      y_start: r(a[1]),
+      x_end: r(b[0]),
+      y_end: r(b[1]),
       ...(effectiveLevel ? { level: effectiveLevel } : {}),
       // The defaults of the preferences become the ruler's own values
       ...(rulerColorPref ? { color: rulerColorPref } : {}),
@@ -1875,13 +2194,38 @@ export default function PlanView() {
         }
         if (e.key === "Delete" || e.key === "Backspace") return;
       }
-      if (e.ctrlKey || e.metaKey) {
+      // AltGr (e.g. @ on German keyboards) comes as Ctrl+Alt on Windows; it types, it is no shortcut
+      if ((e.ctrlKey || e.metaKey) && !e.getModifierState("AltGraph")) {
         const key = e.key.toLowerCase();
         // Keys of the plan never trigger WebView functions (Ctrl+G is "find next" there)
         if (onShortcut(key, sel, e.shiftKey) || "acdgvx".includes(key)) e.preventDefault();
         return;
       }
+      if (offsetFrom.current) {
+        // "Ruler at a distance": the typed distance, Enter adds the ruler, Esc cancels
+        if (e.key === "Enter") finishOffsetGuide();
+        else if (e.key === "Escape") {
+          offsetFrom.current = null;
+          typed.current = null;
+          setHint(hintText());
+        } else if (e.key !== "Tab") {
+          const next = inputKey(typed.current, e.key);
+          if (next === undefined) return;
+          typed.current = next;
+        }
+        draw();
+        e.preventDefault();
+        return;
+      }
       if (isPathTool(state.tool) && onDrawingKey(e)) {
+        e.preventDefault();
+        return;
+      }
+      if (
+        (state.tool === "measure" || state.tool === "ruler") &&
+        !measure.current?.done &&
+        onMeasureKey(e)
+      ) {
         e.preventDefault();
         return;
       }
@@ -1892,6 +2236,10 @@ export default function PlanView() {
       ) {
         measure.current = null;
         draw();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "Tab" && state.tool === "select" && !e.altKey && cycleSelection(e.shiftKey)) {
         e.preventDefault();
         return;
       }
@@ -1950,7 +2298,8 @@ export default function PlanView() {
         },
         selectAll: () => void onShortcut("a", useStore.getState().selection),
         paste: () => void onShortcut("v", useStore.getState().selection),
-        isDrawing: () => draft.current.length > 0,
+        isDrawing: () =>
+          draft.current.length > 0 || (measure.current !== null && !measure.current.done),
       }),
     [input, effectiveLevel],
   );
@@ -2085,6 +2434,31 @@ export default function PlanView() {
         {opened && hint && <div className="plan-hint">{hint}</div>}
         {menu && (
           <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+        )}
+        {distanceEdit && (
+          <input
+            className="plan-distance-editor"
+            // biome-ignore lint/a11y/noAutofocus: the field opens on a click to be typed in
+            autoFocus
+            aria-label={t("Distance")}
+            style={(() => {
+              const v = viewRef.current;
+              const d = distanceEdit.d;
+              const mid: Pt = [(d.a[0] + d.b[0]) / 2, (d.a[1] + d.b[1]) / 2];
+              return {
+                left: (mid[0] * v.scale + v.offsetX) / devicePixelRatio,
+                top: (mid[1] * v.scale + v.offsetY) / devicePixelRatio,
+              };
+            })()}
+            defaultValue={formatFieldValue(toUnit(distanceEdit.d.value))}
+            onFocus={(e) => e.currentTarget.select()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") commitDistance(distanceEdit, e.currentTarget.value);
+              else if (e.key === "Escape") setDistanceEdit(null);
+            }}
+            onBlur={() => setDistanceEdit(null)}
+          />
         )}
         {textEdit && (
           <TextEditor

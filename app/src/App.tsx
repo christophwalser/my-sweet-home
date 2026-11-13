@@ -1,6 +1,6 @@
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { message } from "@tauri-apps/plugin-dialog";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, docResourceUrl, TOP_VIEWS_EVENT } from "./api";
 import CatalogPanel from "./catalog/CatalogPanel";
 import ImportFurnitureDialog from "./catalog/ImportFurnitureDialog";
@@ -111,6 +111,9 @@ function LevelNameInput({ name, onDone }: { name: string; onDone: (name: string 
   );
 }
 
+/** Seconds an error message stays in the window. */
+const ERROR_SECONDS = 6;
+
 export default function App() {
   const [layout, setLayout] = useLayout();
   const detached = useUi((s) => s.detached);
@@ -127,6 +130,14 @@ export default function App() {
   const selectedLevel = useStore((s) => s.selectedLevel);
   const tool = useStore((s) => s.tool);
   const { openHome, run, selectLevel, clearError } = useStore.getState();
+
+  // Error messages disappear after a few seconds, unless the mouse rests on them
+  const [errorHover, setErrorHover] = useState(false);
+  useEffect(() => {
+    if (!error || errorHover) return;
+    const timer = setTimeout(() => useStore.getState().clearError(), ERROR_SECONDS * 1000);
+    return () => clearTimeout(timer);
+  }, [error, errorHover]);
 
   // Preferences: changes from other windows, autosave interval, wall side colors
   const autosaveMinutes = usePreferences((s) => s.autosaveMinutes);
@@ -339,7 +350,13 @@ export default function App() {
       {paletteOpen && <CommandPalette />}
 
       {error && (
-        <div className="error-bar" role="alert">
+        // biome-ignore lint/a11y/noStaticElementInteractions: hovering only keeps the message open
+        <div
+          className="error-bar"
+          role="alert"
+          onMouseEnter={() => setErrorHover(true)}
+          onMouseLeave={() => setErrorHover(false)}
+        >
           <span>{error}</span>
           <button
             type="button"

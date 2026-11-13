@@ -296,6 +296,24 @@ describe("snapContext", () => {
     expect(c.lineLabel).toBe("on wall axis");
   });
 
+  it("adds the faces, face corners and perpendicular feet of nearby walls for walls", () => {
+    const c = snapContext("wall", home, shapes, null, 10, {
+      near: [100, 20],
+      anchor: [50, 100],
+    });
+    const t = w1.attrs.thickness / 2;
+    // The faces of the near wall are lines with their own label
+    const faces = c.lines.filter((_, i) => c.lineLabels?.[i] === "on wall face");
+    expect(faces).toHaveLength(2);
+    expect(c.labels?.get(pointKey([0, -t]))).toBe("wall corner");
+    // Perpendicular from the previous point onto the axis and both faces of w1
+    expect(c.labels?.get(pointKey([50, 0]))).toBe("perpendicular");
+    expect(c.labels?.get(pointKey([50, t]))).toBe("perpendicular");
+    // The far wall gives none
+    expect(c.labels?.get(pointKey([50, 300]))).toBeUndefined();
+    expect(snapDraw([51, 3], [50, 100], c).note).toBe("perpendicular");
+  });
+
   it("leaves out the element being edited and the point being moved", () => {
     const c = snapContext("wall", home, shapes, null, 10, {
       excludeId: "w1",

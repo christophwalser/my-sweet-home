@@ -348,6 +348,8 @@ export function snapContext(
     if (showHints) hints.push({ pt, label });
   };
   const lines: Segment[] = [];
+  /** Labels of single lines (the others get the purpose's label) */
+  const lineLabelOf = new Map<Segment, string>();
   const refs: Pt[] = [];
   const directions: number[] = [];
   const keep = (q: Pt) => !excludePoint || dist(q, excludePoint) > 1e-6;
@@ -368,6 +370,15 @@ export function snapContext(
       showHints = !!near && distanceToWall(near, start, end) < radius * 8;
       named(start, "wall end");
       named(end, "wall end");
+      if (showHints && !a.arc_extent) {
+        // The faces of nearby walls: a wall can end on them and start at their corners
+        for (const side of [s.left, s.right]) {
+          const face: Segment = [side[0], side[side.length - 1]];
+          lines.push(face);
+          lineLabelOf.set(face, "on wall face");
+        }
+        for (const c of corners.filter(keep)) named(c, "wall corner");
+      }
       if (!a.arc_extent) {
         lines.push([start, end]);
         const len = dist(start, end);
@@ -399,6 +410,20 @@ export function snapContext(
       }
       for (const side of [s.left, s.right]) {
         for (let k = 0; k + 1 < side.length; k++) lines.push([side[k], side[k + 1]]);
+      }
+    }
+    if (anchor && !a.arc_extent && purpose !== "polyline" && near) {
+      // Foot of the perpendicular from the previous point on the axis and the faces
+      if (distanceToWall(near, start, end) < radius * 8) {
+        const segs: Segment[] = [
+          [s.left[0], s.left[s.left.length - 1]],
+          [s.right[0], s.right[s.right.length - 1]],
+        ];
+        if (purpose === "wall") segs.push([start, end]);
+        for (const seg of segs) {
+          const foot = perpendicularFoot(anchor, seg);
+          if (foot && dist(foot, anchor) > 1) named(foot, "perpendicular");
+        }
       }
     }
     if (purpose !== "polyline") {
@@ -499,7 +524,7 @@ export function snapContext(
   refs.push(...path);
 
   // Ruler guides: their ends, middles and crossings, the lines themselves and their directions
-  const lineLabels: (string | undefined)[] = lines.map(() => undefined);
+  const lineLabels: (string | undefined)[] = lines.map((l) => lineLabelOf.get(l));
   if (settings.snapToRulers) {
     const rulers: Segment[] = levelGuides(home, levelId)
       .filter((g) => g.id !== excludeId)
@@ -542,6 +567,17 @@ export function snapContext(
     hints,
     freeAngle: !settings.snapAngles,
   };
+}
+
+/** Foot of the perpendicular from `p` on segment `s`, or null if it lies beside the segment. */
+export function perpendicularFoot(p: Pt, [a, b]: Segment): Pt | null {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-9) return null;
+  const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2;
+  if (t <= 0.001 || t >= 0.999) return null;
+  return [a[0] + t * dx, a[1] + t * dy];
 }
 
 function distanceToWall(p: Pt, a: Pt, b: Pt): number {

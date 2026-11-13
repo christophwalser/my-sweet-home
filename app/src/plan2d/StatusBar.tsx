@@ -1,11 +1,13 @@
 // Status bar under the plan: the switches of the magnetism (all, angles, objects, rulers), the
-// grid, and the position of the mouse. A right click chooses the snap radius and angle step.
+// grid, the snap settings (radius and angle step, also by a right click) and the position of
+// the mouse.
 
 import { useState } from "react";
 import { create } from "zustand";
 import { t } from "../i18n";
 import type { Pt } from "../model";
 import { type Preferences, usePreferences } from "../preferences";
+import Icon, { type IconName } from "../ui/Icon";
 import { formatPrecise } from "../units";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
 
@@ -14,6 +16,7 @@ export const usePointer = create<{ pt: Pt | null }>(() => ({ pt: null }));
 
 type Switch = {
   key: "magnetism" | "snapAngles" | "snapObjects" | "snapToRulers" | "grid";
+  icon: IconName;
   label: string;
   title: string;
 };
@@ -21,25 +24,29 @@ type Switch = {
 const SWITCHES: Switch[] = [
   {
     key: "magnetism",
+    icon: "magnet",
     label: t("Magnetism"),
     title: t("Snap while drawing and moving (F9); Alt inverts it for a moment"),
   },
   {
     key: "snapAngles",
+    icon: "angle",
     label: t("Angles"),
     title: t("Snap to multiples of 45°, the angle step and right angles to walls"),
   },
   {
     key: "snapObjects",
+    icon: "snapobject",
     label: t("Objects"),
     title: t("Snap to the ends, middles, faces and corners of walls, rooms and furniture (F3)"),
   },
   {
     key: "snapToRulers",
+    icon: "guide",
     label: t("Rulers"),
     title: t("Snap to the ends, middles, lines and crossings of the rulers"),
   },
-  { key: "grid", label: t("Grid"), title: t("Show the grid") },
+  { key: "grid", icon: "grid", label: t("Grid"), title: t("Show the grid") },
 ];
 
 /** Snap radii (screen pixels) and angle steps offered by the right click. */
@@ -86,13 +93,28 @@ export default function StatusBar() {
           type="button"
           className={`plan-status-switch${prefs[s.key] ? " on" : ""}`}
           aria-pressed={!!prefs[s.key]}
-          title={s.title}
+          title={`${s.label}: ${s.title}`}
+          aria-label={s.label}
           disabled={s.key !== "magnetism" && s.key !== "grid" && !prefs.magnetism}
           onClick={() => toggle(s.key)}
         >
-          {s.label}
+          <Icon name={s.icon} size={16} />
         </button>
       ))}
+      <button
+        type="button"
+        className="plan-status-settings"
+        title={t("Snap radius and angle step")}
+        aria-haspopup="menu"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setMenu({ x: r.left, y: r.top });
+        }}
+      >
+        <Icon name="settings" size={14} />
+        {`${prefs.snapRadius} px · ${prefs.angleStep}°`}
+        <Icon name="chevdown" size={12} />
+      </button>
       <span className="plan-status-position">
         {pointer ? `X ${formatPrecise(pointer[0])}   Y ${formatPrecise(pointer[1])}` : ""}
       </span>

@@ -129,6 +129,16 @@ fn room_add_inside_point_takes_the_inner_outline_of_the_walls() {
         json!({ "inside_point": [1000, 1000] }),
     );
     assert!(err.contains("not enclosed"), "{err}");
+
+    // The same walls a second time: no second room on the same outline
+    let err = run_err(
+        &r,
+        &mut doc,
+        "room_add",
+        json!({ "inside_point": [100, 100] }),
+    );
+    assert!(err.contains("already a room"), "{err}");
+    assert_eq!(doc.home().rooms.len(), 1);
 }
 
 #[test]

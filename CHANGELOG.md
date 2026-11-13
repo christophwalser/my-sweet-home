@@ -30,8 +30,24 @@ All notable changes to this project are documented in this file. The format foll
   arrow keys and the mouse wheel step them. Typed lengths in the plan accept units too.
 - Alt+arrow keys move the selection by 1 mm; Shift while dragging keeps the move on one axis.
 - A piece dragged from the catalog near a wall turns with its back to it before it is dropped.
+- While drawing, measuring or drawing a ruler, Tab switches from the typed length to the angle;
+  `@dx,dy` gives a point relative to the last one, `#x,y` an absolute point, `300<45` both.
+- Walls snap to the faces of nearby walls and to the foot of the perpendicular on them.
+- Snap markers show the kind of point (square end, triangle middle, cross crossing, ⊥, diamond for
+  rulers); the snap notes are translated.
+- Moved elements line up with the edges and middles of nearby furniture and with wall faces
+  (smart guides) and snap to equal gaps; a single piece shows its distances to its neighbors.
+- A click on a distance of the selected piece types it, and the piece moves there.
+- "Ruler at a distance…" in the context menu of a wall or ruler adds a parallel ruler.
+- Rooms have a handle in the middle of each edge to add a corner or (Shift) move the edge;
+  dragged corners snap to right angles with the neighboring edges.
+- Tab selects the next element under the mouse; a rubber band dragged to the left also selects
+  what it touches. Polylines are selected by the rubber band too.
 
 ### Changed
+
+- The status bar shows icons and a button for the snap radius and angle step.
+- Error messages disappear after a few seconds.
 
 - Error messages are shown in the chosen language with a clearer explanation.
 - Dragged elements move in steps that get finer when zoomed in (down to 1 mm) instead of always
@@ -41,6 +57,8 @@ All notable changes to this project are documented in this file. The format foll
   then color, texture, surface and materials.
 
 ### Fixed
+
+- "Room from walls" no longer adds a second room on walls that already enclose one.
 
 - Lamps whose light comes from a material of their model (e.g. the contributed "Mini spot")
   are placed as lights and light the 3D view.
