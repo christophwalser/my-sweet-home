@@ -78,7 +78,7 @@ bar at the bottom of the plan explains the next step.
   properties ("Angle at start/end", "Angle between", "Make 90°"); drawing and dragging snap to
   right angles relative to the joined wall (Alt: free).
 - Walls: select two and press J (or "Join walls") to connect them at the intersection of their
-  axes; "Detach" removes connections, "Split" cuts a wall in two. Near an existing wall, the
+  axes (the two parts of a split wall become one wall again); "Detach" removes connections, "Split" cuts a wall in two. Near an existing wall, the
   wall tool shows where a new wall can start (ends, middle, flush with the end face).
 - Drag to move (a single wall moves straight; corner angles are shown), R to rotate, Del to
   delete, arrow keys to nudge; Ctrl+C / X / V / D copy, cut, paste and duplicate (also into

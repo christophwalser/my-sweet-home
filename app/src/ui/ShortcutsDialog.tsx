@@ -6,13 +6,21 @@ import { MENUS, type MenuEntry } from "./commands";
 
 /** Keys of the plan and the 3D view that are no commands of the menus. */
 const VIEW_KEYS: [string, string][] = [
-  [t("Arrow keys"), t("Move the selection by 1 cm (Shift: 10 cm)")],
+  [t("Arrow keys"), t("Move the selection by 1 cm (Shift: 10 cm, Alt: 1 mm)")],
   [formatShortcut("Shift+R"), t("Rotate the selected furniture by -15°")],
   [t("Enter / double-click"), t("Finish the drawing")],
   [t("Backspace"), t("Remove the last point while drawing")],
-  [t("Digits + Enter (while drawing)"), t("Length of the next wall or line segment")],
+  [
+    t("Digits + Enter (while drawing)"),
+    t("Length of the next segment, also with units and arithmetic; @dx,dy relative, #x,y absolute"),
+  ],
+  [
+    "Tab",
+    t("While drawing: switch between length and angle; otherwise: next element under the mouse"),
+  ],
   [t("Alt (held)"), t("Invert magnetism")],
-  [t("Shift (held)"), t("Angles in 1° steps; add to the selection")],
+  [t("Shift (held)"), t("Angles in 1° steps while drawing; move on one axis while dragging")],
+  [t("Shift+click"), t("Add to the selection or take out of it")],
   [t("Right mouse button"), t("Pan the plan; context menu")],
   [t("Mouse wheel"), t("Zoom the plan or the 3D view")],
   [t("W A S D / arrows"), t("Walk in the virtual visit")],

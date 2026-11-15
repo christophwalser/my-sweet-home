@@ -6,6 +6,65 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- The location of the home can also be set in the home properties.
+- "Align north with the map": turn the walls over an OpenStreetMap map of the location to set
+  the north direction of the compass; the map can be zoomed and moved.
+- Rulers always show their length and angle in the plan, and both can be changed in the properties.
+- A second digit chooses the variants of a plan tool, e.g. 2 then 1 for "Room from walls".
+- Texts are typed directly in the plan; a double-click on a text changes it there.
+- A piece dragged from the catalog shows at its size in the plan before it is dropped.
+- "Keep proportions" for furniture, in the properties and with the plan handles.
+- The texture chooser offers the five textures used last and keeps its search text.
+- The context menu offers to remove the added dimensions of a wall or piece.
+- Three or more walls can be joined, e.g. a third wall to two joined walls.
+- Joining two collinear walls whose ends meet, e.g. the parts of a split wall, makes one wall.
+- The list of selected elements can be filtered by kind, and a kind removed from the selection.
+- Polylines can be shown in the 3D view ("Visible in 3D").
+- Status bar under the plan with switches for the magnetism (F9), angles, objects (F3) and
+  rulers, the snap radius and angle step (right click) and the mouse position.
+- Walls, rooms, lines, dimensions and rulers snap to the ends, middles, lines and crossings of
+  rulers.
+- Number fields calculate (`240+11.5`, `3m - 12cm`) and change values relatively (`+5`, `*2`);
+  arrow keys and the mouse wheel step them. Typed lengths in the plan accept units too.
+- Alt+arrow keys move the selection by 1 mm; Shift while dragging keeps the move on one axis.
+- A piece dragged from the catalog near a wall turns with its back to it before it is dropped.
+- While drawing, measuring or drawing a ruler, Tab switches from the typed length to the angle;
+  `@dx,dy` gives a point relative to the last one, `#x,y` an absolute point, `300<45` both.
+- Walls snap to the faces of nearby walls and to the foot of the perpendicular on them.
+- Snap markers show the kind of point (square end, triangle middle, cross crossing, ⊥, diamond for
+  rulers); the snap notes are translated.
+- Moved elements line up with the edges and middles of nearby furniture and with wall faces
+  (smart guides) and snap to equal gaps; a single piece shows its distances to its neighbors.
+- A click on a distance of the selected piece types it, and the piece moves there.
+- "Ruler at a distance…" in the context menu of a wall or ruler adds a parallel ruler.
+- Rooms have a handle in the middle of each edge to add a corner or (Shift) move the edge;
+  dragged corners snap to right angles with the neighboring edges.
+- Tab selects the next element under the mouse; a rubber band dragged to the left also selects
+  what it touches. Polylines are selected by the rubber band too.
+
+### Changed
+
+- The status bar shows icons and a button for the snap radius and angle step.
+- Error messages disappear after a few seconds.
+
+- Error messages are shown in the chosen language with a clearer explanation.
+- Dragged elements move in steps that get finer when zoomed in (down to 1 mm) instead of always
+  1 cm, and freely with Alt. Shift+drag no longer adds the element to the selection
+  (Shift+click does).
+- The furniture properties are ordered: name, description, size, elevation, position, angle,
+  then color, texture, surface and materials.
+
+### Fixed
+
+- "Room from walls" no longer adds a second room on walls that already enclose one.
+
+- Lamps whose light comes from a material of their model (e.g. the contributed "Mini spot")
+  are placed as lights and light the 3D view.
+- Walls stop the light of the lamps nearest to the visitor in the virtual visit.
+- Latitude and longitude are shown with four decimals instead of one.
+
 ## [0.1.0] - 2026-11-11
 
 First public release.

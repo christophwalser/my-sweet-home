@@ -5,11 +5,14 @@
 
 import type { Home, Pt, WallShape } from "../model";
 import { usePreferences } from "../preferences";
-import { formatLength, formatPrecise, unitSymbol } from "../units";
+import { formatLength, formatPrecise } from "../units";
 import { type AutoDim, dimensionLine } from "./autoDims";
 import type { ViewTransform } from "./drawPlan";
+import type { DropPreview } from "./dropPreview";
 import { HANDLE_SHAPE, type Handle, type HandleDrag, lengthText } from "./handles";
 import { elementOutlines } from "./interaction";
+import { drawMarker, markerShape, noteText } from "./markers";
+import type { Gap } from "./moveSnap";
 import type { Joint, MovePreview } from "./moving";
 import { offsetOutline, type Segment } from "./snapping";
 
@@ -37,8 +40,10 @@ export type PlanOverlay = {
   noteAt: Pt | null;
   /** Snap points of nearby walls (ends, middle, flush points) shown while drawing */
   hints: { pt: Pt; label: string }[];
-  /** Length typed on the keyboard while drawing */
+  /** Text of the length, angle or point typed on the keyboard while drawing or measuring */
   typedLength: string | null;
+  /** Where the typed text is shown while measuring or drawing a ruler (null: at the draft) */
+  typedAt?: Pt | null;
   /** Handles of the selected element */
   handles: Handle[];
   /** Handle being dragged: preview of the change and the cursor position */
@@ -48,7 +53,7 @@ export type PlanOverlay = {
   /** Distance measured with the measuring tool */
   measure: [Pt, Pt] | null;
   /** Free spaces beside a door or window being slid along its wall */
-  gaps: [Pt, Pt][];
+  gaps: Gap[];
   /** Automatic dimensions of the selected wall or piece */
   autoDims: AutoDim[];
   /** Dimension being placed with the dimension tool (after its two points) */
@@ -59,6 +64,8 @@ export type PlanOverlay = {
   visitor: { x: number; y: number; yaw: number; fov: number } | null;
   /** The visitor is selected: outline and the handle that turns it */
   visitorHandle: Pt | null;
+  /** Catalog piece dragged over the plan, at its size where it will land */
+  dropPreview?: { preview: DropPreview; icon: HTMLImageElement | null } | null;
   accent: string;
   /** Color of guides */
   guide: string;
@@ -299,7 +306,7 @@ export function drawOverlay(
       drawAngle(ctx, a, b, prev, overlay.accent, px);
       const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
       const typed = overlay.typedLength;
-      const text = typed !== null ? `Length: ${typed}▏${unitSymbol()}` : lengthText(length);
+      const text = typed ?? lengthText(length);
       drawCenteredTag(ctx, text, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);
     }
   }
@@ -309,20 +316,8 @@ export function drawOverlay(
     ctx.strokeStyle = overlay.guide;
     ctx.lineWidth = 1.2 * px;
     const r = 3.5 * px;
-    for (const { pt, label } of overlay.hints) {
-      const [x, y] = pt;
-      ctx.beginPath();
-      if (label.startsWith("flush")) {
-        // Flush points are drawn as crosses, wall ends and middles as circles
-        ctx.moveTo(x - r, y - r);
-        ctx.lineTo(x + r, y + r);
-        ctx.moveTo(x - r, y + r);
-        ctx.lineTo(x + r, y - r);
-      } else {
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-      }
-      ctx.stroke();
-    }
+    // The shape tells the kind of point: square end, triangle middle, cross corner, ...
+    for (const { pt, label } of overlay.hints) drawMarker(ctx, markerShape(label), pt[0], pt[1], r);
   }
 
   // Alignment guides and direction note
@@ -349,7 +344,7 @@ export function drawOverlay(
   const cursor =
     overlay.noteAt ?? draft?.points[draft.points.length - 1] ?? overlay.handleDrag?.cursor;
   if (overlay.note && cursor)
-    drawTag(ctx, overlay.note, cursor[0] + 14 * px, cursor[1] - 18 * px, px);
+    drawTag(ctx, noteText(overlay.note), cursor[0] + 14 * px, cursor[1] - 18 * px, px);
 
   if (overlay.measure)
     drawMeasure(
@@ -359,7 +354,12 @@ export function drawOverlay(
       overlay.measureColor ?? overlay.guide,
       px,
     );
-  for (const [a, b] of overlay.gaps) drawGap(ctx, a, b, overlay.guide, px);
+  if (overlay.typedAt && overlay.typedLength) {
+    const [x, y] = overlay.typedAt;
+    drawTag(ctx, overlay.typedLength, x + 12 * px, y + 18 * px, px);
+  }
+  for (const [a, b, text] of overlay.gaps) drawGap(ctx, a, b, overlay.guide, px, text);
+  if (overlay.dropPreview) drawDropPreview(ctx, overlay.dropPreview, overlay.accent, px);
   for (const d of overlay.autoDims) drawDimensionPreview(ctx, d, overlay.accent, px);
   if (overlay.dimensionDraft) {
     drawDimensionPreview(ctx, overlay.dimensionDraft, overlay.accent, px);
@@ -368,11 +368,16 @@ export function drawOverlay(
   // Rubber band
   if (overlay.rubberBand) {
     const [[x0, y0], [x1, y1]] = overlay.rubberBand;
-    ctx.fillStyle = withAlpha(overlay.accent, 0.1);
-    ctx.strokeStyle = overlay.accent;
+    // From right to left a crossing selection: dashed and green, like in CAD programs
+    const crossing = x1 < x0;
+    const color = crossing ? "#2e9e5b" : overlay.accent;
+    ctx.fillStyle = withAlpha(color, 0.1);
+    ctx.strokeStyle = color;
     ctx.lineWidth = px;
+    ctx.setLineDash(crossing ? [6 * px, 4 * px] : []);
     ctx.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
     ctx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+    ctx.setLineDash([]);
   }
 
   // Snap marker
@@ -381,9 +386,8 @@ export function drawOverlay(
     const [x, y] = snap;
     ctx.strokeStyle = overlay.accent;
     ctx.lineWidth = 1.5 * px;
-    ctx.beginPath();
-    ctx.arc(x, y, 6 * px, 0, Math.PI * 2);
-    ctx.stroke();
+    const label = overlay.snap ? overlay.note : overlay.handleDrag?.drag.snapNote;
+    drawMarker(ctx, markerShape(label), x, y, 6 * px);
   }
 }
 
@@ -519,6 +523,41 @@ function drawGap(
   drawCenteredTag(ctx, text ?? formatPrecise(len), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);
 }
 
+/** A catalog piece being dragged: its outline, its icon inside and its size. */
+function drawDropPreview(
+  ctx: CanvasRenderingContext2D,
+  drop: { preview: DropPreview; icon: HTMLImageElement | null },
+  accent: string,
+  px: number,
+): void {
+  const { preview: p, icon } = drop;
+  ctx.save();
+  ctx.fillStyle = withAlpha(accent, 0.12);
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 1.5 * px;
+  ctx.setLineDash([]);
+  strokePath(ctx, p.corners, true);
+  ctx.fill();
+  if (icon?.complete && icon.naturalWidth > 0) {
+    // Fitted into the outline, keeping its proportions
+    const k = Math.min(p.width / icon.naturalWidth, p.depth / icon.naturalHeight);
+    const w = icon.naturalWidth * k;
+    const h = icon.naturalHeight * k;
+    ctx.translate(p.center[0], p.center[1]);
+    ctx.rotate(p.angle);
+    ctx.globalAlpha = 0.85;
+    ctx.drawImage(icon, -w / 2, -h / 2, w, h);
+  }
+  ctx.restore();
+  drawTag(
+    ctx,
+    `${formatLength(p.width)} × ${formatLength(p.depth)}`,
+    p.center[0] + p.width / 2 + 8 * px,
+    p.center[1],
+    px,
+  );
+}
+
 /** Number with at most one decimal. */
 function oneDecimal(v: number): string {
   return String(Math.round(v * 10) / 10);
@@ -549,11 +588,28 @@ function drawMeasure(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, color: string,
       false,
     );
   }
+  drawMeasureTag(ctx, a, b, px, true);
+}
+
+/**
+ * Tag beside the segment a→b with its length and direction (degrees, clockwise from the x axis
+ * like the plan); with `parts` also its horizontal and vertical parts.
+ */
+export function drawMeasureTag(
+  ctx: CanvasRenderingContext2D,
+  a: Pt,
+  b: Pt,
+  px: number,
+  parts = false,
+): void {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy);
   if (len < 0.05) return;
   // Rounded first, so that -0.01° shows as 0°, not 360°
   const angle = (((Math.round((Math.atan2(dy, dx) * 1800) / Math.PI) / 10) % 360) + 360) % 360;
   let text = `${formatPrecise(len)} · ${oneDecimal(angle)}°`;
-  if (Math.abs(dx) >= 0.05 && Math.abs(dy) >= 0.05) {
+  if (parts && Math.abs(dx) >= 0.05 && Math.abs(dy) >= 0.05) {
     text += ` · Δx ${oneDecimal(Math.abs(dx))} · Δy ${oneDecimal(Math.abs(dy))}`;
   }
   drawCenteredTag(ctx, text, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);

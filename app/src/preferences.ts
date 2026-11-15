@@ -17,6 +17,14 @@ export type Preferences = {
   magnetism: boolean;
   /** Angle steps of the magnetism in degrees (between the attracting multiples of 45°) */
   angleStep: number;
+  /** Magnetism to angles: 45° multiples, angle steps, right angles to walls */
+  snapAngles: boolean;
+  /** Magnetism to the points and lines of walls, rooms and furniture */
+  snapObjects: boolean;
+  /** Magnetism to the ruler guides: their ends, middles, lines and crossings */
+  snapToRulers: boolean;
+  /** Radius of the magnetism in screen pixels */
+  snapRadius: number;
   /** Furniture in the plan seen from above (rendered from the model) instead of its icon */
   furnitureTopView: boolean;
   /** Rooms in the plan: their floor color or texture, or one neutral color */
@@ -78,6 +86,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   grid: true,
   magnetism: true,
   angleStep: 5,
+  snapAngles: true,
+  snapObjects: true,
+  snapToRulers: true,
+  snapRadius: 10,
   furnitureTopView: true,
   roomRendering: "floor",
   leftSideColor: "#e8913a",

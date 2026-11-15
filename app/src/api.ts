@@ -114,7 +114,29 @@ export type CatalogDragData = {
   doorOrWindow: boolean;
   /** Name as shown in the catalog (translated); used as name of the new piece */
   name: string;
+  /** Size in cm, for the outline shown in the plan while dragging */
+  width: number;
+  depth: number;
 };
+
+/**
+ * Catalog item being dragged, with its icon. Drag events tell the plan the data only on the
+ * drop, so the plan reads it here to show the piece at its size while it is dragged.
+ */
+let catalogDrag: { data: CatalogDragData; icon: HTMLImageElement | null } | null = null;
+
+export function setCatalogDrag(
+  drag: { data: CatalogDragData; icon: HTMLImageElement | null } | null,
+): void {
+  catalogDrag = drag;
+}
+
+export function currentCatalogDrag(): {
+  data: CatalogDragData;
+  icon: HTMLImageElement | null;
+} | null {
+  return catalogDrag;
+}
 
 /** Base URL of the custom `msh` URI scheme (served as http://msh.localhost on Windows). */
 const MSH_BASE = "http://msh.localhost";

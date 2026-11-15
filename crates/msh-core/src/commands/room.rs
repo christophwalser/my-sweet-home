@@ -75,6 +75,15 @@ struct UpdateParams {
     reset_area_position: Option<bool>,
 }
 
+/// Whether a room outline has the given points (1 cm tolerance), in any order and direction.
+fn same_outline(room: &[Point], points: &[[f32; 2]]) -> bool {
+    room.len() == points.len()
+        && points.iter().all(|p| {
+            room.iter()
+                .any(|q| (q.x - p[0]).abs() <= 1.0 && (q.y - p[1]).abs() <= 1.0)
+        })
+}
+
 pub(super) fn register(r: &mut Registry) {
     r.add(
         "room_add",
@@ -85,13 +94,28 @@ pub(super) fn register(r: &mut Registry) {
             let level = resolve_level(doc.home(), p.level)?;
             let points = match (p.points, p.inside_point) {
                 (Some(points), None) => points,
-                (None, Some(at)) => msh_geometry::enclosed_area(doc.home(), level.as_deref(), at)
-                    .ok_or_else(|| {
-                    CommandError::failed(format!(
-                        "the point ({}, {}) is not enclosed by walls",
-                        at[0], at[1]
-                    ))
-                })?,
+                (None, Some(at)) => {
+                    let points = msh_geometry::enclosed_area(doc.home(), level.as_deref(), at)
+                        .ok_or_else(|| {
+                            CommandError::failed(format!(
+                                "the point ({}, {}) is not enclosed by walls",
+                                at[0], at[1]
+                            ))
+                        })?;
+                    // The same walls give the same outline: a second room on it is no use
+                    if let Some(existing) = doc
+                        .home()
+                        .rooms
+                        .iter()
+                        .find(|r| r.attrs.level == level && same_outline(&r.points, &points))
+                    {
+                        return Err(CommandError::failed(format!(
+                            "there is already a room with this outline ('{}')",
+                            existing.attrs.id.as_deref().unwrap_or("")
+                        )));
+                    }
+                    points
+                }
                 _ => {
                     return Err(CommandError::failed("give either points or inside_point"));
                 }

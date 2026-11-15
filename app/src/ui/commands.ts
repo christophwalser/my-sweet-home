@@ -5,6 +5,7 @@
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { ask, message, open } from "@tauri-apps/plugin-dialog";
 import { api } from "../api";
+import { errorText } from "../errorText";
 import { t } from "../i18n";
 import {
   closeView3DWindow,
@@ -19,6 +20,7 @@ import { clearRecentHomes, recentHomes, recentLabel, removeRecentHome } from "..
 import { type Tool, useStore, VISITOR_ID } from "../store";
 import type { IconName } from "./Icon";
 import { planActions } from "./planBridge";
+import { type ToolKeyState, toolForDigit, toolShortcut } from "./toolKeys";
 import { type DialogName, isDark, useUi } from "./uiStore";
 
 export type Command = {
@@ -283,7 +285,7 @@ const toolCommand = (
   label,
   icon,
   hint,
-  shortcut,
+  shortcut: shortcut ?? toolShortcut(`tool.${tool}`),
   enabled: hasHome,
   checked: () => store().tool === tool,
   run: () => chooseTool(tool),
@@ -455,44 +457,25 @@ const LIST: Command[] = [
     t("Straight walls"),
     "wall",
     t("Click to add points, double-click to finish"),
-    "1",
   ),
   toolCommand("arcwall", t("Round walls"), "arcwall", t("Walls drawn as quarter circle arcs")),
-  toolCommand(
-    "room",
-    t("Room by corners"),
-    "room",
-    t("Click the corners, double-click to finish"),
-    "2",
-  ),
+  toolCommand("room", t("Room by corners"), "room", t("Click the corners, double-click to finish")),
   toolCommand(
     "roomauto",
     t("Room from walls"),
     "roomauto",
     t("Click inside walls to create the room of that area"),
   ),
-  toolCommand(
-    "polyline",
-    t("Lines"),
-    "polyline",
-    t("Click to add points, double-click to finish"),
-    "3",
-  ),
-  toolCommand("dimension", t("Dimension"), "dimension", t("Click start and end point"), "4"),
+  toolCommand("polyline", t("Lines"), "polyline", t("Click to add points, double-click to finish")),
+  toolCommand("dimension", t("Dimension"), "dimension", t("Click start and end point")),
   toolCommand(
     "heightdim",
     t("Height dimension"),
     "heightdim",
     t("Click where the height of the level is measured"),
   ),
-  toolCommand("label", t("Text"), "text", t("Click to place a text"), "5"),
-  toolCommand(
-    "measure",
-    t("Measure"),
-    "measure",
-    t("Measure a distance without adding anything"),
-    "6",
-  ),
+  toolCommand("label", t("Text"), "text", t("Click to place a text")),
+  toolCommand("measure", t("Measure"), "measure", t("Measure a distance without adding anything")),
   toolCommand(
     "ruler",
     t("Ruler"),
@@ -515,7 +498,7 @@ const LIST: Command[] = [
     icon: "joinwalls",
     shortcut: "J",
     shortcutElsewhere: true,
-    enabled: () => selectedWalls().length === 2,
+    enabled: () => selectedWalls().length >= 2,
     run: () => void run("wall_join", { ids: selectedWalls() }),
   },
   {
@@ -591,10 +574,39 @@ const LIST: Command[] = [
     id: "plan.magnetism",
     label: t("Magnetism"),
     icon: "grid",
+    shortcut: "F9",
     hint: t("Snap to walls, angles and lengths while drawing and moving; Alt inverts it"),
     checked: () => usePreferences.getState().magnetism,
     run: () =>
       usePreferences.getState().update({ magnetism: !usePreferences.getState().magnetism }),
+  },
+  {
+    id: "plan.snapAngles",
+    label: t("Snap to angles"),
+    icon: "grid",
+    enabled: () => usePreferences.getState().magnetism,
+    checked: () => usePreferences.getState().snapAngles,
+    run: () =>
+      usePreferences.getState().update({ snapAngles: !usePreferences.getState().snapAngles }),
+  },
+  {
+    id: "plan.snapObjects",
+    label: t("Snap to objects"),
+    icon: "grid",
+    shortcut: "F3",
+    enabled: () => usePreferences.getState().magnetism,
+    checked: () => usePreferences.getState().snapObjects,
+    run: () =>
+      usePreferences.getState().update({ snapObjects: !usePreferences.getState().snapObjects }),
+  },
+  {
+    id: "plan.snapRulers",
+    label: t("Snap to rulers"),
+    icon: "grid",
+    enabled: () => usePreferences.getState().magnetism,
+    checked: () => usePreferences.getState().snapToRulers,
+    run: () =>
+      usePreferences.getState().update({ snapToRulers: !usePreferences.getState().snapToRulers }),
   },
   {
     id: "plan.backgroundImport",
@@ -926,7 +938,7 @@ export function runCommand(c: Command): void {
   if (!isEnabled(c)) return;
   Promise.resolve()
     .then(() => c.run())
-    .catch((e) => useStore.setState({ error: String(e) }));
+    .catch((e) => useStore.setState({ error: errorText(e) }));
 }
 
 // ---------------------------------------------------------------- menus
@@ -1053,6 +1065,9 @@ export const MENUS: Menu[] = [
       cmd("plan.rulers"),
       cmd("plan.grid"),
       cmd("plan.magnetism"),
+      cmd("plan.snapAngles"),
+      cmd("plan.snapObjects"),
+      cmd("plan.snapRulers"),
     ],
   },
   {
@@ -1165,6 +1180,9 @@ export function eventShortcut(e: KeyboardEvent): string {
   return [...mods.filter(Boolean), key].join("+");
 }
 
+/** Digit typed last, for choosing an entry of a tool group with a second digit. */
+let toolKeys: ToolKeyState = null;
+
 /** Further shortcuts of commands: typed shortcut → shortcut shown in the menus. */
 const SHORTCUT_ALIASES: Record<string, string> = { "Ctrl+Shift+Z": "Ctrl+Y" };
 
@@ -1182,7 +1200,17 @@ export function handleGlobalShortcut(e: KeyboardEvent): void {
   if (typing && !/^F\d+$/.test(shortcut) && shortcut !== "Ctrl+K") return;
   // Digits choose plan tools, except while a drawing takes a typed length
   const digit = /^\d$/.test(shortcut);
-  if (digit && (planActions()?.isDrawing() ?? true)) return;
+  if (digit) {
+    if (planActions()?.isDrawing() ?? true) return;
+    const chosen = toolForDigit(toolKeys, shortcut, performance.now());
+    toolKeys = chosen.state;
+    const c = chosen.command ? COMMANDS.get(chosen.command) : undefined;
+    if (c) {
+      e.preventDefault();
+      runCommand(c);
+    }
+    return;
+  }
   // Plain letters and Del belong to the plan view (rotate, join, delete, ...)
   if (!digit && !shortcut.includes("Ctrl+") && !/^F\d+$/.test(shortcut)) return;
   for (const c of COMMANDS.values()) {

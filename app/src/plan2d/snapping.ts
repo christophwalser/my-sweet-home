@@ -18,6 +18,7 @@ import {
 } from "../model";
 import { usePreferences } from "../preferences";
 import { sameLevel } from "./drawPlan";
+import { levelGuides } from "./guideData";
 
 export type Segment = [Pt, Pt];
 
@@ -36,6 +37,8 @@ export type SnapContext = {
   labels?: Map<string, string>;
   /** Shown when the point snaps onto one of `lines` */
   lineLabel?: string;
+  /** Labels of single lines instead of `lineLabel` (same index as `lines`), e.g. "on ruler" */
+  lineLabels?: (string | undefined)[];
   /** Snap points of nearby elements, drawn as markers so the user sees where to click */
   hints?: { pt: Pt; label: string }[];
   /** Fine angle steps (1° instead of 5°), e.g. while Shift is pressed */
@@ -46,6 +49,8 @@ export type SnapContext = {
    * other directions within `CORNER_TOLERANCE`; Alt disables magnetism.
    */
   corner?: number[];
+  /** No angle magnetism: the direction follows the pointer (preference "Angles" off) */
+  freeAngle?: boolean;
 };
 
 /** Tolerance of the right-angle magnetism to the wall at the corner. */
@@ -81,6 +86,7 @@ const WALL_DIRECTION_TOLERANCE = 4 * DEG;
  * 45° multiples can be set too.
  */
 export function snapAngleDeg(deg: number, fine: boolean): number {
+  if (!usePreferences.getState().snapAngles) return Math.round(deg * 10) / 10;
   if (fine) return Math.round(deg / FINE_STEP_DEG) * FINE_STEP_DEG;
   const major = Math.round(deg / 45) * 45;
   if (Math.abs(deg - major) < MAJOR_TOLERANCE_DEG) return major;
@@ -140,6 +146,11 @@ function segmentIntersection([a, b]: Segment, [c, d]: Segment): Pt | null {
   return [a[0] + t * rx, a[1] + t * ry];
 }
 
+/** Note shown when a point snaps onto line `i` of the context. */
+function lineNote(ctx: SnapContext, i: number): string | null {
+  return ctx.lineLabels?.[i] ?? ctx.lineLabel ?? null;
+}
+
 /** Snaps a drawing point. `previous` is the last point of the path (or the fixed end). */
 export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped {
   const r = ctx.radius;
@@ -166,16 +177,19 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
     // 2. Direction from the previous point
     const raw = Math.atan2(p[1] - previous[1], p[0] - previous[0]);
     const length = dist(p, previous);
-    let dirAngle = snapAngleDeg(raw / DEG, !!ctx.fine) * DEG;
+    const free = !!ctx.freeAngle;
+    let dirAngle = free ? raw : snapAngleDeg(raw / DEG, !!ctx.fine) * DEG;
     let note: string | null = null;
     // A wall direction wins over a 45° multiple only if it is closer
     const onMajor =
       Math.abs(raw / MAJOR_STEP - Math.round(raw / MAJOR_STEP)) * 45 < MAJOR_TOLERANCE_DEG;
-    let bestWall = onMajor
-      ? Math.min(WALL_DIRECTION_TOLERANCE, angleDiff(dirAngle, raw))
-      : WALL_DIRECTION_TOLERANCE;
+    let bestWall = free
+      ? -1
+      : onMajor
+        ? Math.min(WALL_DIRECTION_TOLERANCE, angleDiff(dirAngle, raw))
+        : WALL_DIRECTION_TOLERANCE;
     const corner = ctx.corner ?? [];
-    if (ctx.fine) {
+    if (ctx.fine && !free) {
       // Shift: only 1° steps, counted from the wall at the corner if there is one, so the
       // corner angle is a whole degree; no other stage may override them
       bestWall = -1;
@@ -189,7 +203,7 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
       }
     }
     // Right angles to the wall at the corner come first (not with Shift)
-    let bestCorner = ctx.fine ? -1 : CORNER_TOLERANCE;
+    let bestCorner = ctx.fine || free ? -1 : CORNER_TOLERANCE;
     for (const d of corner) {
       for (let k = 0; k < 4; k++) {
         const a = d + (k * Math.PI) / 2;
@@ -221,13 +235,13 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
     // Along the direction: lines and alignment guides close to the projected point
     let snapped: Snapped | null = null;
     let snappedDist = r;
-    for (const s of ctx.lines) {
+    ctx.lines.forEach((s, i) => {
       const hit = raySegment(previous, dir, s);
       if (hit && dist(hit, q) < snappedDist && dist(hit, previous) > 1) {
         snappedDist = dist(hit, q);
-        snapped = { pt: hit, marker: hit, guides: [], note: note ?? ctx.lineLabel ?? null };
+        snapped = { pt: hit, marker: hit, guides: [], note: note ?? lineNote(ctx, i) };
       }
-    }
+    });
     for (const ref of ctx.refs) {
       if (Math.abs(dir[0]) > 1e-6 && Math.abs(ref[0] - previous[0]) > 1e-6) {
         const t = (ref[0] - previous[0]) / dir[0];
@@ -257,14 +271,16 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
   }
 
   // 3. No previous point: lines, then alignment guides, then whole centimeters
-  for (const s of ctx.lines) {
+  let bestLine = -1;
+  ctx.lines.forEach((s, i) => {
     const q = projectOnSegment(p, s);
     if (dist(q, p) < bestDist) {
       best = q;
       bestDist = dist(q, p);
+      bestLine = i;
     }
-  }
-  if (best) return { pt: best, marker: best, guides: [], note: ctx.lineLabel ?? null };
+  });
+  if (best) return { pt: best, marker: best, guides: [], note: lineNote(ctx, bestLine) };
   let x = Math.round(p[0]);
   let y = Math.round(p[1]);
   const guides: Segment[] = [];
@@ -332,6 +348,8 @@ export function snapContext(
     if (showHints) hints.push({ pt, label });
   };
   const lines: Segment[] = [];
+  /** Labels of single lines (the others get the purpose's label) */
+  const lineLabelOf = new Map<Segment, string>();
   const refs: Pt[] = [];
   const directions: number[] = [];
   const keep = (q: Pt) => !excludePoint || dist(q, excludePoint) > 1e-6;
@@ -352,6 +370,15 @@ export function snapContext(
       showHints = !!near && distanceToWall(near, start, end) < radius * 8;
       named(start, "wall end");
       named(end, "wall end");
+      if (showHints && !a.arc_extent) {
+        // The faces of nearby walls: a wall can end on them and start at their corners
+        for (const side of [s.left, s.right]) {
+          const face: Segment = [side[0], side[side.length - 1]];
+          lines.push(face);
+          lineLabelOf.set(face, "on wall face");
+        }
+        for (const c of corners.filter(keep)) named(c, "wall corner");
+      }
       if (!a.arc_extent) {
         lines.push([start, end]);
         const len = dist(start, end);
@@ -383,6 +410,20 @@ export function snapContext(
       }
       for (const side of [s.left, s.right]) {
         for (let k = 0; k + 1 < side.length; k++) lines.push([side[k], side[k + 1]]);
+      }
+    }
+    if (anchor && !a.arc_extent && purpose !== "polyline" && near) {
+      // Foot of the perpendicular from the previous point on the axis and the faces
+      if (distanceToWall(near, start, end) < radius * 8) {
+        const segs: Segment[] = [
+          [s.left[0], s.left[s.left.length - 1]],
+          [s.right[0], s.right[s.right.length - 1]],
+        ];
+        if (purpose === "wall") segs.push([start, end]);
+        for (const seg of segs) {
+          const foot = perpendicularFoot(anchor, seg);
+          if (foot && dist(foot, anchor) > 1) named(foot, "perpendicular");
+        }
       }
     }
     if (purpose !== "polyline") {
@@ -463,6 +504,17 @@ export function snapContext(
     corner.push(Math.atan2(b[1] - a[1], b[0] - a[0]));
   }
 
+  // Preference "Objects" off: no points and lines of walls, rooms and furniture
+  const settings = usePreferences.getState();
+  if (!settings.snapObjects) {
+    points.length = 0;
+    lines.length = 0;
+    refs.length = 0;
+    hints.length = 0;
+    directions.length = 0;
+    labels.clear();
+  }
+
   // The path being drawn: its first point closes it, all its points align
   if (path.length > 0) {
     points.push(path[0]);
@@ -470,11 +522,42 @@ export function snapContext(
       labels.set(pointKey(path[0]), purpose === "room" ? "finish room" : "close");
   }
   refs.push(...path);
+
+  // Ruler guides: their ends, middles and crossings, the lines themselves and their directions
+  const lineLabels: (string | undefined)[] = lines.map((l) => lineLabelOf.get(l));
+  if (settings.snapToRulers) {
+    const rulers: Segment[] = levelGuides(home, levelId)
+      .filter((g) => g.id !== excludeId)
+      .map((g) => [
+        [g.x_start, g.y_start],
+        [g.x_end, g.y_end],
+      ]);
+    const others = [...lines];
+    rulers.forEach((s, i) => {
+      const [a, b] = s;
+      if (dist(a, b) < 1) return;
+      named(a, "ruler end");
+      named(b, "ruler end");
+      named([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], "ruler middle");
+      refs.push(...[a, b].filter(keep));
+      directions.push(Math.atan2(b[1] - a[1], b[0] - a[0]));
+      for (const o of [...others, ...rulers.slice(i + 1)]) {
+        const x = segmentIntersection(s, o);
+        if (x && keep(x)) {
+          points.push(x);
+          labels.set(pointKey(x), "ruler crossing");
+        }
+      }
+      lines.push(s);
+      lineLabels.push("on ruler");
+    });
+  }
   // Avoid directions that are too many to be meaningful
   return {
     radius,
     points,
     lines,
+    lineLabels,
     refs,
     directions: dedupeAngles(directions).slice(0, 8),
     labels,
@@ -482,7 +565,19 @@ export function snapContext(
     corner,
     fine,
     hints,
+    freeAngle: !settings.snapAngles,
   };
+}
+
+/** Foot of the perpendicular from `p` on segment `s`, or null if it lies beside the segment. */
+export function perpendicularFoot(p: Pt, [a, b]: Segment): Pt | null {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-9) return null;
+  const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2;
+  if (t <= 0.001 || t >= 0.999) return null;
+  return [a[0] + t * dx, a[1] + t * dy];
 }
 
 function distanceToWall(p: Pt, a: Pt, b: Pt): number {
