@@ -6,82 +6,39 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
-### Added
-
-- The location of the home can also be set in the home properties.
-- "Align north with the map": turn the walls over an OpenStreetMap map of the location to set
-  the north direction of the compass; the map can be zoomed and moved.
-- Rulers always show their length and angle in the plan, and both can be changed in the properties.
-- A second digit chooses the variants of a plan tool, e.g. 2 then 1 for "Room from walls".
-- Texts are typed directly in the plan; a double-click on a text changes it there.
-- A piece dragged from the catalog shows at its size in the plan before it is dropped.
-- "Keep proportions" for furniture, in the properties and with the plan handles.
-- The texture chooser offers the five textures used last and keeps its search text.
-- The context menu offers to remove the added dimensions of a wall or piece.
-- Three or more walls can be joined, e.g. a third wall to two joined walls.
-- Joining two collinear walls whose ends meet, e.g. the parts of a split wall, makes one wall.
-- The list of selected elements can be filtered by kind, and a kind removed from the selection.
-- Polylines can be shown in the 3D view ("Visible in 3D").
-- Status bar under the plan with switches for the magnetism (F9), angles, objects (F3) and
-  rulers, the snap radius and angle step (right click) and the mouse position.
-- Walls, rooms, lines, dimensions and rulers snap to the ends, middles, lines and crossings of
-  rulers.
-- Number fields calculate (`240+11.5`, `3m - 12cm`) and change values relatively (`+5`, `*2`);
-  arrow keys and the mouse wheel step them. Typed lengths in the plan accept units too.
-- Alt+arrow keys move the selection by 1 mm; Shift while dragging keeps the move on one axis.
-- A piece dragged from the catalog near a wall turns with its back to it before it is dropped.
-- While drawing, measuring or drawing a ruler, Tab switches from the typed length to the angle;
-  `@dx,dy` gives a point relative to the last one, `#x,y` an absolute point, `300<45` both.
-- Walls snap to the faces of nearby walls and to the foot of the perpendicular on them.
-- Snap markers show the kind of point (square end, triangle middle, cross crossing, ⊥, diamond for
-  rulers); the snap notes are translated.
-- Moved elements line up with the edges and middles of nearby furniture and with wall faces
-  (smart guides) and snap to equal gaps; a single piece shows its distances to its neighbors.
-- A click on a distance of the selected piece types it, and the piece moves there.
-- "Ruler at a distance…" in the context menu of a wall or ruler adds a parallel ruler.
-- Rooms have a handle in the middle of each edge to add a corner or (Shift) move the edge;
-  dragged corners snap to right angles with the neighboring edges.
-- Tab selects the next element under the mouse; a rubber band dragged to the left also selects
-  what it touches. Polylines are selected by the rubber band too.
-
-### Changed
-
-- The status bar shows icons and a button for the snap radius and angle step.
-- Error messages disappear after a few seconds.
-
-- Error messages are shown in the chosen language with a clearer explanation.
-- Dragged elements move in steps that get finer when zoomed in (down to 1 mm) instead of always
-  1 cm, and freely with Alt. Shift+drag no longer adds the element to the selection
-  (Shift+click does).
-- The furniture properties are ordered: name, description, size, elevation, position, angle,
-  then color, texture, surface and materials.
-
-### Fixed
-
-- "Room from walls" no longer adds a second room on walls that already enclose one.
-
-- Lamps whose light comes from a material of their model (e.g. the contributed "Mini spot")
-  are placed as lights and light the 3D view.
-- Walls stop the light of the lamps nearest to the visitor in the virtual visit.
-- Latitude and longitude are shown with four decimals instead of one.
-
-## [0.1.0] - 2026-11-11
+## [0.1.0] - 2026-11-15
 
 First public release.
 
 ### Added
 
-- 2D plan editor: walls (also round), rooms, dimensions, labels, polylines, levels,
+- 2D plan editor: walls (also round and sloping), rooms, dimensions, labels, polylines, levels,
   furniture with docking to walls, doors and windows, background images, rulers.
+- Precise drawing: typed lengths and angles while drawing, measuring or drawing a ruler (Tab
+  switches to the angle; `@dx,dy` relative, `#x,y` absolute, `300<45` both), number fields that
+  calculate (`240+11.5`, `3m - 12cm`) and change values relatively (`+5`, `*2`).
+- Magnetism: snapping to the ends, middles, faces and crossings of walls and rulers and to the
+  foot of the perpendicular, with markers for the kind of point; smart guides that line up moved
+  elements with nearby furniture and wall faces and snap to equal gaps; editable distances of
+  the selected piece to its neighbors.
+- Status bar under the plan with switches for the magnetism (F9), angles, objects (F3) and
+  rulers, the snap radius and angle step, and the mouse position.
+- Editing: room edge handles to add corners or move an edge, joining three or more walls and
+  merging collinear walls, "Ruler at a distance…", "Keep proportions" for furniture, texts typed
+  directly in the plan, Tab to select the next element under the mouse, crossing selection with
+  a rubber band dragged to the left, filtering the selection by kind.
 - 3D view with aerial view and virtual visit, photos (draft and GPU path tracing) and videos
-  along a camera path.
+  along a camera path; lamps light the 3D view, also with light from their model's materials.
+- Location of the home with address search, and "Align north with the map" over an
+  OpenStreetMap map.
 - Reading and writing Sweet Home 3D files (`.sh3d`, `.sh3f`, `.sh3t`), verified against the
   original Sweet Home 3D reader.
 - Catalog of installed Sweet Home 3D libraries, import of libraries, models (OBJ, DAE, 3DS,
   glTF/GLB and more) and textures, online catalog (sweethome3d.com, ambientCG, Poly Haven).
 - Printing and export: PDF, SVG, PNG, CSV and OBJ.
 - CLI `msh`, MCP server and live control of the running app.
-- User interface in English, German, French and Italian; user guide in English and German.
+- User interface in English, German, French and Italian, with error messages explained in the
+  chosen language; user guide in English and German.
 - MSI installer without bundled libraries; license and third-party notices installed with
   the app.
 
@@ -92,5 +49,5 @@ First public release.
 - Updated `quick-xml` (0.42) and `zip` (9) for RUSTSEC-2026-0194, -0195, -0367, -0368,
   -0369 and -0429.
 
-[Unreleased]: https://github.com/christophwalser/my-sweet-home/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/christophwalser/my-sweet-home/releases/tag/v0.1.0
+[Unreleased]: https://github.com/christophwalser/my-sweet-home/compare/0.1.0...HEAD
+[0.1.0]: https://github.com/christophwalser/my-sweet-home/releases/tag/0.1.0

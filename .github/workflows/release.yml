@@ -1,11 +1,11 @@
-# Builds the release artifacts. A tag "v<version>" (matching the version in Cargo.toml and
-# tauri.conf.json) builds them and creates a draft GitHub release, which a maintainer reviews
-# and publishes. "Run workflow" builds the artifacts without a release, for testing.
+# Builds the release artifacts. A tag "<version>" without a "v", e.g. "0.1.0" (matching the
+# version in Cargo.toml and tauri.conf.json), builds them and creates a draft GitHub release,
+# which a maintainer reviews and publishes. "Run workflow" builds the artifacts without a release, for testing.
 name: Release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["[0-9]+.[0-9]+.[0-9]+*"]
   workflow_dispatch:
 
 permissions:
@@ -41,7 +41,7 @@ jobs:
           if ($cargo.Matches[0].Groups[1].Value -ne $version) {
             throw "Version mismatch: Cargo.toml $($cargo.Matches[0].Groups[1].Value), tauri.conf.json $version"
           }
-          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne $version) {
             throw "Tag $env:GITHUB_REF_NAME does not match version $version"
           }
           "version=$version" >> $env:GITHUB_OUTPUT
