@@ -357,6 +357,23 @@ export default function PlanView() {
    * along the left normal of the line.
    */
   const offsetFrom = useRef<{ a: Pt; b: Pt; half: number; offset: number } | null>(null);
+  /** Focuses a field opened by a click once the click is over, with its text selected. */
+  const focusField = useCallback((el: HTMLInputElement | null) => {
+    if (el)
+      requestAnimationFrame(() => {
+        el.focus();
+        el.select();
+      });
+  }, []);
+  /**
+   * The plan takes typed values (a drawing, a measure, "Ruler at a distance" or a value being
+   * typed): digits and letters are input then, not shortcuts.
+   */
+  const takesTypedInput = () =>
+    draft.current.length > 0 ||
+    (measure.current !== null && !measure.current.done) ||
+    offsetFrom.current !== null ||
+    typed.current !== null;
   /** Distance of the selected piece being typed (clicked on its label) */
   const [distanceEdit, setDistanceEdit] = useState<{ id: string; d: Distance } | null>(null);
   /** Distances of the selected piece to its neighbors, kept while home and selection stay */
@@ -1079,6 +1096,9 @@ export default function PlanView() {
       const dist = distanceUnder(p);
       const selId = useStore.getState().selection[0];
       if (dist && selId) {
+        // No focus change by the mouse press: it would take the focus from the new field
+        e.preventDefault();
+        (e.target as Element).releasePointerCapture(e.pointerId);
         setDistanceEdit({ id: selId, d: dist });
         return;
       }
@@ -1947,6 +1967,8 @@ export default function PlanView() {
     const next = drawing ? inputKey(typed.current, e.key) : undefined;
     if (next !== undefined) {
       typed.current = next;
+    } else if (typed.current !== null && e.key.length === 1) {
+      // Other characters while a value is typed are no shortcuts (e.g. R would rotate)
     } else if (e.key === "Backspace" && drawing) {
       draft.current.pop();
       if (draft.current.length === 0) cursor.current = null;
@@ -2007,7 +2029,8 @@ export default function PlanView() {
       typed.current = null;
     } else {
       const next = inputKey(typed.current, e.key);
-      if (next === undefined) return false;
+      // Other characters while a value is typed are no shortcuts
+      if (next === undefined) return typed.current !== null && e.key.length === 1;
       typed.current = next;
     }
     draw();
@@ -2298,8 +2321,7 @@ export default function PlanView() {
         },
         selectAll: () => void onShortcut("a", useStore.getState().selection),
         paste: () => void onShortcut("v", useStore.getState().selection),
-        isDrawing: () =>
-          draft.current.length > 0 || (measure.current !== null && !measure.current.done),
+        isDrawing: takesTypedInput,
       }),
     [input, effectiveLevel],
   );
@@ -2438,8 +2460,7 @@ export default function PlanView() {
         {distanceEdit && (
           <input
             className="plan-distance-editor"
-            // biome-ignore lint/a11y/noAutofocus: the field opens on a click to be typed in
-            autoFocus
+            ref={focusField}
             aria-label={t("Distance")}
             style={(() => {
               const v = viewRef.current;
@@ -2451,7 +2472,6 @@ export default function PlanView() {
               };
             })()}
             defaultValue={formatFieldValue(toUnit(distanceEdit.d.value))}
-            onFocus={(e) => e.currentTarget.select()}
             onKeyDown={(e) => {
               e.stopPropagation();
               if (e.key === "Enter") commitDistance(distanceEdit, e.currentTarget.value);
