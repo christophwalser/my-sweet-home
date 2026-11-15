@@ -5,7 +5,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import ts from "typescript";
+// The parser of Vite (oxc): TypeScript 7 has no JavaScript compiler API any more
+import { parseAst } from "vite";
 
 const SRC = path.resolve("src");
 const LANGUAGES = ["de", "fr", "it"];
@@ -26,23 +27,30 @@ function collectKeys() {
   const keys = new Set();
   const add = (e) => {
     if (!e) return;
-    if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) keys.add(e.text);
-    else if (ts.isConditionalExpression(e)) {
-      add(e.whenTrue);
-      add(e.whenFalse);
-    } else if (ts.isParenthesizedExpression(e)) add(e.expression);
+    if (e.type === "Literal" && typeof e.value === "string") keys.add(e.value);
+    else if (e.type === "TemplateLiteral" && e.expressions.length === 0) {
+      keys.add(e.quasis[0].value.cooked);
+    } else if (e.type === "ConditionalExpression") {
+      add(e.consequent);
+      add(e.alternate);
+    } else if (e.type === "ParenthesizedExpression") add(e.expression);
+  };
+  const visit = (n) => {
+    if (Array.isArray(n)) {
+      for (const c of n) visit(c);
+      return;
+    }
+    if (!n || typeof n !== "object") return;
+    if (n.type === "CallExpression" && n.callee?.type === "Identifier" && n.callee.name === "t") {
+      add(n.arguments[0]);
+    }
+    for (const [k, v] of Object.entries(n)) {
+      if (k !== "parent" && v && typeof v === "object") visit(v);
+    }
   };
   for (const file of files(SRC)) {
     const src = fs.readFileSync(file, "utf8");
-    const kind = file.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-    const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, kind);
-    const visit = (n) => {
-      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "t") {
-        add(n.arguments[0]);
-      }
-      ts.forEachChild(n, visit);
-    };
-    visit(sf);
+    visit(parseAst(src, { lang: file.endsWith("x") ? "tsx" : "ts" }));
   }
   return keys;
 }
