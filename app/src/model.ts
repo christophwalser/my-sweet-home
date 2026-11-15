@@ -356,6 +356,8 @@ export type Home = {
       north_direction: number | null;
       latitude: number | null;
       longitude: number | null;
+      /** IANA time zone of the location */
+      time_zone?: string | null;
       visible: boolean | null;
     };
   } | null;

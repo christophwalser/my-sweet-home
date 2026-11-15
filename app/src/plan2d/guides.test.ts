@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { makeHome, makeLevel } from "../testFixtures";
 import {
   GUIDES_PROPERTY,
+  guideAngle,
   guideAt,
   guideDash,
+  guideEnd,
+  guideLength,
   guidesInRect,
   homeGuides,
   levelGuides,
@@ -45,6 +48,15 @@ describe("guides", () => {
     expect([dragged[1].x_start, dragged[1].y_start, dragged[1].x_end, dragged[1].y_end]).toEqual([
       0, 50, 40, 160,
     ]);
+  });
+
+  it("gives length and direction of a guide and moves its end to new ones", () => {
+    expect(guideLength(guides[0])).toBe(100);
+    expect(guideAngle(guides[0])).toBe(0);
+    expect(guideAngle(guides[1])).toBe(90);
+    expect(guideAngle({ ...guides[0], y_end: -100 })).toBe(315);
+    expect(guideEnd(guides[1], 50, 0)).toEqual([50, 50]);
+    expect(guideEnd(guides[0], 200, 90)).toEqual([0, 200]);
   });
 
   it("has a dash pattern per dash style, dashed by default", () => {

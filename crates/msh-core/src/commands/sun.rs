@@ -60,6 +60,16 @@ struct LocationParams {
 }
 
 #[derive(Deserialize, JsonSchema)]
+struct MapParams {
+    /// Latitude of the middle in degrees (default: the location of the home)
+    latitude: Option<f64>,
+    /// Longitude of the middle in degrees (default: the location of the home)
+    longitude: Option<f64>,
+    /// Zoom level of the map (15..19, default 19: about 0.2 m per pixel)
+    zoom: Option<u32>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct NoParams {}
 
 #[derive(Deserialize, JsonSchema, Clone, Copy)]
@@ -111,6 +121,29 @@ pub(super) fn register(r: &mut Registry) {
          locations with latitude and longitude; set one with location_set.",
         false,
         |_, p: SearchParams| search(&p.query, p.limit.unwrap_or(5).clamp(1, 10)),
+    );
+    r.add(
+        "location_map",
+        "Downloads a map (OpenStreetMap, north up) around the location of the home or the \
+         given position, e.g. to turn the plan so its north direction matches the map. \
+         Returns a PNG as data URL, its size in pixels, the position (latitude, longitude) \
+         and its pixel, the zoom and the meters per pixel.",
+        false,
+        |doc, p: MapParams| {
+            let (lat, lon) = match (p.latitude, p.longitude) {
+                (Some(lat), Some(lon)) => (lat, lon),
+                _ => {
+                    let (lat, lon, _) = location(doc.home());
+                    (p.latitude.unwrap_or(lat), p.longitude.unwrap_or(lon))
+                }
+            };
+            if !lat.is_finite() || !lon.is_finite() {
+                return Err(CommandError::failed(
+                    "latitude and longitude must be numbers",
+                ));
+            }
+            map(lat, lon, p.zoom.unwrap_or(19).clamp(15, 19))
+        },
     );
     r.add(
         "location_set",
@@ -499,6 +532,103 @@ fn view3d_json(home: &Home) -> Value {
     })
 }
 
+/// HTTP user agent of requests to OpenStreetMap services (their usage policies ask for one
+/// that names the application).
+fn user_agent() -> String {
+    format!(
+        "MySweetHome/{} (home planner compatible with Sweet Home 3D)",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
+/// Map tiles of OpenStreetMap (256 pixels, north up, Web Mercator).
+const TILE_URL: &str = "https://tile.openstreetmap.org";
+const TILE_SIZE: u32 = 256;
+/// Tiles per side of the downloaded map (odd: the position lies in the middle tile).
+const MAP_TILES: u32 = 3;
+
+/// Global pixel position of a point in the Web Mercator map of a zoom level.
+fn mercator_pixel(lat: f64, lon: f64, zoom: u32) -> (f64, f64) {
+    let size = f64::from(TILE_SIZE) * f64::from(1u32 << zoom);
+    let lat = lat.clamp(-85.05, 85.05).to_radians();
+    let x = (lon + 180.0) / 360.0 * size;
+    let y = (1.0 - (lat.tan() + 1.0 / lat.cos()).ln() / std::f64::consts::PI) / 2.0 * size;
+    (x, y)
+}
+
+/// Downloads the tiles around a position (one request per tile, once per user action, as
+/// the tile usage policy allows) and joins them into one PNG.
+fn map(lat: f64, lon: f64, zoom: u32) -> Result<Value, CommandError> {
+    use base64::Engine;
+    use std::io::Read;
+    let (px, py) = mercator_pixel(lat, lon, zoom);
+    let tiles = 1i64 << zoom;
+    let (tx, ty) = (
+        (px / f64::from(TILE_SIZE)).floor() as i64,
+        (py / f64::from(TILE_SIZE)).floor() as i64,
+    );
+    let half = i64::from(MAP_TILES / 2);
+    let side = TILE_SIZE * MAP_TILES;
+    let mut joined = image::RgbaImage::from_pixel(side, side, image::Rgba([224, 224, 224, 255]));
+    let agent = user_agent();
+    for row in 0..MAP_TILES {
+        for col in 0..MAP_TILES {
+            let y = ty - half + i64::from(row);
+            if !(0..tiles).contains(&y) {
+                continue;
+            }
+            // The map repeats around the world from east to west
+            let x = (tx - half + i64::from(col)).rem_euclid(tiles);
+            let mut bytes = Vec::new();
+            ureq::get(&format!("{TILE_URL}/{zoom}/{x}/{y}.png"))
+                .header("User-Agent", &agent)
+                .config()
+                .timeout_global(Some(std::time::Duration::from_secs(15)))
+                .build()
+                .call()
+                .map_err(|e| CommandError::failed(format!("map download failed: {e}")))?
+                .into_body()
+                .into_with_config()
+                .limit(4 << 20)
+                .reader()
+                .take(4 << 20)
+                .read_to_end(&mut bytes)
+                .map_err(|e| CommandError::failed(format!("map download failed: {e}")))?;
+            let tile = image::load_from_memory(&bytes)
+                .map_err(|e| CommandError::failed(format!("unreadable map tile: {e}")))?
+                .to_rgba8();
+            image::imageops::overlay(
+                &mut joined,
+                &tile,
+                i64::from(col * TILE_SIZE),
+                i64::from(row * TILE_SIZE),
+            );
+        }
+    }
+    let mut png = Vec::new();
+    joined
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .map_err(|e| CommandError::failed(format!("map could not be written: {e}")))?;
+    let origin = |t: i64| ((t - half) * i64::from(TILE_SIZE)) as f64;
+    // Ground resolution of Web Mercator at this latitude
+    let meters_per_pixel = 156_543.033_928 * lat.to_radians().cos() / f64::from(1u32 << zoom);
+    Ok(json!({
+        "image": format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(&png)
+        ),
+        "width": side,
+        "height": side,
+        "x": r2(px - origin(tx)),
+        "y": r2(py - origin(ty)),
+        "meters_per_pixel": meters_per_pixel,
+        "zoom": zoom,
+        "latitude": lat,
+        "longitude": lon,
+        "attribution": "© OpenStreetMap contributors",
+    }))
+}
+
 /// Address search with OpenStreetMap Nominatim (one request per user action, as its
 /// usage policy asks; identified by the application name).
 fn search(query: &str, limit: u32) -> Result<Value, CommandError> {
@@ -506,19 +636,18 @@ fn search(query: &str, limit: u32) -> Result<Value, CommandError> {
     if query.is_empty() {
         return Err(CommandError::failed("the search text is empty"));
     }
-    let agent = format!(
-        "MySweetHome/{} (home planner compatible with Sweet Home 3D)",
-        env!("CARGO_PKG_VERSION")
-    );
     let body = ureq::get(NOMINATIM_URL)
-        .set("User-Agent", &agent)
+        .header("User-Agent", user_agent())
         .query("q", query)
         .query("format", "jsonv2")
-        .query("limit", &limit.to_string())
-        .timeout(std::time::Duration::from_secs(15))
+        .query("limit", limit.to_string())
+        .config()
+        .timeout_global(Some(std::time::Duration::from_secs(15)))
+        .build()
         .call()
         .map_err(|e| CommandError::failed(format!("address search failed: {e}")))?
-        .into_string()
+        .into_body()
+        .read_to_string()
         .map_err(|e| CommandError::failed(format!("address search failed: {e}")))?;
     let found: Vec<Value> = serde_json::from_str(&body).map_err(|e| {
         CommandError::failed(format!("unexpected answer of the address search: {e}"))
@@ -541,6 +670,16 @@ fn search(query: &str, limit: u32) -> Result<Value, CommandError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mercator_pixels_of_known_points() {
+        // Zoom 0: the world is one tile of 256 pixels with (0°, 0°) in the middle
+        let (x, y) = mercator_pixel(0.0, 0.0, 0);
+        assert!((x - 128.0).abs() < 1e-9 && (y - 128.0).abs() < 1e-9);
+        // Zurich at zoom 19 lies in tile 274_583 / 183_598 (OpenStreetMap numbering)
+        let (x, y) = mercator_pixel(47.3769, 8.5417, 19);
+        assert_eq!(((x / 256.0) as i64, (y / 256.0) as i64), (274_583, 183_598));
+    }
 
     #[test]
     fn sun_at_solstice_noon_in_paris() {

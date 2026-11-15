@@ -28,7 +28,12 @@ function polar(from: Pt, deg: number, length: number): Pt {
 const angleOf = (from: Pt, to: Pt) => Math.atan2(to[1] - from[1], to[0] - from[0]) / DEG;
 
 afterEach(() => {
-  usePreferences.setState({ angleStep: 5 });
+  usePreferences.setState({
+    angleStep: 5,
+    snapAngles: true,
+    snapObjects: true,
+    snapToRulers: true,
+  });
 });
 
 describe("pointKey", () => {
@@ -291,6 +296,24 @@ describe("snapContext", () => {
     expect(c.lineLabel).toBe("on wall axis");
   });
 
+  it("adds the faces, face corners and perpendicular feet of nearby walls for walls", () => {
+    const c = snapContext("wall", home, shapes, null, 10, {
+      near: [100, 20],
+      anchor: [50, 100],
+    });
+    const t = w1.attrs.thickness / 2;
+    // The faces of the near wall are lines with their own label
+    const faces = c.lines.filter((_, i) => c.lineLabels?.[i] === "on wall face");
+    expect(faces).toHaveLength(2);
+    expect(c.labels?.get(pointKey([0, -t]))).toBe("wall corner");
+    // Perpendicular from the previous point onto the axis and both faces of w1
+    expect(c.labels?.get(pointKey([50, 0]))).toBe("perpendicular");
+    expect(c.labels?.get(pointKey([50, t]))).toBe("perpendicular");
+    // The far wall gives none
+    expect(c.labels?.get(pointKey([50, 300]))).toBeUndefined();
+    expect(snapDraw([51, 3], [50, 100], c).note).toBe("perpendicular");
+  });
+
   it("leaves out the element being edited and the point being moved", () => {
     const c = snapContext("wall", home, shapes, null, 10, {
       excludeId: "w1",
@@ -443,5 +466,48 @@ describe("offsetOutline", () => {
       5,
     );
     expect(Math.hypot(out[1][0] - 100, out[1][1])).toBeLessThanOrEqual(5 / 0.2 + 1e-9);
+  });
+});
+
+describe("ruler guides and the snap switches", () => {
+  const wall = makeWall("w", [0, 0], [400, 0]);
+  const guides = [
+    { id: "g1", level: null, x_start: 100, y_start: -100, x_end: 100, y_end: 300 },
+    { id: "g2", level: null, x_start: -50, y_start: 200, x_end: 450, y_end: 200 },
+  ];
+  const home = makeHome({
+    walls: [wall],
+    properties: [{ name: "mySweetHome.guides", value: JSON.stringify(guides) }],
+  } as never);
+  const shapes = [straightShape(wall)];
+
+  it("snaps to the ends, middles, crossings and lines of rulers", () => {
+    const c = snapContext("wall", home, shapes, null, 10);
+    expect(c.points).toContainEqual([100, 300]);
+    expect(c.labels?.get(pointKey([100, 100]))).toBe("ruler middle");
+    // Crossing of the two rulers and of a ruler with the wall axis
+    expect(c.labels?.get(pointKey([100, 200]))).toBe("ruler crossing");
+    expect(c.labels?.get(pointKey([100, 0]))).toBe("ruler crossing");
+    const s = snapDraw([104, 150], null, c);
+    expect(s.pt).toEqual([100, 150]);
+    expect(s.note).toBe("on ruler");
+  });
+
+  it("leaves rulers, objects or angles out when they are switched off", () => {
+    usePreferences.setState({ snapToRulers: false });
+    expect(snapContext("wall", home, shapes, null, 10).labels?.get(pointKey([100, 200]))).toBe(
+      undefined,
+    );
+    usePreferences.setState({ snapToRulers: true, snapObjects: false });
+    const c = snapContext("wall", home, shapes, null, 10);
+    expect(c.points).not.toContainEqual([0, 0]);
+    expect(c.points).toContainEqual([100, 300]);
+    usePreferences.setState({ snapObjects: true, snapAngles: false });
+    const free = snapDraw(
+      polar([0, 100], 3, 150),
+      [0, 100],
+      snapContext("room", home, shapes, null, 1),
+    );
+    expect(angleOf([0, 100], free.pt)).toBeCloseTo(3);
   });
 });

@@ -1,8 +1,14 @@
 //! File exports through the command registry: plan as SVG, PNG and PDF, furniture list as CSV.
+//!
+//! The tests run with an isolated catalog (`common::isolated_catalog`) and an imported box as
+//! furniture, so they need no installed Sweet Home 3D.
 
+mod common;
+
+use common::{isolated_catalog, write_box_obj};
 use msh_core::{Document, Registry};
 use serde_json::{Value, json};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn run(r: &Registry, doc: &mut Document, name: &str, params: Value) -> Value {
     r.execute(doc, name, params)
@@ -15,9 +21,17 @@ fn out_dir(test: &str) -> PathBuf {
     dir
 }
 
-/// Two levels with walls, a room, a dimension, a label and furniture with prices.
-fn small_house(r: &Registry) -> Document {
+/// Two levels with walls, a room, a dimension, a label and a piece of furniture imported into
+/// the isolated catalog in `root`.
+fn small_house(r: &Registry, root: &Path) -> Document {
     let mut doc = Document::default();
+    let model = write_box_obj(root, "export-test-bed.obj", [140.0, 50.0, 190.0]);
+    let bed = run(
+        r,
+        &mut doc,
+        "furniture_import",
+        json!({ "model_path": model, "name": "Export test bed" }),
+    );
     run(
         r,
         &mut doc,
@@ -53,7 +67,7 @@ fn small_house(r: &Registry) -> Document {
         r,
         &mut doc,
         "furniture_add",
-        json!({ "catalog_id": "eTeks#bed140x190", "x": 300, "y": 200 }),
+        json!({ "catalog_id": bed["catalog_id"], "x": 300, "y": 200 }),
     );
     run(
         r,
@@ -73,8 +87,11 @@ fn small_house(r: &Registry) -> Document {
 
 #[test]
 fn plan_exports_to_svg_png_and_pdf() {
+    let Some(root) = isolated_catalog("plan_exports_to_svg_png_and_pdf") else {
+        return;
+    };
     let r = Registry::standard();
-    let mut doc = small_house(&r);
+    let mut doc = small_house(&r, &root);
     let dir = out_dir("plan");
 
     let svg = dir.join("plan.svg");
@@ -153,8 +170,11 @@ fn plan_exports_to_svg_png_and_pdf() {
 
 #[test]
 fn furniture_list_exports_to_csv() {
+    let Some(root) = isolated_catalog("furniture_list_exports_to_csv") else {
+        return;
+    };
     let r = Registry::standard();
-    let mut doc = small_house(&r);
+    let mut doc = small_house(&r, &root);
     let dir = out_dir("csv");
     let csv = dir.join("furniture.csv");
 
@@ -192,9 +212,12 @@ fn furniture_list_exports_to_csv() {
 
 #[test]
 fn printed_home_has_furniture_plan_and_3d_pages() {
+    let Some(root) = isolated_catalog("printed_home_has_furniture_plan_and_3d_pages") else {
+        return;
+    };
     use base64::Engine;
     let r = Registry::standard();
-    let mut doc = small_house(&r);
+    let mut doc = small_house(&r, &root);
     let dir = out_dir("document");
 
     // Pages for printing: furniture list, three levels and the 3D view
@@ -256,9 +279,12 @@ fn printed_home_has_furniture_plan_and_3d_pages() {
 
 #[test]
 fn plan_export_draws_furniture_from_above_or_as_icons() {
+    let Some(root) = isolated_catalog("plan_export_draws_furniture_from_above_or_as_icons") else {
+        return;
+    };
     use base64::Engine;
     let r = Registry::standard();
-    let mut doc = small_house(&r);
+    let mut doc = small_house(&r, &root);
     let dir = out_dir("top-view");
     let mut piece = None;
     doc.home()

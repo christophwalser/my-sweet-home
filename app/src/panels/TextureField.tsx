@@ -4,11 +4,13 @@
 
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useMemo, useState } from "react";
-import { api, docResourceUrl, libResourceUrl } from "../api";
+import { api, type CatalogItem, docResourceUrl, libResourceUrl } from "../api";
 import { TEXTURE_EXTENSIONS } from "../catalog/modelConvert";
 import { t } from "../i18n";
 import type { Texture } from "../model";
 import { useStore } from "../store";
+import Icon from "../ui/Icon";
+import { useUi } from "../ui/uiStore";
 
 /** Number of textures shown at once in the grid (keeps the panel fast). */
 const MAX_SHOWN = 150;
@@ -32,11 +34,23 @@ function fileStem(path: string): string {
 
 export default function TextureField({ label, current, mixed, onCommit }: Props) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  // Kept for the next element (e.g. the same texture for several materials or pieces)
+  const query = useUi((s) => s.textureQuery);
+  const setQuery = useUi((s) => s.setTextureQuery);
+  const recentIds = useUi((s) => s.recentTextures);
+  const noteTexture = useUi((s) => s.noteTexture);
   const [pending, setPending] = useState<PendingImport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const catalog = useStore((s) => s.catalog);
   const docId = useStore((s) => s.opened?.id);
+
+  const recent = useMemo(
+    () =>
+      recentIds
+        .map((id) => catalog?.items.find((item) => item.kind === "textures" && item.id === id))
+        .filter((item) => item !== undefined),
+    [catalog, recentIds],
+  );
 
   const textures = useMemo(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -49,8 +63,20 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
 
   const pick = (id: string) => {
     onCommit(id);
+    noteTexture(id);
     setOpen(false);
   };
+
+  const tile = (item: CatalogItem) => (
+    <button
+      type="button"
+      key={`${item.library}:${item.id}`}
+      title={`${item.name} (${item.category})`}
+      onClick={() => pick(item.id as string)}
+    >
+      {item.icon ? <img src={libResourceUrl(item.library, item.icon)} alt="" /> : item.name}
+    </button>
+  );
 
   const chooseImage = async () => {
     const chosen = await openDialog({
@@ -103,12 +129,31 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
       {open && (
         <div className="texture-picker">
           <div className="texture-picker-bar">
-            <input
-              type="search"
-              placeholder={t("Search textures")}
-              value={query}
-              onChange={(e) => setQuery(e.currentTarget.value)}
-            />
+            <span className="search-box">
+              <input
+                type="text"
+                placeholder={t("Search textures")}
+                value={query}
+                onChange={(e) => setQuery(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape" && query) {
+                    e.stopPropagation();
+                    setQuery("");
+                  }
+                }}
+              />
+              {query && (
+                <button
+                  type="button"
+                  className="search-clear"
+                  title={t("Clear the search")}
+                  aria-label={t("Clear the search")}
+                  onClick={() => setQuery("")}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              )}
+            </span>
             <button type="button" onClick={() => pick("")} disabled={!current && !mixed}>
               {t("None")}
             </button>
@@ -162,22 +207,14 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
           )}
           {error && <p className="small error-text">{error}</p>}
           {!catalog && <p className="muted small">{t("Loading catalog…")}</p>}
-          <div className="texture-grid">
-            {textures.slice(0, MAX_SHOWN).map((item) => (
-              <button
-                type="button"
-                key={`${item.library}:${item.id}`}
-                title={`${item.name} (${item.category})`}
-                onClick={() => pick(item.id as string)}
-              >
-                {item.icon ? (
-                  <img src={libResourceUrl(item.library, item.icon)} alt="" />
-                ) : (
-                  item.name
-                )}
-              </button>
-            ))}
-          </div>
+          {recent.length > 0 && (
+            <>
+              <p className="muted small texture-heading">{t("Used last")}</p>
+              <div className="texture-grid texture-recent">{recent.map(tile)}</div>
+              <p className="muted small texture-heading">{t("All textures")}</p>
+            </>
+          )}
+          <div className="texture-grid">{textures.slice(0, MAX_SHOWN).map(tile)}</div>
           {textures.length > MAX_SHOWN && (
             <p className="muted small">
               {textures.length - MAX_SHOWN} {t("more; refine the search to see them.")}

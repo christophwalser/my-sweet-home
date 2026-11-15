@@ -29,7 +29,7 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 chrono-tz = "0.10"
 iana-time-zone = "0.1"
 # Address search (OpenStreetMap Nominatim) for the location of the home
-ureq = "2.12"
+ureq = "3.5"
 # Addresses of catalog feeds
 url = "2"
 

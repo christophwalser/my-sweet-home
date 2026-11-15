@@ -8,7 +8,7 @@ export type PlanActions = {
   selectAll: () => void;
   /** Pastes the clipboard on the selected level and selects the pasted elements */
   paste: () => void;
-  /** A drawing is in progress (digits then type a length) */
+  /** A drawing or measure is in progress (digits then type a length) */
   isDrawing: () => boolean;
 };
 

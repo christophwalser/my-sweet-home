@@ -4,7 +4,9 @@ use super::{deg, new_id, parse_color, rad, resolve_level, round2, target_ids, up
 use crate::catalog::{CatalogIndex, EmbeddedResources, FurnitureEntry, embed_furniture_resources};
 use crate::document::Document;
 use crate::registry::{CommandError, Registry};
-use msh_model::{Color, Furniture, Home, LightSource, Piece, PieceAttrs, PieceKind, Sash};
+use msh_model::{
+    Color, Furniture, Home, LightSource, LightSourceMaterial, Piece, PieceAttrs, PieceKind, Sash,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -243,7 +245,7 @@ pub(super) fn register(r: &mut Registry) {
                                 "height": i.height,
                                 "elevation": i.elevation,
                                 "door_or_window": i.door_or_window,
-                                "light": i.extra.contains_key("lightSourceX"),
+                                "light": is_light_item(&i.extra),
                                 "creator": i.creator,
                                 "license": i.license.as_ref().or(f.library_license.as_ref()),
                             }));
@@ -694,7 +696,7 @@ fn piece_from_catalog(doc: &mut Document, entry: &FurnitureEntry) -> Result<Piec
     let flag = |k: &str| x.get(k).map(|v| v.trim().eq_ignore_ascii_case("true"));
     let (w, d, h) = (item.width, item.depth, item.height);
 
-    let is_light = x.contains_key("lightSourceX");
+    let is_light = is_light_item(x);
     let is_shelf_unit = x.contains_key("shelfElevations") || x.contains_key("shelfBoxes");
     let kind = if item.door_or_window {
         PieceKind::DoorOrWindow
@@ -827,15 +829,34 @@ fn piece_from_catalog(doc: &mut Document, entry: &FurnitureEntry) -> Result<Piec
             });
         }
     }
+    // Sweet Home 3D 7: parts of the model with these materials are the light sources
+    let light_source_materials = x
+        .get("lightSourceMaterialName")
+        .map(|v| {
+            v.split_whitespace()
+                .map(|name| LightSourceMaterial {
+                    name: name.to_owned(),
+                    ..Default::default()
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     Ok(Piece {
         kind,
         attrs,
         sashes,
         light_sources,
+        light_source_materials,
         shelves,
         ..Default::default()
     })
+}
+
+/// A catalog item is a lamp: it has light source points or (Sweet Home 3D 7) materials of
+/// its model that are light sources.
+fn is_light_item(extra: &std::collections::BTreeMap<String, String>) -> bool {
+    extra.contains_key("lightSourceX") || extra.contains_key("lightSourceMaterialName")
 }
 
 /// Depth of a door or window from the catalog (its real depth), if its catalog item is known.

@@ -49,6 +49,21 @@ function pieceTransform(p: Piece, base: number): THREE.Object3D {
   return tmp;
 }
 
+/** Light color of lamps whose model materials are their light sources. */
+const MATERIAL_LIGHT_COLOR = 0xffffff;
+
+/**
+ * Light sources of a lamp: its points, or for a lamp whose model materials are its light
+ * sources (Sweet Home 3D 7) one source in the middle of the piece.
+ */
+export function lightSources(p: Piece): NonNullable<Piece["light_sources"]> {
+  if (p.light_sources?.length) return p.light_sources;
+  if (p.light_source_materials?.length) {
+    return [{ x: 0.5, y: 0.5, z: 0.5, color: MATERIAL_LIGHT_COLOR, diameter: null }];
+  }
+  return [];
+}
+
 /** World positions and colors of all light sources of visible lamps. */
 export function lampLights(
   home: Home,
@@ -57,8 +72,8 @@ export function lampLights(
 ): LampLight[] {
   const result: LampLight[] = [];
   forEachPiece(home.furniture, (p) => {
-    const sources = p.light_sources;
-    if (!sources?.length || !shown.has(p.attrs.level)) return;
+    const sources = lightSources(p);
+    if (!sources.length || !shown.has(p.attrs.level)) return;
     const a = p.attrs;
     const power = a.power ?? 0.5;
     if (power <= 0) return;
@@ -93,22 +108,55 @@ export function normalizedColor(c: THREE.Color): THREE.Color {
   return color;
 }
 
-/** Lights for the lamps nearest to `viewer`, at most `max`. */
+/** Number of lamps nearest to the viewer whose light is stopped by walls (shadows). */
+export const LAMP_SHADOWS = 4;
+/** Size of a lamp's shadow map (per side of its cube for a point light). */
+const LAMP_SHADOW_SIZE = 512;
+
+/**
+ * Lets a lamp's light be stopped by walls and furniture. The shadow is drawn once (lamps and
+ * walls do not move while the visitor walks); `refreshLampShadows` draws it again.
+ */
+function castLampShadow(light: THREE.PointLight | THREE.SpotLight): void {
+  light.castShadow = true;
+  light.shadow.mapSize.set(LAMP_SHADOW_SIZE, LAMP_SHADOW_SIZE);
+  light.shadow.bias = -0.004;
+  light.shadow.normalBias = 1;
+  light.shadow.camera.near = 2;
+  light.shadow.camera.far = LIGHT_RANGE * 1.5;
+  light.shadow.autoUpdate = false;
+  light.shadow.needsUpdate = true;
+}
+
+/** Draws the shadows of the lamps again, e.g. after models were loaded. */
+export function refreshLampShadows(lamps: THREE.Object3D): void {
+  lamps.traverse((o) => {
+    const light = o as THREE.PointLight;
+    if (light.isLight && light.castShadow) light.shadow.needsUpdate = true;
+  });
+}
+
+/**
+ * Lights for the lamps nearest to `viewer`, at most `max`. The `shadows` nearest ones are
+ * stopped by walls, so a lamp outside does not light the room behind the wall.
+ */
 export function buildLampLights(
   lights: LampLight[],
   viewer: THREE.Vector3,
   max = MAX_LAMP_LIGHTS,
+  shadows = 0,
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = "lamps";
   const nearest = [...lights]
     .sort((a, b) => a.position.distanceToSquared(viewer) - b.position.distanceToSquared(viewer))
     .slice(0, max);
-  for (const l of nearest) {
+  nearest.forEach((l, i) => {
     const color = normalizedColor(l.color);
     if (l.spot === null) {
       const light = new THREE.PointLight(color, LIGHT_INTENSITY * l.power, LIGHT_RANGE, 2);
       light.position.copy(l.position);
+      if (i < shadows) castLampShadow(light);
       group.add(light);
     } else {
       // A cone concentrates the light of the lamp: narrow cones are brighter
@@ -124,9 +172,10 @@ export function buildLampLights(
       );
       light.position.copy(l.position);
       light.target.position.copy(l.position).addScaledVector(l.direction, 100);
+      if (i < shadows) castLampShadow(light);
       group.add(light, light.target);
     }
-  }
+  });
   return group;
 }
 

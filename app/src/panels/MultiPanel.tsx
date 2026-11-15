@@ -2,12 +2,13 @@
 // furniture). A field shows the common value or "mixed"; a change applies to all
 // selected elements of that kind in one command (one undo step).
 
+import { useState } from "react";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Room, type Texture, type Wall } from "../model";
 import { useStore, VISITOR_ID } from "../store";
 import { formatArea, formatLength } from "../units";
 import { byRole, Field, SelectField, SideSection, toHex, WALL_PATTERNS } from "./fields";
-import { selectionItems } from "./selectionItems";
+import { type SelectionGroup, selectionGroups, selectionItems } from "./selectionItems";
 import TextureField from "./TextureField";
 
 type Run = (command: string, params: Record<string, unknown>) => Promise<unknown>;
@@ -387,12 +388,59 @@ export default function MultiPanel({
  */
 function SelectionList({ home, selection }: { home: Home; selection: string[] }) {
   const setSelection = useStore((s) => s.setSelection);
+  const [filter, setFilter] = useState<SelectionGroup | null>(null);
   const items = selectionItems(home, selection, VISITOR_ID);
+  const groups = selectionGroups(items);
+  // A filter whose elements all left the selection shows everything again
+  const active = filter && groups.some((g) => g.group === filter) ? filter : null;
+  const shown = active ? items.filter((i) => i.group === active) : items;
+  const activeLabel = groups.find((g) => g.group === active)?.label ?? "";
   return (
     <section className="selection-list">
       <h3>{t("Selected elements ({n})", { n: items.length })}</h3>
+      {groups.length > 1 && (
+        // biome-ignore lint/a11y/useSemanticElements: a fieldset would add a border and legend
+        <div className="selection-filter" role="group" aria-label={t("Show only")}>
+          <button
+            type="button"
+            className={`chip ${active ? "" : "on"}`}
+            aria-pressed={!active}
+            onClick={() => setFilter(null)}
+          >
+            {t("All")} ({items.length})
+          </button>
+          {groups.map((g) => (
+            <button
+              type="button"
+              key={g.group}
+              className={`chip ${active === g.group ? "on" : ""}`}
+              aria-pressed={active === g.group}
+              onClick={() => setFilter(active === g.group ? null : g.group)}
+            >
+              {g.label} ({g.count})
+            </button>
+          ))}
+        </div>
+      )}
+      {active && (
+        <div className="prop-actions">
+          <button
+            type="button"
+            onClick={() => {
+              const ids = new Set(shown.map((i) => i.id));
+              setSelection(selection.filter((id) => !ids.has(id)));
+              setFilter(null);
+            }}
+          >
+            {t("Remove {kind} from the selection", { kind: activeLabel })}
+          </button>
+          <button type="button" onClick={() => setSelection(shown.map((i) => i.id))}>
+            {t("Select only {kind}", { kind: activeLabel })}
+          </button>
+        </div>
+      )}
       <ul>
-        {items.map((item) => (
+        {shown.map((item) => (
           <li key={item.id}>
             <button
               type="button"
