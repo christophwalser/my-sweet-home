@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { REFERENCE_PROPERTY } from "../model";
 import {
   makeHome,
   makePiece,
@@ -89,5 +90,19 @@ describe("hitTestAll", () => {
     expect(hitTest(home, shapes, null, [200, 150], 2)?.id).toBe("p");
     expect(hitTestAll(home, shapes, null, [100, 2], 2).map((h) => h.id)).toEqual(["w", "r"]);
     expect(hitTestAll(home, shapes, null, [900, 900], 2)).toEqual([]);
+  });
+});
+
+describe("reference objects", () => {
+  it("are neither hit by a click nor selected by a band", () => {
+    const terrain = {
+      ...makePiece({ id: "t", x: 0, y: 0, width: 20000, depth: 20000 }),
+      properties: [{ name: REFERENCE_PROPERTY, value: "true" }],
+    };
+    const chair = makePiece({ id: "c", x: 100, y: 100, width: 40, depth: 40 });
+    const home = makeHome({ furniture: [terrain, chair] });
+    expect(hitTest(home, [], null, [500, 500], 5)).toBeNull();
+    expect(hitTest(home, [], null, [100, 100], 5)?.id).toBe("c");
+    expect(elementsInRect(home, null, [-15000, -15000], [15000, 15000], true)).toEqual(["c"]);
   });
 });

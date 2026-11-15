@@ -51,6 +51,10 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 
 **Plan › Hintergrundbild importieren** legt einen eingescannten Plan oder eine PDF-Seite unter den Plan. Markiere eine bekannte Länge und tippe sie ein, dann setze den Nullpunkt. Danach zeichnest du Wände und Räume maßstabsgetreu darauf.
 
+## Gelände und Scans als Referenzobjekte
+
+Geländemodelle, Laserscans oder Nachbarhäuser, die als Möbel importiert sind, markierst du in ihren Eigenschaften als **Referenzobjekt**. Der Plan zeigt sie dann blass zuunterst, unter dem Hintergrundbild: Klicks, der Auswahlrahmen und der Magnetismus übergehen sie, so zeichnest du Wände und Räume ungestört darauf. Zum Ändern wählst du ein Referenzobjekt in der Möbelliste aus; im 3D bleibt es unverändert. Möbel eines tieferen Geschosses, die in das angezeigte Geschoss hineinragen (z. B. ein hohes Geländemodell), erscheinen genauso; Treppen bleiben wählbar.
+
 ## Grundplan sperren
 
 **Plan › Grundplan sperren** verhindert, dass Wände, Räume, Texte, Türen, Fenster und feste Möbel ausgewählt werden; nur bewegliche Möbel lassen sich dann verschieben.

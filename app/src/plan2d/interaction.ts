@@ -7,7 +7,7 @@ import {
   type Home,
   type Piece,
   type Pt,
-  pieceAtLevel,
+  piecePickable,
   piecesWithTop,
   type WallShape,
   wallAtLevel,
@@ -89,7 +89,8 @@ export function hitTestAll(
   // furniture selectable, like Sweet Home 3D.
   const locked = home.attrs.base_plan_locked === true;
   const pieces = piecesWithTop(home.furniture).filter(
-    (e) => pieceAtLevel(home, e.piece, levelId) && e.topId && !(locked && isBasePlanPiece(e.piece)),
+    (e) =>
+      piecePickable(home, e.piece, levelId) && e.topId && !(locked && isBasePlanPiece(e.piece)),
   );
   pieces.sort((a, b) => (b.piece.attrs.elevation ?? 0) - (a.piece.attrs.elevation ?? 0));
   for (const { piece, topId } of pieces) {
@@ -314,7 +315,7 @@ export function elementsInRect(
   // Pieces and groups (a group when all its pieces are selected)
   const groups = new Map<string, boolean>();
   for (const { piece, topId } of piecesWithTop(home.furniture)) {
-    if (!pieceAtLevel(home, piece, levelId) || !topId) continue;
+    if (!piecePickable(home, piece, levelId) || !topId) continue;
     if (locked && isBasePlanPiece(piece)) continue;
     const pa = piece.attrs;
     const isInside = crossing ? rect.polygon(pieceOutline(piece)) : rect.point([pa.x, pa.y]);

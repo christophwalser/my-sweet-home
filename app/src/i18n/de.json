@@ -1001,5 +1001,7 @@
   "Move the mouse to the side of the new ruler and click, or type the distance + Enter · Esc: cancel": "Maus auf die Seite des neuen Lineals bewegen und klicken oder Abstand eintippen + Enter · Esc: abbrechen",
   "Distance": "Abstand",
   "Length of the next segment, also with units and arithmetic; @dx,dy relative, #x,y absolute": "Länge des nächsten Abschnitts, auch mit Einheiten und Rechnen; @dx,dy relativ, #x,y absolut",
-  "While drawing: switch between length and angle; otherwise: next element under the mouse": "Beim Zeichnen: zwischen Länge und Winkel wechseln; sonst: nächstes Element unter der Maus"
+  "While drawing: switch between length and angle; otherwise: next element under the mouse": "Beim Zeichnen: zwischen Länge und Winkel wechseln; sonst: nächstes Element unter der Maus",
+  "Reference object": "Referenzobjekt",
+  "For terrain, scans and neighbor houses: faint in the plan and not picked or snapped to there (select it in the furniture list); unchanged in 3D": "Für Gelände, Scans und Nachbarhäuser: im Plan blass und dort weder wählbar noch Fangziel (in der Möbelliste auswählen); im 3D unverändert"
 }

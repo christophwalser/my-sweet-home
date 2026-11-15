@@ -5,10 +5,14 @@ import {
   type FurnitureGroup,
   forEachGroup,
   forEachPiece,
+  isReference,
   onLevel,
   type Piece,
   pieceAtLevel,
+  pieceIsBackdrop,
+  piecePickable,
   piecesWithTop,
+  REFERENCE_PROPERTY,
   wallAtLevel,
   wallPolygon,
 } from "./model";
@@ -191,5 +195,29 @@ describe("levels", () => {
 
   it("does not show pieces of upper levels", () => {
     expect(pieceAtLevel(home, makePiece({ level: "first", height: 1000 }), "ground")).toBe(false);
+  });
+
+  it("shows tall pieces of lower levels and reference objects only as backdrop", () => {
+    // Terrain on the ground level, reaching up through the first level
+    const terrain = makePiece({ level: "ground", height: 6000 });
+    expect(pieceAtLevel(home, terrain, "first")).toBe(true);
+    expect(pieceIsBackdrop(home, terrain, "first")).toBe(true);
+    expect(piecePickable(home, terrain, "first")).toBe(false);
+    // On its own level it is an ordinary piece, unless it is a reference object
+    expect(piecePickable(home, terrain, "ground")).toBe(true);
+    const reference: Piece = {
+      ...terrain,
+      properties: [{ name: REFERENCE_PROPERTY, value: "true" }],
+    };
+    expect(isReference(reference)).toBe(true);
+    expect(piecePickable(home, reference, "ground")).toBe(false);
+    expect(piecePickable(home, reference, null)).toBe(false);
+    // Staircases stay pickable on the level they lead to
+    const stairs = makePiece({
+      level: "ground",
+      height: 250,
+      staircase_cut_out_shape: "M0,0 L1,0 L1,1 Z",
+    });
+    expect(piecePickable(home, stairs, "first")).toBe(true);
   });
 });

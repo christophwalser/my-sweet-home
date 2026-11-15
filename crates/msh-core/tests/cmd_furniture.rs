@@ -1070,3 +1070,55 @@ fn furniture_add_keeps_ceiling_pieces_under_the_ceiling_of_their_level() {
     assert!(close(piece(&doc, &s).attrs.elevation.unwrap(), 229.7));
     assert_eq!(piece(&doc, &l).attrs.elevation, Some(150.0));
 }
+
+#[test]
+fn reference_flag_is_set_kept_on_save_and_cleared() {
+    let r = Registry::standard();
+    let mut doc = plain_home(&r);
+    let is_reference = |p: &Piece| {
+        p.properties
+            .iter()
+            .filter(|pr| pr.name == "mySweetHome.reference")
+            .map(|pr| pr.value.clone())
+            .collect::<Vec<_>>()
+    };
+    let before = snapshot(&doc);
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": "table", "reference": true }),
+    );
+    let after = snapshot(&doc);
+    assert_eq!(is_reference(&piece(&doc, "table")), ["true"]);
+    check_undo_redo(&r, &mut doc, &before, &after);
+    // Set twice, still one property
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": "table", "reference": true }),
+    );
+    assert_eq!(is_reference(&piece(&doc, "table")), ["true"]);
+
+    let reopened = save_and_reopen(
+        &r,
+        &mut doc,
+        "reference_flag_is_set_kept_on_save_and_cleared",
+    );
+    let mut kept = None;
+    reopened.home().for_each_piece(|x| {
+        if x.attrs.id.as_deref() == Some("table") {
+            kept = Some(is_reference(x).len());
+        }
+    });
+    assert_eq!(kept, Some(1));
+
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": "table", "reference": false }),
+    );
+    assert!(is_reference(&piece(&doc, "table")).is_empty());
+}

@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { docResourceUrl } from "../api";
 import { t } from "../i18n";
-import { forEachPiece, type Home, type Piece, type Wall } from "../model";
+import { forEachPiece, type Home, isReference, type Piece, type Wall } from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { guideAngle, guideEnd, guideLength, homeGuides } from "../plan2d/guides";
 import { usePreferences } from "../preferences";
@@ -957,6 +957,19 @@ export default function PropertiesPanel() {
             onCommit={(v) => set("base_plan_item")(v)}
           />
         )}
+        <label
+          className="prop-row prop-check"
+          title={t(
+            "For terrain, scans and neighbor houses: faint in the plan and not picked or snapped to there (select it in the furniture list); unchanged in 3D",
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={isReference(p)}
+            onChange={(e) => set("reference")(e.currentTarget.checked)}
+          />
+          <span>{t("Reference object")}</span>
+        </label>
         <Field
           label={t("Name in plan")}
           type="checkbox"

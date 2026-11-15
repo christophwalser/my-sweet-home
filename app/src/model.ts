@@ -496,3 +496,33 @@ export function pieceAtLevel(home: Home, piece: Piece, levelId: string | null): 
   const floor = home.levels.find((l) => l.attrs.id === levelId)?.attrs.floor_thickness ?? 12;
   return top > level.elevation + floor;
 }
+
+/** Piece property marking a reference object (terrain, scan, neighbor house). */
+export const REFERENCE_PROPERTY = "mySweetHome.reference";
+
+/** True for a reference object: shown in the plan and in 3D, but not picked or snapped to. */
+export function isReference(piece: Piece): boolean {
+  return (
+    piece.properties?.some((pr) => pr.name === REFERENCE_PROPERTY && pr.value === "true") ?? false
+  );
+}
+
+/**
+ * True if the plan of the level shows the piece only as a backdrop: a reference object, or a
+ * piece of a lower level that reaches up into this one (staircases excepted, their cut-out
+ * matters here). The plan draws it faint and does not pick or snap to it.
+ */
+export function pieceIsBackdrop(home: Home, piece: Piece, levelId: string | null): boolean {
+  if (isReference(piece)) return true;
+  if (levelId === null || piece.attrs.level === levelId || piece.attrs.staircase_cut_out_shape) {
+    return false;
+  }
+  const own = levelPosition(home, piece.attrs.level);
+  const level = levelPosition(home, levelId);
+  return !!own && !!level && own.elevation < level.elevation;
+}
+
+/** True if the piece can be picked and snapped to in the plan of the level. */
+export function piecePickable(home: Home, piece: Piece, levelId: string | null): boolean {
+  return pieceAtLevel(home, piece, levelId) && !pieceIsBackdrop(home, piece, levelId);
+}
