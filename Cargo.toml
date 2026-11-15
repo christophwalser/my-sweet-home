@@ -20,7 +20,7 @@ msh-ipc = { path = "crates/msh-ipc" }
 tokio = { version = "1", features = ["net", "io-util", "sync", "time", "rt", "macros"] }
 schemars = "1.2"
 uuid = { version = "1.29", features = ["v4"] }
-resvg = "0.47"
+resvg = "0.50"
 base64 = "0.23"
 anyhow = "1"
 thiserror = "2"
