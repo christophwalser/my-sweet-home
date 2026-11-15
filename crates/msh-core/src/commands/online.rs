@@ -106,28 +106,41 @@ fn failed(what: &str, e: impl std::fmt::Display) -> CommandError {
     CommandError::failed(format!("{what}: {e}"))
 }
 
+/// Largest text answer of an online source (search results, lists).
+const MAX_TEXT_BYTES: u64 = 50 << 20;
+
 fn get_text(url: &str, query: &[(&str, &str)]) -> Result<String, CommandError> {
     let mut req = ureq::get(url)
-        .set("User-Agent", &agent())
-        .timeout(Duration::from_secs(30));
+        .header("User-Agent", agent())
+        .config()
+        .timeout_global(Some(Duration::from_secs(30)))
+        .build();
     for (k, v) in query {
         req = req.query(k, v);
     }
     req.call()
         .map_err(|e| failed("the online source did not answer", e))?
-        .into_string()
+        .into_body()
+        .into_with_config()
+        .limit(MAX_TEXT_BYTES)
+        .read_to_string()
         .map_err(|e| failed("the online source sent no text", e))
 }
 
 fn get_bytes(url: &str) -> Result<Vec<u8>, CommandError> {
     let response = ureq::get(url)
-        .set("User-Agent", &agent())
-        .timeout(Duration::from_secs(600))
+        .header("User-Agent", agent())
+        .config()
+        .timeout_global(Some(Duration::from_secs(600)))
+        .build()
         .call()
         .map_err(|e| failed("the download failed", e))?;
     let mut data = Vec::new();
     response
-        .into_reader()
+        .into_body()
+        .into_with_config()
+        .limit(MAX_DOWNLOAD_BYTES + 1)
+        .reader()
         .take(MAX_DOWNLOAD_BYTES + 1)
         .read_to_end(&mut data)
         .map_err(|e| failed("the download failed", e))?;
