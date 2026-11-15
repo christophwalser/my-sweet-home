@@ -10,7 +10,24 @@ All notable changes to this project are documented in this file. The format foll
 
 - The location of the home can also be set in the home properties.
 - "Align north with the map": turn the walls over an OpenStreetMap map of the location to set
-  the north direction of the compass.
+  the north direction of the compass; the map can be zoomed and moved.
+- Rulers always show their length and angle in the plan, and both can be changed in the properties.
+- A second digit chooses the variants of a plan tool, e.g. 2 then 1 for "Room from walls".
+- Texts are typed directly in the plan; a double-click on a text changes it there.
+- A piece dragged from the catalog shows at its size in the plan before it is dropped.
+- "Keep proportions" for furniture, in the properties and with the plan handles.
+- The texture chooser offers the five textures used last and keeps its search text.
+- The context menu offers to remove the added dimensions of a wall or piece.
+- Three or more walls can be joined, e.g. a third wall to two joined walls.
+- Joining two collinear walls whose ends meet, e.g. the parts of a split wall, makes one wall.
+- The list of selected elements can be filtered by kind, and a kind removed from the selection.
+- Polylines can be shown in the 3D view ("Visible in 3D").
+
+### Changed
+
+- Error messages are shown in the chosen language with a clearer explanation.
+- The furniture properties are ordered: name, description, size, elevation, position, angle,
+  then color, texture, surface and materials.
 
 ### Fixed
 

@@ -3,6 +3,7 @@
 // edit_delete). Drawn only on screen, never printed or exported.
 
 import type { Home, Pt } from "../model";
+import { drawMeasureTag } from "./overlay";
 
 export type Guide = {
   id: string;
@@ -51,6 +52,28 @@ export function homeGuides(home: Home): Guide[] {
 export function levelGuides(home: Home, level: string | null): Guide[] {
   const all = homeGuides(home);
   return home.levels.length === 0 ? all : all.filter((g) => g.level === level);
+}
+
+/** Length of a guide in cm. */
+export function guideLength(g: Guide): number {
+  return Math.hypot(g.x_end - g.x_start, g.y_end - g.y_start);
+}
+
+/**
+ * Direction of a guide in degrees from 0 to 360, clockwise from the x axis like the plan (as
+ * the measuring tool shows it), rounded to 0.1°.
+ */
+export function guideAngle(g: Guide): number {
+  const deg = (Math.atan2(g.y_end - g.y_start, g.x_end - g.x_start) * 180) / Math.PI;
+  // Rounded first, so that -0.01° shows as 0°, not 360°
+  return (((Math.round(deg * 10) / 10) % 360) + 360) % 360;
+}
+
+/** End point of a guide that keeps its start and gets the given length and direction. */
+export function guideEnd(g: Guide, length: number, angleDeg: number): Pt {
+  const a = (angleDeg * Math.PI) / 180;
+  const r = (v: number) => Math.round(v * 100) / 100;
+  return [r(g.x_start + length * Math.cos(a)), r(g.y_start + length * Math.sin(a))];
 }
 
 /** Distance from `p` to the guide line. */
@@ -163,6 +186,10 @@ export function drawGuides(
       ctx.lineTo(x + nx, y + ny);
     }
     ctx.stroke();
+  }
+  // Length and direction of every guide, also of the one being drawn
+  for (const g of guides) {
+    drawMeasureTag(ctx, [g.x_start, g.y_start], [g.x_end, g.y_end], px);
   }
   ctx.restore();
 }

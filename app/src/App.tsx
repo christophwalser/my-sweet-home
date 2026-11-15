@@ -31,6 +31,7 @@ import { initTheme, useUi } from "./ui/uiStore";
 import { formatPrecise, fromUnit, toUnit, unitSymbol, useUnit } from "./units";
 import View3D from "./view3d/View3D";
 import "./App.css";
+import { errorText } from "./errorText";
 import { followLanguage, formatDateTime, t } from "./i18n";
 import { followPreferences, newHomeParams, usePreferences } from "./preferences";
 
@@ -179,7 +180,7 @@ export default function App() {
         if (getCurrentWebviewWindow().label === "main") await offerRecovery();
         else if (!useStore.getState().opened) await run("home_new", newHomeParams());
       })
-      .catch((e) => useStore.setState({ error: String(e) }));
+      .catch((e) => useStore.setState({ error: errorText(e) }));
     return () => {
       void unsubscribe.then((off) => off());
     };
@@ -339,8 +340,14 @@ export default function App() {
       {error && (
         <div className="error-bar" role="alert">
           <span>{error}</span>
-          <button type="button" onClick={clearError}>
-            {t("Dismiss")}
+          <button
+            type="button"
+            className="error-close"
+            onClick={clearError}
+            title={t("Dismiss")}
+            aria-label={t("Dismiss")}
+          >
+            <Icon name="close" size={16} />
           </button>
         </div>
       )}

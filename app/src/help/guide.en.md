@@ -13,7 +13,7 @@ Every change can be undone with **Ctrl+Z** and redone with **Ctrl+Y**. **Ctrl+K*
 
 # Drawing the plan
 
-Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. The keys **1** to **6** choose walls, rooms, lines, dimensions, texts and the measure tool, in the order of the tool bar.
+Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. The keys **1** to **6** choose walls, rooms, lines, dimensions, texts and the measure tool, in the order of the tool bar. A second digit right after it chooses the further entries of the button's drop-down, counted from 1: **1** then **1** chooses round walls, **2** then **1** **Room from walls**, **4** then **1** the height dimension, **6** then **1** the ruler.
 
 ## Walls
 
@@ -32,6 +32,7 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. T
 
 - The dimension tool measures between two clicks; a third click places the dimension line.
 - Texts and polylines (straight or curved) have their own tools; their style is set in the properties.
+- A text is typed right where you click in the plan; **Enter** finishes, **Shift+Enter** starts a new line. **Double-click** a text to change it in place.
 - The measure tool shows a distance without adding anything to the plan. Its second mode, the **ruler**, draws a guide line that stays in the plan to help place elements; it is saved with the home but not printed. Select a ruler and press **Del** to remove it, or use **Plan › Delete rulers of this level**. Color and dashes of a ruler are set in its properties; the defaults for new rulers and the color of the measure tool are under **Preferences › Tools**.
 
 ## Background image
@@ -87,7 +88,7 @@ Everything you import is stored in Sweet Home 3D's library folders, so both prog
 - **Aerial view**: drag to turn around the home, right-drag to move, the wheel zooms. Double-click a surface to turn around that point.
 - **Virtual visit**: drag to look around, **W A S D** or the arrow keys to walk, **Q / E** down and up, **Shift** faster. Walls stop you; open doors let you through. The visitor is shown in the plan and can be moved there.
 - **Points of view** stores and recalls camera positions.
-- **3D settings** set ground and sky, light and wall transparency, the location (search by address) and the date and time of the sun. The location can also be set in the properties of the home. **Align north with the map** shows the walls over a map of the location: turn them until they match the building, and the compass points north.
+- **3D settings** set ground and sky, light and wall transparency, the location (search by address) and the date and time of the sun. The location can also be set in the properties of the home. **Align north with the map** shows the walls over a map of the location: turn them with the mouse wheel until they match the building, and the compass points north. Drag the walls to move them, drag beside them to move the map; **Ctrl+wheel** or the buttons zoom.
 - Lamps light the virtual visit; walls stop the light of the lamps nearest to you.
 
 # Photos and videos

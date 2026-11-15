@@ -8,6 +8,7 @@ import { usePreferences } from "../preferences";
 import { formatLength, formatPrecise, unitSymbol } from "../units";
 import { type AutoDim, dimensionLine } from "./autoDims";
 import type { ViewTransform } from "./drawPlan";
+import type { DropPreview } from "./dropPreview";
 import { HANDLE_SHAPE, type Handle, type HandleDrag, lengthText } from "./handles";
 import { elementOutlines } from "./interaction";
 import type { Joint, MovePreview } from "./moving";
@@ -59,6 +60,8 @@ export type PlanOverlay = {
   visitor: { x: number; y: number; yaw: number; fov: number } | null;
   /** The visitor is selected: outline and the handle that turns it */
   visitorHandle: Pt | null;
+  /** Catalog piece dragged over the plan, at its size where it will land */
+  dropPreview?: { preview: DropPreview; icon: HTMLImageElement | null } | null;
   accent: string;
   /** Color of guides */
   guide: string;
@@ -360,6 +363,7 @@ export function drawOverlay(
       px,
     );
   for (const [a, b] of overlay.gaps) drawGap(ctx, a, b, overlay.guide, px);
+  if (overlay.dropPreview) drawDropPreview(ctx, overlay.dropPreview, overlay.accent, px);
   for (const d of overlay.autoDims) drawDimensionPreview(ctx, d, overlay.accent, px);
   if (overlay.dimensionDraft) {
     drawDimensionPreview(ctx, overlay.dimensionDraft, overlay.accent, px);
@@ -519,6 +523,41 @@ function drawGap(
   drawCenteredTag(ctx, text ?? formatPrecise(len), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);
 }
 
+/** A catalog piece being dragged: its outline, its icon inside and its size. */
+function drawDropPreview(
+  ctx: CanvasRenderingContext2D,
+  drop: { preview: DropPreview; icon: HTMLImageElement | null },
+  accent: string,
+  px: number,
+): void {
+  const { preview: p, icon } = drop;
+  ctx.save();
+  ctx.fillStyle = withAlpha(accent, 0.12);
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 1.5 * px;
+  ctx.setLineDash([]);
+  strokePath(ctx, p.corners, true);
+  ctx.fill();
+  if (icon?.complete && icon.naturalWidth > 0) {
+    // Fitted into the outline, keeping its proportions
+    const k = Math.min(p.width / icon.naturalWidth, p.depth / icon.naturalHeight);
+    const w = icon.naturalWidth * k;
+    const h = icon.naturalHeight * k;
+    ctx.translate(p.center[0], p.center[1]);
+    ctx.rotate(p.angle);
+    ctx.globalAlpha = 0.85;
+    ctx.drawImage(icon, -w / 2, -h / 2, w, h);
+  }
+  ctx.restore();
+  drawTag(
+    ctx,
+    `${formatLength(p.width)} × ${formatLength(p.depth)}`,
+    p.center[0] + p.width / 2 + 8 * px,
+    p.center[1],
+    px,
+  );
+}
+
 /** Number with at most one decimal. */
 function oneDecimal(v: number): string {
   return String(Math.round(v * 10) / 10);
@@ -549,11 +588,28 @@ function drawMeasure(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, color: string,
       false,
     );
   }
+  drawMeasureTag(ctx, a, b, px, true);
+}
+
+/**
+ * Tag beside the segment a→b with its length and direction (degrees, clockwise from the x axis
+ * like the plan); with `parts` also its horizontal and vertical parts.
+ */
+export function drawMeasureTag(
+  ctx: CanvasRenderingContext2D,
+  a: Pt,
+  b: Pt,
+  px: number,
+  parts = false,
+): void {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy);
   if (len < 0.05) return;
   // Rounded first, so that -0.01° shows as 0°, not 360°
   const angle = (((Math.round((Math.atan2(dy, dx) * 1800) / Math.PI) / 10) % 360) + 360) % 360;
   let text = `${formatPrecise(len)} · ${oneDecimal(angle)}°`;
-  if (Math.abs(dx) >= 0.05 && Math.abs(dy) >= 0.05) {
+  if (parts && Math.abs(dx) >= 0.05 && Math.abs(dy) >= 0.05) {
     text += ` · Δx ${oneDecimal(Math.abs(dx))} · Δy ${oneDecimal(Math.abs(dy))}`;
   }
   drawCenteredTag(ctx, text, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a, b, px);

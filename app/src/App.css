@@ -194,6 +194,20 @@ input[type="search"]:focus {
   flex: 1;
 }
 
+.error-bar .error-close {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.error-bar .error-close:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.15));
+  border-radius: 4px;
+}
+
 .catalog {
   grid-area: catalog;
 }
@@ -410,6 +424,39 @@ input[type="search"]:focus {
   gap: 6px;
 }
 
+.texture-picker-bar .search-box {
+  position: relative;
+  display: flex;
+  flex: 1 1 100%;
+}
+
+.search-box .search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  padding: 2px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.search-box .search-clear:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.texture-heading {
+  margin: 6px 0 2px;
+}
+
+.texture-picker-bar .search-box input {
+  padding-right: 22px;
+}
+
 .texture-picker-bar input {
   flex: 1 1 100%;
   min-width: 0;
@@ -500,6 +547,25 @@ input[type="search"]:focus {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 2px 6px;
+}
+
+.plan-text-editor {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  min-width: 6em;
+  padding: 0 4px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: sans-serif;
+  line-height: 1.2;
+  text-align: center;
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+  outline: none;
+  box-shadow: var(--shadow);
 }
 
 .plan-hint {
@@ -1763,6 +1829,7 @@ body.resizing-horizontal {
 }
 
 .north-map-stage {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1772,8 +1839,24 @@ body.resizing-horizontal {
 .north-map-stage canvas {
   width: min(700px, calc(100vh - 260px));
   aspect-ratio: 1;
-  cursor: move;
   touch-action: none;
+}
+
+.north-map-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.north-map-zoom .icon-button {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
 }
 
 .north-map .dialog-actions {
@@ -2202,6 +2285,13 @@ body.moving-dialog * {
 /* Selected elements in the properties of a multiple selection */
 .selection-list {
   margin-top: 12px;
+}
+
+.selection-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
 }
 
 .selection-list ul {

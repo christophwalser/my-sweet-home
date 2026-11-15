@@ -353,6 +353,8 @@ export function dragHandle(
   snapRadius: number,
   magnetism: boolean,
   fine = false,
+  /** Furniture keeps its proportions when resized (always for non-deformable models) */
+  keepProportions = false,
 ): HandleDrag | null {
   const { id } = handle;
   const none = { snap: null, guides: [] as Segment[] };
@@ -717,7 +719,7 @@ export function dragHandle(
       const height = Math.max(1, Math.round((a.height + delta) * 10) / 10);
       const params: Record<string, unknown> = { id, height };
       let info = t("Height {v0}", { v0: formatPrecise(height) });
-      if (a.deformable === false) {
+      if (a.deformable === false || keepProportions) {
         // Proportional pieces grow in all directions, around their center
         const f = height / a.height;
         params.width = Math.round(a.width * f * 10) / 10;
@@ -740,7 +742,8 @@ export function dragHandle(
       let w = local[0] + a.width / 2;
       let d = local[1] + a.depth / 2;
       let h = a.height;
-      if (a.deformable === false) {
+      const proportional = a.deformable === false || keepProportions;
+      if (proportional) {
         const f = Math.max(w / a.width, d / a.depth, 0.01);
         w = a.width * f;
         d = a.depth * f;
@@ -758,7 +761,7 @@ export function dragHandle(
       const cx = a.x + ox;
       const cy = a.y + oy;
       const params: Record<string, unknown> = { id, x: cx, y: cy, width: w, depth: d };
-      if (a.deformable === false) params.height = h;
+      if (proportional) params.height = h;
       return {
         preview: [{ pts: pieceCorners(cx, cy, w, d, angle), closed: true }],
         ...none,

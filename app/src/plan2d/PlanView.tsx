@@ -17,7 +17,12 @@
 // from the CLI or MCP.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CATALOG_DRAG_TYPE, type CatalogDragData, docResourceUrl } from "../api";
+import {
+  CATALOG_DRAG_TYPE,
+  type CatalogDragData,
+  currentCatalogDrag,
+  docResourceUrl,
+} from "../api";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
 import {
@@ -25,16 +30,18 @@ import {
   newLabelParams,
   newRoomParams,
   newWallParams,
+  prefs,
   usePreferences,
 } from "../preferences";
 import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../store";
 import Icon from "../ui/Icon";
 import { registerPlanActions } from "../ui/planBridge";
-import { useDarkMode } from "../ui/uiStore";
+import { useDarkMode, useUi } from "../ui/uiStore";
 import { fromUnit, unitSymbol } from "../units";
 import { levelOfEye } from "../view3d/visitor";
 import { autoDimensions } from "./autoDims";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
+import { existingDimensions, existingHeightDimension } from "./dimensionMatch";
 import {
   drawPlan,
   type PlanColors,
@@ -42,6 +49,7 @@ import {
   planBounds,
   type ViewTransform,
 } from "./drawPlan";
+import { type DropPreview, dropPreview } from "./dropPreview";
 import { drawGuides, guideAt, guidesInRect, levelGuides, movedGuides } from "./guides";
 import {
   dragHandle,
@@ -79,6 +87,7 @@ import {
   snapDraw,
 } from "./snapping";
 import { dropElevation } from "./support";
+import TextEditor, { type TextEdit } from "./TextEditor";
 import { topView } from "./topView";
 
 const LIGHT: PlanColors = {
@@ -293,6 +302,10 @@ export default function PlanView() {
   const [hint, setHint] = useState("");
   /** Open context menu: position in CSS pixels in the plan area and its items */
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  /** Text typed in the plan */
+  const [textEdit, setTextEdit] = useState<TextEdit | null>(null);
+  /** Catalog piece dragged over the plan */
+  const drop = useRef<{ preview: DropPreview; icon: HTMLImageElement | null } | null>(null);
   const dark = useDarkMode();
   const colors = dark ? DARK : LIGHT;
   const rulerColors = dark ? DARK_RULER : LIGHT_RULER;
@@ -479,12 +492,14 @@ export default function PlanView() {
           ? t("Click the end point, or type a length + Enter · Esc to cancel")
           : t("Click the start point, or drag");
       case "label":
-        return t("Click to place a text");
+        return t(
+          "Click where the text goes and type it · Enter: finish · Shift+Enter: new line · Esc: cancel",
+        );
       default:
         if (hoverHandle.current) return HANDLE_HINT[hoverHandle.current.kind];
-        if (selectedWallCount() === 2)
+        if (selectedWallCount() >= 2)
           return t(
-            "J or Join walls: connect both walls at the intersection of their axes · Shift+click: change the selection",
+            "J or Join walls: connect the walls at the intersections of their axes · Shift+click: change the selection",
           );
         return useStore.getState().selection.length > 0
           ? t(
@@ -580,6 +595,7 @@ export default function PlanView() {
           ? visitorHandlePos(v, pxToCm(1))
           : null;
       })(),
+      dropPreview: drop.current,
       accent,
       guide: guideColor,
       measureColor,
@@ -1012,19 +1028,15 @@ export default function PlanView() {
         if (id) setSelection([id]);
       });
     } else if (tool === "label") {
-      const text = window.prompt(t("Label text"));
-      if (text?.trim()) {
-        void run("label_add", {
-          text,
-          ...newLabelParams(),
-          x: Math.round(p[0]),
-          y: Math.round(p[1]),
-          ...levelParam(),
-        }).then((r) => {
-          const id = (r as { id?: string } | undefined)?.id;
-          if (id) setSelection([id]);
-        });
-      }
+      // Typed at the clicked position (the click finishes a text being typed elsewhere first)
+      e.preventDefault();
+      (document.activeElement as HTMLElement | null)?.blur();
+      setTextEdit({
+        at: [Math.round(p[0]), Math.round(p[1])],
+        id: null,
+        text: "",
+        size: prefs().newTextSize,
+      });
     } else if (tool === "dimension" && dimOffset.current !== null) {
       dimOffset.current = offsetAt(p);
       void finishDraft();
@@ -1079,6 +1091,7 @@ export default function PlanView() {
         pxToCm(SNAP_PX),
         magnetismActive(e.altKey),
         e.shiftKey,
+        useUi.getState().keepProportions,
       );
       draw();
       return;
@@ -1302,9 +1315,44 @@ export default function PlanView() {
     } else if (isPathTool(tool)) {
       // The second click of the double-click added no point (same position)
       void finishDraft();
-    } else if (tool === "select" && useStore.getState().selection.length === 0) {
-      refit();
+    } else if (tool === "select" && input) {
+      // Double-click on a text: change it where it is
+      const p = toWorld(e.clientX, e.clientY);
+      const hit = hitTest(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+      const label = hit ? input.home.labels.find((l) => l.attrs.id === hit.id) : undefined;
+      if (label?.attrs.id) {
+        setTextEdit({
+          at: [label.attrs.x, label.attrs.y],
+          id: label.attrs.id,
+          text: label.text,
+          size: label.text_style?.font_size ?? 18,
+        });
+      } else if (useStore.getState().selection.length === 0) {
+        refit();
+      }
     }
+  };
+
+  /** Adds the typed text, or changes (or deletes, when emptied) the edited one. */
+  const commitText = (edit: TextEdit, text: string) => {
+    setTextEdit(null);
+    if (edit.id) {
+      if (text === edit.text) return;
+      if (!text.trim()) void run("edit_delete", { ids: [edit.id] });
+      else void run("label_update", { id: edit.id, text });
+      return;
+    }
+    if (!text.trim()) return;
+    void run("label_add", {
+      text,
+      ...newLabelParams(),
+      x: edit.at[0],
+      y: edit.at[1],
+      ...levelParam(),
+    }).then((r) => {
+      const id = (r as { id?: string } | undefined)?.id;
+      if (id) setSelection([id]);
+    });
   };
 
   // ---------------------------------------------------------------- context menu
@@ -1535,7 +1583,7 @@ export default function PlanView() {
             }).then(selectNew),
         });
       }
-      if (walls.length === 2) {
+      if (walls.length >= 2) {
         items.push({
           label: t("Join walls"),
           shortcut: "J",
@@ -1551,7 +1599,15 @@ export default function PlanView() {
       const dims = autoDimensions(home, input.wallShapes, sel[0]);
       const r = (v: number) => Math.round(v * 10) / 10;
       items.push({ separator: true });
-      if (dims.length > 0) {
+      const existing = existingDimensions(home, effectiveLevel, dims);
+      if (existing) {
+        items.push({
+          label: walls.length
+            ? t("Remove dimensions of the wall")
+            : t("Remove dimensions of the piece"),
+          action: () => void run("edit_delete", { ids: existing }),
+        });
+      } else if (dims.length > 0) {
         items.push({
           label: walls.length ? t("Add dimensions of the wall") : t("Add dimensions of the piece"),
           action: () => {
@@ -1568,36 +1624,53 @@ export default function PlanView() {
           },
         });
       }
-      items.push({
-        label: t("Add height dimension"),
-        action: () => {
-          if (walls.length) {
-            const a = walls[0].attrs;
-            void run("dimension_add_height", {
-              x: r(a.x_start),
-              y: r(a.y_start),
-              elevation_end: a.height ?? home.attrs.wall_height ?? 250,
-              ...levelParam(),
-            });
-            return;
-          }
-          let piece: Piece | null = null;
-          forEachPiece(home.furniture, (q) => {
-            if (q.attrs.id === sel[0]) piece = q;
-          });
-          if (!piece) return;
+      // Height dimension: at the wall start, or at the front right corner of the piece
+      let height: { at: Pt; bottom: number; top: number } | null = null;
+      if (walls.length) {
+        const a = walls[0].attrs;
+        height = {
+          at: [r(a.x_start), r(a.y_start)],
+          bottom: 0,
+          top: a.height ?? home.attrs.wall_height ?? 250,
+        };
+      } else {
+        let piece: Piece | null = null;
+        forEachPiece(home.furniture, (q) => {
+          if (q.attrs.id === sel[0]) piece = q;
+        });
+        if (piece) {
           const a = (piece as Piece).attrs;
           const corner = dims[1]?.end ?? [a.x, a.y];
           const bottom = a.elevation ?? 0;
-          void run("dimension_add_height", {
-            x: r(corner[0]),
-            y: r(corner[1]),
-            elevation_start: bottom,
-            elevation_end: bottom + (a.height_in_plan ?? a.height),
-            ...levelParam(),
-          });
-        },
-      });
+          height = {
+            at: [r(corner[0]), r(corner[1])],
+            bottom,
+            top: bottom + (a.height_in_plan ?? a.height),
+          };
+        }
+      }
+      if (height) {
+        const h = height;
+        const existing = existingHeightDimension(home, effectiveLevel, h.at, h.bottom, h.top);
+        items.push(
+          existing
+            ? {
+                label: t("Remove height dimension"),
+                action: () => void run("edit_delete", { ids: [existing] }),
+              }
+            : {
+                label: t("Add height dimension"),
+                action: () =>
+                  void run("dimension_add_height", {
+                    x: h.at[0],
+                    y: h.at[1],
+                    ...(h.bottom ? { elevation_start: h.bottom } : {}),
+                    elevation_end: h.top,
+                    ...levelParam(),
+                  }),
+              },
+        );
+      }
     }
     if (rooms.length === 1 && sel.length === 1) {
       const room = rooms[0];
@@ -1825,9 +1898,9 @@ export default function PlanView() {
           }
         });
       } else if ((e.key === "j" || e.key === "J") && state.opened) {
-        // Join the two selected walls
+        // Join the selected walls
         const walls = state.opened.home.walls.filter((w) => sel.includes(w.attrs.id));
-        if (walls.length !== 2) return;
+        if (walls.length < 2) return;
         void run("wall_join", { ids: walls.map((w) => w.attrs.id) });
       } else if (e.key.startsWith("Arrow") && sel.length > 0) {
         const d = e.shiftKey ? 10 : 1;
@@ -1872,10 +1945,28 @@ export default function PlanView() {
     if (e.dataTransfer.types.includes(CATALOG_DRAG_TYPE) && input) {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
+      // The piece at its size where it will land
+      const drag = currentCatalogDrag();
+      if (drag) {
+        const p = toWorld(e.clientX, e.clientY);
+        drop.current = {
+          preview: dropPreview(input.home, effectiveLevel, drag.data, p, pxToCm(40)),
+          icon: drag.icon,
+        };
+        draw();
+      }
     }
   };
 
+  const onDragLeave = () => {
+    if (!drop.current) return;
+    drop.current = null;
+    draw();
+  };
+
   const onDrop = async (e: React.DragEvent) => {
+    drop.current = null;
+    draw();
     const raw = e.dataTransfer.getData(CATALOG_DRAG_TYPE);
     if (!raw || !input) return;
     e.preventDefault();
@@ -1936,11 +2027,27 @@ export default function PlanView() {
           onDoubleClick={onDoubleClick}
           onContextMenu={(e) => e.preventDefault()}
           onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
           onDrop={(e) => void onDrop(e)}
         />
         {opened && hint && <div className="plan-hint">{hint}</div>}
         {menu && (
           <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+        )}
+        {textEdit && (
+          <TextEditor
+            key={`${textEdit.id ?? "new"}-${textEdit.at.join(",")}`}
+            left={
+              (textEdit.at[0] * viewRef.current.scale + viewRef.current.offsetX) / devicePixelRatio
+            }
+            top={
+              (textEdit.at[1] * viewRef.current.scale + viewRef.current.offsetY) / devicePixelRatio
+            }
+            fontPx={(textEdit.size * viewRef.current.scale) / devicePixelRatio}
+            initial={textEdit.text}
+            onCommit={(text) => commitText(textEdit, text)}
+            onCancel={() => setTextEdit(null)}
+          />
         )}
         {opened && (
           <button

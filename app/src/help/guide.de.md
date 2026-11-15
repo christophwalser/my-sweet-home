@@ -13,7 +13,7 @@ Jede Änderung lässt sich mit **Strg+Z** rückgängig machen und mit **Strg+Y**
 
 # Plan zeichnen
 
-Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in den Plan. Die Tasten **1** bis **6** wählen Wände, Räume, Linien, Bemaßung, Text und das Messwerkzeug, in der Reihenfolge der Werkzeugleiste.
+Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in den Plan. Die Tasten **1** bis **6** wählen Wände, Räume, Linien, Bemaßung, Text und das Messwerkzeug, in der Reihenfolge der Werkzeugleiste. Eine zweite Ziffer direkt danach wählt die weiteren Einträge aus dem Menü des Knopfs, ab 1 gezählt: **1** und dann **1** wählt runde Wände, **2** und dann **1** **Raum aus Wänden**, **4** und dann **1** das Höhenmaß, **6** und dann **1** das Lineal.
 
 ## Wände
 
@@ -32,6 +32,7 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 
 - Das Bemaßungswerkzeug misst zwischen zwei Klicks; ein dritter Klick platziert die Maßlinie.
 - Texte und Polylinien (gerade oder gebogen) haben eigene Werkzeuge; ihren Stil legst du in den Eigenschaften fest.
+- Einen Text tippst du direkt an der geklickten Stelle im Plan; **Enter** beendet, **Umschalt+Enter** beginnt eine neue Zeile. Ein **Doppelklick** auf einen Text ändert ihn dort.
 - Das Messwerkzeug zeigt einen Abstand, ohne etwas zum Plan hinzuzufügen. Sein zweiter Modus, das **Lineal**, zeichnet eine Hilfslinie, die zum Platzieren von Elementen im Plan bleibt; sie wird mit dem Haus gespeichert, aber nicht gedruckt. Zum Entfernen ein Lineal auswählen und **Entf** drücken, oder **Plan › Lineale dieser Ebene löschen**. Farbe und Strichart eines Lineals stehen in seinen Eigenschaften; die Vorgaben für neue Lineale und die Farbe des Messwerkzeugs unter **Einstellungen › Werkzeuge**.
 
 ## Hintergrundbild
@@ -87,7 +88,7 @@ Alles Importierte liegt in den Bibliotheksordnern von Sweet Home 3D, so nutzen e
 - **Luftbild**: Ziehen dreht um das Haus, Ziehen mit der rechten Maustaste verschiebt, das Mausrad zoomt. Ein Doppelklick auf eine Fläche dreht künftig um diesen Punkt.
 - **Rundgang**: Ziehen schaut umher, **W A S D** oder die Pfeiltasten gehen, **Q / E** runter und rauf, **Umschalt** schneller. Wände halten dich auf, offene Türen lassen dich durch. Der Besucher erscheint im Plan und lässt sich dort verschieben.
 - **Blickpunkte** speichert Kamerapositionen und ruft sie wieder auf.
-- **3D-Einstellungen** legen Boden und Himmel, Licht und Wandtransparenz, den Standort (Suche nach Adresse) sowie Datum und Uhrzeit der Sonne fest. Den Standort kannst du auch in den Eigenschaften des Hauses festlegen. **Norden an der Karte ausrichten** zeigt die Wände über einer Karte des Standorts: Drehe sie, bis sie auf das Gebäude passen, dann zeigt der Kompass nach Norden.
+- **3D-Einstellungen** legen Boden und Himmel, Licht und Wandtransparenz, den Standort (Suche nach Adresse) sowie Datum und Uhrzeit der Sonne fest. Den Standort kannst du auch in den Eigenschaften des Hauses festlegen. **Norden an der Karte ausrichten** zeigt die Wände über einer Karte des Standorts: Drehe sie mit dem Mausrad, bis sie auf das Gebäude passen, dann zeigt der Kompass nach Norden. Ziehen an den Wänden verschiebt sie, Ziehen daneben verschiebt die Karte; **Strg+Mausrad** oder die Knöpfe zoomen.
 - Lampen beleuchten den Rundgang; Wände halten das Licht der Lampen in deiner Nähe auf.
 
 # Fotos und Videos

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { northRotation, planOutlines } from "./northMap";
+import {
+  insideOutlines,
+  northRotation,
+  type Outline,
+  offsetPosition,
+  planOutlines,
+} from "./northMap";
 
 describe("planOutlines", () => {
   it("joins both sides of each wall around the middle of all walls", () => {
@@ -35,6 +41,29 @@ describe("planOutlines", () => {
       [45, -90],
       [-55, -90],
     ]);
+  });
+});
+
+describe("map helpers", () => {
+  it("moves a position by meters to the east and south", () => {
+    const [lat, lon] = offsetPosition(0, 10, 111_320, 111_320);
+    expect(lat).toBeCloseTo(-1);
+    expect(lon).toBeCloseTo(11);
+    // Degrees of longitude get shorter towards the poles
+    expect(offsetPosition(60, 0, 55_660, 0)[1]).toBeCloseTo(1, 3);
+  });
+
+  it("tells whether a point lies on the building", () => {
+    const outlines: Outline[] = [
+      [
+        [-50, -20],
+        [50, -20],
+        [50, 20],
+      ],
+    ];
+    expect(insideOutlines(outlines, 0, 0)).toBe(true);
+    expect(insideOutlines(outlines, 60, 0)).toBe(false);
+    expect(insideOutlines(outlines, 60, 0, 15)).toBe(true);
   });
 });
 
