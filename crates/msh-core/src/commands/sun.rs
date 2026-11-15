@@ -581,11 +581,16 @@ fn map(lat: f64, lon: f64, zoom: u32) -> Result<Value, CommandError> {
             let x = (tx - half + i64::from(col)).rem_euclid(tiles);
             let mut bytes = Vec::new();
             ureq::get(&format!("{TILE_URL}/{zoom}/{x}/{y}.png"))
-                .set("User-Agent", &agent)
-                .timeout(std::time::Duration::from_secs(15))
+                .header("User-Agent", &agent)
+                .config()
+                .timeout_global(Some(std::time::Duration::from_secs(15)))
+                .build()
                 .call()
                 .map_err(|e| CommandError::failed(format!("map download failed: {e}")))?
-                .into_reader()
+                .into_body()
+                .into_with_config()
+                .limit(4 << 20)
+                .reader()
                 .take(4 << 20)
                 .read_to_end(&mut bytes)
                 .map_err(|e| CommandError::failed(format!("map download failed: {e}")))?;
@@ -632,14 +637,17 @@ fn search(query: &str, limit: u32) -> Result<Value, CommandError> {
         return Err(CommandError::failed("the search text is empty"));
     }
     let body = ureq::get(NOMINATIM_URL)
-        .set("User-Agent", &user_agent())
+        .header("User-Agent", user_agent())
         .query("q", query)
         .query("format", "jsonv2")
-        .query("limit", &limit.to_string())
-        .timeout(std::time::Duration::from_secs(15))
+        .query("limit", limit.to_string())
+        .config()
+        .timeout_global(Some(std::time::Duration::from_secs(15)))
+        .build()
         .call()
         .map_err(|e| CommandError::failed(format!("address search failed: {e}")))?
-        .into_string()
+        .into_body()
+        .read_to_string()
         .map_err(|e| CommandError::failed(format!("address search failed: {e}")))?;
     let found: Vec<Value> = serde_json::from_str(&body).map_err(|e| {
         CommandError::failed(format!("unexpected answer of the address search: {e}"))

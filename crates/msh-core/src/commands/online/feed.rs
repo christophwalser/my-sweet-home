@@ -122,17 +122,22 @@ fn read(
     match loc {
         Location::Web(url) => {
             let mut req = ureq::get(url.as_str())
-                .set("User-Agent", &agent())
-                .timeout(Duration::from_secs(600));
+                .header("User-Agent", agent())
+                .config()
+                .timeout_global(Some(Duration::from_secs(600)))
+                .build();
             let same_host = matches!(feed, Location::Web(f) if f.host_str() == url.host_str() && f.port_or_known_default() == url.port_or_known_default());
             if let (Some(t), true) = (token.filter(|t| !t.trim().is_empty()), same_host) {
-                req = req.set("Authorization", &format!("Bearer {}", t.trim()));
+                req = req.header("Authorization", format!("Bearer {}", t.trim()));
             }
             let response = req
                 .call()
                 .map_err(|e| failed("the catalog server did not answer", e))?;
             response
-                .into_reader()
+                .into_body()
+                .into_with_config()
+                .limit(limit + 1)
+                .reader()
                 .take(limit + 1)
                 .read_to_end(&mut data)
                 .map_err(|e| failed("cannot read from the catalog server", e))?;
