@@ -12,6 +12,7 @@ import {
   type Piece,
   type Pt,
   pieceAtLevel,
+  pieceIsBackdrop,
   type Room,
   type TextStyle,
   type Texture,
@@ -46,6 +47,8 @@ export const DEFAULT_ROOM_FONT = 24;
 const DEFAULT_ROOM_NAME_Y_OFFSET = -40;
 /** Opacity of room floors in the plan, as in Sweet Home 3D. */
 const ROOM_ALPHA = 0.75;
+/** Opacity of reference objects and pieces reaching up from a lower level in the plan. */
+const BACKDROP_ALPHA = 0.35;
 /** Wall pattern used when a wall has none (Sweet Home 3D's default preference). */
 const DEFAULT_WALL_PATTERN = "hatchUp";
 const DEFAULT_LABEL_FONT = 18;
@@ -176,13 +179,31 @@ export function drawPlan(
 
   const { home, wallShapes, levelId } = input;
 
-  // Background image under the plan, at 70 % opacity like Sweet Home 3D
+  // Pieces sorted by elevation like Sweet Home 3D: higher pieces are drawn on top
+  const pieces: Piece[] = [];
+  forEachPiece(home.furniture, (p) => {
+    if (pieceAtLevel(home, p, levelId)) pieces.push(p);
+  });
+  pieces.sort((a, b) => (a.attrs.elevation ?? 0) - (b.attrs.elevation ?? 0));
+  // Backdrops (reference objects such as terrain and scans, pieces reaching up from a lower
+  // level) lie faint at the bottom, under the background image: that is mostly the plan of the
+  // building and stays readable on top of the terrain
+  const backdrop = new Set(pieces.filter((p) => pieceIsBackdrop(home, p, levelId)));
+  ctx.save();
+  ctx.globalAlpha = BACKDROP_ALPHA;
+  for (const p of backdrop) {
+    if (p.kind !== "DoorOrWindow") drawPiece(ctx, p, input, colors, px);
+  }
+  ctx.restore();
+
+  // Background image under the plan, at 70 % opacity like Sweet Home 3D; opaque over backdrops,
+  // so that the terrain does not tint the plan of the building
   const bg = backgroundImageOf(home, levelId);
   const bgImage = bg && bg.visible !== false ? input.icons.get(bg.image) : undefined;
   if (bg && bgImage?.complete && bgImage.naturalWidth > 0) {
     const s = backgroundScale(bg);
     ctx.save();
-    ctx.globalAlpha = 0.7;
+    ctx.globalAlpha = backdrop.size > 0 ? 1 : 0.7;
     ctx.translate(-(bg.x_origin ?? 0), -(bg.y_origin ?? 0));
     ctx.scale(s, s);
     ctx.drawImage(bgImage, 0, 0);
@@ -282,14 +303,8 @@ export function drawPlan(
   }
 
   // Furniture (below walls so that doors in walls stay readable on top)
-  const pieces: Piece[] = [];
-  forEachPiece(home.furniture, (p) => {
-    if (pieceAtLevel(home, p, levelId)) pieces.push(p);
-  });
-  // Sort by elevation like Sweet Home 3D: higher pieces are drawn on top
-  pieces.sort((a, b) => (a.attrs.elevation ?? 0) - (b.attrs.elevation ?? 0));
   for (const p of pieces) {
-    if (p.kind !== "DoorOrWindow") drawPiece(ctx, p, input, colors, px);
+    if (p.kind !== "DoorOrWindow" && !backdrop.has(p)) drawPiece(ctx, p, input, colors, px);
   }
 
   // Walls, drawn as one area like Sweet Home 3D: first all outlines with double

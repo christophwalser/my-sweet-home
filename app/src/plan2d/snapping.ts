@@ -12,7 +12,7 @@ import {
   forEachPiece,
   type Home,
   type Pt,
-  pieceAtLevel,
+  piecePickable,
   type WallShape,
   wallAtLevel,
 } from "../model";
@@ -452,7 +452,7 @@ export function snapContext(
     // Corners of furniture: points to measure from and guides to align with
     forEachPiece(home.furniture, (p) => {
       const a = p.attrs;
-      if (!pieceAtLevel(home, p, levelId) || a.visible === false) return;
+      if (!piecePickable(home, p, levelId) || a.visible === false) return;
       refs.push([a.x, a.y]);
       const w = (a.width_in_plan ?? a.width) / 2;
       const d = (a.depth_in_plan ?? a.depth) / 2;

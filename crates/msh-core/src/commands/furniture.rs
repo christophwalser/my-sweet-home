@@ -131,6 +131,9 @@ struct UpdateParams {
     /// Part of the base plan (not movable, locked with the base plan); doors and windows
     /// always are
     base_plan_item: Option<bool>,
+    /// Reference object (terrain, scan, neighbor house): shown in the plan faint and in 3D,
+    /// but not picked or snapped to in the plan; selected in the furniture list
+    reference: Option<bool>,
 }
 
 /// A decimal for the file: at most `digits` decimals, without trailing zeros.
@@ -381,8 +384,8 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "furniture_update",
-        "Moves, rotates, resizes, renames, colors, mirrors or hides a piece of furniture (or \
-         several pieces with ids; x and y only for one piece).",
+        "Moves, rotates, resizes, renames, colors, mirrors or hides a piece of furniture, or \
+         marks it as reference object (or several pieces with ids; x and y only for one piece).",
         true,
         |doc, p: UpdateParams| {
             // Textures of material changes are embedded once for all pieces
@@ -540,6 +543,17 @@ pub(super) fn register(r: &mut Registry) {
                 if let Some(v) = &p.currency {
                     a.currency = (!v.is_empty()).then(|| v.to_ascii_uppercase());
                 }
+                if let Some(v) = p.reference {
+                    piece.properties.retain(|pr| pr.name != REFERENCE_PROPERTY);
+                    if v {
+                        piece.properties.push(msh_model::Property {
+                            name: REFERENCE_PROPERTY.into(),
+                            value: "true".into(),
+                            kind: None,
+                            ..Default::default()
+                        });
+                    }
+                }
                 // Movable is the default; the file only says so when it is not
                 if let Some(v) = p.base_plan_item
                     && piece.kind != PieceKind::DoorOrWindow
@@ -604,6 +618,10 @@ fn normalize_angle(a: f32) -> f32 {
 /// Piece property with the opening angle of a lamp's light cone in degrees (our own; Sweet
 /// Home 3D keeps it and lights in all directions).
 pub const SPOT_ANGLE_PROPERTY: &str = "mySweetHome.spotAngle";
+
+/// Piece property marking a reference object such as terrain or a scan (our own; Sweet Home 3D
+/// keeps it and treats the piece as any other).
+pub const REFERENCE_PROPERTY: &str = "mySweetHome.reference";
 
 /// Size of the box around a tilted piece, as Sweet Home 3D stores it in `widthInPlan`,
 /// `depthInPlan` and `heightInPlan`: the box rotated with Rz(−roll) · Rx(−pitch).

@@ -8,7 +8,7 @@ import {
   type Home,
   type Piece,
   type Pt,
-  pieceAtLevel,
+  piecePickable,
   type WallShape,
   wallAtLevel,
 } from "../model";
@@ -89,7 +89,7 @@ export function moveTargets(
   };
   forEachPiece(home.furniture, (p) => {
     const a = p.attrs;
-    if (!a.id || skip.has(a.id) || a.visible === false || !pieceAtLevel(home, p, levelId)) return;
+    if (!a.id || skip.has(a.id) || a.visible === false || !piecePickable(home, p, levelId)) return;
     const pts = pieceOutline(p);
     const b = boxOf(pts);
     if (b) addBox(b);

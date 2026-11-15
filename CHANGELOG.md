@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- "Reference object" for furniture such as terrain, laser scans and neighbor houses: the plan
+  shows it faint under the background image and clicks, the rubber band and the magnetism ignore it; the 3D
+  view is unchanged.
+
+### Changed
+
+- Pieces of a lower level that reach up into the shown level (e.g. a tall terrain model) are
+  shown faint in its plan and can no longer be picked or snapped to there; staircases still can.
+
 ## [0.1.0] - 2026-11-15
 
 First public release.

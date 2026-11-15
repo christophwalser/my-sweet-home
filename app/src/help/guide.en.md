@@ -51,6 +51,10 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. T
 
 **Plan › Import background image** places a scanned plan or a page of a PDF under the plan. Mark a known length and type it in, then set the origin. Walls and rooms can then be drawn on top at the right scale.
 
+## Terrain and scans as reference objects
+
+Terrain models, laser scans or neighbor houses imported as furniture are marked as **Reference object** in their properties. The plan then shows them faint at the bottom, under the background image: clicks, the rubber band and the magnetism ignore them, so walls and rooms are drawn on top undisturbed. Select a reference object in the furniture list to change it; the 3D view shows it as before. Pieces of a lower level that reach up into the shown level (e.g. a tall terrain model) are shown the same way; staircases stay selectable.
+
 ## Locking the base plan
 
 **Plan › Lock base plan** keeps walls, rooms, texts, doors, windows and fixed furniture from being selected, so only movable furniture can be moved.

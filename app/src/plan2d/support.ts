@@ -3,7 +3,7 @@
 // shelf nearest to its elevation. The elevation handle snaps to these surfaces.
 
 import { t } from "../i18n";
-import { forEachPiece, type Home, type Piece, type Pt } from "../model";
+import { forEachPiece, type Home, isReference, type Piece, type Pt } from "../model";
 
 /** A surface a piece can stand on, as elevation above the floor of its level (cm). */
 export type Surface = { elevation: number; label: string };
@@ -71,6 +71,8 @@ function supports(home: Home, piece: Piece, p: Pt): Piece[] {
     const b = q.attrs;
     if (q === piece || b.id === a.id || b.level !== a.level || b.visible === false) return;
     if (q.kind === "DoorOrWindow" || q.kind === "Light" || b.staircase_cut_out_shape) return;
+    // A reference object (terrain, scan) is only a box around its model, no surface to stand on
+    if (isReference(q)) return;
     if ((b.width_in_plan ?? b.width) * (b.depth_in_plan ?? b.depth) <= area) return;
     if (contains(q, p)) result.push(q);
   });
