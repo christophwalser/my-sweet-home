@@ -16,6 +16,10 @@ updates:
     groups:
       cargo-minor:
         update-types: [minor, patch]
+    ignore:
+      # krilla-svg (PDF export) pins usvg 0.47; resvg must stay on 0.47 until it moves on
+      - dependency-name: resvg
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: npm
     directory: /app
