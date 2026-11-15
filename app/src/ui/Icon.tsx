@@ -513,6 +513,30 @@ const PATHS = {
       <path d="m20 20-4-4" />
     </>
   ),
+  magnet: (
+    <>
+      <path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4z" />
+      <path d="M6 8h4M14 8h4" />
+    </>
+  ),
+  angle: (
+    <>
+      <path d="M4 19h16M4 19 15 6" />
+      <path d="M10 19a6 6 0 0 0-1.6-4.1" />
+    </>
+  ),
+  snapobject: (
+    <>
+      <rect x="4" y="4" width="10" height="10" />
+      <circle cx="14" cy="14" r="3" />
+      <path d="M14 8v3M14 17v3M8 14h3M17 14h3" />
+    </>
+  ),
+  more: (
+    <>
+      <path d="M12 6h.01M12 12h.01M12 18h.01" />
+    </>
+  ),
   drag: (
     <>
       <path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" />

@@ -3,10 +3,11 @@
 // elements with different values are selected.
 
 import { type ReactNode, useRef } from "react";
+import { evalLength, evalNumber } from "../expression";
 import { formatNumber, t } from "../i18n";
 import type { Texture } from "../model";
 import { useStore } from "../store";
-import { formatFieldValue, parseLength, toUnit, unitSymbol, useUnit } from "../units";
+import { formatFieldValue, fromUnit, type LengthUnit, toUnit, unitSymbol, useUnit } from "../units";
 
 /**
  * Properties of one wall side. Its color matches the marking of that side in the
@@ -54,7 +55,14 @@ export function toHex(argb: number | null | undefined): string {
   return `#${(argb & 0xffffff).toString(16).padStart(6, "0")}`;
 }
 
-/** Input that commits on Enter or blur, not on every keystroke. */
+/** Step of the arrow keys and the mouse wheel in a length field, in the unit (Shift: x10). */
+const LENGTH_STEP: Record<LengthUnit, number> = { cm: 1, mm: 1, m: 0.01, inch: 1 };
+
+/**
+ * Input that commits on Enter or blur, not on every keystroke. Number fields calculate
+ * ("240+11.5") and change the value relatively ("+5", "+-5", "*2", "/2"); the arrow keys and the
+ * mouse wheel step the typed value before it is committed.
+ */
 export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps) {
   // A mixed color field shows a placeholder color: only a real change may commit it
   const changed = useRef(false);
@@ -97,19 +105,41 @@ export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps)
     if (mixed && (raw === "" || (type === "color" && !changed.current))) return;
     changed.current = false;
     if (isLength) {
-      const cm = parseLength(raw, lengthUnit);
+      const cm = evalLength(raw, lengthUnit, typeof value === "number" && !mixed ? value : null);
       if (cm !== null && toUnit(cm, lengthUnit) !== shown) onCommit(cm);
     } else if (type === "number" || type === "angle") {
-      const n = Number.parseFloat(raw.replace(",", "."));
-      if (Number.isFinite(n) && n !== shown) onCommit(n);
+      const n = evalNumber(raw, shown);
+      if (n !== null && n !== shown) onCommit(n);
     } else if (raw !== display) {
       onCommit(raw);
     }
+  };
+  const numeric = type === "number" || type === "angle";
+  // Steps the typed value (not committed yet) by `steps`
+  const step = (input: HTMLInputElement, steps: number) => {
+    if (isLength) {
+      const cm = evalLength(input.value, lengthUnit) ?? (typeof value === "number" ? value : 0);
+      const next = cm + fromUnit(LENGTH_STEP[lengthUnit] * steps, lengthUnit);
+      input.value = formatFieldValue(toUnit(next, lengthUnit), lengthUnit);
+    } else {
+      const n = evalNumber(input.value) ?? shown ?? 0;
+      input.value = formatNumber(Math.round((n + steps) * 10) / 10, 1);
+    }
+    changed.current = true;
   };
   return (
     <label className="prop-row">
       <span className="prop-label">{label}</span>
       <input
+        ref={(el) => {
+          if (!el || !numeric) return;
+          // A property handler, so that the wheel does not scroll the panel meanwhile
+          el.onwheel = (e) => {
+            if (document.activeElement !== el) return;
+            e.preventDefault();
+            step(el, (e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 10 : 1));
+          };
+        }}
         // Re-create the input when the value changes from outside (undo, CLI, MCP)
         key={String(display)}
         type={type === "color" ? "color" : "text"}
@@ -123,6 +153,10 @@ export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps)
         onBlur={(e) => commit(e.currentTarget.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+          else if (numeric && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+            e.preventDefault();
+            step(e.currentTarget, (e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 10 : 1));
+          }
         }}
       />
       {(unit || (mixed && type === "color")) && (

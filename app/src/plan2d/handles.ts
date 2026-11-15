@@ -11,10 +11,13 @@ import { forEachPiece, type Home, type Piece, type Pt, type WallShape } from "..
 import { formatArea, formatLength, formatPrecise } from "../units";
 import { boundsCenter, DEFAULT_ROOM_FONT, labelCenter, roomLabelPositions } from "./drawPlan";
 import { homeGuides } from "./guides";
+import { noteText } from "./markers";
 import { editedWallJoints, type Joint } from "./moving";
+import { edgeOffset, insertCorner, moveEdge, snapCorner } from "./roomEdit";
 import {
   offsetOutline,
   type Segment,
+  type Snapped,
   snapAngleDeg,
   snapContext,
   snapDraw,
@@ -29,6 +32,7 @@ export type HandleKind =
   | "wall-arc"
   | "wall-rotate"
   | "room-point"
+  | "room-edge"
   | "polyline-point"
   | "dimension-start"
   | "dimension-end"
@@ -62,6 +66,7 @@ export const HANDLE_SHAPE: Record<HandleKind, HandleShape> = {
   "wall-arc": "diamond",
   "wall-rotate": "rotate",
   "room-point": "square",
+  "room-edge": "circle",
   "polyline-point": "square",
   "dimension-start": "square",
   "dimension-end": "square",
@@ -84,7 +89,8 @@ export const HANDLE_HINT: Record<HandleKind, string> = {
   "wall-thickness": t("Drag to change the thickness"),
   "wall-arc": t("Drag sideways to bend the wall into an arc · Shift: 1° steps"),
   "wall-rotate": t("Drag to rotate the wall around its center · Shift: 1° steps"),
-  "room-point": t("Drag to move this corner"),
+  "room-point": t("Drag to move this corner · it snaps to right angles with the neighboring edges"),
+  "room-edge": t("Drag to add a corner here · Shift: move the whole edge parallel"),
   "polyline-point": t("Drag to move this point"),
   "dimension-start": t("Drag to move the start of the dimension"),
   "dimension-end": t("Drag to move the end of the dimension"),
@@ -116,6 +122,8 @@ export type HandleDrag = {
   preview: { pts: Pt[]; closed: boolean }[];
   /** Point the cursor snapped to, if any */
   snap: Pt | null;
+  /** What the snapped point is (its note, for the marker shape) */
+  snapNote?: string | null;
   /** Alignment guides */
   guides: Segment[];
   /** Short text shown next to the cursor (length, size or angle) */
@@ -226,6 +234,13 @@ export function elementHandles(home: Home, id: string, cmPerPx: number): Handle[
       index,
       pos: [p.x, p.y],
     }));
+    // A handle in the middle of each edge (not on edges too short to grab)
+    room.points.forEach((p, index) => {
+      const q = room.points[(index + 1) % room.points.length];
+      if (room.points.length >= 3 && Math.hypot(q.x - p.x, q.y - p.y) > 12 * cmPerPx) {
+        handles.push({ id, kind: "room-edge", index, pos: [(p.x + q.x) / 2, (p.y + q.y) / 2] });
+      }
+    });
     if (room.points.length >= 3) {
       const labels = roomLabelPositions(room);
       if (room.attrs.name) handles.push({ id, kind: "room-name", index: 0, pos: labels.name });
@@ -344,6 +359,37 @@ export function directionDeg(a: Pt, b: Pt): number {
  * radius in cm; `magnetism` is false while Alt is pressed; `fine` (Shift) uses 1°
  * angle steps instead of 5°.
  */
+/**
+ * Snaps a room corner being dragged or inserted: first to the targets of the plan (wall
+ * corners, other rooms, rulers), otherwise to right angles and alignments with its neighbors
+ * `[prev2, prev, next, next2]`.
+ */
+function snapRoomCorner(
+  home: Home,
+  wallShapes: WallShape[],
+  levelId: string | null,
+  p: Pt,
+  from: Pt,
+  others: Pt[],
+  [prev2, prev, next, next2]: [Pt, Pt, Pt, Pt],
+  snapRadius: number,
+  magnetism: boolean,
+): Snapped {
+  if (!magnetism) return { pt: p, marker: null, guides: [], note: null };
+  const s = snapDraw(
+    p,
+    null,
+    snapContext("room", home, wallShapes, levelId, snapRadius, {
+      excludePoint: from,
+      near: p,
+      path: others,
+    }),
+  );
+  if (s.marker) return s;
+  const corner = snapCorner(p, prev2, prev, next, next2, snapRadius);
+  return corner ? { pt: corner.pt, marker: null, guides: corner.guides, note: corner.note } : s;
+}
+
 export function dragHandle(
   home: Home,
   wallShapes: WallShape[],
@@ -389,8 +435,9 @@ export function dragHandle(
       return {
         preview: [{ pts: wallOutline(start, end, a.thickness, a.arc_extent), closed: true }],
         snap: s.marker,
+        snapNote: s.note,
         guides: s.guides,
-        info: `${lengthText(len)} · ${directionDeg(start, end)}°${s.note ? ` · ${s.note}` : ""}`,
+        info: `${lengthText(len)} · ${directionDeg(start, end)}°${s.note ? ` · ${noteText(s.note)}` : ""}`,
         joints: editedWallJoints(home, id, start, end),
         command: "wall_update",
         params: isStart
@@ -514,24 +561,71 @@ export function dragHandle(
       const room = home.rooms.find((r) => r.attrs.id === id);
       if (!room) return null;
       const n = room.points.length;
+      const pts: Pt[] = room.points.map((q) => [q.x, q.y]);
+      const at = (k: number) => pts[(k + n) % n];
       const prev = room.points[(handle.index + n - 1) % n];
-      const s = magnetism
-        ? snapDraw(
-            p,
-            null,
-            snapContext("room", home, wallShapes, levelId, snapRadius, {
-              excludePoint: handle.pos,
-              near: p,
-              path: room.points.filter((_, i) => i !== handle.index).map((q) => [q.x, q.y]),
-            }),
-          )
-        : { pt: p, marker: null, guides: [], note: null };
+      const s = snapRoomCorner(
+        home,
+        wallShapes,
+        levelId,
+        p,
+        handle.pos,
+        pts.filter((_, i) => i !== handle.index),
+        [at(handle.index - 2), at(handle.index - 1), at(handle.index + 1), at(handle.index + 2)],
+        snapRadius,
+        magnetism,
+      );
       const points: Pt[] = room.points.map((q, i) => (i === handle.index ? s.pt : [q.x, q.y]));
       return {
         preview: [{ pts: points, closed: true }],
         snap: s.marker,
+        snapNote: s.note,
         guides: s.guides,
-        info: `${lengthText(Math.hypot(s.pt[0] - prev.x, s.pt[1] - prev.y))}${s.note ? ` · ${s.note}` : ""}`,
+        info: `${lengthText(Math.hypot(s.pt[0] - prev.x, s.pt[1] - prev.y))}${s.note ? ` · ${noteText(s.note)}` : ""}`,
+        command: "room_update",
+        params: { id, points },
+      };
+    }
+    case "room-edge": {
+      const room = home.rooms.find((r) => r.attrs.id === id);
+      if (!room) return null;
+      const n = room.points.length;
+      const pts: Pt[] = room.points.map((q) => [q.x, q.y]);
+      const at = (k: number) => pts[(k + n) % n];
+      const a = at(handle.index);
+      const b = at(handle.index + 1);
+      if (fine) {
+        // Shift: the whole edge moves parallel, in whole cm with magnetism
+        const raw = edgeOffset(a, b, p);
+        const offset = magnetism ? Math.round(raw) : Math.round(raw * 10) / 10;
+        const points = moveEdge(pts, handle.index, offset);
+        return {
+          preview: [{ pts: points, closed: true }],
+          ...none,
+          info: t("Offset {v0}", { v0: formatPrecise(Math.abs(offset)) }),
+          command: "room_update",
+          params: { id, points },
+        };
+      }
+      // A new corner between the ends of the edge
+      const s = snapRoomCorner(
+        home,
+        wallShapes,
+        levelId,
+        p,
+        handle.pos,
+        pts,
+        [at(handle.index - 1), a, b, at(handle.index + 2)],
+        snapRadius,
+        magnetism,
+      );
+      const points = insertCorner(pts, handle.index, s.pt);
+      return {
+        preview: [{ pts: points, closed: true }],
+        snap: s.marker,
+        snapNote: s.note,
+        guides: s.guides,
+        info: `${lengthText(Math.hypot(s.pt[0] - a[0], s.pt[1] - a[1]))}${s.note ? ` · ${noteText(s.note)}` : ""}`,
         command: "room_update",
         params: { id, points },
       };
@@ -559,6 +653,7 @@ export function dragHandle(
       return {
         preview: [{ pts: points, closed: !!pl.attrs.closed_path }],
         snap: s.marker,
+        snapNote: s.note,
         guides: s.guides,
         info: previous ? lengthText(Math.hypot(s.pt[0] - previous[0], s.pt[1] - previous[1])) : "",
         command: "polyline_update",
@@ -582,6 +677,7 @@ export function dragHandle(
       return {
         preview: [{ pts: [fixed, s.pt], closed: false }],
         snap: s.marker,
+        snapNote: s.note,
         guides: s.guides,
         info: lengthText(Math.hypot(s.pt[0] - fixed[0], s.pt[1] - fixed[1])),
         command: "dimension_update",
@@ -607,6 +703,7 @@ export function dragHandle(
         // The ruler itself shows the change (movedGuides), so no outline
         preview: [],
         snap: s.marker,
+        snapNote: s.note,
         guides: s.guides,
         info: lengthText(Math.hypot(s.pt[0] - fixed[0], s.pt[1] - fixed[1])),
         command: "guide_update",

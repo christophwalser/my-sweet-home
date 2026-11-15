@@ -48,6 +48,14 @@ const RULES: Rule[] = [
     () => t("The wall has no length: its start and end are at the same point."),
   ],
   [/^a wall path needs at least 2 points$/, () => t("A wall needs at least 2 points.")],
+  [
+    /^there is already a room with this outline/,
+    () => t("These walls already enclose a room. Select it to change it."),
+  ],
+  [
+    /^the point \(.*\) is not enclosed by walls$/,
+    () => t("The walls do not enclose this point. Click inside walls that form a closed outline."),
+  ],
   [/^a room needs at least 3 points$/, () => t("A room needs at least 3 corners.")],
   [/^a polyline needs at least 2 points$/, () => t("A line needs at least 2 points.")],
   [/^a guide needs two different points$/, () => t("A ruler needs two different points.")],

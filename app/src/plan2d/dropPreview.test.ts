@@ -43,4 +43,34 @@ describe("drop preview", () => {
     );
     expect(free.center).toEqual([300, 150]);
   });
+
+  it("shows a piece docked to a wall where the dock puts it", () => {
+    const dock = () => ({ x: 30, y: 150, angleDeg: 90 });
+    const p = dropPreview(
+      home,
+      null,
+      { width: 80, depth: 40, doorOrWindow: false },
+      [35, 150],
+      40,
+      dock,
+    );
+    expect(p.center).toEqual([30, 150]);
+    expect(p.angle).toBeCloseTo(Math.PI / 2);
+    expect(p.corners.map((c) => roundPt(c))).toEqual([
+      [50, 110],
+      [50, 190],
+      [10, 190],
+      [10, 110],
+    ]);
+    // Without a dock nearby the piece stays at the pointer
+    const free = dropPreview(
+      home,
+      null,
+      { width: 80, depth: 40, doorOrWindow: false },
+      [200, 100],
+      40,
+      () => null,
+    );
+    expect(free.center).toEqual([200, 100]);
+  });
 });

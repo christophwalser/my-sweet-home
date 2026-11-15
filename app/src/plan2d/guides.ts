@@ -3,20 +3,11 @@
 // edit_delete). Drawn only on screen, never printed or exported.
 
 import type { Home, Pt } from "../model";
+import { type Guide, levelGuides } from "./guideData";
+import { rectSelection } from "./interaction";
 import { drawMeasureTag } from "./overlay";
 
-export type Guide = {
-  id: string;
-  level: string | null;
-  x_start: number;
-  y_start: number;
-  x_end: number;
-  y_end: number;
-  /** Line color "#RRGGBB"; missing: the ruler color of the preferences */
-  color?: string;
-  /** SOLID, DOT, DASH, DASH_DOT or DASH_DOT_DOT; missing: the preferences */
-  dash_style?: string;
-};
+export { GUIDES_PROPERTY, type Guide, homeGuides, levelGuides } from "./guideData";
 
 /** Dash pattern of a guide in screen pixels. */
 export function guideDash(style: string | undefined): number[] {
@@ -32,26 +23,6 @@ export function guideDash(style: string | undefined): number[] {
     default:
       return [8, 5];
   }
-}
-
-export const GUIDES_PROPERTY = "mySweetHome.guides";
-
-/** All guides of a home (none if the property is missing or unreadable). */
-export function homeGuides(home: Home): Guide[] {
-  const raw = home.properties?.find((p) => p.name === GUIDES_PROPERTY)?.value;
-  if (!raw) return [];
-  try {
-    const list = JSON.parse(raw);
-    return Array.isArray(list) ? (list as Guide[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Guides of a level (homes without levels: all). */
-export function levelGuides(home: Home, level: string | null): Guide[] {
-  const all = homeGuides(home);
-  return home.levels.length === 0 ? all : all.filter((g) => g.level === level);
 }
 
 /** Length of a guide in cm. */
@@ -102,12 +73,16 @@ export function guideAt(home: Home, level: string | null, p: Pt, tolerance: numb
 }
 
 /** Guides lying completely inside the rectangle from `a` to `b`. */
-export function guidesInRect(home: Home, level: string | null, a: Pt, b: Pt): Guide[] {
-  const [x0, x1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
-  const [y0, y1] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
-  const inside = (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
-  return levelGuides(home, level).filter(
-    (g) => inside(g.x_start, g.y_start) && inside(g.x_end, g.y_end),
+export function guidesInRect(
+  home: Home,
+  level: string | null,
+  a: Pt,
+  b: Pt,
+  crossing = false,
+): Guide[] {
+  const rect = rectSelection(a, b, crossing);
+  return levelGuides(home, level).filter((g) =>
+    rect.segment([g.x_start, g.y_start], [g.x_end, g.y_end]),
   );
 }
 
