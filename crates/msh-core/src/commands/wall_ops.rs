@@ -9,7 +9,7 @@ use serde_json::json;
 
 #[derive(Deserialize, JsonSchema)]
 struct JoinParams {
-    /// IDs of the two walls to connect
+    /// IDs of the walls to connect (two, or more to add walls to joined ones)
     ids: Vec<String>,
 }
 
@@ -125,6 +125,308 @@ fn round(p: P) -> P {
     ]
 }
 
+/// How two walls are joined: at the intersection of their axes, either as a corner (both end
+/// there) or as a T junction (one ends on the axis of the other).
+enum Join {
+    /// Both walls end at `point`, at their start or end
+    Corner {
+        point: P,
+        a_start: bool,
+        b_start: bool,
+    },
+    /// Wall `a` (or `b` when `moves_a` is false) ends at `point` inside the other wall
+    T {
+        point: P,
+        moves_a: bool,
+        at_start: bool,
+    },
+}
+
+/// Computes how walls `ia` and `ib` would be joined, without changing them.
+fn plan_join(home: &Home, ia: usize, ib: usize) -> Result<Join, CommandError> {
+    if ia == ib {
+        return Err(CommandError::failed("a wall cannot be joined to itself"));
+    }
+    let (a, b) = (&home.walls[ia].attrs, &home.walls[ib].attrs);
+    if !is_straight(a) || !is_straight(b) {
+        return Err(CommandError::failed("arc walls cannot be joined"));
+    }
+    if a.level != b.level {
+        return Err(CommandError::failed("the walls are on different levels"));
+    }
+    let da = [a.x_end - a.x_start, a.y_end - a.y_start];
+    let db = [b.x_end - b.x_start, b.y_end - b.y_start];
+    let cross = da[0] * db[1] - da[1] * db[0];
+    let la = da[0].hypot(da[1]);
+    let lb = db[0].hypot(db[1]);
+    if la < 1e-3 || lb < 1e-3 {
+        return Err(CommandError::failed("a wall has no length"));
+    }
+
+    let point = if cross.abs() < 1e-4 * la * lb {
+        // Parallel: only collinear walls can be joined, at the middle of their closest ends
+        let off = ((b.x_start - a.x_start) * da[1] - (b.y_start - a.y_start) * da[0]) / la;
+        if off.abs() > 1.0 {
+            return Err(CommandError::failed("parallel walls cannot be joined"));
+        }
+        let (pa, pb) = [
+            (start(a), start(b)),
+            (start(a), end(b)),
+            (end(a), start(b)),
+            (end(a), end(b)),
+        ]
+        .into_iter()
+        .min_by(|x, y| dist(x.0, x.1).total_cmp(&dist(y.0, y.1)))
+        .unwrap_or((start(a), start(b)));
+        [(pa[0] + pb[0]) / 2.0, (pa[1] + pb[1]) / 2.0]
+    } else {
+        let w = [b.x_start - a.x_start, b.y_start - a.y_start];
+        let t = (w[0] * db[1] - w[1] * db[0]) / cross;
+        [a.x_start + da[0] * t, a.y_start + da[1] * t]
+    };
+    let point = round(point);
+
+    // Whether the point lies inside a wall (away from both of its ends)
+    let margin = a.thickness.max(b.thickness);
+    let inside = |w: &WallAttrs| {
+        let t = param(w, point);
+        t > 0.0 && t < 1.0 && dist(point, start(w)) > margin && dist(point, end(w)) > margin
+    };
+    let a_start = dist(start(a), point) <= dist(end(a), point);
+    let b_start = dist(start(b), point) <= dist(end(b), point);
+    match (inside(a), inside(b)) {
+        (true, true) => Err(CommandError::failed(
+            "the walls cross each other; split one of them first (wall_split)",
+        )),
+        (false, true) => Ok(Join::T {
+            point,
+            moves_a: true,
+            at_start: a_start,
+        }),
+        (true, false) => Ok(Join::T {
+            point,
+            moves_a: false,
+            at_start: b_start,
+        }),
+        (false, false) => Ok(Join::Corner {
+            point,
+            a_start,
+            b_start,
+        }),
+    }
+}
+
+/// Joins walls `ia` and `ib` as planned by [`plan_join`].
+fn apply_join(home: &mut Home, ia: usize, ib: usize, join: &Join) -> serde_json::Value {
+    match *join {
+        Join::T {
+            point,
+            moves_a,
+            at_start,
+        } => {
+            let i = if moves_a { ia } else { ib };
+            clear_end(home, i, at_start);
+            set_end(&mut home.walls[i].attrs, at_start, point);
+            json!({ "joined": "t", "point": point })
+        }
+        Join::Corner {
+            point,
+            a_start,
+            b_start,
+        } => {
+            let (a_id, b_id) = (
+                home.walls[ia].attrs.id.clone(),
+                home.walls[ib].attrs.id.clone(),
+            );
+            clear_end(home, ia, a_start);
+            clear_end(home, ib, b_start);
+            let wa = &mut home.walls[ia].attrs;
+            set_end(wa, a_start, point);
+            if a_start {
+                wa.wall_at_start = Some(b_id);
+            } else {
+                wa.wall_at_end = Some(b_id);
+            }
+            let wb = &mut home.walls[ib].attrs;
+            set_end(wb, b_start, point);
+            if b_start {
+                wb.wall_at_start = Some(a_id);
+            } else {
+                wb.wall_at_end = Some(a_id);
+            }
+            json!({ "joined": "corner", "point": point })
+        }
+    }
+}
+
+/// Height of wall `a` at its start or end.
+fn height_at(a: &WallAttrs, at_start: bool) -> Option<f32> {
+    if at_start {
+        a.height
+    } else {
+        a.height_at_end.or(a.height)
+    }
+}
+
+/// Merges two straight, collinear walls of the same thickness whose ends meet (e.g. the parts
+/// of a split wall) into wall `ia`, which then reaches the far end of wall `ib` and takes over
+/// its join there; wall `ib` is removed. Returns `None` (nothing changed) for other walls.
+fn merge_collinear(home: &mut Home, ia: usize, ib: usize) -> Option<serde_json::Value> {
+    let (a, b) = (home.walls[ia].attrs.clone(), home.walls[ib].attrs.clone());
+    if ia == ib || !is_straight(&a) || !is_straight(&b) || a.level != b.level {
+        return None;
+    }
+    if (a.thickness - b.thickness).abs() > 0.01 {
+        return None;
+    }
+    let da = [a.x_end - a.x_start, a.y_end - a.y_start];
+    let db = [b.x_end - b.x_start, b.y_end - b.y_start];
+    let (la, lb) = (da[0].hypot(da[1]), db[0].hypot(db[1]));
+    if la < 1e-3 || lb < 1e-3 || (da[0] * db[1] - da[1] * db[0]).abs() > 1e-4 * la * lb {
+        return None;
+    }
+    // The meeting ends (start or end of each wall)
+    let (a_start, b_start) = [(true, true), (true, false), (false, true), (false, false)]
+        .into_iter()
+        .min_by(|x, y| {
+            let d = |(sa, sb): (bool, bool)| {
+                let pa = if sa { start(&a) } else { end(&a) };
+                let pb = if sb { start(&b) } else { end(&b) };
+                dist(pa, pb)
+            };
+            d(*x).total_cmp(&d(*y))
+        })?;
+    let pa = if a_start { start(&a) } else { end(&a) };
+    let pb = if b_start { start(&b) } else { end(&b) };
+    // The walls must continue each other, not overlap
+    let far_b = if b_start { end(&b) } else { start(&b) };
+    let far_a = if a_start { end(&a) } else { start(&a) };
+    if dist(pa, pb) > 1.0 || dist(far_a, far_b) < la.max(lb) {
+        return None;
+    }
+    let (a_id, b_id) = (a.id.clone(), b.id.clone());
+    let far_join = joined_at(&b, !b_start)
+        .filter(|j| *j != a_id)
+        .map(str::to_string);
+    let far_height = height_at(&b, !b_start);
+    {
+        let w = &mut home.walls[ia].attrs;
+        set_end(w, a_start, far_b);
+        if a_start {
+            w.wall_at_start = far_join;
+        } else {
+            w.wall_at_end = far_join;
+        }
+        // Sloping walls keep the heights of both far ends
+        let (h0, h1) = if a_start {
+            (far_height, height_at(&a, false))
+        } else {
+            (height_at(&a, true), far_height)
+        };
+        if h0 != h1 || a.height_at_end.is_some() {
+            (w.height, w.height_at_end) = (h0, h1);
+        }
+    }
+    // Walls joined to the removed wall are joined to the merged one
+    for w in &mut home.walls {
+        if w.attrs.id == a_id {
+            continue;
+        }
+        if w.attrs.wall_at_start.as_deref() == Some(b_id.as_str()) {
+            w.attrs.wall_at_start = Some(a_id.clone());
+        }
+        if w.attrs.wall_at_end.as_deref() == Some(b_id.as_str()) {
+            w.attrs.wall_at_end = Some(a_id.clone());
+        }
+    }
+    home.walls.remove(ib);
+    Some(json!({ "joined": "merged", "id": a_id, "removed": b_id }))
+}
+
+/// The wall joined at one end of `a` (start or end).
+fn joined_at(a: &WallAttrs, at_start: bool) -> Option<&str> {
+    if at_start {
+        a.wall_at_start.as_deref()
+    } else {
+        a.wall_at_end.as_deref()
+    }
+}
+
+/// Distance from point `p` to the axis segment of wall `w`.
+fn segment_distance(w: &WallAttrs, p: P) -> f32 {
+    let t = param(w, p).clamp(0.0, 1.0);
+    dist(
+        p,
+        [
+            w.x_start + (w.x_end - w.x_start) * t,
+            w.y_start + (w.y_end - w.y_start) * t,
+        ],
+    )
+}
+
+/// Joins three or more walls: each wall not yet joined to another of them is joined to the
+/// nearest of them, without breaking joins that already exist between them (e.g. a third wall
+/// added to two joined walls). One undo step for all.
+fn join_several(home: &mut Home, ids: &[String]) -> crate::registry::CommandResult {
+    let indices = ids
+        .iter()
+        .map(|id| index_of(home, id))
+        .collect::<Result<Vec<_>, _>>()?;
+    let linked = |home: &Home, i: usize| {
+        let a = &home.walls[i].attrs;
+        [true, false]
+            .into_iter()
+            .any(|s| joined_at(a, s).is_some_and(|j| ids.iter().any(|id| id == j)))
+    };
+    let mut results = Vec::new();
+    let mut last_error = None;
+    for &i in &indices {
+        if linked(home, i) {
+            continue;
+        }
+        // The other walls, nearest first (distance between the axes at the ends of wall i)
+        let a = &home.walls[i].attrs;
+        let mut others: Vec<(f32, usize)> = indices
+            .iter()
+            .filter(|&&j| j != i)
+            .map(|&j| {
+                let b = &home.walls[j].attrs;
+                let d = segment_distance(b, start(a))
+                    .min(segment_distance(b, end(a)))
+                    .min(segment_distance(a, start(b)))
+                    .min(segment_distance(a, end(b)));
+                (d, j)
+            })
+            .collect();
+        others.sort_by(|x, y| x.0.total_cmp(&y.0));
+        for (_, j) in others {
+            let join = match plan_join(home, i, j) {
+                Ok(join) => join,
+                Err(e) => {
+                    last_error = Some(e);
+                    continue;
+                }
+            };
+            // An end of the other wall that is joined already keeps its join
+            let keeps = match join {
+                Join::Corner { b_start, .. } => joined_at(&home.walls[j].attrs, b_start).is_none(),
+                Join::T {
+                    moves_a, at_start, ..
+                } => moves_a || joined_at(&home.walls[j].attrs, at_start).is_none(),
+            };
+            if keeps {
+                results.push(apply_join(home, i, j, &join));
+                break;
+            }
+        }
+    }
+    if results.is_empty() {
+        return Err(last_error
+            .unwrap_or_else(|| CommandError::failed("the selected walls are joined already")));
+    }
+    Ok(json!({ "joined": results }))
+}
+
 pub(super) fn register(r: &mut Registry) {
     r.add(
         "wall_set_angle",
@@ -205,98 +507,29 @@ pub(super) fn register(r: &mut Registry) {
         "wall_join",
         "Connects two walls. Their axes are extended or shortened to their intersection: if it \
          is near an end of both walls, they get a mitered corner; if it lies inside one wall, \
-         the other one ends on its axis (T junction). Collinear walls are joined end to end.",
+         the other one ends on its axis (T junction). Two collinear walls of the same \
+         thickness whose ends meet (e.g. the parts of a split wall) become one wall, the first \
+         one; other collinear walls are joined end to end. \
+         With more than two walls, each one not yet joined to another of them is joined to the \
+         nearest one, keeping the joins between them (e.g. a third wall added to two joined \
+         walls).",
         true,
         |doc, p: JoinParams| {
-            let [a_id, b_id] = p.ids.as_slice() else {
-                return Err(CommandError::failed("wall_join needs exactly two wall IDs"));
-            };
             let home = doc.home_mut();
+            if p.ids.len() > 2 {
+                return join_several(home, &p.ids);
+            }
+            let [a_id, b_id] = p.ids.as_slice() else {
+                return Err(CommandError::failed(
+                    "wall_join needs at least two wall IDs",
+                ));
+            };
             let (ia, ib) = (index_of(home, a_id)?, index_of(home, b_id)?);
-            if ia == ib {
-                return Err(CommandError::failed("a wall cannot be joined to itself"));
+            if let Some(merged) = merge_collinear(home, ia, ib) {
+                return Ok(merged);
             }
-            let (a, b) = (home.walls[ia].attrs.clone(), home.walls[ib].attrs.clone());
-            if !is_straight(&a) || !is_straight(&b) {
-                return Err(CommandError::failed("arc walls cannot be joined"));
-            }
-            if a.level != b.level {
-                return Err(CommandError::failed("the walls are on different levels"));
-            }
-            let da = [a.x_end - a.x_start, a.y_end - a.y_start];
-            let db = [b.x_end - b.x_start, b.y_end - b.y_start];
-            let cross = da[0] * db[1] - da[1] * db[0];
-            let la = da[0].hypot(da[1]);
-            let lb = db[0].hypot(db[1]);
-            if la < 1e-3 || lb < 1e-3 {
-                return Err(CommandError::failed("a wall has no length"));
-            }
-
-            let point = if cross.abs() < 1e-4 * la * lb {
-                // Parallel: only collinear walls can be joined, at the middle of their closest ends
-                let off = ((b.x_start - a.x_start) * da[1] - (b.y_start - a.y_start) * da[0]) / la;
-                if off.abs() > 1.0 {
-                    return Err(CommandError::failed("parallel walls cannot be joined"));
-                }
-                let (pa, pb) = [
-                    (start(&a), start(&b)),
-                    (start(&a), end(&b)),
-                    (end(&a), start(&b)),
-                    (end(&a), end(&b)),
-                ]
-                .into_iter()
-                .min_by(|x, y| dist(x.0, x.1).total_cmp(&dist(y.0, y.1)))
-                .unwrap_or((start(&a), start(&b)));
-                [(pa[0] + pb[0]) / 2.0, (pa[1] + pb[1]) / 2.0]
-            } else {
-                let w = [b.x_start - a.x_start, b.y_start - a.y_start];
-                let t = (w[0] * db[1] - w[1] * db[0]) / cross;
-                [a.x_start + da[0] * t, a.y_start + da[1] * t]
-            };
-            let point = round(point);
-
-            // Whether the point lies inside a wall (away from both of its ends)
-            let margin = a.thickness.max(b.thickness);
-            let inside = |w: &WallAttrs| {
-                let t = param(w, point);
-                t > 0.0 && t < 1.0 && dist(point, start(w)) > margin && dist(point, end(w)) > margin
-            };
-            let a_start_near = dist(start(&a), point) <= dist(end(&a), point);
-            let b_start_near = dist(start(&b), point) <= dist(end(&b), point);
-            match (inside(&a), inside(&b)) {
-                (true, true) => Err(CommandError::failed(
-                    "the walls cross each other; split one of them first (wall_split)",
-                )),
-                (false, true) => {
-                    clear_end(home, ia, a_start_near);
-                    set_end(&mut home.walls[ia].attrs, a_start_near, point);
-                    Ok(json!({ "joined": "t", "point": point }))
-                }
-                (true, false) => {
-                    clear_end(home, ib, b_start_near);
-                    set_end(&mut home.walls[ib].attrs, b_start_near, point);
-                    Ok(json!({ "joined": "t", "point": point }))
-                }
-                (false, false) => {
-                    clear_end(home, ia, a_start_near);
-                    clear_end(home, ib, b_start_near);
-                    let wa = &mut home.walls[ia].attrs;
-                    set_end(wa, a_start_near, point);
-                    if a_start_near {
-                        wa.wall_at_start = Some(b_id.clone());
-                    } else {
-                        wa.wall_at_end = Some(b_id.clone());
-                    }
-                    let wb = &mut home.walls[ib].attrs;
-                    set_end(wb, b_start_near, point);
-                    if b_start_near {
-                        wb.wall_at_start = Some(a_id.clone());
-                    } else {
-                        wb.wall_at_end = Some(a_id.clone());
-                    }
-                    Ok(json!({ "joined": "corner", "point": point }))
-                }
-            }
+            let join = plan_join(home, ia, ib)?;
+            Ok(apply_join(home, ia, ib, &join))
         },
     );
     r.add(

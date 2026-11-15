@@ -163,6 +163,68 @@ fn catalog_search_finds_furniture_and_textures_by_all_words() {
 
 // ---------------------------------------------------------------- furniture_add
 
+/// A lamp whose light comes from a material of its model (Sweet Home 3D 7, e.g. the mini
+/// spot of the contributed furniture) is placed as a light that keeps that material.
+#[test]
+fn furniture_add_places_a_lamp_with_a_light_source_material() {
+    use std::io::Write;
+    let Some(root) = isolated_catalog("furniture_add_places_a_lamp_with_a_light_source_material")
+    else {
+        return;
+    };
+    let dir = root.join("eTeks").join("Sweet Home 3D").join("furniture");
+    std::fs::create_dir_all(&dir).unwrap();
+    let obj = write_box_obj(&root, "spot.obj", [7.0, 0.3, 7.0]);
+    let mut zip = zip::ZipWriter::new(std::fs::File::create(dir.join("Spots.sh3f")).unwrap());
+    let options = zip::write::SimpleFileOptions::default();
+    zip.start_file("PluginFurnitureCatalog.properties", options)
+        .unwrap();
+    zip.write_all(
+        b"id=spots\nid#1=Test#minispotVx8\nname#1=Mini spot Vx8\ncategory#1=Lights\n\
+          icon#1=/spot.obj\nmodel#1=/spot.obj\nwidth#1=7\ndepth#1=7\nheight#1=0.3\n\
+          elevation#1=249.7\nmovable#1=false\nlightSourceMaterialName#1=spot\n",
+    )
+    .unwrap();
+    zip.start_file("spot.obj", options).unwrap();
+    zip.write_all(&std::fs::read(&obj).unwrap()).unwrap();
+    zip.finish().unwrap();
+
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let found = run(
+        &r,
+        &mut doc,
+        "catalog_search",
+        json!({ "query": "minispotVx8" }),
+    );
+    assert_eq!(found["results"][0]["light"], json!(true), "{found}");
+    let id = run(
+        &r,
+        &mut doc,
+        "furniture_add",
+        json!({ "catalog_id": "Test#minispotVx8", "x": 100, "y": 100 }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(id.starts_with("light-"), "{id}");
+    let p = piece(&doc, &id);
+    assert_eq!(p.kind, PieceKind::Light);
+    assert_eq!(p.attrs.power, Some(0.5));
+    assert!(p.light_sources.is_empty());
+    let names: Vec<&str> = p
+        .light_source_materials
+        .iter()
+        .map(|m| m.name.as_str())
+        .collect();
+    assert_eq!(names, ["spot"]);
+    // Saved as a light with its material
+    let reopened = save_and_reopen(&r, &mut doc, "light-source-material");
+    let p = piece(&reopened, &id);
+    assert_eq!(p.kind, PieceKind::Light);
+    assert_eq!(p.light_source_materials.len(), 1);
+}
+
 #[test]
 fn furniture_add_places_and_embeds_a_catalog_piece() {
     let Some(root) = isolated_catalog("furniture_add_places_and_embeds_a_catalog_piece") else {

@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { create } from "zustand";
+import { addRecent } from "../panels/recentTextures";
 
 /** Dialogs and panels that commands can open. Only one is open at a time. */
 export type DialogName =
@@ -63,10 +64,21 @@ type UiState = {
   /** Variant last chosen per split button of the tool bar (button ID → command ID) */
   variants: Record<string, string>;
   setVariant: (button: string, command: string) => void;
+  /** Furniture keeps its proportions when its size changes (properties and plan handles) */
+  keepProportions: boolean;
+  setKeepProportions: (on: boolean) => void;
+  /** Search text of the texture chooser, kept from one element to the next */
+  textureQuery: string;
+  setTextureQuery: (query: string) => void;
+  /** Catalog IDs of the textures chosen last, newest first */
+  recentTextures: string[];
+  noteTexture: (catalogId: string) => void;
 };
 
 const THEME_KEY = "msh.theme";
 const VARIANTS_KEY = "msh.toolVariants";
+const PROPORTIONS_KEY = "msh.keepProportions";
+const RECENT_TEXTURES_KEY = "msh.recentTextures";
 
 function loadJson<T>(key: string, fallback: T): T {
   try {
@@ -117,6 +129,19 @@ export const useUi = create<UiState>((set, get) => ({
     const variants = { ...get().variants, [button]: command };
     set({ variants });
     saveJson(VARIANTS_KEY, variants);
+  },
+  keepProportions: loadJson<boolean>(PROPORTIONS_KEY, false),
+  setKeepProportions: (keepProportions) => {
+    set({ keepProportions });
+    saveJson(PROPORTIONS_KEY, keepProportions);
+  },
+  textureQuery: "",
+  setTextureQuery: (textureQuery) => set({ textureQuery }),
+  recentTextures: loadJson<string[]>(RECENT_TEXTURES_KEY, []),
+  noteTexture: (catalogId) => {
+    const recentTextures = addRecent(get().recentTextures, catalogId);
+    set({ recentTextures });
+    saveJson(RECENT_TEXTURES_KEY, recentTextures);
   },
 }));
 

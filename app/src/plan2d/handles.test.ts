@@ -133,7 +133,24 @@ describe("elementHandles", () => {
     ];
     const room = makeRoom(pts, { id: "r", name: "Kitchen", area_visible: true });
     const kinds = elementHandles(makeHome({ rooms: [room] }), "r", 1).map((h) => h.kind);
-    expect(kinds).toEqual(["room-point", "room-point", "room-point", "room-name", "room-area"]);
+    expect(kinds).toEqual([
+      "room-point",
+      "room-point",
+      "room-point",
+      "room-edge",
+      "room-edge",
+      "room-edge",
+      "room-name",
+      "room-area",
+    ]);
+    // Edge handles sit in the middle of the edges; short edges have none
+    const edges = elementHandles(makeHome({ rooms: [room] }), "r", 1).filter(
+      (h) => h.kind === "room-edge",
+    );
+    expect(edges[0].pos).toEqual([50, 0]);
+    expect(
+      elementHandles(makeHome({ rooms: [room] }), "r", 20).some((h) => h.kind === "room-edge"),
+    ).toBe(false);
   });
 
   it("gives degenerate rooms no label handles", () => {
@@ -366,6 +383,15 @@ describe("dragHandle on furniture and the compass", () => {
     const h = handleOf(home, "p", "piece-resize");
     const offset: Pt = [h.pos[0] - 50, h.pos[1] - 25];
     const d = dragHandle(home, [], null, h, [70 + offset[0], 25 + offset[1]], 10, true);
+    expect(d?.params).toMatchObject({ width: 120, depth: 60, height: 96 });
+  });
+
+  it("keeps the proportions of any piece when asked to", () => {
+    const home = makeHome({ furniture: [piece] });
+    const h = handleOf(home, "p", "piece-resize");
+    const offset: Pt = [h.pos[0] - 50, h.pos[1] - 25];
+    const p: Pt = [70 + offset[0], 25 + offset[1]];
+    const d = dragHandle(home, [], null, h, p, 10, true, false, true);
     expect(d?.params).toMatchObject({ width: 120, depth: 60, height: 96 });
   });
 

@@ -320,9 +320,11 @@ export function createPieceObject(
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         mesh.receiveShadow = true;
-        // Transparent parts like window panes let the sun through
+        // Transparent parts like window panes let the sun through; a lamp would block
+        // its own light (its source lies inside the model)
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        mesh.castShadow = !mats.some((m) => m.transparent && m.opacity < 0.9);
+        mesh.castShadow =
+          piece.kind !== "Light" && !mats.some((m) => m.transparent && m.opacity < 0.9);
       });
       outer.add(rotated);
       onLoaded();
@@ -339,9 +341,9 @@ export function createPieceObject(
 function applyLightGlow(obj: THREE.Object3D, piece: Piece): void {
   const names = new Set((piece.light_source_materials ?? []).map((m) => m.name));
   const power = piece.attrs.power ?? 0.5;
-  const source = piece.light_sources?.[0];
-  if (names.size === 0 || power <= 0 || !source) return;
-  const color = new THREE.Color(source.color & 0xffffff);
+  if (names.size === 0 || power <= 0) return;
+  // Without light source points the light is white
+  const color = new THREE.Color((piece.light_sources?.[0]?.color ?? 0xffffff) & 0xffffff);
   const max = Math.max(color.r, color.g, color.b);
   if (max > 0) color.multiplyScalar(1 / max);
   else color.setRGB(1, 1, 1);

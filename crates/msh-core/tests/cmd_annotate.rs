@@ -443,6 +443,35 @@ fn polyline_add_rejects_invalid_input() {
 // ---------------------------------------------------------------- polyline_update
 
 #[test]
+fn polyline_update_shows_the_polyline_in_3d() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let id = add_polyline(&r, &mut doc);
+    assert_eq!(doc.home().polylines[0].attrs.elevation, None);
+    let before = snapshot(&doc);
+    run(
+        &r,
+        &mut doc,
+        "polyline_update",
+        json!({ "id": id, "visible_in_3d": true }),
+    );
+    assert_eq!(doc.home().polylines[0].attrs.elevation, Some(0.0));
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+
+    let reopened = save_and_reopen(&r, &mut doc, "polyline_visible_in_3d");
+    assert_eq!(reopened.home().polylines[0].attrs.elevation, Some(0.0));
+
+    run(
+        &r,
+        &mut doc,
+        "polyline_update",
+        json!({ "id": id, "visible_in_3d": false }),
+    );
+    assert_eq!(doc.home().polylines[0].attrs.elevation, None);
+}
+
+#[test]
 fn polyline_update_changes_all_properties() {
     let r = Registry::standard();
     let mut doc = new_doc(&r);

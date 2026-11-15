@@ -247,7 +247,8 @@ Implemented:
   smallest hole of the union of the wall outlines (`msh_geometry::enclosed_area`, boolean ops
   of the `geo` crate) that contains the point.
 - Polylines: tool "Line", `polyline_add` / `polyline_update` (thickness, color, dash style,
-  arrows, closed); arrows are drawn in the plan.
+  arrows, closed, `visible_in_3d`: an elevation, as SH3D 6.0 shows such polylines in 3D);
+  arrows are drawn in the plan.
 - `wall_update`: baseboards per side (height 0 removes), pattern, "" removes colors/textures,
   joined walls follow moved end points. `room_update`: "" removes colors/textures.
   `dimension_update`.
@@ -285,10 +286,13 @@ Based on user feedback; Sweet Home 3D's interaction is the baseline, with additi
   Home 3D's magnetism; Alt disables it.
 - `wall_add_path` joins an open path to a free wall end at its first or last point (mitered
   corner instead of two overlapping walls).
-- Joining and separating walls: `wall_join` (two walls; their axes are extended or shortened to
+- Joining and separating walls: `wall_join` (two or more walls; their axes are extended or shortened to
   the intersection: mitered corner near both ends, T junction if the intersection lies inside
-  one wall, end-to-end for collinear walls), `wall_detach`, `wall_split` (at a point or the
-  middle). UI: "Join walls" (or J) for two selected walls, "Detach", "Split". Moving a free wall
+  one wall, end-to-end for collinear walls; two collinear walls of the same thickness whose ends
+  meet, e.g. the parts of a split wall, become one wall again), `wall_detach`, `wall_split` (at a point or the
+  middle). With more than two walls, each one not yet joined to another of them is joined to the
+  nearest one without breaking the joins between them. UI: "Join walls" (or J) for two or more
+  selected walls, "Detach", "Split". Moving a free wall
   end onto a free end of another wall (`wall_update`, handles) joins them.
 - Placing a wall against an existing one: near a wall, the wall tool shows its snap points (ends
   and middle as circles, "flush" points as crosses) and names the point the cursor snaps to.
@@ -1176,6 +1180,26 @@ the process tree (the app and its WebView2 processes; Sweet Home 3D 7.6.1 is one
   pieces whose top is above the ceiling of their level until they touch it (not doors and
   windows), and `level_update` keeps pieces touching the ceiling at the ceiling when the level
   height changes. Pieces placed before are not changed.
+
+### 4.49 Location in the home, north from a map, lamp lights (2026-11-11)
+
+- One location component (`panels/LocationFields.tsx`: address search, latitude and longitude
+  with four decimals, time zone, north direction) is shown in the 3D settings and in the
+  compass section of the home properties; both read the compass, so each shows changes made
+  in the other at once.
+- North from a map: `location_map` downloads the OpenStreetMap tiles around the location
+  (zoom 15 to 19, 3 × 3 tiles, same user agent as the address search, one download per
+  opening, zoom step or move of the map beyond the downloaded part) and joins them into one PNG in msh-core, so the WebView's CSP stays as it is.
+  The dialog draws the wall outlines over it (`panels/northMap.ts`) at the map's scale; the
+  angle that puts the walls onto the building becomes the compass's north direction. The map
+  shows the required attribution.
+- Lamps whose light comes from materials of their model (Sweet Home 3D 7
+  `lightSourceMaterialName`, e.g. the contributed "Mini spot") were placed as plain pieces
+  without light; they are now lights with their `lightSourceMaterial`s, and the 3D view gives
+  them one white light in the middle of the piece. Pieces placed before stay plain pieces.
+- Lamp lights in the virtual visit passed through walls (no shadows). The four lamps nearest
+  to the visitor now cast shadows (512 px maps, drawn once and again when models are loaded,
+  not every frame); lamp models themselves cast none, since their light source lies inside.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

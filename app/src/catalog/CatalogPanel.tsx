@@ -11,6 +11,7 @@ import {
   type CatalogItem,
   type CatalogKind,
   libResourceUrl,
+  setCatalogDrag,
 } from "../api";
 import { language, t } from "../i18n";
 import Splitter from "../layout/Splitter";
@@ -25,6 +26,13 @@ import { homeCenter } from "./ImportFurnitureDialog";
 import { categoriesFor, itemMenu, libraryOf, openEditor, undoLibrary } from "./library";
 
 const MAX_RESULTS = 300;
+
+/** Transparent picture shown under the pointer while an item is dragged. */
+const EMPTY_DRAG_IMAGE = (() => {
+  const img = new Image(1, 1);
+  img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+  return img;
+})();
 
 /** Places a catalog piece in the middle of the home, on the selected level. */
 async function addToHome(item: CatalogItem): Promise<void> {
@@ -102,10 +110,23 @@ function ItemRow({
           catalogId: item.id,
           doorOrWindow: item.doorOrWindow,
           name: item.name,
+          width: item.width,
+          depth: item.depth,
         };
         e.dataTransfer.setData(CATALOG_DRAG_TYPE, JSON.stringify(data));
         e.dataTransfer.effectAllowed = "copy";
+        // The plan shows the piece at its size; no picture of the list row in the way
+        let icon: HTMLImageElement | null = null;
+        if (item.icon) {
+          // Loaded for the plan canvas (which must stay readable for exports)
+          icon = new Image();
+          icon.crossOrigin = "anonymous";
+          icon.src = libResourceUrl(item.library, item.icon);
+        }
+        setCatalogDrag({ data, icon });
+        e.dataTransfer.setDragImage(EMPTY_DRAG_IMAGE, 0, 0);
       }}
+      onDragEnd={() => setCatalogDrag(null)}
     >
       {item.icon ? (
         <img src={libResourceUrl(item.library, item.icon)} alt="" loading="lazy" decoding="async" />

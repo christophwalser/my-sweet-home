@@ -194,6 +194,20 @@ input[type="search"]:focus {
   flex: 1;
 }
 
+.error-bar .error-close {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.error-bar .error-close:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.15));
+  border-radius: 4px;
+}
+
 .catalog {
   grid-area: catalog;
 }
@@ -410,6 +424,39 @@ input[type="search"]:focus {
   gap: 6px;
 }
 
+.texture-picker-bar .search-box {
+  position: relative;
+  display: flex;
+  flex: 1 1 100%;
+}
+
+.search-box .search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  padding: 2px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.search-box .search-clear:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.texture-heading {
+  margin: 6px 0 2px;
+}
+
+.texture-picker-bar .search-box input {
+  padding-right: 22px;
+}
+
 .texture-picker-bar input {
   flex: 1 1 100%;
   min-width: 0;
@@ -502,6 +549,40 @@ input[type="search"]:focus {
   padding: 2px 6px;
 }
 
+.plan-text-editor {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  min-width: 6em;
+  padding: 0 4px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: sans-serif;
+  line-height: 1.2;
+  text-align: center;
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+  outline: none;
+  box-shadow: var(--shadow);
+}
+
+.plan-distance-editor {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 7em;
+  padding: 1px 4px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+  outline: none;
+  box-shadow: var(--shadow);
+}
+
 .plan-hint {
   position: absolute;
   left: 8px;
@@ -513,6 +594,65 @@ input[type="search"]:focus {
   color: #ffffff;
   font-size: 12px;
   pointer-events: none;
+}
+
+/* Status bar under the plan: magnetism switches and the mouse position */
+.plan-status {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  user-select: none;
+}
+
+.plan-status-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.plan-status-switch.on {
+  border-color: var(--border);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.plan-status-switch:disabled {
+  opacity: 0.45;
+}
+
+.plan-status-settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-status-settings:hover,
+.plan-status-switch:hover:not(:disabled) {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.plan-status-position {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
 }
 
 .plan-view {
@@ -1757,6 +1897,57 @@ body.resizing-horizontal {
   font-size: 12px;
 }
 
+/* Turning the plan to match a map (north direction) */
+.north-map {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.north-map-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.north-map-stage canvas {
+  width: min(700px, calc(100vh - 260px));
+  aspect-ratio: 1;
+  touch-action: none;
+}
+
+.north-map-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.north-map-zoom .icon-button {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+}
+
+.north-map .dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.north-map .dialog-actions .prop-row {
+  margin-right: auto;
+}
+
+.north-map .dialog-actions input {
+  width: 80px;
+}
+
 /* A part of the window that failed (see ErrorBoundary) */
 .error-boundary {
   display: flex;
@@ -2168,6 +2359,13 @@ body.moving-dialog * {
 /* Selected elements in the properties of a multiple selection */
 .selection-list {
   margin-top: 12px;
+}
+
+.selection-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
 }
 
 .selection-list ul {
