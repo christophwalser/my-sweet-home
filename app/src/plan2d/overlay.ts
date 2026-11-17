@@ -31,7 +31,8 @@ export type PlanOverlay = {
   /** Left and right sides of the selected walls (colored like in the properties panel) */
   wallSides: { left: Pt[][]; right: Pt[][]; highlight: "left" | "right" | null } | null;
   /** Points of the path being drawn, including the cursor point */
-  draft: { points: Pt[]; kind: DraftKind; thickness: number } | null;
+  /** `axis`: where the wall will lie when the points describe one of its sides */
+  draft: { points: Pt[]; kind: DraftKind; thickness: number; axis?: Pt[] } | null;
   /** Alignment guides of the current snap */
   guides: Segment[];
   /** Explanation of a direction snap shown at the cursor (e.g. "⊥ wall") */
@@ -263,7 +264,7 @@ export function drawOverlay(
     ctx.strokeStyle = overlay.accent;
     if (draft.kind === "wall" && pts.length >= 2) {
       // Walls with their real thickness
-      const outline = offsetOutline(pts, draft.thickness / 2);
+      const outline = offsetOutline(draft.axis ?? pts, draft.thickness / 2);
       ctx.fillStyle = withAlpha(overlay.accent, 0.25);
       ctx.beginPath();
       outline.forEach(([x, y], i) => {

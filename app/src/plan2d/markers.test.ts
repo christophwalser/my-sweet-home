@@ -8,12 +8,12 @@ describe("markerShape", () => {
     expect(markerShape("close")).toBe("square");
     expect(markerShape("wall middle")).toBe("triangle");
     expect(markerShape("wall corner")).toBe("cross");
-    expect(markerShape("ruler crossing")).toBe("cross");
+    expect(markerShape("guide line crossing")).toBe("cross");
     expect(markerShape("flush with wall end")).toBe("cross");
     expect(markerShape("perpendicular")).toBe("perpendicular");
-    expect(markerShape("ruler end")).toBe("diamond");
-    expect(markerShape("ruler middle")).toBe("diamond");
-    expect(markerShape("on ruler")).toBe("circle");
+    expect(markerShape("guide line end")).toBe("diamond");
+    expect(markerShape("guide line middle")).toBe("diamond");
+    expect(markerShape("on guide line")).toBe("circle");
     expect(markerShape("on wall face")).toBe("circle");
     expect(markerShape(null)).toBe("circle");
   });

@@ -1202,6 +1202,40 @@ the process tree (the app and its WebView2 processes; Sweet Home 3D 7.6.1 is one
   to the visitor now cast shadows (512 px maps, drawn once and again when models are loaded,
   not every frame); lamp models themselves cast none, since their light source lies inside.
 
+### 4.50 Precise drawing after the UX review (2026-11-17)
+
+- Keys: an open dialog (`.dialog-backdrop`) takes all keys; `ui/keyTarget.ts` tells text
+  fields (all keys theirs) from check boxes, drop-downs and sliders (plain keys theirs, Ctrl
+  shortcuts for the app). Letters choose tools (`TOOL_LETTERS` in `ui/toolKeys.ts`; R and J
+  stay rotate and join), Space held pans with the left button.
+- `edit_rotate` (IDs, angle, optional point): rotates walls, rooms, furniture, lines,
+  dimensions, texts (upright) and guide lines around a point, by default the center of
+  their bounding box. Doors and windows in a rotated wall follow (`carried_openings`, shared
+  with `edit_move`), the touching end of joined walls too. `furniture_update` takes
+  `rotate_deg` (each piece around its own center). R in the plan rotates furniture each
+  around itself and any other selection as a whole. **Edit › Rotate… / Move…** type the
+  values (`ui/TransformDialog.tsx`).
+- Reference line of walls: `wall_add_path` takes `side` (axis, left, right): the points are
+  that line and the axis is the path offset by half the thickness with mitered corners.
+  `wall_update` takes `keep_side` (the line that stays when the thickness changes) and
+  `direction_deg` (the end turns around the start). Neither is stored: Sweet Home 3D walls
+  have only an axis. The plan mirrors the offset for the preview (`sideAxis` in
+  `plan2d/snapping.ts`).
+- Tool options above the plan (`ui/ToolOptions.tsx`): thickness, height, reference line or
+  arc for walls, text size for texts. They live in the store until the window closes.
+- Pasting on another level keeps the position (20 cm offset only on the level copied from).
+  Paste style leaves wall thickness and heights alone.
+- Selection: Ctrl+click toggles like Shift+click, a rubber band with Shift or Ctrl adds,
+  **Select similar** (`similarElements`) selects the same kind on the level.
+- Context menu of the plan: entries of commands come from the registry (`reg` in
+  `PlanView.tsx`), so labels, shortcuts and enabled states match the menus; entries that need
+  the clicked point (split wall here, add point) stay local. `ContextMenu` takes the focus:
+  arrow keys, Home / End, Enter, Escape; Shift+F10 or the menu key opens it for the selection.
+- "Ruler" in the UI now only means the rulers along the edges; the lines drawn in the plan
+  are guide lines (the tool and store IDs keep `ruler` / `guide`).
+- Open from the review: door and window tools with built-in models, guide lines dragged out
+  of the edge rulers, configurable shortcuts, align and array copy for walls and texts.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

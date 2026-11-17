@@ -43,8 +43,8 @@ const SWITCHES: Switch[] = [
   {
     key: "snapToRulers",
     icon: "guide",
-    label: t("Rulers"),
-    title: t("Snap to the ends, middles, lines and crossings of the rulers"),
+    label: t("Guide lines"),
+    title: t("Snap to the ends, middles, lines and crossings of the guide lines"),
   },
   { key: "grid", icon: "grid", label: t("Grid"), title: t("Show the grid") },
 ];

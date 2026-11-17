@@ -12,6 +12,74 @@ use serde_json::json;
 /// Thickness of new walls in cm if not given.
 const DEFAULT_THICKNESS: f32 = 10.0;
 
+/// A line of a wall: its axis or one of its faces (left = left when walking from the start
+/// to the end).
+#[derive(Deserialize, JsonSchema, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum Side {
+    Axis,
+    Left,
+    Right,
+}
+
+impl Side {
+    /// Signed distance of the axis from this line towards the right side, in thicknesses.
+    fn axis_shift(self) -> f32 {
+        match self {
+            Side::Axis => 0.0,
+            Side::Left => 0.5,
+            Side::Right => -0.5,
+        }
+    }
+}
+
+/// Unit normal of the direction a -> b pointing to the right side (the plan's y points down).
+fn right_normal(a: [f32; 2], b: [f32; 2]) -> Option<[f32; 2]> {
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let len = dx.hypot(dy);
+    (len > 1e-3).then(|| [-dy / len, dx / len])
+}
+
+/// The path moved by `distance` to its right side (negative: to the left), with mitered
+/// corners, so every segment stays parallel to the given one.
+fn offset_path(points: &[[f32; 2]], closed: bool, distance: f32) -> Vec<[f32; 2]> {
+    let n = points.len();
+    if distance == 0.0 || n < 2 {
+        return points.to_vec();
+    }
+    // Normal of the segment starting at point i
+    let normal = |i: usize| right_normal(points[i], points[(i + 1) % n]);
+    (0..n)
+        .map(|i| {
+            let before = if i > 0 {
+                normal(i - 1)
+            } else if closed {
+                normal(n - 1)
+            } else {
+                None
+            };
+            let after = if i + 1 < n || closed { normal(i) } else { None };
+            let shift = match (before, after) {
+                (Some(a), Some(b)) => {
+                    let k = 1.0 + a[0] * b[0] + a[1] * b[1];
+                    // A path turning back on itself has no miter
+                    if k < 1e-3 {
+                        a
+                    } else {
+                        [(a[0] + b[0]) / k, (a[1] + b[1]) / k]
+                    }
+                }
+                (Some(a), None) | (None, Some(a)) => a,
+                (None, None) => [0.0, 0.0],
+            };
+            [
+                points[i][0] + shift[0] * distance,
+                points[i][1] + shift[1] * distance,
+            ]
+        })
+        .collect()
+}
+
 #[derive(Deserialize, JsonSchema)]
 struct AddParams {
     x_start: f32,
@@ -45,6 +113,11 @@ struct PathParams {
     height: Option<f32>,
     /// Arc extent in degrees of every wall of the path, for round walls
     arc_extent_deg: Option<f32>,
+    /// Line of the walls the points describe: "axis" (default), "left" or "right" (left =
+    /// left when walking along the path). With a side the walls lie completely beside the
+    /// points, e.g. to draw a room by its inner dimensions or a house by its outer ones
+    /// (straight walls only)
+    side: Option<Side>,
     /// Plan pattern (default hatchUp), see wall_update
     pattern: Option<String>,
     /// Colors of the sides as #RRGGBB
@@ -66,7 +139,13 @@ struct UpdateParams {
     /// Length between the end points in cm: the start stays, the end moves along the wall
     /// (not together with x_end / y_end)
     length: Option<f32>,
+    /// Direction from the start to the end in degrees, clockwise from the x axis: the start
+    /// and the length stay, the end turns around the start (not together with x_end / y_end)
+    direction_deg: Option<f32>,
     thickness: Option<f32>,
+    /// Line that stays in place when the thickness changes: "axis" (default), "left" or
+    /// "right" (straight walls only)
+    keep_side: Option<Side>,
     height: Option<f32>,
     height_at_end: Option<f32>,
     arc_extent_deg: Option<f32>,
@@ -182,10 +261,19 @@ pub(super) fn register(r: &mut Registry) {
                 .map(optional_color)
                 .transpose()?;
             let ids: Vec<String> = (0..n).map(|_| new_id("wall")).collect();
+            let side = p.side.unwrap_or(Side::Axis);
+            let round = p.arc_extent_deg.is_some_and(|v| v != 0.0);
+            if side != Side::Axis && round {
+                return Err(CommandError::failed(
+                    "side can only be given for straight walls",
+                ));
+            }
+            let thickness = p.thickness.unwrap_or(DEFAULT_THICKNESS);
+            let points = offset_path(&p.points, closed, side.axis_shift() * thickness);
             let home = doc.home_mut();
             for i in 0..n {
-                let start = p.points[i];
-                let end = p.points[(i + 1) % p.points.len()];
+                let start = points[i];
+                let end = points[(i + 1) % points.len()];
                 let mut w = new_wall(&ids[i], start, end, p.thickness, p.height, level.clone());
                 w.attrs.arc_extent = p.arc_extent_deg.filter(|v| *v != 0.0).map(rad);
                 if let Some(pattern) = &p.pattern {
@@ -202,8 +290,8 @@ pub(super) fn register(r: &mut Registry) {
                 home.walls.push(w);
             }
             if !closed {
-                let first = p.points[0];
-                let last = p.points[p.points.len() - 1];
+                let first = points[0];
+                let last = points[points.len() - 1];
                 join_free_end(home, &ids[0], first, true, &level);
                 join_free_end(home, &ids[n - 1], last, false, &level);
             }
@@ -212,8 +300,8 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "wall_update",
-        "Changes coordinates, length, thickness, height, colors, textures, baseboards or pattern \
-         of a wall (or of several walls with ids; coordinates only for one wall). Joined walls \
+        "Changes coordinates, length, direction, thickness, height, colors, textures, baseboards \
+         or pattern of a wall (or of several walls with ids; coordinates only for one wall). Joined walls \
          keep their connection: when an end point moves, the touching end of the joined wall \
          moves along. A new length keeps the start and moves the wall joined at the end in \
          parallel, so corners keep their angles.",
@@ -232,9 +320,16 @@ pub(super) fn register(r: &mut Registry) {
             }
             let targets = target_ids(p.id.clone(), p.ids.clone())?;
             if targets.len() > 1
-                && [p.x_start, p.y_start, p.x_end, p.y_end, p.length]
-                    .iter()
-                    .any(Option::is_some)
+                && [
+                    p.x_start,
+                    p.y_start,
+                    p.x_end,
+                    p.y_end,
+                    p.length,
+                    p.direction_deg,
+                ]
+                .iter()
+                .any(Option::is_some)
             {
                 return Err(CommandError::failed(
                     "coordinates can only be changed for one wall at a time",
@@ -263,7 +358,22 @@ pub(super) fn register(r: &mut Registry) {
                 macro_rules! set {
                 ($($f:ident),*) => { $( if let Some(v) = p.$f { a.$f = v; } )* };
             }
+                let old_wall_thickness = a.thickness;
                 set!(x_start, y_start, x_end, y_end, thickness);
+                if let Some(direction) = p.direction_deg {
+                    if p.x_end.is_some() || p.y_end.is_some() {
+                        return Err(CommandError::failed(
+                            "direction_deg cannot be combined with x_end / y_end",
+                        ));
+                    }
+                    if !direction.is_finite() {
+                        return Err(CommandError::failed("direction_deg must be a number"));
+                    }
+                    let length = (a.x_end - a.x_start).hypot(a.y_end - a.y_start);
+                    let angle = rad(direction);
+                    a.x_end = a.x_start + angle.cos() * length;
+                    a.y_end = a.y_start + angle.sin() * length;
+                }
                 if let Some(length) = p.length {
                     if p.x_end.is_some() || p.y_end.is_some() {
                         return Err(CommandError::failed(
@@ -273,7 +383,12 @@ pub(super) fn register(r: &mut Registry) {
                     if length <= 0.0 {
                         return Err(CommandError::failed("length must be positive"));
                     }
-                    let (dx, dy) = (old_end.0 - old_start.0, old_end.1 - old_start.1);
+                    // The direction after direction_deg, else the one the wall had
+                    let (dx, dy) = if p.direction_deg.is_some() {
+                        (a.x_end - a.x_start, a.y_end - a.y_start)
+                    } else {
+                        (old_end.0 - old_start.0, old_end.1 - old_start.1)
+                    };
                     let old_length = dx.hypot(dy);
                     if old_length < 1e-3 {
                         return Err(CommandError::failed("the wall has no direction"));
@@ -283,6 +398,22 @@ pub(super) fn register(r: &mut Registry) {
                 }
                 if a.thickness <= 0.0 {
                     return Err(CommandError::failed("thickness must be positive"));
+                }
+                // The wall grows to one side only: its axis moves by half the difference
+                let keep = p.keep_side.unwrap_or(Side::Axis);
+                if keep != Side::Axis && a.thickness != old_wall_thickness {
+                    if a.arc_extent.is_some_and(|v| v != 0.0) {
+                        return Err(CommandError::failed(
+                            "keep_side can only be given for straight walls",
+                        ));
+                    }
+                    if let Some(n) = right_normal([a.x_start, a.y_start], [a.x_end, a.y_end]) {
+                        let d = keep.axis_shift() * (a.thickness - old_wall_thickness);
+                        a.x_start += n[0] * d;
+                        a.y_start += n[1] * d;
+                        a.x_end += n[0] * d;
+                        a.y_end += n[1] * d;
+                    }
                 }
                 if let Some(v) = p.height {
                     a.height = Some(v);

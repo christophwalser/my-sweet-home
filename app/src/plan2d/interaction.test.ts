@@ -8,7 +8,7 @@ import {
   makeWall,
   straightShape,
 } from "../testFixtures";
-import { elementsInRect, hitTest, hitTestAll, rectSelection } from "./interaction";
+import { elementsInRect, hitTest, hitTestAll, rectSelection, similarElements } from "./interaction";
 
 describe("rectSelection", () => {
   it("takes only what lies inside as a window", () => {
@@ -104,5 +104,29 @@ describe("reference objects", () => {
     expect(hitTest(home, [], null, [500, 500], 5)).toBeNull();
     expect(hitTest(home, [], null, [100, 100], 5)?.id).toBe("c");
     expect(elementsInRect(home, null, [-15000, -15000], [15000, 15000], true)).toEqual(["c"]);
+  });
+});
+
+describe("similarElements", () => {
+  const home = makeHome({
+    walls: [makeWall("w1", [0, 0], [400, 0]), makeWall("w2", [400, 0], [400, 300])],
+    furniture: [
+      makePiece({ id: "c1", name: "Chair", x: 50, y: 50 }),
+      makePiece({ id: "c2", name: "Chair", x: 150, y: 50 }),
+      makePiece({ id: "t", name: "Table", x: 100, y: 150 }),
+    ],
+  });
+
+  it("selects all walls for a wall", () => {
+    expect(similarElements(home, null, ["w1"]).sort()).toEqual(["w1", "w2"]);
+  });
+
+  it("selects the same pieces of furniture, not all furniture", () => {
+    expect(similarElements(home, null, ["c2"]).sort()).toEqual(["c1", "c2"]);
+    expect(similarElements(home, null, ["t", "w2"]).sort()).toEqual(["t", "w1", "w2"]);
+  });
+
+  it("keeps a selection it does not know", () => {
+    expect(similarElements(home, null, ["nope"])).toEqual(["nope"]);
   });
 });

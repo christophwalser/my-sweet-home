@@ -21,7 +21,7 @@ import { type Tool, useStore, VISITOR_ID } from "../store";
 import type { IconName } from "./Icon";
 import { keyTarget, modalOpen } from "./keyTarget";
 import { planActions } from "./planBridge";
-import { type ToolKeyState, toolForDigit, toolShortcut } from "./toolKeys";
+import { type ToolKeyState, toolForDigit, toolForLetter, toolShortcut } from "./toolKeys";
 import { type DialogName, isDark, useUi } from "./uiStore";
 
 export type Command = {
@@ -231,16 +231,25 @@ export async function deleteLevel(): Promise<void> {
   if (yes) await run("edit_delete", { ids: [level.attrs.id] });
 }
 
-function rotateSelection(stepDeg: number): void {
+/**
+ * Rotates the selection by a step, as one undo step. Pieces of furniture alone turn each
+ * around its own center; with walls, rooms or other elements among them the whole selection
+ * turns around its center.
+ */
+export function rotateSelection(stepDeg: number): void {
   const opened = store().opened;
   if (!opened) return;
   const sel = selected();
-  const ids: string[] = [];
+  if (sel.length === 0) return;
+  const pieces: string[] = [];
   forEachPiece(opened.home.furniture, (p) => {
-    if (p.attrs.id && sel.includes(p.attrs.id)) ids.push(p.attrs.id);
+    if (p.attrs.id && sel.includes(p.attrs.id)) pieces.push(p.attrs.id);
   });
-  // One command, so that one undo step takes the rotation of all pieces back
-  if (ids.length > 0) void run("furniture_update", { ids, rotate_deg: stepDeg });
+  if (pieces.length === sel.length) {
+    void run("furniture_update", { ids: pieces, rotate_deg: stepDeg });
+  } else {
+    void run("edit_rotate", { ids: sel, angle_deg: stepDeg });
+  }
 }
 
 function align(how: string): void {
@@ -425,6 +434,16 @@ const LIST: Command[] = [
     run: () => planActions()?.selectAll(),
   },
   {
+    id: "edit.selectSimilar",
+    label: t("Select similar"),
+    icon: "selectall",
+    hint: t(
+      "Selects all elements of the level of the same kind: all walls, all rooms, the same furniture",
+    ),
+    enabled: hasSelection,
+    run: () => planActions()?.selectSimilar(),
+  },
+  {
     id: "edit.lockBasePlan",
     label: t("Lock base plan"),
     icon: "lock",
@@ -480,7 +499,7 @@ const LIST: Command[] = [
   toolCommand("measure", t("Measure"), "measure", t("Measure a distance without adding anything")),
   toolCommand(
     "ruler",
-    t("Ruler"),
+    t("Guide line"),
     "guide",
     t(
       "Draw a guide line that stays in the plan for placing elements; select it and press Del to remove it",
@@ -488,7 +507,7 @@ const LIST: Command[] = [
   ),
   {
     id: "plan.clearGuides",
-    label: t("Delete rulers of this level"),
+    label: t("Delete guide lines of this level"),
     icon: "delete",
     enabled: () => guidesOfLevel().length > 0,
     run: () => void run("guide_clear", levelParam()),
@@ -603,7 +622,7 @@ const LIST: Command[] = [
   },
   {
     id: "plan.snapRulers",
-    label: t("Snap to rulers"),
+    label: t("Snap to guide lines"),
     icon: "grid",
     enabled: () => usePreferences.getState().magnetism,
     checked: () => usePreferences.getState().snapToRulers,
@@ -775,8 +794,22 @@ const LIST: Command[] = [
     icon: "rotate",
     shortcut: "R",
     shortcutElsewhere: true,
-    enabled: () => selectedFurniture().length > 0,
+    enabled: hasSelection,
     run: () => rotateSelection(15),
+  },
+  {
+    id: "edit.rotateBy",
+    label: t("Rotate…"),
+    icon: "rotate",
+    enabled: hasSelection,
+    run: () => useUi.getState().openDialog("rotate"),
+  },
+  {
+    id: "edit.moveBy",
+    label: t("Move…"),
+    icon: "pan",
+    enabled: hasSelection,
+    run: () => useUi.getState().openDialog("move"),
   },
   // 3D view
   {
@@ -1017,7 +1050,18 @@ export const MENUS: Menu[] = [
       cmd("edit.duplicate"),
       cmd("edit.delete"),
       sep,
+      cmd("edit.moveBy"),
+      cmd("edit.rotateBy"),
+      cmd("furniture.rotate"),
+      {
+        kind: "submenu",
+        label: t("Flip"),
+        icon: "flip",
+        entries: () => [cmd("edit.flipH"), cmd("edit.flipV")],
+      },
+      sep,
       cmd("edit.selectAll"),
+      cmd("edit.selectSimilar"),
       cmd("edit.lockBasePlan"),
     ],
   },
@@ -1112,13 +1156,6 @@ export const MENUS: Menu[] = [
       },
       cmd("furniture.distributeH"),
       cmd("furniture.distributeV"),
-      {
-        kind: "submenu",
-        label: t("Flip"),
-        icon: "flip",
-        entries: () => [cmd("edit.flipH"), cmd("edit.flipV")],
-      },
-      cmd("furniture.rotate"),
     ],
   },
   {
@@ -1216,7 +1253,19 @@ export function handleGlobalShortcut(e: KeyboardEvent): void {
     }
     return;
   }
-  // Plain letters and Del belong to the plan view (rotate, join, delete, ...)
+  // Plain letters choose plan tools too (W wall, M measure, ...), under the same conditions.
+  // The 3D view keeps its own keys (W A S D walk in the virtual visit).
+  if (/^[A-Z]$/.test(shortcut) && focus === "other") {
+    const in3D = (e.target as HTMLElement).closest?.(".view3d-canvas");
+    const id = in3D || (planActions()?.isDrawing() ?? true) ? null : toolForLetter(shortcut);
+    const c = id ? COMMANDS.get(id) : undefined;
+    if (c) {
+      e.preventDefault();
+      runCommand(c);
+      return;
+    }
+  }
+  // Other plain letters and Del belong to the plan view (rotate, join, delete, ...)
   if (!digit && !shortcut.includes("Ctrl+") && !/^F\d+$/.test(shortcut)) return;
   for (const c of COMMANDS.values()) {
     if (c.shortcut === shortcut && !c.shortcutElsewhere) {

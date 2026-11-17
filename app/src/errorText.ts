@@ -58,7 +58,7 @@ const RULES: Rule[] = [
   ],
   [/^a room needs at least 3 points$/, () => t("A room needs at least 3 corners.")],
   [/^a polyline needs at least 2 points$/, () => t("A line needs at least 2 points.")],
-  [/^a guide needs two different points$/, () => t("A ruler needs two different points.")],
+  [/^a guide needs two different points$/, () => t("A guide line needs two different points.")],
   [
     /^(a group needs at least two pieces|give the IDs of at least two pieces)$/,
     () => t("Select at least two pieces of furniture."),

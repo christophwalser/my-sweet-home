@@ -854,3 +854,143 @@ fn wall_top_color_and_texture_are_set_saved_and_removed() {
     );
     assert!(reopened.home().walls[0].textures.is_empty());
 }
+
+// ---------------------------------------------------------------- reference line
+
+#[test]
+fn wall_add_path_by_a_side_puts_the_walls_beside_the_points() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    // Clockwise in the plan: the inside is on the right of the path
+    let inner = json!([[0, 0], [400, 0], [400, 300], [0, 300]]);
+    let res = run(
+        &r,
+        &mut doc,
+        "wall_add_path",
+        json!({ "points": inner, "closed": true, "thickness": 20, "side": "right" }),
+    );
+    let w = ids(&res, "ids");
+    let a = wall(&doc, &w[0]);
+    assert!(close(a.x_start, -10.0) && close(a.y_start, -10.0));
+    assert!(close(a.x_end, 410.0) && close(a.y_end, -10.0));
+    let c = wall(&doc, &w[2]);
+    assert!(close(c.x_start, 410.0) && close(c.y_start, 310.0));
+    assert!(close(c.x_end, -10.0) && close(c.y_end, 310.0));
+
+    // The same points as the outer dimensions: the walls lie inside
+    let res = run(
+        &r,
+        &mut doc,
+        "wall_add_path",
+        json!({ "points": inner, "closed": true, "thickness": 20, "side": "left", "level": null }),
+    );
+    let w = ids(&res, "ids");
+    let a = wall(&doc, &w[0]);
+    assert!(close(a.x_start, 10.0) && close(a.y_start, 10.0));
+    assert!(close(a.x_end, 390.0) && close(a.y_end, 10.0));
+
+    // An open path: the free ends move straight to the side
+    let res = run(
+        &r,
+        &mut doc,
+        "wall_add_path",
+        json!({ "points": [[1000, 0], [1400, 0], [1400, 300]], "thickness": 30, "side": "left" }),
+    );
+    let w = ids(&res, "ids");
+    let (a, b) = (wall(&doc, &w[0]), wall(&doc, &w[1]));
+    assert!(close(a.x_start, 1000.0) && close(a.y_start, 15.0));
+    assert!(close(a.x_end, 1385.0) && close(a.y_end, 15.0));
+    assert!(close(b.x_end, 1385.0) && close(b.y_end, 300.0));
+
+    let err = run_err(
+        &r,
+        &mut doc,
+        "wall_add_path",
+        json!({ "points": [[0, 0], [100, 0]], "side": "left", "arc_extent_deg": 90 }),
+    );
+    assert!(err.contains("straight"), "{err}");
+}
+
+#[test]
+fn wall_update_keeps_a_side_when_the_thickness_changes() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let w = ids(
+        &run(
+            &r,
+            &mut doc,
+            "wall_add_path",
+            json!({ "points": [[0, 0], [400, 0], [400, 300]], "thickness": 10 }),
+        ),
+        "ids",
+    );
+    let before = snapshot(&doc);
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": w[0], "thickness": 30, "keep_side": "left" }),
+    );
+    let a = wall(&doc, &w[0]);
+    assert_eq!(a.thickness, 30.0);
+    // The left face stays at y = -5, so the axis moves 10 cm to the right
+    assert!(close(a.y_start, 10.0) && close(a.y_end, 10.0));
+    assert!(close(a.x_start, 0.0) && close(a.x_end, 400.0));
+    let b = wall(&doc, &w[1]);
+    assert!(
+        close(b.x_start, 400.0) && close(b.y_start, 10.0),
+        "the joined wall follows"
+    );
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": w[0], "thickness": 10, "keep_side": "right" }),
+    );
+    // The right face was at y = 25 and stays there
+    assert!(close(wall(&doc, &w[0]).y_start, 20.0));
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": w[0], "thickness": 20 }),
+    );
+    assert!(
+        close(wall(&doc, &w[0]).y_start, 20.0),
+        "the axis by default"
+    );
+}
+
+#[test]
+fn wall_update_sets_the_direction_around_the_start() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let id = add_wall(&r, &mut doc, [100.0, 100.0], [500.0, 100.0]);
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": id, "direction_deg": 90 }),
+    );
+    let a = wall(&doc, &id);
+    assert!(close(a.x_start, 100.0) && close(a.y_start, 100.0));
+    assert!(close(a.x_end, 100.0) && close(a.y_end, 500.0), "clockwise");
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": id, "direction_deg": 180, "length": 250 }),
+    );
+    let a = wall(&doc, &id);
+    assert!(close(a.x_end, -150.0) && close(a.y_end, 100.0));
+    let err = run_err(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": id, "direction_deg": 0, "x_end": 5 }),
+    );
+    assert!(err.contains("direction_deg"), "{err}");
+}

@@ -11,7 +11,7 @@ export function markerShape(label: string | null | undefined): MarkerShape {
   if (label.startsWith("perpendicular")) return "perpendicular";
   if (label.includes("crossing") || label.startsWith("flush") || label === "wall corner")
     return "cross";
-  if (label.includes("ruler") && !label.startsWith("on ")) return "diamond";
+  if (label.includes("guide line") && !label.startsWith("on ")) return "diamond";
   if (label.includes("middle")) return "triangle";
   if (
     label.includes("end") ||
@@ -77,10 +77,10 @@ const NOTES: Record<string, string> = {
   "on wall axis": t("on wall axis"),
   "on wall face": t("on wall face"),
   "on edge": t("on edge"),
-  "on ruler": t("on ruler"),
-  "ruler end": t("ruler end"),
-  "ruler middle": t("ruler middle"),
-  "ruler crossing": t("ruler crossing"),
+  "on guide line": t("on guide line"),
+  "guide line end": t("guide line end"),
+  "guide line middle": t("guide line middle"),
+  "guide line crossing": t("guide line crossing"),
   perpendicular: t("perpendicular"),
   close: t("close"),
   "finish room": t("finish room"),

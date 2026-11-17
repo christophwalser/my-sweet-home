@@ -24,6 +24,7 @@ mod library;
 mod library_edit;
 mod online;
 mod room;
+mod rotate;
 mod sun;
 mod text;
 mod view;
@@ -52,6 +53,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     annotate::register(r);
     edit::register(r);
     flip::register(r);
+    rotate::register(r);
     view::register(r);
     visit::register(r);
     sun::register(r);

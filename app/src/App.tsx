@@ -28,36 +28,15 @@ import Icon, { type IconName } from "./ui/Icon";
 import MenuBar from "./ui/MenuBar";
 import ShortcutsDialog from "./ui/ShortcutsDialog";
 import ToolBar from "./ui/ToolBar";
+import ToolOptions from "./ui/ToolOptions";
+import TransformDialog from "./ui/TransformDialog";
 import { initTheme, useUi } from "./ui/uiStore";
-import { formatPrecise, fromUnit, toUnit, unitSymbol, useUnit } from "./units";
+import { formatPrecise } from "./units";
 import View3D from "./view3d/View3D";
 import "./App.css";
 import { errorText } from "./errorText";
 import { followLanguage, formatDateTime, t } from "./i18n";
 import { followPreferences, newHomeParams, usePreferences } from "./preferences";
-
-/** Thickness of the walls drawn next, shown while the wall tool is active. */
-function WallThicknessInput() {
-  const thickness = useStore((s) => s.wallThickness);
-  const setThickness = useStore((s) => s.setWallThickness);
-  const unit = useUnit();
-  return (
-    <label className="tool-option" title={t("Thickness of new walls (default in the preferences)")}>
-      {t("Thickness")}
-      <input
-        type="number"
-        min={0}
-        step="any"
-        value={toUnit(thickness, unit)}
-        onChange={(e) => {
-          const v = Number.parseFloat(e.currentTarget.value);
-          if (Number.isFinite(v) && v > 0) setThickness(fromUnit(v, unit));
-        }}
-      />
-      {unitSymbol(unit)}
-    </label>
-  );
-}
 
 /** Small icon button of a pane (maximize, minimize, separate window). */
 function PaneButton({
@@ -346,6 +325,9 @@ export default function App() {
         />
       )}
       {dialog === "shortcuts" && <ShortcutsDialog onClose={closeDialog} />}
+      {(dialog === "rotate" || dialog === "move") && (
+        <TransformDialog mode={dialog} onClose={closeDialog} />
+      )}
       {dialog === "help" && <HelpDialog onClose={closeDialog} />}
       {paletteOpen && <CommandPalette />}
 
@@ -385,7 +367,7 @@ export default function App() {
         <main className="plan" style={{ flex: planFlex }}>
           {opened && (
             <div className="plan-toolbar">
-              {(tool === "wall" || tool === "arcwall") && <WallThicknessInput />}
+              <ToolOptions tool={tool} />
               <nav className="level-tabs" aria-label={t("Levels")}>
                 {levels.map((l) =>
                   editingLevel === l.attrs.id ? (

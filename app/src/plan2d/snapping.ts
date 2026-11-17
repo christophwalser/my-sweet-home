@@ -37,7 +37,7 @@ export type SnapContext = {
   labels?: Map<string, string>;
   /** Shown when the point snaps onto one of `lines` */
   lineLabel?: string;
-  /** Labels of single lines instead of `lineLabel` (same index as `lines`), e.g. "on ruler" */
+  /** Labels of single lines instead of `lineLabel` (same index as `lines`), e.g. "on guide line" */
   lineLabels?: (string | undefined)[];
   /** Snap points of nearby elements, drawn as markers so the user sees where to click */
   hints?: { pt: Pt; label: string }[];
@@ -560,20 +560,20 @@ export function snapContext(
     rulers.forEach((s, i) => {
       const [a, b] = s;
       if (dist(a, b) < 1) return;
-      named(a, "ruler end");
-      named(b, "ruler end");
-      named([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], "ruler middle");
+      named(a, "guide line end");
+      named(b, "guide line end");
+      named([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], "guide line middle");
       refs.push(...[a, b].filter(keep));
       directions.push(Math.atan2(b[1] - a[1], b[0] - a[0]));
       for (const o of [...others, ...rulers.slice(i + 1)]) {
         const x = segmentIntersection(s, o);
         if (x && keep(x)) {
           points.push(x);
-          labels.set(pointKey(x), "ruler crossing");
+          labels.set(pointKey(x), "guide line crossing");
         }
       }
       lines.push(s);
-      lineLabels.push("on ruler");
+      lineLabels.push("on guide line");
     });
   }
   // Avoid directions that are too many to be meaningful
@@ -664,6 +664,18 @@ export function offsetOutline(pts: Pt[], half: number): Pt[] {
     right.push([pts[i][0] - nx * m, pts[i][1] - ny * m]);
   }
   return [...left, ...right.reverse()];
+}
+
+/**
+ * Axis of a wall path whose points describe one of its sides (as `side` of wall_add_path):
+ * the path moved by half the thickness to the other side, with mitered corners.
+ */
+export function sideAxis(pts: Pt[], line: "axis" | "left" | "right", thickness: number): Pt[] {
+  if (line === "axis" || pts.length < 2) return pts;
+  const outline = offsetOutline(pts, thickness / 2);
+  const n = pts.length;
+  // The outline lists the left side, then the right side backwards
+  return line === "right" ? outline.slice(0, n) : outline.slice(n).reverse();
 }
 
 /** Left normal (like the left side of a wall: (sin, −cos) of the direction). */

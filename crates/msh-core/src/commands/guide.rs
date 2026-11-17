@@ -133,7 +133,7 @@ struct NoParams {}
 pub(super) fn register(r: &mut Registry) {
     r.add(
         "guide_add",
-        "Adds a ruler guide: a help line in the plan for placing elements (not printed or \
+        "Adds a guide line: a help line in the plan for placing elements (not printed or \
          exported; delete it with edit_delete). Returns its ID.",
         true,
         |doc, p: AddParams| {
@@ -178,7 +178,7 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "guide_update",
-        "Changes the line color, dash style, start or end point of ruler guides, or whether they \n         show on all levels.",
+        "Changes the line color, dash style, start or end point of guide lines, or whether they \n         show on all levels.",
         true,
         |doc, p: UpdateParams| {
             let ids = target_ids(p.id, p.ids)?;
@@ -218,13 +218,13 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "guide_list",
-        "Lists the ruler guides of the home (ID, level, start and end in cm, color, dash style, \n         all_levels).",
+        "Lists the guide lines of the home (ID, level, start and end in cm, color, dash style, \n         all_levels).",
         false,
         |doc, _: NoParams| Ok(json!({ "guides": guides(doc.home()) })),
     );
     r.add(
         "guide_clear",
-        "Deletes all ruler guides of a level (default: the selected level) or of all levels.",
+        "Deletes all guide lines of a level (default: the selected level) or of all levels.",
         true,
         |doc, p: ClearParams| {
             let home = doc.home_mut();

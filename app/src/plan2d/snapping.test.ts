@@ -511,13 +511,13 @@ describe("ruler guides and the snap switches", () => {
   it("snaps to the ends, middles, crossings and lines of rulers", () => {
     const c = snapContext("wall", home, shapes, null, 10);
     expect(c.points).toContainEqual([100, 300]);
-    expect(c.labels?.get(pointKey([100, 100]))).toBe("ruler middle");
+    expect(c.labels?.get(pointKey([100, 100]))).toBe("guide line middle");
     // Crossing of the two rulers and of a ruler with the wall axis
-    expect(c.labels?.get(pointKey([100, 200]))).toBe("ruler crossing");
-    expect(c.labels?.get(pointKey([100, 0]))).toBe("ruler crossing");
+    expect(c.labels?.get(pointKey([100, 200]))).toBe("guide line crossing");
+    expect(c.labels?.get(pointKey([100, 0]))).toBe("guide line crossing");
     const s = snapDraw([104, 150], null, c);
     expect(s.pt).toEqual([100, 150]);
-    expect(s.note).toBe("on ruler");
+    expect(s.note).toBe("on guide line");
   });
 
   it("leaves rulers, objects or angles out when they are switched off", () => {

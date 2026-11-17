@@ -33,6 +33,9 @@ export type Tool =
   /** Ruler: a guide line that stays in the plan (measuring tool without the length) */
   | "ruler";
 
+/** A line of a wall: its axis or one of its faces (left = left from the start to the end). */
+export type WallLine = "axis" | "left" | "right";
+
 type State = {
   opened: OpenedHome | null;
   selectedLevel: string | null;
@@ -41,6 +44,14 @@ type State = {
   tool: Tool;
   /** Thickness of new walls drawn in the plan (cm) */
   wallThickness: number;
+  /** Height of new walls (cm); null: the wall height of the home */
+  wallHeight: number | null;
+  /** Line of new walls that runs through the drawn points */
+  wallLine: WallLine;
+  /** Arc of new round walls in degrees */
+  arcExtent: number;
+  /** Line of a wall that stays when its thickness is changed in the properties */
+  wallKeepLine: WallLine;
   /** Incremented to ask the plan to fit the view (e.g. after importing a background image) */
   fitRequest: number;
   requestFit: () => void;
@@ -94,6 +105,10 @@ export const useStore = create<State>((set, get) => ({
   selection: [],
   tool: "select",
   wallThickness: usePreferences.getState().newWallThickness,
+  wallHeight: null,
+  wallLine: "axis",
+  arcExtent: 90,
+  wallKeepLine: "axis",
   highlightSide: null,
   fitRequest: 0,
   requestFit: () => set((s) => ({ fitRequest: s.fitRequest + 1 })),

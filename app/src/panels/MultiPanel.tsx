@@ -417,7 +417,7 @@ function RulersSection({ guides, home, run }: { guides: Guide[]; home: Home; run
   return (
     <>
       <h2>
-        {guides.length} {t("rulers")}
+        {guides.length} {t("guide lines")}
       </h2>
       <Field
         label={t("Color")}

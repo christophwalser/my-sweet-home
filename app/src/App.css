@@ -554,6 +554,15 @@ input[type="search"]:focus {
   padding: 2px 6px;
 }
 
+.tool-option select {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+
 .plan-text-editor {
   position: absolute;
   transform: translate(-50%, -100%);
@@ -754,7 +763,8 @@ input[type="search"]:focus {
   font: inherit;
 }
 
-.context-menu button:hover:not(:disabled) {
+.context-menu button:hover:not(:disabled),
+.context-menu button:focus-visible {
   background: var(--accent, #2f6fde);
   color: #ffffff;
 }
@@ -1347,6 +1357,10 @@ input[type="search"]:focus {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.transform-dialog {
+  width: min(340px, calc(100vw - 32px));
 }
 
 .dialog-body {

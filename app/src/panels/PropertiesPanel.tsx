@@ -16,8 +16,9 @@ import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { guideAngle, guideEnd, guideLength, homeGuides } from "../plan2d/guides";
 import { usePreferences } from "../preferences";
 import { formatMoney, piecePrice } from "../prices";
-import { currentVisitor, setVisitor, useStore, VISITOR_ID } from "../store";
+import { currentVisitor, setVisitor, useStore, VISITOR_ID, type WallLine } from "../store";
 import { deleteLevel } from "../ui/commands";
+import { WALL_LINES } from "../ui/ToolOptions";
 import { useUi } from "../ui/uiStore";
 import { formatArea, formatLength } from "../units";
 import { spotAngle } from "../view3d/lights";
@@ -651,6 +652,7 @@ export default function PropertiesPanel() {
   const selection = useStore((s) => s.selection);
   const levelId = useStore((s) => s.selectedLevel);
   const run = useStore((s) => s.run);
+  const keepLine = useStore((s) => s.wallKeepLine);
   if (!opened) return <div className="props muted">{t("No home open")}</div>;
   const home = opened.home;
 
@@ -1190,6 +1192,27 @@ export default function PropertiesPanel() {
         />
         <Field label={t("X end")} type="number" unit="cm" value={a.x_end} onCommit={set("x_end")} />
         <Field label={t("Y end")} type="number" unit="cm" value={a.y_end} onCommit={set("y_end")} />
+        {/* Clockwise from the x axis, as typed while drawing; the start stays */}
+        <Field
+          label={t("Direction")}
+          type="number"
+          unit="°"
+          value={
+            Math.round(
+              (((Math.atan2(a.y_end - a.y_start, a.x_end - a.x_start) * 180) / Math.PI + 360) %
+                360) *
+                100,
+            ) / 100
+          }
+          onCommit={set("direction_deg")}
+        />
+        <Field
+          label={t("Arc")}
+          type="number"
+          unit="°"
+          value={Math.round((((a.arc_extent ?? 0) * 180) / Math.PI) * 100) / 100}
+          onCommit={set("arc_extent_deg")}
+        />
         <CornerAngleField label={t("Angle at start")} home={home} wall={wall} atStart run={run} />
         <CornerAngleField
           label={t("Angle at end")}
@@ -1203,7 +1226,20 @@ export default function PropertiesPanel() {
           type="number"
           unit="cm"
           value={a.thickness}
-          onCommit={set("thickness")}
+          onCommit={(v) =>
+            void run("wall_update", {
+              id: a.id,
+              thickness: v,
+              // A round wall always grows around its axis
+              ...(keepLine !== "axis" && !a.arc_extent && { keep_side: keepLine }),
+            })
+          }
+        />
+        <SelectField
+          label={t("Stays in place")}
+          value={keepLine}
+          options={WALL_LINES}
+          onCommit={(v) => useStore.setState({ wallKeepLine: v as WallLine })}
         />
         <Field
           label={t("Height")}
@@ -1363,7 +1399,7 @@ export default function PropertiesPanel() {
       void run("guide_update", { id: guide.id, [field]: v });
     return (
       <div className="props">
-        <h2>{t("Ruler")}</h2>
+        <h2>{t("Guide line")}</h2>
         <Field
           label={t("Length")}
           type="number"
@@ -1401,7 +1437,7 @@ export default function PropertiesPanel() {
         {home.levels.length > 0 && (
           <label
             className="prop-row prop-check"
-            title={t("Shows the ruler on every level, e.g. to line up the floors")}
+            title={t("Shows the guide line on every level, e.g. to line up the floors")}
           >
             <input
               type="checkbox"

@@ -19,6 +19,8 @@ export type DialogName =
   | "video"
   | "settings3d"
   | "shortcuts"
+  | "rotate"
+  | "move"
   | "help"
   | "about"
   | "plugins";

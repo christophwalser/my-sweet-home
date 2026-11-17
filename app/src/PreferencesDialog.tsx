@@ -290,7 +290,7 @@ export default function PreferencesDialog({
             )}
             {tab === "tools" && (
               <>
-                <Group title={t("Ruler")}>
+                <Group title={t("Guide line")}>
                   <OptionalColor
                     label={t("Color")}
                     value={p.rulerColor}
@@ -303,7 +303,7 @@ export default function PreferencesDialog({
                     onChange={(rulerDashStyle) => set({ rulerDashStyle })}
                   />
                   <p className="muted small">
-                    {t("New rulers get these values; change a ruler in its properties.")}
+                    {t("New guide lines get these values; change a guide line in its properties.")}
                   </p>
                 </Group>
                 <Group title={t("Measure")}>
