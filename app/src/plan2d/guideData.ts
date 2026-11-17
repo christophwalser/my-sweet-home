@@ -14,6 +14,8 @@ export type Guide = {
   color?: string;
   /** SOLID, DOT, DASH, DASH_DOT or DASH_DOT_DOT; missing: the preferences */
   dash_style?: string;
+  /** Shown on all levels, not only on its own */
+  all_levels?: boolean;
 };
 
 export const GUIDES_PROPERTY = "mySweetHome.guides";
@@ -30,8 +32,8 @@ export function homeGuides(home: Home): Guide[] {
   }
 }
 
-/** Guides of a level (homes without levels: all). */
+/** Guides shown on a level: its own and those shown on all levels (homes without levels: all). */
 export function levelGuides(home: Home, level: string | null): Guide[] {
   const all = homeGuides(home);
-  return home.levels.length === 0 ? all : all.filter((g) => g.level === level);
+  return home.levels.length === 0 ? all : all.filter((g) => g.level === level || g.all_levels);
 }

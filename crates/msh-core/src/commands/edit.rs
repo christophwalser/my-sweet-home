@@ -75,7 +75,8 @@ pub(super) fn register(r: &mut Registry) {
                 + clip.furniture.len()
                 + clip.polylines.len()
                 + clip.dimension_lines.len()
-                + clip.labels.len();
+                + clip.labels.len()
+                + clip.guides.len();
             doc.clipboard = Some(clip);
             Ok(json!({ "copied": count }))
         },

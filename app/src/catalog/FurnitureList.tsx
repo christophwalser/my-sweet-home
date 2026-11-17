@@ -5,7 +5,7 @@
 
 import { useMemo, useState } from "react";
 import { t } from "../i18n";
-import type { Furniture } from "../model";
+import { type Furniture, isReference } from "../model";
 import { usePreferences } from "../preferences";
 import { formatMoney } from "../prices";
 import { useStore } from "../store";
@@ -50,6 +50,8 @@ export default function FurnitureList({ query }: { query: string }) {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const list = home.furniture
       .filter((f): f is Furniture & { attrs: { id: string } } => !!f.attrs.id)
+      // Reference objects (terrain, scans) are no furniture: they are in the home details
+      .filter((f) => f.type !== "piece" || !isReference(f))
       .filter((f) => words.every((w) => f.attrs.name.toLowerCase().includes(w)));
     const { column, desc } = sort;
     list.sort((a, b) => {

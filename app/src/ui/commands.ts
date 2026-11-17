@@ -908,11 +908,12 @@ function currentBackground() {
   return level ? (level.background_image ?? null) : (opened.home.background_image ?? null);
 }
 
-/** Ruler guides of the shown level. */
+/** Ruler guides of the shown level (not those of other levels shown on all levels). */
 function guidesOfLevel() {
   const opened = store().opened;
   if (!opened) return [];
-  return levelGuides(opened.home, currentLevel()?.attrs.id ?? null);
+  const level = currentLevel()?.attrs.id ?? null;
+  return levelGuides(opened.home, level).filter((g) => !level || g.level === level);
 }
 
 function levelParam(): Record<string, unknown> {

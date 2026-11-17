@@ -82,6 +82,12 @@ struct UpdateParams {
     /// negative value restores the default (matt)
     left_side_shininess: Option<f32>,
     right_side_shininess: Option<f32>,
+    /// Color of the top of the wall in 3D (seen on walls lower than the ceiling) as #RRGGBB,
+    /// "" for the default color
+    top_color: Option<String>,
+    /// Catalog ID of a texture for the top of the wall, "" to remove it (kept by My Sweet
+    /// Home; Sweet Home 3D shows the top color instead)
+    top_texture: Option<String>,
     /// Baseboard on the left side
     left_side_baseboard: Option<BaseboardParams>,
     right_side_baseboard: Option<BaseboardParams>,
@@ -101,6 +107,10 @@ struct BaseboardParams {
     /// Catalog ID of a texture, "" to remove it
     texture: Option<String>,
 }
+
+/// Texture role of the top of a wall. Sweet Home 3D has no such texture: it ignores it when
+/// reading and shows the top color.
+pub const TOP_TEXTURE: &str = "topTexture";
 
 /// Default size of new baseboards in cm (like the Sweet Home 3D preferences).
 const DEFAULT_BASEBOARD_HEIGHT: f32 = 7.0;
@@ -211,6 +221,7 @@ pub(super) fn register(r: &mut Registry) {
         |doc, p: UpdateParams| {
             let left_tex = texture_for(doc, non_empty(&p.left_side_texture), "leftSideTexture")?;
             let right_tex = texture_for(doc, non_empty(&p.right_side_texture), "rightSideTexture")?;
+            let top_tex = texture_for(doc, non_empty(&p.top_texture), TOP_TEXTURE)?;
             let mut baseboard_tex = Vec::new();
             for b in [&p.left_side_baseboard, &p.right_side_baseboard] {
                 let tex = match b {
@@ -288,6 +299,9 @@ pub(super) fn register(r: &mut Registry) {
                 if let Some(c) = &p.right_side_color {
                     a.right_side_color = optional_color(c)?;
                 }
+                if let Some(c) = &p.top_color {
+                    a.top_color = optional_color(c)?;
+                }
                 if let Some(v) = &p.pattern {
                     a.pattern = Some(v.clone());
                 }
@@ -300,6 +314,7 @@ pub(super) fn register(r: &mut Registry) {
                 for (role, tex, param) in [
                     ("leftSideTexture", left_tex.clone(), &p.left_side_texture),
                     ("rightSideTexture", right_tex.clone(), &p.right_side_texture),
+                    (TOP_TEXTURE, top_tex.clone(), &p.top_texture),
                 ] {
                     if param.is_some() {
                         w.textures.retain(|t| t.role.as_deref() != Some(role));

@@ -347,6 +347,9 @@ export default function PlanView() {
   const measureColor = measureColorPref || guideColor;
 
   const gesture = useRef<Gesture | null>(null);
+  // A finished move or handle drag whose command is still running: the plan keeps showing it
+  // until the changed home arrives, so that nothing jumps back to its old place in between
+  const settling = useRef<{ gesture: Gesture; home: Home } | null>(null);
   const draft = useRef<Pt[]>([]);
   const cursor = useRef<Pt | null>(null);
   const snapState = useRef<Snapped | null>(null);
@@ -600,7 +603,8 @@ export default function PlanView() {
     drawPlan(ctx, canvas.width, canvas.height, viewRef.current, input, colors, {
       grid: showGrid,
     });
-    const g = gesture.current;
+    if (settling.current && settling.current.home !== input.home) settling.current = null;
+    const g = gesture.current ?? settling.current?.gesture ?? null;
     const drawing = isPathTool(tool);
     // A complete typed input shows where the next point lands
     const typedAt = typedPoint();
@@ -1365,6 +1369,20 @@ export default function PlanView() {
     }
   };
 
+  /** Keeps showing the finished gesture `g` until its command has changed the home. */
+  const settle = (g: Gesture, pending: Promise<unknown>) => {
+    if (!input) return;
+    const entry = { gesture: g, home: input.home };
+    settling.current = entry;
+    const done = () => {
+      if (settling.current !== entry) return;
+      settling.current = null;
+      draw();
+    };
+    // Failed (or changed nothing): show the home as it is; otherwise the new home ends it
+    void pending.then((r) => (r === undefined ? done() : setTimeout(done, 1000)));
+  };
+
   const onPointerUp = (e: React.PointerEvent) => {
     const g = gesture.current;
     gesture.current = null;
@@ -1409,7 +1427,7 @@ export default function PlanView() {
       return;
     }
     if (g.kind === "handle") {
-      if (g.drag) void run(g.drag.command, g.drag.params);
+      if (g.drag) settle(g, run(g.drag.command, g.drag.params));
       draw();
       return;
     }
@@ -1440,8 +1458,9 @@ export default function PlanView() {
         single && (dx !== 0 || dy !== 0) && magnetismActive(e.altKey)
           ? dropElevation(input.home, single, [single.attrs.x + dx, single.attrs.y + dy])
           : null;
+      let pending: Promise<unknown> | null = null;
       if (g.slide && sel.length === 1) {
-        void run("furniture_update", {
+        pending = run("furniture_update", {
           id: sel[0],
           x: g.slide.x,
           y: g.slide.y,
@@ -1454,7 +1473,7 @@ export default function PlanView() {
           single && magnetismActive(e.altKey)
             ? dropElevation(input.home, single, [g.dock.x, g.dock.y])
             : null;
-        void run("furniture_update", {
+        pending = run("furniture_update", {
           id: sel[0],
           x: g.dock.x,
           y: g.dock.y,
@@ -1463,7 +1482,7 @@ export default function PlanView() {
         });
       } else if (single && drop) {
         // Move and change the elevation in one step
-        void run("furniture_update", {
+        pending = run("furniture_update", {
           id: sel[0],
           x: single.attrs.x + dx,
           y: single.attrs.y + dy,
@@ -1473,8 +1492,9 @@ export default function PlanView() {
         const v = currentVisitor();
         if (v) void setVisitor({ x: v.x + dx, y: v.y + dy });
       } else if ((dx !== 0 || dy !== 0) && sel.length > 0) {
-        void run("edit_move", { ids: sel, dx, dy });
+        pending = run("edit_move", { ids: sel, dx, dy });
       }
+      if (pending) settle(g, pending);
       draw();
     } else if (g.kind === "band") {
       // Dragged from right to left: also what the band only touches

@@ -366,8 +366,11 @@ export function snapContext(
       s.right[0],
       s.right[s.right.length - 1],
     ];
+    // Close to the wall: within some snap radii of its faces (measured from the axis, so the
+    // half thickness is added; otherwise the faces of thick walls are out of reach when zoomed in)
+    const reach = radius * 8 + (a.thickness ?? 0) / 2;
     if (purpose === "wall") {
-      showHints = !!near && distanceToWall(near, start, end) < radius * 8;
+      showHints = !!near && distanceToWall(near, start, end) < reach;
       named(start, "wall end");
       named(end, "wall end");
       if (showHints && !a.arc_extent) {
@@ -378,6 +381,27 @@ export function snapContext(
           lineLabelOf.set(face, "on wall face");
         }
         for (const c of corners.filter(keep)) named(c, "wall corner");
+        // A wall started on a face (also an end face) with one side flush with its corner
+        const half = (thickness ?? 0) / 2;
+        const last = s.left.length - 1;
+        const faces: Segment[] = [
+          [s.left[0], s.left[last]],
+          [s.right[0], s.right[s.right.length - 1]],
+          [s.left[0], s.right[0]],
+          [s.left[last], s.right[s.right.length - 1]],
+        ];
+        for (const [p0, p1] of half > 0 ? faces : []) {
+          const len = dist(p0, p1);
+          if (len < 2 * half + 1) continue;
+          const ux = (p1[0] - p0[0]) / len;
+          const uy = (p1[1] - p0[1]) / len;
+          for (const q of [
+            [p0[0] + ux * half, p0[1] + uy * half],
+            [p1[0] - ux * half, p1[1] - uy * half],
+          ] as Pt[]) {
+            if (keep(q)) named(q, "flush with wall corner");
+          }
+        }
       }
       if (!a.arc_extent) {
         lines.push([start, end]);
@@ -414,7 +438,7 @@ export function snapContext(
     }
     if (anchor && !a.arc_extent && purpose !== "polyline" && near) {
       // Foot of the perpendicular from the previous point on the axis and the faces
-      if (distanceToWall(near, start, end) < radius * 8) {
+      if (distanceToWall(near, start, end) < reach) {
         const segs: Segment[] = [
           [s.left[0], s.left[s.left.length - 1]],
           [s.right[0], s.right[s.right.length - 1]],

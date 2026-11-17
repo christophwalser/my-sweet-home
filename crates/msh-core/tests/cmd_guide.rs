@@ -220,3 +220,93 @@ fn guide_color_and_dash_style_are_set_and_changed() {
         .contains("two different points")
     );
 }
+
+#[test]
+fn guides_can_show_on_all_levels() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let level = run(&r, &mut doc, "level_add", json!({ "name": "L" }))["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let id = add(
+        &r,
+        &mut doc,
+        json!({ "x_start": 0, "y_start": 0, "x_end": 100, "y_end": 0, "level": level, "all_levels": true }),
+    );
+    let list = run(&r, &mut doc, "guide_list", json!({}));
+    assert_eq!(list["guides"][0]["all_levels"], json!(true));
+
+    let before = snapshot(&doc);
+    run(
+        &r,
+        &mut doc,
+        "guide_update",
+        json!({ "id": id, "all_levels": false }),
+    );
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+    // Off is the default and not written
+    let list = run(&r, &mut doc, "guide_list", json!({}));
+    assert!(list["guides"][0].get("all_levels").is_none());
+
+    run(
+        &r,
+        &mut doc,
+        "guide_update",
+        json!({ "id": id, "all_levels": true }),
+    );
+    let mut reopened = save_and_reopen(&r, &mut doc, "guides_can_show_on_all_levels");
+    let list = run(&r, &mut reopened, "guide_list", json!({}));
+    assert_eq!(list["guides"][0]["all_levels"], json!(true));
+}
+
+#[test]
+fn guides_are_copied_pasted_and_duplicated() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let first = run(&r, &mut doc, "level_add", json!({ "name": "A" }))["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let second = run(&r, &mut doc, "level_add", json!({ "name": "B" }))["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let id = add(
+        &r,
+        &mut doc,
+        json!({ "x_start": 0, "y_start": 0, "x_end": 100, "y_end": 0, "level": first, "color": "#FF0000", "all_levels": true }),
+    );
+    let copied = run(&r, &mut doc, "edit_copy", json!({ "ids": [id] }));
+    assert_eq!(copied["copied"], json!(1));
+
+    let before = snapshot(&doc);
+    let pasted = run(&r, &mut doc, "edit_paste", json!({ "level": second }));
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+    let new = ids(&pasted, "ids");
+    assert_eq!(new.len(), 1);
+    assert_ne!(new[0], id);
+    let list = run(&r, &mut doc, "guide_list", json!({}));
+    let g = &list["guides"][1];
+    assert_eq!(g["id"], json!(new[0]));
+    assert_eq!(g["level"], json!(second));
+    // Moved by 20 cm, as the original is still there; its own values are kept
+    assert_eq!(g["x_start"], json!(20.0));
+    assert_eq!(g["y_end"], json!(20.0));
+    assert_eq!(g["color"], json!("#FF0000"));
+    assert_eq!(g["all_levels"], json!(true));
+
+    // Duplicated on its own level
+    let dup = run(&r, &mut doc, "edit_duplicate", json!({ "ids": [id] }));
+    let dup = ids(&dup, "ids");
+    let list = run(&r, &mut doc, "guide_list", json!({}));
+    let g = list["guides"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["id"] == json!(dup[0]))
+        .unwrap();
+    assert_eq!(g["level"], json!(first));
+}

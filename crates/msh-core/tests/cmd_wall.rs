@@ -785,3 +785,72 @@ fn update_sets_matt_or_shiny_wall_sides() {
     );
     assert_eq!(wall(&doc, &id).left_side_shininess, None);
 }
+
+#[test]
+fn wall_top_color_and_texture_are_set_saved_and_removed() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let id = add_wall(&r, &mut doc, [0.0, 0.0], [300.0, 0.0]);
+    let before = snapshot(&doc);
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": id, "top_color": "#336699" }),
+    );
+    assert_eq!(
+        doc.home().walls[0].attrs.top_color.map(|c| c.0 & 0xFFFFFF),
+        Some(0x336699)
+    );
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": id, "top_color": "" }),
+    );
+    assert_eq!(doc.home().walls[0].attrs.top_color, None);
+    let err = run_err(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": id, "top_texture": "no#such" }),
+    );
+    assert!(err.contains("unknown texture"), "{err}");
+
+    let Some(tex) = any_texture() else {
+        eprintln!("skipped: no Sweet Home 3D texture catalog installed");
+        return;
+    };
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": id, "top_texture": tex }),
+    );
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": id, "top_texture": tex }),
+    );
+    let roles: Vec<_> = doc.home().walls[0]
+        .textures
+        .iter()
+        .filter_map(|t| t.role.clone())
+        .collect();
+    assert_eq!(roles, ["topTexture"], "set twice, kept once");
+    let mut reopened = save_and_reopen(&r, &mut doc, "wall_top_texture");
+    assert_eq!(
+        reopened.home().walls[0].textures[0].role.as_deref(),
+        Some("topTexture")
+    );
+    run(
+        &r,
+        &mut reopened,
+        "wall_update",
+        json!({ "id": id, "top_texture": "" }),
+    );
+    assert!(reopened.home().walls[0].textures.is_empty());
+}

@@ -4,7 +4,14 @@
 import { useEffect, useState } from "react";
 import { docResourceUrl } from "../api";
 import { t } from "../i18n";
-import { forEachPiece, type Home, isReference, type Piece, type Wall } from "../model";
+import {
+  forEachPiece,
+  forEveryPiece,
+  type Home,
+  isReference,
+  type Piece,
+  type Wall,
+} from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { guideAngle, guideEnd, guideLength, homeGuides } from "../plan2d/guides";
 import { usePreferences } from "../preferences";
@@ -189,6 +196,45 @@ function WallSide({
   );
 }
 
+/** Color and texture of the top of a wall (seen in 3D on walls lower than the ceiling). */
+function WallTop({
+  wall,
+  run,
+}: {
+  wall: Wall;
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const id = wall.attrs.id;
+  const color = wall.attrs.top_color;
+  return (
+    <fieldset className="side-section">
+      <h3 title={t("Seen in 3D on walls lower than the ceiling, e.g. a half-height wall")}>
+        {t("Top")}
+      </h3>
+      <Field
+        label={t("Color")}
+        type="color"
+        value={toHex(color)}
+        onCommit={(v) => void run("wall_update", { id, top_color: v })}
+      />
+      {color !== null && (
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => void run("wall_update", { id, top_color: "" })}
+        >
+          {t("Default color")}
+        </button>
+      )}
+      <TextureField
+        label={t("Texture")}
+        current={byRole(wall.textures, "topTexture")}
+        onCommit={(v) => void run("wall_update", { id, top_texture: v })}
+      />
+    </fieldset>
+  );
+}
+
 /** Position, eye height and view of the virtual visitor (Sweet Home 3D's observer). */
 function VisitorSection() {
   const opened = useStore((s) => s.opened);
@@ -261,6 +307,63 @@ function VisitorSection() {
         )}
       </p>
     </div>
+  );
+}
+
+/**
+ * Reference objects of the home (terrain, scans, neighbor houses): each can be shown or hidden
+ * (in the plan and in 3D) and selected to change it.
+ */
+function ReferenceObjectsSection({
+  home,
+  run,
+}: {
+  home: Home;
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const setSelection = useStore((s) => s.setSelection);
+  const references: Piece[] = [];
+  // Hidden ones too, so that they can be shown again
+  forEveryPiece(home.furniture, (p) => {
+    if (isReference(p) && p.attrs.id) references.push(p);
+  });
+  return (
+    <>
+      <h2>{t("Reference objects")}</h2>
+      <p className="muted small">
+        {t(
+          "Terrain, scans and neighbor houses: like the background image they lie faint under the plan, and they show in 3D.",
+        )}
+      </p>
+      {references.length === 0 && (
+        <p className="muted small">
+          {t(
+            "None yet: mark terrain, scans or neighbor houses as reference object in their properties.",
+          )}
+        </p>
+      )}
+      {references.map((p) => (
+        <div key={p.attrs.id} className="prop-row prop-check">
+          <input
+            type="checkbox"
+            checked={p.attrs.visible !== false}
+            title={t("Visible")}
+            aria-label={t("Show {name}", { name: p.attrs.name })}
+            onChange={(e) =>
+              void run("furniture_update", { id: p.attrs.id, visible: e.currentTarget.checked })
+            }
+          />
+          <button
+            type="button"
+            className="link-button"
+            title={t("Select it to change it")}
+            onClick={() => p.attrs.id && setSelection([p.attrs.id])}
+          >
+            {p.attrs.name} ({t("Change…")})
+          </button>
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -780,6 +883,7 @@ export default function PropertiesPanel() {
             <BackgroundImageSection levelId={null} background={home.background_image ?? null} />
           )
         )}
+        <ReferenceObjectsSection home={home} run={run} />
         <CompassSection home={home} run={run} />
         <p className="muted">{t("Click an element in the plan to edit it.")}</p>
       </div>
@@ -820,8 +924,9 @@ export default function PropertiesPanel() {
     );
   }
 
+  // Hidden pieces too (selected in the furniture list or the home details)
   let piece: Piece | null = null;
-  forEachPiece(home.furniture, (p) => {
+  forEveryPiece(home.furniture, (p) => {
     if (p.attrs.id === id) piece = p;
   });
   if (piece) {
@@ -829,6 +934,55 @@ export default function PropertiesPanel() {
     const a = p.attrs;
     const set = (field: string) => (v: string | number | boolean) =>
       void run("furniture_update", { id, [field]: v });
+    if (isReference(p)) {
+      // A reference object is not furniture: only what places it in the plan and 3D
+      return (
+        <div className="props">
+          <h2>{t("Reference object")}</h2>
+          {a.description && <p className="muted small">{a.description}</p>}
+          <Field label={t("Name")} type="text" value={a.name} onCommit={set("name")} />
+          <Field
+            label={t("Visible")}
+            type="checkbox"
+            value={a.visible !== false}
+            onCommit={set("visible")}
+          />
+          <Field label="X" type="number" unit="cm" value={a.x} onCommit={set("x")} />
+          <Field label="Y" type="number" unit="cm" value={a.y} onCommit={set("y")} />
+          <Field
+            label={t("Elevation")}
+            type="number"
+            unit="cm"
+            value={a.elevation ?? 0}
+            onCommit={set("elevation")}
+          />
+          <Field
+            label={t("Angle")}
+            type="number"
+            unit="°"
+            value={Math.round(((a.angle ?? 0) * 1800) / Math.PI) / 10}
+            onCommit={set("angle_deg")}
+          />
+          <p className="muted small">
+            {t(
+              "Shown faint under the plan of every level and as it is in 3D; it is saved as a piece of furniture, so Sweet Home 3D opens it too.",
+            )}
+          </p>
+          <div className="prop-actions">
+            <button
+              type="button"
+              title={t("Show it in the furniture list and let it be picked in the plan again")}
+              onClick={() => set("reference")(false)}
+            >
+              {t("Make it a piece of furniture")}
+            </button>
+            <button type="button" onClick={() => void run("edit_delete", { ids: [id] })}>
+              {t("Delete")}
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="props">
         <h2>
@@ -1072,6 +1226,7 @@ export default function PropertiesPanel() {
         />
         <WallSide wall={wall} side="left" run={run} />
         <WallSide wall={wall} side="right" run={run} />
+        <WallTop wall={wall} run={run} />
         {wallActions}
         {actions}
       </div>
@@ -1242,6 +1397,19 @@ export default function PropertiesPanel() {
           options={DASH_STYLES}
           onCommit={set("dash_style")}
         />
+        {home.levels.length > 0 && (
+          <label
+            className="prop-row prop-check"
+            title={t("Shows the ruler on every level, e.g. to line up the floors")}
+          >
+            <input
+              type="checkbox"
+              checked={guide.all_levels === true}
+              onChange={(e) => set("all_levels")(e.currentTarget.checked)}
+            />
+            <span>{t("On all levels")}</span>
+          </label>
+        )}
         <p className="muted small">
           {t(
             "A guide for placing elements; it is saved with the home but not printed or exported. Drag it to move it, drag its ends to change it.",

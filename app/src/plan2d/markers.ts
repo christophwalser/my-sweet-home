@@ -73,6 +73,7 @@ const NOTES: Record<string, string> = {
   "wall middle": t("wall middle"),
   "wall corner": t("wall corner"),
   "flush with wall end": t("flush with wall end"),
+  "flush with wall corner": t("flush with wall corner"),
   "on wall axis": t("on wall axis"),
   "on wall face": t("on wall face"),
   "on edge": t("on edge"),

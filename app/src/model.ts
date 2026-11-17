@@ -388,6 +388,14 @@ export type OpenedHome = {
   cameraMoves: number;
 };
 
+/** Calls `fn` for every piece, hidden ones too, expanding groups. */
+export function forEveryPiece(items: Furniture[], fn: (p: Piece) => void): void {
+  for (const item of items) {
+    if (item.type === "group") forEveryPiece(item.items, fn);
+    else fn(item);
+  }
+}
+
 /** Calls `fn` for every visible piece, expanding groups. */
 export function forEachPiece(items: Furniture[], fn: (p: Piece) => void): void {
   for (const item of items) {
@@ -490,6 +498,8 @@ export function pieceAtLevel(home: Home, piece: Piece, levelId: string | null): 
   if (!own || !level) return false;
   if (sameElevationBelow(own, level)) return true;
   if (own.elevation >= level.elevation) return false;
+  // Reference objects (terrain, scans) lie under the plan of every level above theirs
+  if (isReference(piece)) return true;
   const a = piece.attrs;
   const top = own.elevation + (a.elevation ?? 0) + (a.height_in_plan ?? a.height);
   if (a.staircase_cut_out_shape) return top >= level.elevation;

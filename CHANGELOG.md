@@ -11,11 +11,35 @@ All notable changes to this project are documented in this file. The format foll
 - "Reference object" for furniture such as terrain, laser scans and neighbor houses: the plan
   shows it faint under the background image and clicks, the rubber band and the magnetism ignore it; the 3D
   view is unchanged.
+- Walls get a color and a texture for their top ("Top" in their properties), seen in 3D on walls
+  lower than the ceiling; Sweet Home 3D shows the top color and ignores the texture.
+- Rulers can be shown on all levels (checkbox in their properties), e.g. to line up the floors.
+- Rulers can be copied, cut, pasted and duplicated like other elements; color, dashes and "On all
+  levels" can be changed for several selected rulers at once.
+- Reference objects are their own kind of object, like the background image: they are listed in
+  the home details (show or hide each one, change it in its own panel with name, position,
+  elevation and angle) and no longer in the furniture list; the plan shows them faint under
+  every level above theirs. They are still saved as furniture, so Sweet Home 3D opens the file.
+- Magnetism: a wall can start on the face of another wall with one of its sides flush with that
+  wall's corner (snap point "flush with wall corner", using the thickness of the new wall).
 
 ### Changed
 
+- "Fit plan to window" fits to the walls of the level (the building); terrain, parcel lines and
+  other things around the house no longer widen it. Levels without walls fit as before.
+
 - Pieces of a lower level that reach up into the shown level (e.g. a tall terrain model) are
   shown faint in its plan and can no longer be picked or snapped to there; staircases still can.
+
+### Fixed
+
+- Elements moved with the mouse, or changed with a handle, no longer jump back to their old place
+  for a moment when the mouse button is released.
+- In the virtual visit the sky no longer shows through a slit in the ceiling above walls lower
+  than the ceiling (e.g. half-height walls): the ceiling of the room next to them now covers them.
+- The snap points on the faces of thick walls no longer disappear when the plan is zoomed in far.
+- A hidden piece of furniture or reference object stays selected and keeps its properties, so it
+  can be shown again there (before, it vanished from the panel and the home details).
 
 ## [0.1.0] - 2026-11-15
 

@@ -314,6 +314,33 @@ describe("snapContext", () => {
     expect(snapDraw([51, 3], [50, 100], c).note).toBe("perpendicular");
   });
 
+  it("lets a new wall start on a face flush with the corner of a nearby wall", () => {
+    const c = snapContext("wall", home, shapes, null, 10, { near: [205, 0], thickness: 4 });
+    const t = w1.attrs.thickness / 2;
+    // On the end face, 2 cm (half the new wall) from each corner
+    expect(c.labels?.get(pointKey([200, t - 2]))).toBe("flush with wall corner");
+    expect(c.labels?.get(pointKey([200, -t + 2]))).toBe("flush with wall corner");
+    // On the side faces too
+    expect(c.labels?.get(pointKey([198, t]))).toBe("flush with wall corner");
+    expect(snapDraw([201, t - 2.5], null, c).pt).toEqual([200, t - 2]);
+    // Without the thickness of the new wall there are none
+    const plain = snapContext("wall", home, shapes, null, 10, { near: [205, 0] });
+    expect([...(plain.labels?.values() ?? [])]).not.toContain("flush with wall corner");
+  });
+
+  it("keeps the face points of a thick wall when zoomed in (small snap radius)", () => {
+    const thick = makeWall("t", [0, 0], [200, 0], { thickness: 40 });
+    const h = makeHome({ walls: [thick] });
+    // The cursor on the face, 20 cm from the axis; the radius is only 0.5 cm
+    const c = snapContext("wall", h, [straightShape(thick)], null, 0.5, {
+      near: [100, 20],
+      thickness: 10,
+    });
+    expect(c.labels?.get(pointKey([200, 15]))).toBe("flush with wall corner");
+    expect(c.hints?.length).toBeGreaterThan(0);
+    expect(snapDraw([199.8, 15.2], null, c).note).toBe("flush with wall corner");
+  });
+
   it("leaves out the element being edited and the point being moved", () => {
     const c = snapContext("wall", home, shapes, null, 10, {
       excludeId: "w1",

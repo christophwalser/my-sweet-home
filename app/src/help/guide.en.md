@@ -19,8 +19,8 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. T
 
 - Click the start point, then each corner. **Double-click**, **Enter** or **Escape** ends the wall, **Backspace** removes the last point.
 - Type a length and press **Enter** to fix the next wall at that length. Units and arithmetic work too: `3.5m`, `5'3"`, `240+11.5`. **Tab** switches to the angle (degrees, clockwise from the x axis); the value not typed follows the mouse. `@dx,dy` places the point relative to the last one, `#x,y` at absolute coordinates, `300<45` gives length and angle at once.
-- Magnetism snaps to right angles, 45°, parallel walls, wall ends, wall faces, the foot of the perpendicular on a nearby wall and rulers; hold **Shift** for 1° steps and **Alt** to switch magnetism off for a moment.
-- Select a wall to change its thickness, height (also different at both ends), length, colors, textures, surface (matt or shiny), baseboards and pattern. **Make 90°** straightens the corner to the next wall.
+- Magnetism snaps to right angles, 45°, parallel walls, wall ends, wall faces (a new wall also starts flush with the corner of a wall face), the foot of the perpendicular on a nearby wall and rulers; hold **Shift** for 1° steps and **Alt** to switch magnetism off for a moment.
+- Select a wall to change its thickness, height (also different at both ends), length, colors, textures, surface (matt or shiny), baseboards and pattern; **Top** gives a wall lower than the ceiling (e.g. a half-height wall) its own color and texture on top. **Make 90°** straightens the corner to the next wall.
 - Round walls are drawn with the arrow next to the wall tool.
 
 ## Rooms
@@ -34,7 +34,7 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. T
 - The dimension tool measures between two clicks; a third click places the dimension line.
 - Texts and polylines (straight or curved) have their own tools; their style is set in the properties.
 - A text is typed right where you click in the plan; **Enter** finishes, **Shift+Enter** starts a new line. **Double-click** a text to change it in place.
-- The measure tool shows a distance without adding anything to the plan. Like walls, its end point (and that of a ruler) can be typed: a length, **Tab** for the angle, or `@dx,dy`. Its second mode, the **ruler**, draws a guide line that stays in the plan to help place elements; it is saved with the home but not printed. Select a ruler and press **Del** to remove it, or use **Plan › Delete rulers of this level**. Color and dashes of a ruler are set in its properties; the defaults for new rulers and the color of the measure tool are under **Preferences › Tools**. **Ruler at a distance…** in the context menu of a wall or ruler adds a parallel ruler: move the mouse to its side and click, or type the distance (from the wall face) and press **Enter**.
+- The measure tool shows a distance without adding anything to the plan. Like walls, its end point (and that of a ruler) can be typed: a length, **Tab** for the angle, or `@dx,dy`. Its second mode, the **ruler**, draws a guide line that stays in the plan to help place elements; it is saved with the home but not printed. Select a ruler and press **Del** to remove it, or use **Plan › Delete rulers of this level**. Color and dashes of a ruler are set in its properties, and **On all levels** shows it on every level, e.g. to line up the floors; rulers can be copied and pasted like other elements; the defaults for new rulers and the color of the measure tool are under **Preferences › Tools**. **Ruler at a distance…** in the context menu of a wall or ruler adds a parallel ruler: move the mouse to its side and click, or type the distance (from the wall face) and press **Enter**.
 
 ## Precision and magnetism
 
@@ -53,7 +53,7 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. T
 
 ## Terrain and scans as reference objects
 
-Terrain models, laser scans or neighbor houses imported as furniture are marked as **Reference object** in their properties. The plan then shows them faint at the bottom, under the background image: clicks, the rubber band and the magnetism ignore them, so walls and rooms are drawn on top undisturbed. Select a reference object in the furniture list to change it; the 3D view shows it as before. Pieces of a lower level that reach up into the shown level (e.g. a tall terrain model) are shown the same way; staircases stay selectable.
+Terrain models, laser scans or neighbor houses imported as furniture are marked as **Reference object** in their properties. The plan then shows them faint at the bottom, under the background image: clicks, the rubber band and the magnetism ignore them, so walls and rooms are drawn on top undisturbed. The home details (click an empty spot of the plan) list the reference objects: show or hide each one there, or click its name to select and change it; the 3D view shows them as before. Reference objects are not furniture: they are not in the furniture list, and the plan shows them under every level above their own. **Make it a piece of furniture** in their panel turns one back. Pieces of a lower level that reach up into the shown level (e.g. a tall terrain model) are shown the same way; staircases stay selectable.
 
 ## Locking the base plan
 

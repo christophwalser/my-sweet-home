@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Pt } from "../model";
+import { type Pt, REFERENCE_PROPERTY } from "../model";
 import {
   makeDimension,
   makeHome,
@@ -159,13 +159,32 @@ describe("planBounds", () => {
     expect(planBounds(input(makeHome()))).toBeNull();
   });
 
-  it("covers wall outlines, rooms and furniture centers", () => {
+  it("fits to the walls only, when there are walls", () => {
     const home = makeHome({
       walls: [makeWall("w", [0, 0], [100, 0])],
       rooms: [makeRoom([[-50, 20]])],
       furniture: [makePiece({ x: 300, y: 300 })],
     });
-    expect(planBounds(input(home))).toEqual([-50, -5, 300, 300]);
+    expect(planBounds(input(home))).toEqual([0, -5, 100, 5]);
+  });
+
+  it("covers rooms and furniture centers without walls", () => {
+    const home = makeHome({
+      rooms: [makeRoom([[-50, 20]])],
+      furniture: [makePiece({ x: 300, y: 300 })],
+    });
+    expect(planBounds(input(home))).toEqual([-50, 20, 300, 300]);
+  });
+
+  it("fits to the building, not to reference objects such as terrain", () => {
+    const terrain = makePiece(
+      { id: "terrain", x: 5000, y: 5000 },
+      { properties: [{ name: REFERENCE_PROPERTY, value: "true" }] },
+    );
+    const home = makeHome({ walls: [makeWall("w", [0, 0], [100, 0])], furniture: [terrain] });
+    expect(planBounds(input(home))).toEqual([0, -5, 100, 5]);
+    // Only terrain yet: fit to it
+    expect(planBounds(input(makeHome({ furniture: [terrain] })))).toEqual([5000, 5000, 5000, 5000]);
   });
 
   it("includes the offset of dimension lines", () => {

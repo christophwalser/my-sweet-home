@@ -5,9 +5,19 @@
 import { useState } from "react";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Room, type Texture, type Wall } from "../model";
+import { type Guide, homeGuides } from "../plan2d/guides";
+import { usePreferences } from "../preferences";
 import { useStore, VISITOR_ID } from "../store";
 import { formatArea, formatLength } from "../units";
-import { byRole, Field, SelectField, SideSection, toHex, WALL_PATTERNS } from "./fields";
+import {
+  byRole,
+  DASH_STYLES,
+  Field,
+  SelectField,
+  SideSection,
+  toHex,
+  WALL_PATTERNS,
+} from "./fields";
 import { type SelectionGroup, selectionGroups, selectionItems } from "./selectionItems";
 import TextureField from "./TextureField";
 
@@ -84,6 +94,7 @@ function WallsSection({ walls, home, run }: { walls: Wall[]; home: Home; run: Ru
       {(["left", "right"] as const).map((side) => (
         <WallsSide key={side} walls={walls} side={side} update={update} />
       ))}
+      <WallsTop walls={walls} update={update} />
     </>
   );
 }
@@ -182,6 +193,43 @@ function WallsSide({
         </>
       )}
     </SideSection>
+  );
+}
+
+/** Color and texture of the top of several walls. */
+function WallsTop({
+  walls,
+  update,
+}: {
+  walls: Wall[];
+  update: (values: Record<string, unknown>) => void;
+}) {
+  const color = common(walls.map((w) => w.attrs.top_color));
+  const texture = commonTexture(walls.map((w) => byRole(w.textures, "topTexture")));
+  return (
+    <fieldset className="side-section">
+      <h3 title={t("Seen in 3D on walls lower than the ceiling, e.g. a half-height wall")}>
+        {t("Top")}
+      </h3>
+      <Field
+        label={t("Color")}
+        type="color"
+        value={toHex(color.value)}
+        mixed={color.mixed}
+        onCommit={(v) => update({ top_color: v })}
+      />
+      {(color.mixed || color.value !== null) && (
+        <button type="button" className="link-button" onClick={() => update({ top_color: "" })}>
+          {t("Default color")}
+        </button>
+      )}
+      <TextureField
+        label={t("Texture")}
+        current={texture.value}
+        mixed={texture.mixed}
+        onCommit={(v) => update({ top_texture: v })}
+      />
+    </fieldset>
   );
 }
 
@@ -355,7 +403,50 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
   );
 }
 
-/** Sections for the walls, rooms and furniture among the selected elements. */
+/** Color, dashes and "on all levels" of several rulers. */
+function RulersSection({ guides, home, run }: { guides: Guide[]; home: Home; run: Run }) {
+  const prefs = usePreferences.getState();
+  const ids = guides.map((g) => g.id);
+  const set = (field: string) => (v: string | number | boolean) =>
+    void run("guide_update", { ids, [field]: v });
+  const color = common(
+    guides.map((g) => (g.color ?? (prefs.rulerColor || "#b0267e")).toLowerCase()),
+  );
+  const dashes = common(guides.map((g) => g.dash_style ?? prefs.rulerDashStyle));
+  const allLevels = common(guides.map((g) => g.all_levels === true));
+  return (
+    <>
+      <h2>
+        {guides.length} {t("rulers")}
+      </h2>
+      <Field
+        label={t("Color")}
+        type="color"
+        value={color.value}
+        mixed={color.mixed}
+        onCommit={set("color")}
+      />
+      <SelectField
+        label={t("Dashes")}
+        value={dashes.value ?? ""}
+        mixed={dashes.mixed}
+        options={DASH_STYLES}
+        onCommit={set("dash_style")}
+      />
+      {home.levels.length > 0 && (
+        <Field
+          label={t("On all levels")}
+          type="checkbox"
+          value={allLevels.value}
+          mixed={allLevels.mixed}
+          onCommit={set("all_levels")}
+        />
+      )}
+    </>
+  );
+}
+
+/** Sections for the walls, rooms, furniture and rulers among the selected elements. */
 export default function MultiPanel({
   home,
   selection,
@@ -372,11 +463,13 @@ export default function MultiPanel({
   forEachPiece(home.furniture, (p) => {
     if (p.attrs.id && sel.has(p.attrs.id)) pieces.push(p);
   });
+  const guides = homeGuides(home).filter((g) => sel.has(g.id));
   return (
     <>
       {walls.length > 0 && <WallsSection walls={walls} home={home} run={run} />}
       {rooms.length > 0 && <RoomsSection rooms={rooms} run={run} />}
       {pieces.length > 0 && <FurnitureSection pieces={pieces} run={run} />}
+      {guides.length > 0 && <RulersSection guides={guides} home={home} run={run} />}
       <SelectionList home={home} selection={selection} />
     </>
   );

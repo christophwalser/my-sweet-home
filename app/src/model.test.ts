@@ -220,4 +220,15 @@ describe("levels", () => {
     });
     expect(piecePickable(home, stairs, "first")).toBe(true);
   });
+
+  it("shows a low reference object under the plan of the levels above it", () => {
+    const scan: Piece = {
+      ...makePiece({ level: "ground", height: 10 }),
+      properties: [{ name: REFERENCE_PROPERTY, value: "true" }],
+    };
+    expect(pieceAtLevel(home, scan, "first")).toBe(true);
+    expect(pieceIsBackdrop(home, scan, "first")).toBe(true);
+    // An ordinary low piece is not
+    expect(pieceAtLevel(home, makePiece({ level: "ground", height: 10 }), "first")).toBe(false);
+  });
 });

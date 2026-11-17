@@ -9,6 +9,7 @@ import {
   cssColor,
   forEachPiece,
   type Home,
+  isReference,
   type Piece,
   type Pt,
   pieceAtLevel,
@@ -64,7 +65,11 @@ export type PlanInput = {
   topView?: (p: Piece) => CanvasImageSource | null;
 };
 
-/** Bounding box of all walls, rooms and furniture on a level. */
+/**
+ * Area to fit the plan of a level to: the building, that is its walls. Without walls, all rooms,
+ * lines, furniture, dimensions and texts; reference objects (terrain, scans) count only when there
+ * is nothing else. Terrain, parcel lines and the like around the house never widen it.
+ */
 export function planBounds(input: PlanInput): [number, number, number, number] | null {
   let minX = Infinity;
   let minY = Infinity;
@@ -81,6 +86,7 @@ export function planBounds(input: PlanInput): [number, number, number, number] |
     if (!wallAtLevel(home, w, levelId)) return;
     for (const p of wallPolygon(wallShapes[i])) add(p[0], p[1]);
   });
+  if (Number.isFinite(minX)) return [minX, minY, maxX, maxY];
   for (const r of home.rooms) {
     if (!sameLevel(r.attrs.level, levelId)) continue;
     for (const p of r.points) add(p.x, p.y);
@@ -89,8 +95,11 @@ export function planBounds(input: PlanInput): [number, number, number, number] |
     if (!sameLevel(pl.attrs.level, levelId)) continue;
     for (const p of pl.points) add(p.x, p.y);
   }
+  const references: Piece[] = [];
   forEachPiece(home.furniture, (p) => {
-    if (pieceAtLevel(home, p, levelId)) add(p.attrs.x, p.attrs.y);
+    if (!pieceAtLevel(home, p, levelId)) return;
+    if (isReference(p)) references.push(p);
+    else add(p.attrs.x, p.attrs.y);
   });
   for (const d of home.dimension_lines) {
     if (!sameLevel(d.attrs.level, levelId)) continue;
@@ -118,6 +127,8 @@ export function planBounds(input: PlanInput): [number, number, number, number] |
     add(bb[0], bb[1]);
     add(bb[2], bb[3]);
   }
+  // Only terrain or scans yet: fit to them
+  if (!hasElements && !bb) for (const p of references) add(p.attrs.x, p.attrs.y);
   return Number.isFinite(minX) ? [minX, minY, maxX, maxY] : null;
 }
 

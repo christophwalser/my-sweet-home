@@ -28,6 +28,9 @@ pub struct Guide {
     /// SOLID, DOT, DASH, DASH_DOT or DASH_DOT_DOT (default: DASH)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dash_style: Option<String>,
+    /// Shown on all levels, not only on its own
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub all_levels: bool,
 }
 
 /// Normalizes a color to "#RRGGBB".
@@ -45,7 +48,7 @@ pub fn guides(home: &Home) -> Vec<Guide> {
 }
 
 /// Stores the guides of a home; no guides remove the property.
-fn set_guides(home: &mut Home, guides: &[Guide]) {
+pub(crate) fn set_guides(home: &mut Home, guides: &[Guide]) {
     home.properties.retain(|p| p.name != GUIDES_PROPERTY);
     if !guides.is_empty() {
         home.properties.push(Property {
@@ -98,6 +101,8 @@ struct AddParams {
     color: Option<String>,
     /// Dash style (default DASH)
     dash_style: Option<DashStyle>,
+    /// Show the guide on all levels (default: only on its own)
+    all_levels: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -107,6 +112,8 @@ struct UpdateParams {
     /// Line color "#RRGGBB"
     color: Option<String>,
     dash_style: Option<DashStyle>,
+    /// Show the guides on all levels, or only on their own
+    all_levels: Option<bool>,
     /// New start or end point in cm (moves that end of the guides)
     x_start: Option<f32>,
     y_start: Option<f32>,
@@ -163,6 +170,7 @@ pub(super) fn register(r: &mut Registry) {
                 y_end: p.y_end,
                 color: p.color.as_deref().map(color_string).transpose()?,
                 dash_style: p.dash_style.map(|d| d.as_str().into()),
+                all_levels: p.all_levels.unwrap_or(false),
             });
             set_guides(home, &list);
             Ok(json!({ "id": id }))
@@ -170,7 +178,7 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "guide_update",
-        "Changes the line color, dash style, start or end point of ruler guides.",
+        "Changes the line color, dash style, start or end point of ruler guides, or whether they \n         show on all levels.",
         true,
         |doc, p: UpdateParams| {
             let ids = target_ids(p.id, p.ids)?;
@@ -193,6 +201,9 @@ pub(super) fn register(r: &mut Registry) {
                 if let Some(d) = p.dash_style {
                     g.dash_style = Some(d.as_str().into());
                 }
+                if let Some(all) = p.all_levels {
+                    g.all_levels = all;
+                }
                 g.x_start = p.x_start.unwrap_or(g.x_start);
                 g.y_start = p.y_start.unwrap_or(g.y_start);
                 g.x_end = p.x_end.unwrap_or(g.x_end);
@@ -207,7 +218,7 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "guide_list",
-        "Lists the ruler guides of the home (ID, level, start and end in cm, color, dash style).",
+        "Lists the ruler guides of the home (ID, level, start and end in cm, color, dash style, \n         all_levels).",
         false,
         |doc, _: NoParams| Ok(json!({ "guides": guides(doc.home()) })),
     );

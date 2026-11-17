@@ -4,6 +4,7 @@
 //! reference (models, icons, textures), so it can be pasted into the same home or
 //! into another home opened later in the same session.
 
+use crate::commands::guide::{Guide, guides, set_guides};
 use crate::commands::new_id;
 use crate::document::Document;
 use msh_format::ContentEntry;
@@ -19,6 +20,8 @@ pub struct Clipboard {
     pub polylines: Vec<Polyline>,
     pub dimension_lines: Vec<DimensionLine>,
     pub labels: Vec<Label>,
+    /// Ruler guides (kept in a home property, see `commands::guide`)
+    pub guides: Vec<Guide>,
     /// Resources referenced by the copied elements (all entries of a multi-part model)
     pub contents: Vec<ContentEntry>,
 }
@@ -60,6 +63,10 @@ impl Clipboard {
                 .iter()
                 .filter(|l| has(&l.attrs.id))
                 .cloned()
+                .collect(),
+            guides: guides(home)
+                .into_iter()
+                .filter(|g| ids.contains(g.id.as_str()))
                 .collect(),
             ..Default::default()
         };
@@ -103,6 +110,7 @@ impl Clipboard {
             && self.polylines.is_empty()
             && self.dimension_lines.is_empty()
             && self.labels.is_empty()
+            && self.guides.is_empty()
     }
 
     /// IDs of the copied top-level elements.
@@ -120,6 +128,7 @@ impl Clipboard {
                 .filter_map(|d| d.attrs.id.clone()),
         );
         ids.extend(self.labels.iter().filter_map(|l| l.attrs.id.clone()));
+        ids.extend(self.guides.iter().map(|g| g.id.clone()));
         ids
     }
 
@@ -134,7 +143,8 @@ impl Clipboard {
         offset: Option<(f32, f32)>,
     ) -> Vec<String> {
         let (dx, dy) = offset.unwrap_or_else(|| {
-            let existing = crate::document::all_ids(doc.home());
+            let mut existing = crate::document::all_ids(doc.home());
+            existing.extend(guides(doc.home()).into_iter().map(|g| g.id));
             if self.ids().iter().any(|id| existing.contains(id)) {
                 (20.0, 20.0)
             } else {
@@ -234,6 +244,26 @@ impl Clipboard {
             l.attrs.y += dy;
             new_ids.push(id);
             doc.home_mut().labels.push(l);
+        }
+        if !clip.guides.is_empty() {
+            let home = doc.home_mut();
+            let without_levels = home.levels.is_empty();
+            let mut list = guides(home);
+            for mut g in clip.guides {
+                g.id = new_id("guide");
+                g.level = if without_levels {
+                    None
+                } else {
+                    level.clone().or(g.level)
+                };
+                g.x_start += dx;
+                g.y_start += dy;
+                g.x_end += dx;
+                g.y_end += dy;
+                new_ids.push(g.id.clone());
+                list.push(g);
+            }
+            set_guides(home, &list);
         }
         new_ids
     }

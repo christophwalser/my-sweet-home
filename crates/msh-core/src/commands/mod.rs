@@ -16,7 +16,7 @@ mod export;
 mod flip;
 mod furniture;
 mod group;
-mod guide;
+pub(crate) mod guide;
 mod home;
 mod import;
 mod level;

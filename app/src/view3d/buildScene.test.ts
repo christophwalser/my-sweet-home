@@ -1,8 +1,9 @@
 import type * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import type { Home, OpenedHome } from "../model";
-import { makeHome, makePiece, makeWall, straightShape } from "../testFixtures";
+import { makeHome, makePiece, makeRoom, makeWall, straightShape } from "../testFixtures";
 import {
+  buildRooms,
   buildWalls,
   levelInfos,
   surfaceMaterial,
@@ -106,5 +107,34 @@ describe("surfaceMaterial", () => {
     expect(shiny.type).toBe("MeshPhongMaterial");
     expect(shiny.shininess).toBe(32);
     expect(shiny.color.getHex()).toBe(0xff0000);
+  });
+});
+
+describe("buildRooms", () => {
+  it("closes the ceiling over a wall lower than the ceiling, next to a room", () => {
+    const room = makeRoom(
+      [
+        [0, 0],
+        [300, 0],
+        [300, 200],
+        [0, 200],
+      ],
+      { id: "r" },
+    );
+    const h = (height: number | null) =>
+      makeHome({
+        rooms: [room],
+        walls: [makeWall("low", [100, 205], [200, 205], { thickness: 10, height })],
+      });
+    const caps = (home: Home) =>
+      buildRooms(
+        opened(home),
+        levelInfos(home),
+        visibleLevels(home, null),
+        () => {},
+      ).children.filter((c) => c.name.startsWith("wallCeiling:"));
+    expect(caps(h(100)).map((c) => c.name)).toEqual(["wallCeiling:low"]);
+    // A wall up to the ceiling needs none
+    expect(caps(h(null))).toEqual([]);
   });
 });

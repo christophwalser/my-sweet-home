@@ -7,7 +7,7 @@ import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
 import { errorText } from "./errorText";
 import { language } from "./i18n";
-import { forEachGroup, forEachPiece, type OpenedHome } from "./model";
+import { forEachGroup, forEveryPiece, type OpenedHome } from "./model";
 import { homeGuides } from "./plan2d/guides";
 import { usePreferences } from "./preferences";
 import type { CameraPose } from "./view3d/camera";
@@ -259,7 +259,8 @@ export function poseParams(p: CameraPose): Record<string, number> {
 function allIds(opened: OpenedHome): Set<string> {
   const ids = new Set<string>();
   const h = opened.home;
-  forEachPiece(h.furniture, (p) => {
+  // Hidden pieces stay selected: their panel is where they are shown again
+  forEveryPiece(h.furniture, (p) => {
     if (p.attrs.id) ids.add(p.attrs.id);
   });
   forEachGroup(h.furniture, (g) => {
