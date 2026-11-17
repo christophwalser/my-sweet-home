@@ -132,10 +132,28 @@ impl Clipboard {
         ids
     }
 
+    /// Levels the copied top-level elements were on (`None`: a home without levels).
+    fn levels(&self) -> HashSet<Option<String>> {
+        let mut levels: HashSet<Option<String>> =
+            self.walls.iter().map(|w| w.attrs.level.clone()).collect();
+        levels.extend(self.rooms.iter().map(|r| r.attrs.level.clone()));
+        levels.extend(self.furniture.iter().map(|f| match f {
+            Furniture::Piece(p) => p.attrs.level.clone(),
+            Furniture::Group(g) => g.attrs.level.clone(),
+        }));
+        levels.extend(self.polylines.iter().map(|p| p.attrs.level.clone()));
+        levels.extend(self.dimension_lines.iter().map(|d| d.attrs.level.clone()));
+        levels.extend(self.labels.iter().map(|l| l.attrs.level.clone()));
+        levels.extend(self.guides.iter().map(|g| g.level.clone()));
+        levels
+    }
+
     /// Pastes the elements into `doc` on `level`, moved by (dx, dy), with new IDs.
-    /// If `offset` is `None`, the copies are moved by 20 cm when the originals are
-    /// still in the home (so they do not hide each other), otherwise they keep their
-    /// position. Returns the IDs of the new elements.
+    /// If `offset` is `None`, the copies are moved by 20 cm when they would lie on
+    /// their originals (these are still in the home and were copied from `level`), so
+    /// they do not hide each other. Otherwise they keep their position: copies pasted
+    /// on another level stay exactly above or below their originals. Returns the IDs
+    /// of the new elements.
     pub fn paste(
         &self,
         doc: &mut Document,
@@ -145,7 +163,10 @@ impl Clipboard {
         let (dx, dy) = offset.unwrap_or_else(|| {
             let mut existing = crate::document::all_ids(doc.home());
             existing.extend(guides(doc.home()).into_iter().map(|g| g.id));
-            if self.ids().iter().any(|id| existing.contains(id)) {
+            let originals = self.ids().iter().any(|id| existing.contains(id));
+            // A ruler shown on all levels would hide its copy on any of them
+            let everywhere = self.guides.iter().any(|g| g.all_levels);
+            if originals && (everywhere || self.levels().contains(&level)) {
                 (20.0, 20.0)
             } else {
                 (0.0, 0.0)

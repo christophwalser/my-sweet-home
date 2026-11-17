@@ -1122,3 +1122,46 @@ fn reference_flag_is_set_kept_on_save_and_cleared() {
     );
     assert!(is_reference(&piece(&doc, "table")).is_empty());
 }
+
+#[test]
+fn furniture_update_rotates_several_pieces_in_one_undo_step() {
+    let r = Registry::standard();
+    let mut doc = plain_home(&r);
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": "table", "angle_deg": 350 }),
+    );
+    let before = snapshot(&doc);
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "ids": ["chair", "table"], "rotate_deg": 15 }),
+    );
+    let deg = |id: &str| piece(&doc, id).attrs.angle.unwrap_or(0.0).to_degrees();
+    assert!(close(deg("chair"), 15.0), "from its own angle");
+    assert!(close(deg("table"), 5.0), "wraps at 360°");
+    assert_eq!(piece(&doc, "door").attrs.angle, None, "not in ids");
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": "chair", "rotate_deg": -30 }),
+    );
+    assert!(close(
+        piece(&doc, "chair").attrs.angle.unwrap().to_degrees(),
+        345.0
+    ));
+    let err = run_err(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": "chair", "rotate_deg": 15, "angle_deg": 90 }),
+    );
+    assert!(err.contains("not both"), "{err}");
+}

@@ -318,6 +318,11 @@ input[type="search"]:focus {
   outline-offset: -1px;
 }
 
+.prop-row input[aria-invalid="true"] {
+  border-color: var(--danger);
+  outline: 1px solid var(--danger);
+}
+
 .prop-row input[type="color"] {
   width: 100%;
   height: 26px;

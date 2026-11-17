@@ -58,8 +58,21 @@ export function toHex(argb: number | null | undefined): string {
 /** Step of the arrow keys and the mouse wheel in a length field, in the unit (Shift: x10). */
 const LENGTH_STEP: Record<LengthUnit, number> = { cm: 1, mm: 1, m: 0.01, inch: 1 };
 
+/** Decimals kept in plain number fields (e.g. shininess 0.25, a price 12.99) and angle fields. */
+const NUMBER_DECIMALS = 3;
+const ANGLE_DECIMALS = 2;
+
+/** Time a command gets to change the model before a field shows the old value again. */
+const REFUSED_RESET_MS = 600;
+
+function roundTo(value: number, decimals: number): number {
+  const f = 10 ** decimals;
+  return Math.round(value * f) / f;
+}
+
 /**
- * Input that commits on Enter or blur, not on every keystroke. Number fields calculate
+ * Input that commits on Enter or blur, not on every keystroke. Escape takes the typed value
+ * back; an input that is no number is marked on Enter and replaced by the value on blur. Number fields calculate
  * ("240+11.5") and change the value relatively ("+5", "+-5", "*2", "/2"); the arrow keys and the
  * mouse wheel step the typed value before it is committed.
  */
@@ -84,35 +97,56 @@ export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps)
       </label>
     );
   }
+  const decimals = type === "angle" || unit === "°" ? ANGLE_DECIMALS : NUMBER_DECIMALS;
   // Number shown (in the unit for lengths), null for other values
   const shown =
     mixed || typeof value !== "number"
       ? null
       : type === "angle"
-        ? Math.round(((value * 180) / Math.PI) * 10) / 10
+        ? roundTo((value * 180) / Math.PI, decimals)
         : isLength
           ? toUnit(value, lengthUnit)
-          : Math.round(value * 10) / 10;
+          : roundTo(value, decimals);
   const display =
     shown !== null
       ? isLength
         ? formatFieldValue(shown, lengthUnit)
-        : formatNumber(shown, 1)
+        : formatNumber(shown, decimals)
       : mixed
         ? ""
         : String(value ?? "");
-  const commit = (raw: string) => {
-    if (mixed && (raw === "" || (type === "color" && !changed.current))) return;
-    changed.current = false;
+  // Text of the untouched field: what Escape and an invalid input go back to
+  const initial = type === "color" && mixed ? "#ffffff" : String(display);
+  /** The value typed: `null` when it is no valid input, `undefined` when it changes nothing. */
+  const parse = (raw: string): string | number | null | undefined => {
+    if (mixed && (raw === "" || (type === "color" && !changed.current))) return undefined;
     if (isLength) {
       const cm = evalLength(raw, lengthUnit, typeof value === "number" && !mixed ? value : null);
-      if (cm !== null && toUnit(cm, lengthUnit) !== shown) onCommit(cm);
-    } else if (type === "number" || type === "angle") {
-      const n = evalNumber(raw, shown);
-      if (n !== null && n !== shown) onCommit(n);
-    } else if (raw !== display) {
-      onCommit(raw);
+      if (cm === null) return null;
+      return toUnit(cm, lengthUnit) === shown ? undefined : cm;
     }
+    if (type === "number" || type === "angle") {
+      const n = evalNumber(raw, shown);
+      if (n === null) return null;
+      return n === shown ? undefined : n;
+    }
+    return raw === display ? undefined : raw;
+  };
+  /** Commits the typed value; anything else puts the value of the model back into the field. */
+  const commit = (input: HTMLInputElement) => {
+    const parsed = parse(input.value);
+    changed.current = false;
+    input.removeAttribute("aria-invalid");
+    if (parsed === null || parsed === undefined) {
+      input.value = initial;
+      return;
+    }
+    onCommit(parsed);
+    // A changed value re-creates the input. If the command was refused, the field would keep
+    // showing a value the model does not have: put the real one back.
+    window.setTimeout(() => {
+      if (input.isConnected && document.activeElement !== input) input.value = initial;
+    }, REFUSED_RESET_MS);
   };
   const numeric = type === "number" || type === "angle";
   // Steps the typed value (not committed yet) by `steps`
@@ -123,8 +157,9 @@ export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps)
       input.value = formatFieldValue(toUnit(next, lengthUnit), lengthUnit);
     } else {
       const n = evalNumber(input.value) ?? shown ?? 0;
-      input.value = formatNumber(Math.round((n + steps) * 10) / 10, 1);
+      input.value = formatNumber(roundTo(n + steps, decimals), decimals);
     }
+    input.removeAttribute("aria-invalid");
     changed.current = true;
   };
   return (
@@ -144,18 +179,35 @@ export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps)
         key={String(display)}
         type={type === "color" ? "color" : "text"}
         inputMode={(type === "number" || type === "angle") && !isLength ? "decimal" : undefined}
-        defaultValue={type === "color" && mixed ? "#ffffff" : String(display)}
+        defaultValue={initial}
         placeholder={mixed ? "mixed" : undefined}
         // Also for colors: one command (and undo step) when leaving the field
-        onInput={() => {
+        onInput={(e) => {
           changed.current = true;
+          e.currentTarget.removeAttribute("aria-invalid");
         }}
-        onBlur={(e) => commit(e.currentTarget.value)}
+        onBlur={(e) => commit(e.currentTarget)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
-          else if (numeric && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+          const input = e.currentTarget;
+          if (e.key === "Enter") {
+            // An invalid input stays for correcting it, marked as such
+            if (parse(input.value) === null) {
+              input.setAttribute("aria-invalid", "true");
+              input.select();
+            } else input.blur();
+          } else if (e.key === "Escape") {
+            // The first Escape takes the typed value back, only the next one goes on (e.g.
+            // to close a dialog)
+            if (input.value !== initial) {
+              e.stopPropagation();
+              input.value = initial;
+              changed.current = false;
+              input.removeAttribute("aria-invalid");
+            }
+            input.blur();
+          } else if (numeric && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
             e.preventDefault();
-            step(e.currentTarget, (e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 10 : 1));
+            step(input, (e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 10 : 1));
           }
         }}
       />

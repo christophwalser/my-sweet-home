@@ -17,6 +17,7 @@ import { guideAngle, guideEnd, guideLength, homeGuides } from "../plan2d/guides"
 import { usePreferences } from "../preferences";
 import { formatMoney, piecePrice } from "../prices";
 import { currentVisitor, setVisitor, useStore, VISITOR_ID } from "../store";
+import { deleteLevel } from "../ui/commands";
 import { useUi } from "../ui/uiStore";
 import { formatArea, formatLength } from "../units";
 import { spotAngle } from "../view3d/lights";
@@ -866,7 +867,7 @@ export default function PropertiesPanel() {
               <button
                 type="button"
                 title={t("Delete this level and everything on it (Ctrl+Z restores it)")}
-                onClick={() => void run("edit_delete", { ids: [level.attrs.id] })}
+                onClick={() => void deleteLevel()}
               >
                 {t("Delete level")}
               </button>

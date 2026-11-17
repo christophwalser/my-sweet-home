@@ -45,7 +45,7 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 - Ist ein Möbel ausgewählt, klicke einen seiner Abstände an und tippe einen Wert: Das Möbel rückt genau auf diesen Abstand.
 - Gezogene Elemente bewegen sich in Schritten von 1 cm, beim Hineinzoomen feiner (bis 1 mm); mit **Alt** frei. **Umschalt** beim Ziehen hält die Bewegung auf einer Achse (bei einem einzelnen Möbel oder einer Wand entlang ihrer eigenen Richtung).
 - Die Pfeiltasten verschieben die Auswahl um 1 cm, mit **Umschalt** um 10 cm und mit **Alt** um 1 mm.
-- Zahlenfelder in den Eigenschaften rechnen: `240+11.5`, `3m - 12cm`, und ändern den Wert relativ mit `+5`, `+-5`, `*2` oder `/2`. Pfeiltasten und Mausrad ändern den Wert im Feld schrittweise (mit **Umschalt** um 10 Schritte); **Enter** übernimmt ihn.
+- Zahlenfelder in den Eigenschaften rechnen: `240+11.5`, `3m - 12cm`, und ändern den Wert relativ mit `+5`, `+-5`, `*2` oder `/2`. Pfeiltasten und Mausrad ändern den Wert im Feld schrittweise (mit **Umschalt** um 10 Schritte); **Enter** übernimmt ihn, **Esc** nimmt die Eingabe zurück.
 
 ## Hintergrundbild
 
@@ -63,6 +63,7 @@ Geländemodelle, Laserscans oder Nachbarhäuser, die als Möbel importiert sind,
 
 - Das Menü **Ebenen** fügt Ebenen darüber oder auf gleicher Höhe hinzu oder löscht eine. Jede Ebene hat einen Reiter über dem Plan.
 - Die Eigenschaften einer Ebene legen Name, Höhe über Boden, Höhe und Bodendicke fest.
+- Um Wände und Räume auf eine andere Ebene zu übernehmen: kopieren, zur Ebene wechseln und einfügen. Die Kopien liegen genau über den Originalen. Auf der eigenen Ebene eingefügt, werden sie um 20 cm versetzt.
 - Eine Treppe aus dem Katalog schneidet ein Loch in den Boden darüber. Im Rundgang kannst du ihre Stufen hinaufgehen.
 - **3D-Ansicht › Alle Ebenen** zeigt auch die Ebenen über der gewählten.
 
@@ -80,7 +81,7 @@ Geländemodelle, Laserscans oder Nachbarhäuser, die als Möbel importiert sind,
 - In den Eigenschaften legst du Name, Beschreibung, Position, Winkel, Neigung, Größe, Farbe oder Textur des ganzen Möbels, Oberfläche (wie das Modell, matt, glänzend), Spiegelung, Sichtbarkeit und Zugehörigkeit zum Grundplan fest.
 - **Materialien** ändert Farbe, Textur und Glanz einzelner Teile des Modells.
 - Sind mehrere Elemente ausgewählt, listen die Eigenschaften sie unter den gemeinsamen Werten auf: **×** nimmt eines aus der Auswahl, ein Klick auf den Namen wählt nur dieses.
-- Mehrere Möbel lassen sich gruppieren, ausrichten und verteilen (Menü **Möbel**). **Stil einfügen** gibt der Auswahl die Farben und Texturen des kopierten Elements.
+- Mehrere Möbel lassen sich gruppieren, ausrichten und verteilen (Menü **Möbel**). **Stil einfügen** gibt der Auswahl die Farben und Texturen des kopierten Elements; Dicke und Höhe von Wänden bleiben.
 
 ## Möbelliste
 

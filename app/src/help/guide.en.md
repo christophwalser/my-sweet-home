@@ -45,7 +45,7 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. T
 - When a piece is selected, click one of its distances and type a value: the piece moves to exactly that distance.
 - Dragged elements move in steps of 1 cm, finer when you zoom in (down to 1 mm); with **Alt** they move freely. **Shift** while dragging keeps the move on one axis (for a single piece or wall along its own direction).
 - The arrow keys move the selection by 1 cm, with **Shift** by 10 cm and with **Alt** by 1 mm.
-- Number fields in the properties calculate: `240+11.5`, `3m - 12cm`, and change the value relatively with `+5`, `+-5`, `*2` or `/2`. The arrow keys and the mouse wheel step the value in a field (with **Shift** by 10 steps); **Enter** applies it.
+- Number fields in the properties calculate: `240+11.5`, `3m - 12cm`, and change the value relatively with `+5`, `+-5`, `*2` or `/2`. The arrow keys and the mouse wheel step the value in a field (with **Shift** by 10 steps); **Enter** applies it, **Escape** takes the typed value back.
 
 ## Background image
 
@@ -63,6 +63,7 @@ Terrain models, laser scans or neighbor houses imported as furniture are marked 
 
 - The **Levels** menu adds levels above, at the same elevation, or deletes one. Each level has a tab above the plan.
 - The properties of a level set its name, elevation, height and floor thickness.
+- To take walls and rooms to another level, copy them, switch to that level and paste: the copies lie exactly above the originals. Pasted on their own level they are moved by 20 cm.
 - A staircase from the catalog cuts a hole in the floor above. In the virtual visit you can walk up its steps.
 - **3D view › All levels** shows the levels above the selected one too.
 
@@ -80,7 +81,7 @@ Terrain models, laser scans or neighbor houses imported as furniture are marked 
 - The properties set name, description, position, angle, tilt, size, color or texture of the whole piece, surface (like the model, matt, shiny), mirror image, visibility and whether it belongs to the base plan.
 - **Materials** changes the color, texture and shininess of single parts of the model.
 - When several elements are selected, the properties list them below the common values: **×** takes one out of the selection, a click on its name selects only it.
-- Several pieces can be grouped, aligned and distributed (**Furniture** menu). **Paste style** gives the selection the colors and textures of the copied element.
+- Several pieces can be grouped, aligned and distributed (**Furniture** menu). **Paste style** gives the selection the colors and textures of the copied element; the thickness and height of walls stay.
 
 ## Furniture list
 

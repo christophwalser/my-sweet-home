@@ -37,7 +37,8 @@ struct CopyParams {
 #[derive(Deserialize, JsonSchema)]
 struct PasteParams {
     /// Offset in cm. Default: 20 cm right and down if the copied elements are still in
-    /// the home, otherwise the original position.
+    /// the home and are pasted on their own level, otherwise the original position
+    /// (e.g. exactly above the originals on another level).
     dx: Option<f32>,
     dy: Option<f32>,
     /// Target level (default: selected level)

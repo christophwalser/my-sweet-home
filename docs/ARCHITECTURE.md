@@ -554,7 +554,8 @@ furniture is read by its home reader.
   piece's orientation, top, bottom, side by side; the leading piece is `leader` or the last of
   `ids`, i.e. the one selected last, like Sweet Home 3D), `furniture_distribute` (equal gaps
   along x or y, the outer pieces stay), `edit_paste_style` (style of the first copied element
-  of the same kind: wall colors, textures, baseboards, pattern, thickness and heights; room
+  of the same kind: wall colors, textures, baseboards and pattern (thickness and heights
+  stay, they are geometry); room
   floor, ceiling and text styles; furniture color, texture and materials of the same model;
   polyline, dimension and label styles; textures of the copied element are merged into the
   home first, `Clipboard::merged_into`).

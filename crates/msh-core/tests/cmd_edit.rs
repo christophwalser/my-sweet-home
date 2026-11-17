@@ -216,6 +216,44 @@ fn paste_on_a_level_and_invalid_paste() {
     run_err(&r, &mut doc, "edit_paste", json!({ "level": "level-nope" }));
 }
 
+#[test]
+fn paste_on_another_level_keeps_the_position() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let ground = id_of(run(&r, &mut doc, "level_add", json!({ "name": "Ground" })));
+    let w = ids(
+        &run(
+            &r,
+            &mut doc,
+            "wall_add_path",
+            json!({ "points": [[0, 0], [400, 0], [400, 300]] }),
+        ),
+        "ids",
+    );
+    assert_eq!(wall(&doc, &w[0]).level.as_deref(), Some(ground.as_str()));
+    let upper = id_of(run(&r, &mut doc, "level_add", json!({ "name": "Upper" })));
+    run(&r, &mut doc, "edit_copy", json!({ "ids": w }));
+
+    // On the level above the copies lie exactly over the originals
+    let new = ids(&run(&r, &mut doc, "edit_paste", json!({})), "ids");
+    let a = wall(&doc, &new[0]);
+    assert_eq!(a.level.as_deref(), Some(upper.as_str()));
+    assert_eq!(
+        (a.x_start, a.y_start, a.x_end, a.y_end),
+        (0.0, 0.0, 400.0, 0.0)
+    );
+    let b = wall(&doc, &new[1]);
+    assert_eq!((b.x_end, b.y_end), (400.0, 300.0));
+
+    // On their own level they are moved, so they do not hide the originals
+    let new = ids(
+        &run(&r, &mut doc, "edit_paste", json!({ "level": ground })),
+        "ids",
+    );
+    let a = wall(&doc, &new[0]);
+    assert_eq!((a.x_start, a.y_start), (20.0, 20.0));
+}
+
 // ---------------------------------------------------------------- edit_duplicate
 
 #[test]

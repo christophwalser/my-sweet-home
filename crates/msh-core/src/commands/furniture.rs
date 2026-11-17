@@ -81,6 +81,9 @@ struct UpdateParams {
     x: Option<f32>,
     y: Option<f32>,
     angle_deg: Option<f32>,
+    /// Turns each piece by this angle in degrees (clockwise) around its own center,
+    /// starting from its current angle (not together with `angle_deg`)
+    rotate_deg: Option<f32>,
     elevation: Option<f32>,
     width: Option<f32>,
     depth: Option<f32>,
@@ -414,6 +417,14 @@ pub(super) fn register(r: &mut Registry) {
             if p.shininess.is_some_and(|v| !v.is_finite()) {
                 return Err(CommandError::failed("shininess must be a number"));
             }
+            if p.rotate_deg.is_some_and(|v| !v.is_finite()) {
+                return Err(CommandError::failed("rotate_deg must be a number"));
+            }
+            if p.rotate_deg.is_some() && p.angle_deg.is_some() {
+                return Err(CommandError::failed(
+                    "give either angle_deg or rotate_deg, not both",
+                ));
+            }
             let targets = target_ids(p.id.clone(), p.ids.clone())?;
             if targets.len() > 1 && (p.x.is_some() || p.y.is_some()) {
                 return Err(CommandError::failed(
@@ -431,6 +442,9 @@ pub(super) fn register(r: &mut Registry) {
                 }
                 if let Some(v) = p.angle_deg {
                     a.angle = Some(normalize_angle(rad(v)));
+                }
+                if let Some(v) = p.rotate_deg {
+                    a.angle = Some(normalize_angle(a.angle_or_default() + rad(v)));
                 }
                 if let Some(v) = p.elevation {
                     a.elevation = Some(v);

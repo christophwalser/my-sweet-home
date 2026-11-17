@@ -203,7 +203,7 @@ pub(super) fn register(r: &mut Registry) {
     r.add(
         "edit_paste_style",
         "Applies the style of the copied element (see edit_copy) to elements of the same kind: \
-         walls (colors, textures, baseboards, pattern, thickness, height), rooms (floor and \
+         walls (colors, textures, baseboards, pattern; not thickness or height), rooms (floor and \
          ceiling, texts), furniture (color, texture, materials of the same model), lines, \
          dimensions and labels (colors, text style).",
         true,
@@ -379,9 +379,7 @@ fn paste_style(home: &mut Home, clip: &Clipboard, ids: &[String]) -> usize {
             a.right_side_shininess = s.right_side_shininess;
             a.top_color = s.top_color;
             a.pattern = s.pattern.clone();
-            a.thickness = s.thickness;
-            a.height = s.height;
-            a.height_at_end = s.height_at_end;
+            // Thickness and heights are geometry, not style: they stay
             w.textures = src.textures.clone();
             w.baseboards = src.baseboards.clone();
             n += 1;

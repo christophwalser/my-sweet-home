@@ -36,6 +36,7 @@ import {
 } from "../preferences";
 import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../store";
 import Icon from "../ui/Icon";
+import { keyTarget, modalOpen } from "../ui/keyTarget";
 import { registerPlanActions } from "../ui/planBridge";
 import { useDarkMode, useUi } from "../ui/uiStore";
 import { formatFieldValue, toUnit, unitSymbol } from "../units";
@@ -2209,12 +2210,11 @@ export default function PlanView() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.tagName === "SELECT"
-      )
-        return;
+      // A dialog takes all keys: Del must not delete the selection behind it
+      if (modalOpen()) return;
+      // Text fields type; check boxes and drop-downs keep their plain keys (Space, arrows)
+      const focus = keyTarget(target);
+      if (focus === "text" || (focus === "control" && !e.ctrlKey && !e.metaKey)) return;
       // Keys typed in the 3D view (walking in the virtual visit) are not for the plan
       if (target.closest?.(".view3d-canvas") && !e.ctrlKey && !e.metaKey) return;
       const state = useStore.getState();
@@ -2292,17 +2292,14 @@ export default function PlanView() {
       } else if ((e.key === "Delete" || e.key === "Backspace") && sel.length > 0) {
         void run("edit_delete", { ids: sel });
       } else if ((e.key === "r" || e.key === "R") && sel.length > 0 && state.opened) {
-        // Rotate the selected furniture by 15° (Shift: other direction)
-        const step = e.shiftKey ? -15 : 15;
+        // Rotate the selected furniture by 15° (Shift: other direction), as one undo step
+        const ids: string[] = [];
         forEachPiece(state.opened.home.furniture, (p) => {
-          if (p.attrs.id && sel.includes(p.attrs.id)) {
-            const angle = ((p.attrs.angle ?? 0) * 180) / Math.PI + step;
-            void run("furniture_update", {
-              id: p.attrs.id,
-              angle_deg: ((angle % 360) + 360) % 360,
-            });
-          }
+          if (p.attrs.id && sel.includes(p.attrs.id)) ids.push(p.attrs.id);
         });
+        if (ids.length > 0) {
+          void run("furniture_update", { ids, rotate_deg: e.shiftKey ? -15 : 15 });
+        }
       } else if ((e.key === "j" || e.key === "J") && state.opened) {
         // Join the selected walls
         const walls = state.opened.home.walls.filter((w) => sel.includes(w.attrs.id));

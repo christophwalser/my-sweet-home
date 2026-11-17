@@ -19,6 +19,7 @@ import { newHomeParams, prefs, usePreferences } from "../preferences";
 import { clearRecentHomes, recentHomes, recentLabel, removeRecentHome } from "../recentHomes";
 import { type Tool, useStore, VISITOR_ID } from "../store";
 import type { IconName } from "./Icon";
+import { keyTarget, modalOpen } from "./keyTarget";
 import { planActions } from "./planBridge";
 import { type ToolKeyState, toolForDigit, toolShortcut } from "./toolKeys";
 import { type DialogName, isDark, useUi } from "./uiStore";
@@ -216,7 +217,8 @@ async function addLevel(sameElevation: boolean): Promise<void> {
   if (result?.id) useUi.getState().setEditingLevel(result.id);
 }
 
-async function deleteLevel(): Promise<void> {
+/** Deletes the shown level after a confirmation (menu and properties). */
+export async function deleteLevel(): Promise<void> {
   const level = currentLevel();
   if (!level) return;
   const yes = await ask(
@@ -233,12 +235,12 @@ function rotateSelection(stepDeg: number): void {
   const opened = store().opened;
   if (!opened) return;
   const sel = selected();
+  const ids: string[] = [];
   forEachPiece(opened.home.furniture, (p) => {
-    if (p.attrs.id && sel.includes(p.attrs.id)) {
-      const angle = ((p.attrs.angle ?? 0) * 180) / Math.PI + stepDeg;
-      void run("furniture_update", { id: p.attrs.id, angle_deg: ((angle % 360) + 360) % 360 });
-    }
+    if (p.attrs.id && sel.includes(p.attrs.id)) ids.push(p.attrs.id);
   });
+  // One command, so that one undo step takes the rotation of all pieces back
+  if (ids.length > 0) void run("furniture_update", { ids, rotate_deg: stepDeg });
 }
 
 function align(how: string): void {
@@ -1192,16 +1194,18 @@ const SHORTCUT_ALIASES: Record<string, string> = { "Ctrl+Shift+Z": "Ctrl+Y" };
  * the selection in mind) are left to it.
  */
 export function handleGlobalShortcut(e: KeyboardEvent): void {
-  const target = e.target as HTMLElement;
-  const typing =
-    target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
+  // A dialog takes all keys: no command may change the home behind it
+  if (modalOpen()) return;
+  const focus = keyTarget(e.target as HTMLElement);
   const typed = eventShortcut(e);
   const shortcut = SHORTCUT_ALIASES[typed] ?? typed;
   // While typing only function keys and the command search apply
-  if (typing && !/^F\d+$/.test(shortcut) && shortcut !== "Ctrl+K") return;
-  // Digits choose plan tools, except while a drawing takes a typed length
+  if (focus === "text" && !/^F\d+$/.test(shortcut) && shortcut !== "Ctrl+K") return;
+  // Digits choose plan tools, except while a drawing takes a typed length or a drop-down
+  // or slider has the focus (Ctrl shortcuts still work there)
   const digit = /^\d$/.test(shortcut);
   if (digit) {
+    if (focus !== "other") return;
     if (planActions()?.isDrawing() ?? true) return;
     const chosen = toolForDigit(toolKeys, shortcut, performance.now());
     toolKeys = chosen.state;

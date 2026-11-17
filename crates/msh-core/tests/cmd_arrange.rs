@@ -259,6 +259,36 @@ fn paste_style_needs_a_copied_element_of_the_same_kind() {
 }
 
 #[test]
+fn wall_style_keeps_thickness_and_heights() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let source = wall(&r, &mut doc, 200.0);
+    run(
+        &r,
+        &mut doc,
+        "wall_update",
+        json!({ "id": source, "height": 120, "height_at_end": 90, "right_side_color": "#336699" }),
+    );
+    let target = run(
+        &r,
+        &mut doc,
+        "wall_add",
+        json!({ "x_start": 0, "y_start": 300, "x_end": 200, "y_end": 300, "thickness": 36.5 }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let height = doc.home().walls[1].attrs.height;
+    run(&r, &mut doc, "edit_copy", json!({ "ids": [source] }));
+    run(&r, &mut doc, "edit_paste_style", json!({ "ids": [target] }));
+    let a = &doc.home().walls[1].attrs;
+    assert_eq!(a.right_side_color, Some(Color(0xFF336699)));
+    assert_eq!(a.thickness, 36.5, "the thickness is no style");
+    assert_eq!(a.height, height, "the height is no style");
+    assert_eq!(a.height_at_end, None);
+}
+
+#[test]
 fn room_style_is_pasted_undone_and_saved() {
     let r = Registry::standard();
     let mut doc = new_doc(&r);
