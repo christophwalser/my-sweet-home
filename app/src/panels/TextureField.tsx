@@ -1,6 +1,8 @@
 // Texture chooser of the properties panel: shows the current texture and opens a
 // searchable grid of the textures of all installed libraries. "Import…" adds an
-// image file as texture to the user's library "My textures" and applies it.
+// image file as texture to the user's library "My textures" and applies it. With a
+// `target` the field also rotates, resizes and shifts the texture (texture_adjust) and takes
+// the look of a surface clicked in the plan (surface_copy).
 
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useMemo, useState } from "react";
@@ -8,12 +10,17 @@ import { api, type CatalogItem, docResourceUrl, libResourceUrl } from "../api";
 import { TEXTURE_EXTENSIONS } from "../catalog/modelConvert";
 import { t } from "../i18n";
 import type { Texture } from "../model";
+import type { Surface } from "../plan2d/surfaces";
 import { useStore } from "../store";
 import Icon from "../ui/Icon";
 import { useUi } from "../ui/uiStore";
+import { Field } from "./fields";
 
 /** Number of textures shown at once in the grid (keeps the panel fast). */
 const MAX_SHOWN = 150;
+
+/** Elements and their surface a texture field stands for. */
+export type TextureTarget = { ids: string[]; surface: Surface };
 
 type Props = {
   label: string;
@@ -22,6 +29,8 @@ type Props = {
   mixed?: boolean;
   /** Called with a catalog texture ID, or "" to remove the texture */
   onCommit: (catalogId: string) => void;
+  /** Surface of the field: adds the pipette and the fields for angle, size and shift */
+  target?: TextureTarget;
 };
 
 /** An image chosen for import, with the values of the import form. */
@@ -32,7 +41,52 @@ function fileStem(path: string): string {
   return file.replace(/\.[^.]+$/, "");
 }
 
-export default function TextureField({ label, current, mixed, onCommit }: Props) {
+function round(value: number, decimals: number): number {
+  const f = 10 ** decimals;
+  return Math.round(value * f) / f;
+}
+
+/** Angle, size and shift of the texture of a surface. */
+function AdjustFields({ texture, target }: { texture: Texture; target: TextureTarget }) {
+  const run = useStore((s) => s.run);
+  const adjust = (field: string, scale: number) => (v: string | number | boolean) =>
+    void run("texture_adjust", { ...target, [field]: Number(v) / scale });
+  return (
+    <details className="texture-adjust">
+      <summary>{t("Rotate, resize, shift")}</summary>
+      <Field
+        label={t("Angle")}
+        type="number"
+        unit="°"
+        value={round(((texture.angle ?? 0) * 180) / Math.PI, 2)}
+        onCommit={adjust("angle_deg", 1)}
+      />
+      <Field
+        label={t("Size")}
+        type="number"
+        unit="%"
+        value={round((texture.scale ?? 1) * 100, 1)}
+        onCommit={adjust("scale", 100)}
+      />
+      <Field
+        label={t("Shift across")}
+        type="number"
+        unit="%"
+        value={round((texture.x_offset ?? 0) * 100, 1)}
+        onCommit={adjust("x_offset", 100)}
+      />
+      <Field
+        label={t("Shift along")}
+        type="number"
+        unit="%"
+        value={round((texture.y_offset ?? 0) * 100, 1)}
+        onCommit={adjust("y_offset", 100)}
+      />
+    </details>
+  );
+}
+
+export default function TextureField({ label, current, mixed, onCommit, target }: Props) {
   const [open, setOpen] = useState(false);
   // Kept for the next element (e.g. the same texture for several materials or pieces)
   const query = useUi((s) => s.textureQuery);
@@ -67,6 +121,22 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
     setOpen(false);
   };
 
+  /** The next click on a surface in the plan gives its color and texture to this one. */
+  const pickFromPlan = () => {
+    if (!target) return;
+    const { ids, surface } = target;
+    useStore.getState().setTool("select");
+    useUi.getState().setPick({
+      label: t(
+        "Click a wall side, a floor or a piece of furniture to take its color and texture · Esc cancels",
+      ),
+      onPick: (from) =>
+        void useStore
+          .getState()
+          .run("surface_copy", { from_id: from.id, from_surface: from.surface, ids, surface }),
+    });
+  };
+
   const tile = (item: CatalogItem) => (
     <button
       type="button"
@@ -74,7 +144,8 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
       title={`${item.name} (${item.category})`}
       onClick={() => pick(item.id as string)}
     >
-      {item.icon ? <img src={libResourceUrl(item.library, item.icon)} alt="" /> : item.name}
+      {item.icon && <img src={libResourceUrl(item.library, item.icon)} alt="" />}
+      <span className="texture-name">{item.name}</span>
     </button>
   );
 
@@ -123,9 +194,21 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
           {!mixed && current && docId !== undefined && (
             <img src={docResourceUrl(docId, current.image)} alt="" />
           )}
-          <span>{mixed ? "mixed" : (current?.name ?? t("None"))}</span>
+          <span>{mixed ? t("mixed") : (current?.name ?? t("None"))}</span>
         </button>
+        {target && (
+          <button
+            type="button"
+            className="icon-button"
+            title={t("Take color and texture from a surface in the plan")}
+            aria-label={t("Take color and texture from a surface in the plan")}
+            onClick={pickFromPlan}
+          >
+            <Icon name="pipette" size={14} />
+          </button>
+        )}
       </div>
+      {target && current && !mixed && <AdjustFields texture={current} target={target} />}
       {open && (
         <div className="texture-picker">
           <div className="texture-picker-bar">
@@ -215,6 +298,9 @@ export default function TextureField({ label, current, mixed, onCommit }: Props)
             </>
           )}
           <div className="texture-grid">{textures.slice(0, MAX_SHOWN).map(tile)}</div>
+          {catalog && textures.length === 0 && (
+            <p className="muted small">{t("No texture matches the search.")}</p>
+          )}
           {textures.length > MAX_SHOWN && (
             <p className="muted small">
               {textures.length - MAX_SHOWN} {t("more; refine the search to see them.")}

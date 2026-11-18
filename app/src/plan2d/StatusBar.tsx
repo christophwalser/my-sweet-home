@@ -1,12 +1,13 @@
 // Status bar under the plan: the switches of the magnetism (all, angles, objects, rulers), the
-// grid, the snap settings (radius and angle step, also by a right click) and the position of
-// the mouse.
+// grid, the snap settings (radius and angle step, also by a right click), the level shown as
+// an underlay and the position of the mouse.
 
 import { useState } from "react";
 import { create } from "zustand";
 import { t } from "../i18n";
 import type { Pt } from "../model";
-import { type Preferences, usePreferences } from "../preferences";
+import { type Preferences, type Underlay, usePreferences } from "../preferences";
+import { useStore } from "../store";
 import Icon, { type IconName } from "../ui/Icon";
 import { formatPrecise } from "../units";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
@@ -43,10 +44,17 @@ const SWITCHES: Switch[] = [
   {
     key: "snapToRulers",
     icon: "guide",
-    label: t("Rulers"),
-    title: t("Snap to the ends, middles, lines and crossings of the rulers"),
+    label: t("Guide lines"),
+    title: t("Snap to the ends, middles, lines and crossings of the guide lines"),
   },
   { key: "grid", icon: "grid", label: t("Grid"), title: t("Show the grid") },
+];
+
+/** Levels offered as the underlay of the plan. */
+const UNDERLAYS: [Underlay, string][] = [
+  ["below", t("Level below")],
+  ["above", t("Level above")],
+  ["off", t("No underlay")],
 ];
 
 /** Snap radii (screen pixels) and angle steps offered by the right click. */
@@ -56,7 +64,14 @@ const ANGLE_STEPS = [1, 5, 15, 45];
 export default function StatusBar() {
   const prefs = usePreferences();
   const pointer = usePointer((s) => s.pt);
+  const levelCount = useStore((s) => s.opened?.home.levels.length ?? 0);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [underlayMenu, setUnderlayMenu] = useState<{ x: number; y: number } | null>(null);
+  const underlayItems: MenuItem[] = UNDERLAYS.map(([value, label]) => ({
+    label,
+    note: prefs.underlay === value ? "✓" : undefined,
+    action: () => prefs.update({ underlay: value }),
+  }));
   const toggle = (key: Switch["key"]) =>
     prefs.update({ [key]: !prefs[key] } as Partial<Preferences>);
   const items: MenuItem[] = [
@@ -115,11 +130,38 @@ export default function StatusBar() {
         {`${prefs.snapRadius} px · ${prefs.angleStep}°`}
         <Icon name="chevdown" size={12} />
       </button>
+      {levelCount > 1 && (
+        <button
+          type="button"
+          className="plan-status-settings"
+          title={t(
+            "Level shown faded under the plan; its wall ends and corners attract the pointer",
+          )}
+          aria-haspopup="menu"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setUnderlayMenu({ x: r.left, y: r.top });
+          }}
+        >
+          <Icon name="alllevels" size={14} />
+          {UNDERLAYS.find(([value]) => value === prefs.underlay)?.[1]}
+          <Icon name="chevdown" size={12} />
+        </button>
+      )}
       <span className="plan-status-position">
         {pointer ? `X ${formatPrecise(pointer[0])}   Y ${formatPrecise(pointer[1])}` : ""}
       </span>
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} fixed />
+      )}
+      {underlayMenu && (
+        <ContextMenu
+          x={underlayMenu.x}
+          y={underlayMenu.y}
+          items={underlayItems}
+          onClose={() => setUnderlayMenu(null)}
+          fixed
+        />
       )}
     </div>
   );

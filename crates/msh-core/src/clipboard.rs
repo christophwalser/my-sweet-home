@@ -4,6 +4,7 @@
 //! reference (models, icons, textures), so it can be pasted into the same home or
 //! into another home opened later in the same session.
 
+use crate::commands::guide::{Guide, guides, set_guides};
 use crate::commands::new_id;
 use crate::document::Document;
 use msh_format::ContentEntry;
@@ -19,6 +20,8 @@ pub struct Clipboard {
     pub polylines: Vec<Polyline>,
     pub dimension_lines: Vec<DimensionLine>,
     pub labels: Vec<Label>,
+    /// Ruler guides (kept in a home property, see `commands::guide`)
+    pub guides: Vec<Guide>,
     /// Resources referenced by the copied elements (all entries of a multi-part model)
     pub contents: Vec<ContentEntry>,
 }
@@ -60,6 +63,10 @@ impl Clipboard {
                 .iter()
                 .filter(|l| has(&l.attrs.id))
                 .cloned()
+                .collect(),
+            guides: guides(home)
+                .into_iter()
+                .filter(|g| ids.contains(g.id.as_str()))
                 .collect(),
             ..Default::default()
         };
@@ -103,6 +110,7 @@ impl Clipboard {
             && self.polylines.is_empty()
             && self.dimension_lines.is_empty()
             && self.labels.is_empty()
+            && self.guides.is_empty()
     }
 
     /// IDs of the copied top-level elements.
@@ -120,13 +128,32 @@ impl Clipboard {
                 .filter_map(|d| d.attrs.id.clone()),
         );
         ids.extend(self.labels.iter().filter_map(|l| l.attrs.id.clone()));
+        ids.extend(self.guides.iter().map(|g| g.id.clone()));
         ids
     }
 
+    /// Levels the copied top-level elements were on (`None`: a home without levels).
+    fn levels(&self) -> HashSet<Option<String>> {
+        let mut levels: HashSet<Option<String>> =
+            self.walls.iter().map(|w| w.attrs.level.clone()).collect();
+        levels.extend(self.rooms.iter().map(|r| r.attrs.level.clone()));
+        levels.extend(self.furniture.iter().map(|f| match f {
+            Furniture::Piece(p) => p.attrs.level.clone(),
+            Furniture::Group(g) => g.attrs.level.clone(),
+        }));
+        levels.extend(self.polylines.iter().map(|p| p.attrs.level.clone()));
+        levels.extend(self.dimension_lines.iter().map(|d| d.attrs.level.clone()));
+        levels.extend(self.labels.iter().map(|l| l.attrs.level.clone()));
+        levels.extend(self.guides.iter().map(|g| g.level.clone()));
+        levels
+    }
+
     /// Pastes the elements into `doc` on `level`, moved by (dx, dy), with new IDs.
-    /// If `offset` is `None`, the copies are moved by 20 cm when the originals are
-    /// still in the home (so they do not hide each other), otherwise they keep their
-    /// position. Returns the IDs of the new elements.
+    /// If `offset` is `None`, the copies are moved by 20 cm when they would lie on
+    /// their originals (these are still in the home and were copied from `level`), so
+    /// they do not hide each other. Otherwise they keep their position: copies pasted
+    /// on another level stay exactly above or below their originals. Returns the IDs
+    /// of the new elements.
     pub fn paste(
         &self,
         doc: &mut Document,
@@ -134,8 +161,12 @@ impl Clipboard {
         offset: Option<(f32, f32)>,
     ) -> Vec<String> {
         let (dx, dy) = offset.unwrap_or_else(|| {
-            let existing = crate::document::all_ids(doc.home());
-            if self.ids().iter().any(|id| existing.contains(id)) {
+            let mut existing = crate::document::all_ids(doc.home());
+            existing.extend(guides(doc.home()).into_iter().map(|g| g.id));
+            let originals = self.ids().iter().any(|id| existing.contains(id));
+            // A ruler shown on all levels would hide its copy on any of them
+            let everywhere = self.guides.iter().any(|g| g.all_levels);
+            if originals && (everywhere || self.levels().contains(&level)) {
                 (20.0, 20.0)
             } else {
                 (0.0, 0.0)
@@ -234,6 +265,26 @@ impl Clipboard {
             l.attrs.y += dy;
             new_ids.push(id);
             doc.home_mut().labels.push(l);
+        }
+        if !clip.guides.is_empty() {
+            let home = doc.home_mut();
+            let without_levels = home.levels.is_empty();
+            let mut list = guides(home);
+            for mut g in clip.guides {
+                g.id = new_id("guide");
+                g.level = if without_levels {
+                    None
+                } else {
+                    level.clone().or(g.level)
+                };
+                g.x_start += dx;
+                g.y_start += dy;
+                g.x_end += dx;
+                g.y_end += dy;
+                new_ids.push(g.id.clone());
+                list.push(g);
+            }
+            set_guides(home, &list);
         }
         new_ids
     }

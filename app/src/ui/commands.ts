@@ -18,9 +18,11 @@ import { levelGuides } from "../plan2d/guides";
 import { newHomeParams, prefs, usePreferences } from "../preferences";
 import { clearRecentHomes, recentHomes, recentLabel, removeRecentHome } from "../recentHomes";
 import { type Tool, useStore, VISITOR_ID } from "../store";
+import { LEVELS_3D_OPTIONS, levels3dMode } from "../view3d/levels3d";
 import type { IconName } from "./Icon";
+import { keyTarget, modalOpen } from "./keyTarget";
 import { planActions } from "./planBridge";
-import { type ToolKeyState, toolForDigit, toolShortcut } from "./toolKeys";
+import { type ToolKeyState, toolForDigit, toolForLetter, toolShortcut } from "./toolKeys";
 import { type DialogName, isDark, useUi } from "./uiStore";
 
 export type Command = {
@@ -216,7 +218,29 @@ async function addLevel(sameElevation: boolean): Promise<void> {
   if (result?.id) useUi.getState().setEditingLevel(result.id);
 }
 
-async function deleteLevel(): Promise<void> {
+/** Position of the shown level among the levels at its elevation, with their number. */
+function levelPlace(): { at: number; count: number } | null {
+  const level = currentLevel();
+  if (!level) return null;
+  const same = sortedLevels().filter((l) => l.attrs.elevation === level.attrs.elevation);
+  return { at: same.indexOf(level), count: same.length };
+}
+
+/** Whether the shown level has a neighbor at its elevation on that side of the tabs. */
+function canMoveLevel(by: number): boolean {
+  const place = levelPlace();
+  return !!place && place.at + by >= 0 && place.at + by < place.count;
+}
+
+function moveLevel(by: number): void {
+  const level = currentLevel();
+  const place = levelPlace();
+  if (!level || !place) return;
+  void run("level_update", { id: level.attrs.id, elevation_index: place.at + by });
+}
+
+/** Deletes the shown level after a confirmation (menu and properties). */
+export async function deleteLevel(): Promise<void> {
   const level = currentLevel();
   if (!level) return;
   const yes = await ask(
@@ -229,16 +253,25 @@ async function deleteLevel(): Promise<void> {
   if (yes) await run("edit_delete", { ids: [level.attrs.id] });
 }
 
-function rotateSelection(stepDeg: number): void {
+/**
+ * Rotates the selection by a step, as one undo step. Pieces of furniture alone turn each
+ * around its own center; with walls, rooms or other elements among them the whole selection
+ * turns around its center.
+ */
+export function rotateSelection(stepDeg: number): void {
   const opened = store().opened;
   if (!opened) return;
   const sel = selected();
+  if (sel.length === 0) return;
+  const pieces: string[] = [];
   forEachPiece(opened.home.furniture, (p) => {
-    if (p.attrs.id && sel.includes(p.attrs.id)) {
-      const angle = ((p.attrs.angle ?? 0) * 180) / Math.PI + stepDeg;
-      void run("furniture_update", { id: p.attrs.id, angle_deg: ((angle % 360) + 360) % 360 });
-    }
+    if (p.attrs.id && sel.includes(p.attrs.id)) pieces.push(p.attrs.id);
   });
+  if (pieces.length === sel.length) {
+    void run("furniture_update", { ids: pieces, rotate_deg: stepDeg });
+  } else {
+    void run("edit_rotate", { ids: sel, angle_deg: stepDeg });
+  }
 }
 
 function align(how: string): void {
@@ -423,6 +456,16 @@ const LIST: Command[] = [
     run: () => planActions()?.selectAll(),
   },
   {
+    id: "edit.selectSimilar",
+    label: t("Select similar"),
+    icon: "selectall",
+    hint: t(
+      "Selects all elements of the level of the same kind: all walls, all rooms, the same furniture",
+    ),
+    enabled: hasSelection,
+    run: () => planActions()?.selectSimilar(),
+  },
+  {
     id: "edit.lockBasePlan",
     label: t("Lock base plan"),
     icon: "lock",
@@ -478,7 +521,7 @@ const LIST: Command[] = [
   toolCommand("measure", t("Measure"), "measure", t("Measure a distance without adding anything")),
   toolCommand(
     "ruler",
-    t("Ruler"),
+    t("Guide line"),
     "guide",
     t(
       "Draw a guide line that stays in the plan for placing elements; select it and press Del to remove it",
@@ -486,7 +529,7 @@ const LIST: Command[] = [
   ),
   {
     id: "plan.clearGuides",
-    label: t("Delete rulers of this level"),
+    label: t("Delete guide lines of this level"),
     icon: "delete",
     enabled: () => guidesOfLevel().length > 0,
     run: () => void run("guide_clear", levelParam()),
@@ -601,7 +644,7 @@ const LIST: Command[] = [
   },
   {
     id: "plan.snapRulers",
-    label: t("Snap to rulers"),
+    label: t("Snap to guide lines"),
     icon: "grid",
     enabled: () => usePreferences.getState().magnetism,
     checked: () => usePreferences.getState().snapToRulers,
@@ -660,6 +703,30 @@ const LIST: Command[] = [
     run: () => addLevel(true),
   },
   {
+    id: "level.duplicate",
+    label: t("Duplicate level…"),
+    icon: "duplicate",
+    hint: t("Add a level with copies of the walls of this one, exactly above them"),
+    enabled: () => !!currentLevel(),
+    run: () => useUi.getState().openDialog("duplicateLevel"),
+  },
+  {
+    id: "level.moveLeft",
+    label: t("Move level to the left"),
+    icon: "level",
+    hint: t("Change the order of the levels at the same elevation"),
+    enabled: () => canMoveLevel(-1),
+    run: () => moveLevel(-1),
+  },
+  {
+    id: "level.moveRight",
+    label: t("Move level to the right"),
+    icon: "level",
+    hint: t("Change the order of the levels at the same elevation"),
+    enabled: () => canMoveLevel(1),
+    run: () => moveLevel(1),
+  },
+  {
     id: "level.rename",
     label: t("Rename level"),
     icon: "level",
@@ -684,18 +751,21 @@ const LIST: Command[] = [
     enabled: () => !!currentLevel(),
     run: deleteLevel,
   },
-  {
-    id: "level.allIn3D",
-    label: t("Show all levels in 3D"),
-    icon: "alllevels",
-    hint: t("Show all levels, not only the selected one and the ones below"),
-    enabled: () => (store().opened?.home.levels.length ?? 0) > 1,
-    checked: () => store().opened?.home.environment?.attrs.all_levels_visible === true,
-    run: () =>
-      void run("view3d_update", {
-        all_levels_visible: store().opened?.home.environment?.attrs.all_levels_visible !== true,
-      }),
-  },
+  // Levels shown in the 3D view
+  ...LEVELS_3D_OPTIONS.map(
+    ([mode, label]): Command => ({
+      id: `view3d.levels.${mode}`,
+      label,
+      icon: "alllevels",
+      hint: t("Levels shown in the 3D view"),
+      enabled: () => (store().opened?.home.levels.length ?? 0) > 1,
+      checked: () => {
+        const home = store().opened?.home;
+        return !!home && levels3dMode(home) === mode;
+      },
+      run: () => void run("view3d_update", { levels: mode }),
+    }),
+  ),
   // Furniture
   {
     id: "furniture.import",
@@ -773,8 +843,22 @@ const LIST: Command[] = [
     icon: "rotate",
     shortcut: "R",
     shortcutElsewhere: true,
-    enabled: () => selectedFurniture().length > 0,
+    enabled: hasSelection,
     run: () => rotateSelection(15),
+  },
+  {
+    id: "edit.rotateBy",
+    label: t("Rotate…"),
+    icon: "rotate",
+    enabled: hasSelection,
+    run: () => useUi.getState().openDialog("rotate"),
+  },
+  {
+    id: "edit.moveBy",
+    label: t("Move…"),
+    icon: "pan",
+    enabled: hasSelection,
+    run: () => useUi.getState().openDialog("move"),
   },
   // 3D view
   {
@@ -908,11 +992,12 @@ function currentBackground() {
   return level ? (level.background_image ?? null) : (opened.home.background_image ?? null);
 }
 
-/** Ruler guides of the shown level. */
+/** Ruler guides of the shown level (not those of other levels shown on all levels). */
 function guidesOfLevel() {
   const opened = store().opened;
   if (!opened) return [];
-  return levelGuides(opened.home, currentLevel()?.attrs.id ?? null);
+  const level = currentLevel()?.attrs.id ?? null;
+  return levelGuides(opened.home, level).filter((g) => !level || g.level === level);
 }
 
 function levelParam(): Record<string, unknown> {
@@ -1014,7 +1099,18 @@ export const MENUS: Menu[] = [
       cmd("edit.duplicate"),
       cmd("edit.delete"),
       sep,
+      cmd("edit.moveBy"),
+      cmd("edit.rotateBy"),
+      cmd("furniture.rotate"),
+      {
+        kind: "submenu",
+        label: t("Flip"),
+        icon: "flip",
+        entries: () => [cmd("edit.flipH"), cmd("edit.flipV")],
+      },
+      sep,
       cmd("edit.selectAll"),
+      cmd("edit.selectSimilar"),
       cmd("edit.lockBasePlan"),
     ],
   },
@@ -1077,11 +1173,14 @@ export const MENUS: Menu[] = [
       ...(sortedLevels().length > 0 ? [sep] : []),
       cmd("level.add"),
       cmd("level.addSame"),
-      cmd("level.rename"),
-      cmd("level.viewable"),
-      cmd("level.delete"),
+      cmd("level.duplicate"),
       sep,
-      cmd("level.allIn3D"),
+      cmd("level.rename"),
+      cmd("level.moveLeft"),
+      cmd("level.moveRight"),
+      cmd("level.viewable"),
+      sep,
+      cmd("level.delete"),
     ],
   },
   {
@@ -1109,13 +1208,6 @@ export const MENUS: Menu[] = [
       },
       cmd("furniture.distributeH"),
       cmd("furniture.distributeV"),
-      {
-        kind: "submenu",
-        label: t("Flip"),
-        icon: "flip",
-        entries: () => [cmd("edit.flipH"), cmd("edit.flipV")],
-      },
-      cmd("furniture.rotate"),
     ],
   },
   {
@@ -1132,7 +1224,12 @@ export const MENUS: Menu[] = [
       },
       sep,
       cmd("view3d.shadows"),
-      cmd("level.allIn3D"),
+      {
+        kind: "submenu",
+        label: t("Levels shown"),
+        icon: "alllevels",
+        entries: () => LEVELS_3D_OPTIONS.map(([mode]) => cmd(`view3d.levels.${mode}`)),
+      },
       cmd("view3d.settings"),
       cmd("view3d.location"),
       sep,
@@ -1191,16 +1288,18 @@ const SHORTCUT_ALIASES: Record<string, string> = { "Ctrl+Shift+Z": "Ctrl+Y" };
  * the selection in mind) are left to it.
  */
 export function handleGlobalShortcut(e: KeyboardEvent): void {
-  const target = e.target as HTMLElement;
-  const typing =
-    target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
+  // A dialog takes all keys: no command may change the home behind it
+  if (modalOpen()) return;
+  const focus = keyTarget(e.target as HTMLElement);
   const typed = eventShortcut(e);
   const shortcut = SHORTCUT_ALIASES[typed] ?? typed;
   // While typing only function keys and the command search apply
-  if (typing && !/^F\d+$/.test(shortcut) && shortcut !== "Ctrl+K") return;
-  // Digits choose plan tools, except while a drawing takes a typed length
+  if (focus === "text" && !/^F\d+$/.test(shortcut) && shortcut !== "Ctrl+K") return;
+  // Digits choose plan tools, except while a drawing takes a typed length or a drop-down
+  // or slider has the focus (Ctrl shortcuts still work there)
   const digit = /^\d$/.test(shortcut);
   if (digit) {
+    if (focus !== "other") return;
     if (planActions()?.isDrawing() ?? true) return;
     const chosen = toolForDigit(toolKeys, shortcut, performance.now());
     toolKeys = chosen.state;
@@ -1211,7 +1310,19 @@ export function handleGlobalShortcut(e: KeyboardEvent): void {
     }
     return;
   }
-  // Plain letters and Del belong to the plan view (rotate, join, delete, ...)
+  // Plain letters choose plan tools too (W wall, M measure, ...), under the same conditions.
+  // The 3D view keeps its own keys (W A S D walk in the virtual visit).
+  if (/^[A-Z]$/.test(shortcut) && focus === "other") {
+    const in3D = (e.target as HTMLElement).closest?.(".view3d-canvas");
+    const id = in3D || (planActions()?.isDrawing() ?? true) ? null : toolForLetter(shortcut);
+    const c = id ? COMMANDS.get(id) : undefined;
+    if (c) {
+      e.preventDefault();
+      runCommand(c);
+      return;
+    }
+  }
+  // Other plain letters and Del belong to the plan view (rotate, join, delete, ...)
   if (!digit && !shortcut.includes("Ctrl+") && !/^F\d+$/.test(shortcut)) return;
   for (const c of COMMANDS.values()) {
     if (c.shortcut === shortcut && !c.shortcutElsewhere) {

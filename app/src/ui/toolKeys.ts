@@ -1,6 +1,23 @@
-// Digit keys of the plan tools. A digit chooses the first tool of its group in the tool bar; a
-// second digit typed right after it chooses a further variant of the group, counted from 1,
-// e.g. 2 then 1 for "Room from walls".
+// Keys of the plan tools. A letter chooses a tool directly, as usual in drawing programs. A
+// digit chooses the first tool of its group in the tool bar; a second digit typed right after
+// it chooses a further variant of the group, counted from 1, e.g. 2 then 1 for "Room from
+// walls".
+
+/**
+ * Tool command IDs per letter. R (rotate) and J (join walls) act on the selection and are
+ * taken, so rooms have F like "floor".
+ */
+export const TOOL_LETTERS: Record<string, string> = {
+  V: "tool.select",
+  H: "tool.pan",
+  W: "tool.wall",
+  F: "tool.room",
+  L: "tool.polyline",
+  D: "tool.dimension",
+  T: "tool.label",
+  M: "tool.measure",
+  G: "tool.ruler",
+};
 
 /** Tool command IDs per digit, in the order of the drop-down of their tool bar button. */
 export const TOOL_GROUPS: Record<string, string[]> = {
@@ -20,6 +37,9 @@ export type ToolKeyState = { group: string; at: number } | null;
 
 /** Shortcut of a tool command as shown in the menus ("2" or "2, 1"), if it has one. */
 export function toolShortcut(id: string): string | undefined {
+  for (const [letter, tool] of Object.entries(TOOL_LETTERS)) {
+    if (tool === id) return letter;
+  }
   for (const [digit, ids] of Object.entries(TOOL_GROUPS)) {
     const i = ids.indexOf(id);
     if (i === 0) return digit;
@@ -45,4 +65,9 @@ export function toolForDigit(
   const group = TOOL_GROUPS[digit];
   if (!group) return { command: null, state: null };
   return { command: group[0], state: group.length > 1 ? { group: digit, at: now } : null };
+}
+
+/** Tool command chosen by a plain letter key, if it has one. */
+export function toolForLetter(key: string): string | null {
+  return TOOL_LETTERS[key.toUpperCase()] ?? null;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SECOND_KEY_MS, toolForDigit, toolShortcut } from "./toolKeys";
+import { SECOND_KEY_MS, toolForDigit, toolForLetter, toolShortcut } from "./toolKeys";
 
 describe("tool keys", () => {
   it("chooses the first tool of a group with its digit", () => {
@@ -24,9 +24,20 @@ describe("tool keys", () => {
     expect(toolForDigit(first.state, "0", 1500).command).toBeNull();
   });
 
-  it("names the shortcuts of the tools", () => {
-    expect(toolShortcut("tool.wall")).toBe("1");
-    expect(toolShortcut("tool.ruler")).toBe("6, 1");
-    expect(toolShortcut("tool.select")).toBeUndefined();
+  it("names the shortcuts of the tools: the letter, else the digits", () => {
+    expect(toolShortcut("tool.wall")).toBe("W");
+    expect(toolShortcut("tool.ruler")).toBe("G");
+    expect(toolShortcut("tool.select")).toBe("V");
+    expect(toolShortcut("tool.arcwall")).toBe("1, 1");
+    expect(toolShortcut("tool.heightdim")).toBe("4, 1");
+    expect(toolShortcut("tool.nope")).toBeUndefined();
+  });
+
+  it("chooses tools by letter, in either case", () => {
+    expect(toolForLetter("W")).toBe("tool.wall");
+    expect(toolForLetter("m")).toBe("tool.measure");
+    // R rotates and J joins the selection: no tools
+    expect(toolForLetter("R")).toBeNull();
+    expect(toolForLetter("J")).toBeNull();
   });
 });

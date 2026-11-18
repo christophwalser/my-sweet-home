@@ -1,6 +1,7 @@
 //! Level commands.
 
 use super::{new_id, ok_id};
+use crate::clipboard::Clipboard;
 use crate::document::DEFAULT_WALL_HEIGHT;
 use crate::registry::{CommandError, Registry};
 use msh_model::{Furniture, Home, Level, LevelAttrs, PieceKind};
@@ -33,6 +34,33 @@ struct UpdateParams {
     floor_thickness: Option<f32>,
     /// Show the level in the 3D view
     viewable: Option<bool>,
+    /// Position among the levels at the same elevation (0 = first); the others are renumbered
+    elevation_index: Option<i64>,
+    /// Move the levels above by the same amount when the top of this level (elevation +
+    /// height) changes, so the storeys stay stacked (default false)
+    shift_above: Option<bool>,
+    /// Give the walls of this level that had the old level height the new height
+    /// (default false)
+    adjust_walls: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct DuplicateParams {
+    /// Level to copy
+    id: String,
+    /// Name of the new level (default: the name of the copied level with " (2)")
+    name: Option<String>,
+    /// Elevation of the top of the floor in cm; defaults to the top of the highest level
+    /// plus the floor thickness
+    elevation: Option<f32>,
+    /// Copy the rooms too (default false)
+    rooms: Option<bool>,
+    /// Copy the doors and windows too (default false)
+    openings: Option<bool>,
+    /// Copy the other furniture too (default false)
+    furniture: Option<bool>,
+    /// Copy texts, dimension lines and polylines too (default false)
+    annotations: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -68,20 +96,11 @@ pub(super) fn register(r: &mut Registry) {
                     first.background_image = background;
                 }
             }
-            let top = home
-                .levels
-                .iter()
-                .map(|l| l.attrs.elevation + l.attrs.height)
-                .fold(0.0f32, f32::max);
             let floor = p.floor_thickness.unwrap_or(DEFAULT_FLOOR_THICKNESS);
             // Like Sweet Home 3D: the floor of the new level lies on top of the highest
             // level, so its elevation (top of the floor) is that top plus the floor thickness
-            let elevation = p.elevation.unwrap_or(top + floor);
-            let index = home
-                .levels
-                .iter()
-                .filter(|l| l.attrs.elevation == elevation)
-                .count() as i64;
+            let elevation = p.elevation.unwrap_or(top_of(home) + floor);
+            let index = next_index(home, elevation);
             let id = new_id("level");
             home.levels.push(level(
                 &id,
@@ -97,17 +116,33 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "level_update",
-        "Changes name, elevation, height, floor thickness or 3D visibility of a level.",
+        "Changes name, elevation, height, floor thickness, 3D visibility or the order of a level. \
+         With shift_above the levels above keep their distance to this level, with adjust_walls \
+         the walls of full height follow a new level height.",
         true,
         |doc, p: UpdateParams| {
+            for v in [p.elevation, p.height, p.floor_thickness]
+                .into_iter()
+                .flatten()
+            {
+                if !v.is_finite() {
+                    return Err(CommandError::failed(
+                        "elevation, height and floor_thickness must be numbers",
+                    ));
+                }
+            }
             let home = doc.home_mut();
-            let old_height = home
+            let old = home
                 .levels
                 .iter()
                 .find(|l| l.attrs.id == p.id)
-                .map(|l| l.attrs.height);
+                .map(|l| (l.attrs.elevation, l.attrs.height));
+            let old_height = old.map(|o| o.1);
             if let (Some(old), Some(new)) = (old_height, p.height) {
                 follow_ceiling(home, &p.id, old, new);
+                if p.adjust_walls == Some(true) {
+                    adjust_walls(home, &p.id, old, new);
+                }
             }
             let l = home
                 .levels
@@ -130,7 +165,111 @@ pub(super) fn register(r: &mut Registry) {
             if let Some(v) = p.viewable {
                 a.viewable = Some(v);
             }
+            let (elevation, height) = (a.elevation, a.height);
+            if let (Some(true), Some((old_elevation, old_height))) = (p.shift_above, old) {
+                let delta = elevation + height - (old_elevation + old_height);
+                if delta.abs() > 0.0001 {
+                    for l in &mut home.levels {
+                        if l.attrs.id != p.id && l.attrs.elevation > old_elevation + 0.001 {
+                            l.attrs.elevation += delta;
+                        }
+                    }
+                }
+            }
+            if let Some(index) = p.elevation_index {
+                reorder(home, &p.id, index);
+            }
             Ok(ok_id(&p.id))
+        },
+    );
+    r.add(
+        "level_duplicate",
+        "Adds a level with copies of the walls of another level at the same place, on top of \
+         the highest level: the usual way to start the next storey. Rooms, doors and windows, \
+         furniture and annotations are copied on request. The new level becomes the selected \
+         level. Returns its ID and the number of copied elements.",
+        true,
+        |doc, p: DuplicateParams| {
+            let home = doc.home();
+            let source = home
+                .levels
+                .iter()
+                .find(|l| l.attrs.id == p.id)
+                .ok_or_else(|| CommandError::failed(format!("unknown level '{}'", p.id)))?
+                .attrs
+                .clone();
+            if p.elevation.is_some_and(|v| !v.is_finite()) {
+                return Err(CommandError::failed("elevation must be a number"));
+            }
+            let on = |l: &Option<String>| l.as_deref() == Some(p.id.as_str());
+            let mut ids: Vec<String> = home
+                .walls
+                .iter()
+                .filter(|w| on(&w.attrs.level))
+                .map(|w| w.attrs.id.clone())
+                .collect();
+            if p.rooms == Some(true) {
+                ids.extend(
+                    home.rooms
+                        .iter()
+                        .filter(|r| on(&r.attrs.level))
+                        .filter_map(|r| r.attrs.id.clone()),
+                );
+            }
+            let (openings, furniture) = (p.openings == Some(true), p.furniture == Some(true));
+            for item in &home.furniture {
+                match item {
+                    Furniture::Piece(piece) if on(&piece.attrs.level) => {
+                        let opening = piece.kind == PieceKind::DoorOrWindow;
+                        if (opening && openings) || (!opening && furniture) {
+                            ids.extend(piece.attrs.id.clone());
+                        }
+                    }
+                    Furniture::Group(g) if on(&g.attrs.level) && furniture => {
+                        ids.extend(g.attrs.id.clone());
+                    }
+                    _ => {}
+                }
+            }
+            if p.annotations == Some(true) {
+                ids.extend(
+                    home.labels
+                        .iter()
+                        .filter(|l| on(&l.attrs.level))
+                        .filter_map(|l| l.attrs.id.clone()),
+                );
+                ids.extend(
+                    home.dimension_lines
+                        .iter()
+                        .filter(|d| on(&d.attrs.level))
+                        .filter_map(|d| d.attrs.id.clone()),
+                );
+                ids.extend(
+                    home.polylines
+                        .iter()
+                        .filter(|l| on(&l.attrs.level))
+                        .filter_map(|l| l.attrs.id.clone()),
+                );
+            }
+            let clip = Clipboard::copy(doc, &ids);
+
+            let home = doc.home_mut();
+            let elevation = p.elevation.unwrap_or(top_of(home) + source.floor_thickness);
+            let index = next_index(home, elevation);
+            let id = new_id("level");
+            let name = p.name.unwrap_or_else(|| format!("{} (2)", source.name));
+            home.levels.push(level(
+                &id,
+                &name,
+                elevation,
+                source.height,
+                source.floor_thickness,
+                index,
+            ));
+            home.attrs.selected_level = Some(id.clone());
+            // At the same place: the copies lie exactly above their originals
+            let copied = clip.paste(doc, Some(id.clone()), Some((0.0, 0.0)));
+            Ok(json!({ "id": id, "elements": copied.len() }))
         },
     );
     r.add(
@@ -163,7 +302,67 @@ fn level(id: &str, name: &str, elevation: f32, height: f32, floor: f32, index: i
     }
 }
 
-/// Puts all elements without level on `id` (used when the first level is created).
+/// Top of the highest level (0 without levels).
+fn top_of(home: &Home) -> f32 {
+    home.levels
+        .iter()
+        .map(|l| l.attrs.elevation + l.attrs.height)
+        .fold(0.0f32, f32::max)
+}
+
+/// Index of a new level among the levels at `elevation`: after the existing ones.
+fn next_index(home: &Home, elevation: f32) -> i64 {
+    home.levels
+        .iter()
+        .filter(|l| l.attrs.elevation == elevation)
+        .count() as i64
+}
+
+/// Moves the level to `index` among the levels at its elevation and renumbers them.
+fn reorder(home: &mut Home, id: &str, index: i64) {
+    let Some(elevation) = home
+        .levels
+        .iter()
+        .find(|l| l.attrs.id == id)
+        .map(|l| l.attrs.elevation)
+    else {
+        return;
+    };
+    let mut same: Vec<(i64, String)> = home
+        .levels
+        .iter()
+        .filter(|l| l.attrs.elevation == elevation && l.attrs.id != id)
+        .map(|l| (l.attrs.elevation_index.unwrap_or(0), l.attrs.id.clone()))
+        .collect();
+    same.sort_by_key(|(i, _)| *i);
+    let mut order: Vec<String> = same.into_iter().map(|(_, id)| id).collect();
+    let at = index.clamp(0, order.len() as i64) as usize;
+    order.insert(at, id.to_owned());
+    for l in &mut home.levels {
+        if let Some(i) = order.iter().position(|o| *o == l.attrs.id) {
+            l.attrs.elevation_index = Some(i as i64);
+        }
+    }
+}
+
+/// Gives the walls of the level that were as high as the level (`old`) the height `new`.
+/// Lower walls (parapets, half-height walls) and sloped ends keep their height.
+fn adjust_walls(home: &mut Home, level: &str, old: f32, new: f32) {
+    let default = home.attrs.wall_height.unwrap_or(DEFAULT_WALL_HEIGHT);
+    for w in &mut home.walls {
+        let a = &mut w.attrs;
+        if a.level.as_deref() != Some(level) {
+            continue;
+        }
+        if (a.height.unwrap_or(default) - old).abs() < 0.01 {
+            a.height = Some(new);
+        }
+        if a.height_at_end.is_some_and(|h| (h - old).abs() < 0.01) {
+            a.height_at_end = Some(new);
+        }
+    }
+}
+
 /// Keeps ceiling-mounted pieces (top at the old ceiling) at the ceiling when the height of
 /// their level changes, so they do not end up inside the floor of the level above.
 fn follow_ceiling(home: &mut Home, level: &str, old: f32, new: f32) {
@@ -189,6 +388,7 @@ fn follow_ceiling(home: &mut Home, level: &str, old: f32, new: f32) {
     }
 }
 
+/// Puts all elements without level on `id` (used when the first level is created).
 fn assign_level(home: &mut Home, id: &str) {
     let set = |l: &mut Option<String>| {
         if l.is_none() {

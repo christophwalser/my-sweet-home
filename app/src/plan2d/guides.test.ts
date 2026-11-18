@@ -32,6 +32,13 @@ describe("guides", () => {
     ).toEqual([]);
   });
 
+  it("shows a guide on all levels when it is marked so", () => {
+    const all = [...guides, { ...guides[0], id: "g3", all_levels: true }];
+    const h = { ...home, properties: [{ name: GUIDES_PROPERTY, value: JSON.stringify(all) }] };
+    expect(levelGuides(h, "b").map((g) => g.id)).toEqual(["g2", "g3"]);
+    expect(levelGuides(h, "a").map((g) => g.id)).toEqual(["g1", "g3"]);
+  });
+
   it("finds a guide near a point and inside a rectangle", () => {
     expect(guideAt(home, "a", [50, 3], 5)?.id).toBe("g1");
     expect(guideAt(home, "a", [50, 8], 5)).toBeNull();

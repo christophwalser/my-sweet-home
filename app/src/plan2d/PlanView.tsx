@@ -22,7 +22,10 @@ import {
   type CatalogDragData,
   currentCatalogDrag,
   docResourceUrl,
+  TEXTURE_DRAG_TYPE,
+  type TextureDragData,
 } from "../api";
+import { useCatalogPrefs } from "../catalog/catalogPrefs";
 import { evalLength } from "../expression";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
@@ -35,7 +38,10 @@ import {
   usePreferences,
 } from "../preferences";
 import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../store";
+import { rotateSelection } from "../ui/commands";
 import Icon from "../ui/Icon";
+import { keyTarget, modalOpen } from "../ui/keyTarget";
+import { commandItem } from "../ui/menuItems";
 import { registerPlanActions } from "../ui/planBridge";
 import { useDarkMode, useUi } from "../ui/uiStore";
 import { formatFieldValue, toUnit, unitSymbol } from "../units";
@@ -61,7 +67,14 @@ import {
   type HandleDrag,
   handleAt,
 } from "./handles";
-import { distanceToSegment, elementsInRect, hitTest, hitTestAll, nearestWall } from "./interaction";
+import {
+  distanceToSegment,
+  elementsInRect,
+  hitTest,
+  hitTestAll,
+  nearestWall,
+  similarElements,
+} from "./interaction";
 import {
   type Box,
   type Distance,
@@ -98,11 +111,13 @@ import {
   projectOnSegment,
   type SnapPurpose,
   type Snapped,
+  sideAxis,
   snapAngleDeg,
   snapContext,
   snapDraw,
 } from "./snapping";
 import { dropElevation } from "./support";
+import { type SurfaceTarget, surfaceAt } from "./surfaces";
 import TextEditor, { type TextEdit } from "./TextEditor";
 import { topView } from "./topView";
 
@@ -153,7 +168,14 @@ const DRAG_THRESHOLD_PX = 4;
 
 type Gesture =
   | { kind: "pan"; last: [number, number]; screen: [number, number]; moved: boolean }
-  | { kind: "press"; start: Pt; screen: [number, number]; hitId: string | null; shift: boolean }
+  | {
+      kind: "press";
+      start: Pt;
+      screen: [number, number];
+      hitId: string | null;
+      /** Shift or Ctrl held: the click toggles the element, a rubber band adds to the selection */
+      extend: boolean;
+    }
   | {
       kind: "move";
       start: Pt;
@@ -168,7 +190,7 @@ type Gesture =
       targets?: MoveTargets;
       box?: Box | null;
     }
-  | { kind: "band"; start: Pt; end: Pt }
+  | { kind: "band"; start: Pt; end: Pt; extend: boolean }
   | { kind: "handle"; handle: Handle; drag: HandleDrag | null; cursor: Pt }
   /** The handle in front of the visitor is dragged: its new direction */
   | { kind: "visitor-rotate"; yaw: number }
@@ -180,8 +202,6 @@ const PATH_TOOLS: Tool[] = ["wall", "arcwall", "room", "dimension", "polyline"];
 const isPathTool = (t: Tool) => PATH_TOOLS.includes(t);
 /** Kind of drawing of a path tool: round walls are drawn like walls. */
 const draftKind = (t: Tool): DraftKind => (t === "arcwall" ? "wall" : (t as DraftKind));
-/** Arc of the walls drawn with the round wall tool, in degrees. */
-const ARC_WALL_EXTENT_DEG = 90;
 /** Tools whose clicks snap to the plan: drawing tools and the measuring tool. */
 const isSnapTool = (t: Tool) => isPathTool(t) || t === "measure" || t === "ruler";
 
@@ -299,6 +319,10 @@ export default function PlanView() {
   const selection = useStore((s) => s.selection);
   const tool = useStore((s) => s.tool);
   const wallThickness = useStore((s) => s.wallThickness);
+  /** Space is held: the left button pans */
+  const spaceHeld = useRef(false);
+  const wallLine = useStore((s) => s.wallLine);
+  const arcExtent = useStore((s) => s.arcExtent);
   const highlightSide = useStore((s) => s.highlightSide);
   const fitRequest = useStore((s) => s.fitRequest);
   const viewMode = useStore((s) => s.viewMode);
@@ -309,6 +333,7 @@ export default function PlanView() {
   const showGrid = usePreferences((s) => s.grid);
   const unit = usePreferences((s) => s.unit);
   const roomRendering = usePreferences((s) => s.roomRendering);
+  const underlay = usePreferences((s) => s.underlay);
   const leftSideColor = usePreferences((s) => s.leftSideColor);
   const rightSideColor = usePreferences((s) => s.rightSideColor);
   const magnetism = usePreferences((s) => s.magnetism);
@@ -336,6 +361,11 @@ export default function PlanView() {
   const [textEdit, setTextEdit] = useState<TextEdit | null>(null);
   /** Catalog piece dragged over the plan */
   const drop = useRef<{ preview: DropPreview; icon: HTMLImageElement | null } | null>(null);
+  /** Surface under a dragged texture or under the pipette */
+  const surfaceHover = useRef<SurfaceTarget | null>(null);
+  /** A click awaited in the plan: the pipette, or a catalog piece being placed */
+  const pick = useUi((s) => s.pick);
+  const placing = useUi((s) => s.placing);
   const dark = useDarkMode();
   const colors = dark ? DARK : LIGHT;
   const rulerColors = dark ? DARK_RULER : LIGHT_RULER;
@@ -347,6 +377,9 @@ export default function PlanView() {
   const measureColor = measureColorPref || guideColor;
 
   const gesture = useRef<Gesture | null>(null);
+  // A finished move or handle drag whose command is still running: the plan keeps showing it
+  // until the changed home arrives, so that nothing jumps back to its old place in between
+  const settling = useRef<{ gesture: Gesture; home: Home } | null>(null);
   const draft = useRef<Pt[]>([]);
   const cursor = useRef<Pt | null>(null);
   const snapState = useRef<Snapped | null>(null);
@@ -505,11 +538,11 @@ export default function PlanView() {
         const m = measure.current;
         if (m && !m.done)
           return t(
-            "Click the end point of the ruler, or type a length (Tab: angle) + Enter · Shift: 1° steps · {alt}",
+            "Click the end point of the guide line, or type a length (Tab: angle) + Enter · Shift: 1° steps · {alt}",
             { alt },
           );
         return t(
-          "Click the start point of a ruler, or drag · it stays as a guide; select it and press Del to remove it · {alt}",
+          "Click the start point of a guide line, or drag · it stays in the plan; select it and press Del to remove it · {alt}",
           { alt },
         );
       }
@@ -526,7 +559,7 @@ export default function PlanView() {
         return drawing
           ? t(
               "Click the next point · each wall becomes a {ARC_WALL_EXTENT_DEG}° arc, changeable in its properties · {FINISH}",
-              { ARC_WALL_EXTENT_DEG, FINISH },
+              { ARC_WALL_EXTENT_DEG: arcExtent, FINISH },
             )
           : t("Click the start point of the round wall · Shift: 1° steps · {alt}", { alt });
       case "pan":
@@ -600,7 +633,8 @@ export default function PlanView() {
     drawPlan(ctx, canvas.width, canvas.height, viewRef.current, input, colors, {
       grid: showGrid,
     });
-    const g = gesture.current;
+    if (settling.current && settling.current.home !== input.home) settling.current = null;
+    const g = gesture.current ?? settling.current?.gesture ?? null;
     const drawing = isPathTool(tool);
     // A complete typed input shows where the next point lands
     const typedAt = typedPoint();
@@ -645,7 +679,12 @@ export default function PlanView() {
       // A dimension being placed shows as dimensionDraft instead
       draft:
         drawing && points.length > 0 && dimOffset.current === null
-          ? { points, kind: draftKind(tool), thickness: wallThickness }
+          ? {
+              points,
+              kind: draftKind(tool),
+              thickness: wallThickness,
+              axis: tool === "wall" ? sideAxis(points, wallLine, wallThickness) : undefined,
+            }
           : null,
       guides:
         g?.kind === "move"
@@ -681,6 +720,7 @@ export default function PlanView() {
           : null;
       })(),
       dropPreview: drop.current,
+      surfaceTarget: surfaceHover.current,
       accent,
       guide: guideColor,
       measureColor,
@@ -735,6 +775,7 @@ export default function PlanView() {
     rulerDashStyle,
     measureColor,
     wallThickness,
+    wallLine,
     highlightSide,
     showGrid,
     showRulers,
@@ -887,12 +928,17 @@ export default function PlanView() {
     const points = closed ? pts.slice(0, -1) : pts;
     let result: unknown;
     if (tool === "wall" || tool === "arcwall") {
+      // The options of the tool bar above the plan
+      const options = useStore.getState();
       result = await run("wall_add_path", {
         points,
         closed,
-        thickness: wallThickness,
+        thickness: options.wallThickness,
+        ...(options.wallHeight !== null && { height: options.wallHeight }),
         ...newWallParams(),
-        ...(tool === "arcwall" && { arc_extent_deg: ARC_WALL_EXTENT_DEG }),
+        ...(tool === "arcwall"
+          ? { arc_extent_deg: options.arcExtent }
+          : options.wallLine !== "axis" && { side: options.wallLine }),
         ...levelParam(),
       });
     } else if (tool === "room") {
@@ -1077,7 +1123,12 @@ export default function PlanView() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     (e.target as Element).setPointerCapture(e.pointerId);
-    if (e.button === 1 || e.button === 2 || (e.button === 0 && tool === "pan")) {
+    // The middle or right button, the pan tool, or the left button with Space held
+    if (
+      e.button === 1 ||
+      e.button === 2 ||
+      (e.button === 0 && (tool === "pan" || spaceHeld.current))
+    ) {
       gesture.current = {
         kind: "pan",
         last: [e.clientX, e.clientY],
@@ -1088,6 +1139,20 @@ export default function PlanView() {
     }
     if (e.button !== 0 || !input) return;
     const p = toWorld(e.clientX, e.clientY);
+    const ui = useUi.getState();
+    if (ui.pick) {
+      // The pipette: the clicked surface gives its look
+      const from = surfaceAt(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+      if (from) ui.pick.onPick(from);
+      ui.setPick(null);
+      return;
+    }
+    if (ui.placing) {
+      // Shift+click places the piece and keeps it at the pointer for the next one
+      void placeCatalogItem(ui.placing.data, p, e.altKey);
+      if (!e.shiftKey) ui.setPlacing(null);
+      return;
+    }
     if (offsetFrom.current) {
       finishOffsetGuide();
       return;
@@ -1128,7 +1193,7 @@ export default function PlanView() {
         start: p,
         screen: [e.clientX, e.clientY],
         hitId: hit?.id ?? null,
-        shift: e.shiftKey && hit?.id !== VISITOR_ID,
+        extend: (e.shiftKey || e.ctrlKey || e.metaKey) && hit?.id !== VISITOR_ID,
       };
     } else if (tool === "measure" || tool === "ruler") {
       const s = snapped(p, e.altKey, e.shiftKey);
@@ -1184,6 +1249,34 @@ export default function PlanView() {
     const g = gesture.current;
     mouseWorld.current = toWorld(e.clientX, e.clientY);
     usePointer.setState({ pt: mouseWorld.current });
+    const ui = useUi.getState();
+    if (!g && input && (ui.pick || ui.placing)) {
+      // The surface the pipette would take, or the piece where the click would place it
+      if (ui.pick) {
+        surfaceHover.current = surfaceAt(
+          input.home,
+          input.wallShapes,
+          effectiveLevel,
+          mouseWorld.current,
+          pxToCm(PICK_PX),
+        );
+      } else if (ui.placing) {
+        drop.current = {
+          preview: dropPreview(
+            input.home,
+            effectiveLevel,
+            ui.placing.data,
+            mouseWorld.current,
+            pxToCm(40),
+            catalogDock(e.altKey),
+          ),
+          icon: ui.placing.icon,
+        };
+      }
+      if (canvasRef.current) canvasRef.current.style.cursor = "crosshair";
+      draw();
+      return;
+    }
     const o = offsetFrom.current;
     if (o && !g) {
       // The side and distance of the parallel ruler follow the mouse (whole cm with magnetism)
@@ -1271,11 +1364,11 @@ export default function PlanView() {
         // Dragging an unselected element selects it first
         const sel = useStore.getState().selection;
         if (g.hitId === VISITOR_ID) setSelection([VISITOR_ID]);
-        // (Shift while dragging locks the move to an axis; Shift+click extends the selection)
+        // (Shift while dragging locks the move to an axis; Shift or Ctrl+click extends the selection)
         else if (!sel.includes(g.hitId)) setSelection([g.hitId]);
         gesture.current = { kind: "move", start: g.start, offset: [0, 0], dock: null, slide: null };
       } else {
-        gesture.current = { kind: "band", start: g.start, end: p };
+        gesture.current = { kind: "band", start: g.start, end: p, extend: g.extend };
       }
     }
     const g2 = gesture.current;
@@ -1365,6 +1458,20 @@ export default function PlanView() {
     }
   };
 
+  /** Keeps showing the finished gesture `g` until its command has changed the home. */
+  const settle = (g: Gesture, pending: Promise<unknown>) => {
+    if (!input) return;
+    const entry = { gesture: g, home: input.home };
+    settling.current = entry;
+    const done = () => {
+      if (settling.current !== entry) return;
+      settling.current = null;
+      draw();
+    };
+    // Failed (or changed nothing): show the home as it is; otherwise the new home ends it
+    void pending.then((r) => (r === undefined ? done() : setTimeout(done, 1000)));
+  };
+
   const onPointerUp = (e: React.PointerEvent) => {
     const g = gesture.current;
     gesture.current = null;
@@ -1409,7 +1516,7 @@ export default function PlanView() {
       return;
     }
     if (g.kind === "handle") {
-      if (g.drag) void run(g.drag.command, g.drag.params);
+      if (g.drag) settle(g, run(g.drag.command, g.drag.params));
       draw();
       return;
     }
@@ -1420,16 +1527,16 @@ export default function PlanView() {
       return;
     }
     if (g.kind === "press") {
-      // Plain click: select the element under the cursor (Shift toggles)
+      // Plain click: select the element under the cursor (Shift or Ctrl toggles)
       if (g.hitId) {
-        if (g.shift) {
+        if (g.extend) {
           setSelection(
             sel.includes(g.hitId) ? sel.filter((s) => s !== g.hitId) : [...sel, g.hitId],
           );
         } else {
           setSelection([g.hitId]);
         }
-      } else if (!g.shift) {
+      } else if (!g.extend) {
         setSelection([]);
       }
     } else if (g.kind === "move") {
@@ -1440,8 +1547,9 @@ export default function PlanView() {
         single && (dx !== 0 || dy !== 0) && magnetismActive(e.altKey)
           ? dropElevation(input.home, single, [single.attrs.x + dx, single.attrs.y + dy])
           : null;
+      let pending: Promise<unknown> | null = null;
       if (g.slide && sel.length === 1) {
-        void run("furniture_update", {
+        pending = run("furniture_update", {
           id: sel[0],
           x: g.slide.x,
           y: g.slide.y,
@@ -1454,7 +1562,7 @@ export default function PlanView() {
           single && magnetismActive(e.altKey)
             ? dropElevation(input.home, single, [g.dock.x, g.dock.y])
             : null;
-        void run("furniture_update", {
+        pending = run("furniture_update", {
           id: sel[0],
           x: g.dock.x,
           y: g.dock.y,
@@ -1463,7 +1571,7 @@ export default function PlanView() {
         });
       } else if (single && drop) {
         // Move and change the elevation in one step
-        void run("furniture_update", {
+        pending = run("furniture_update", {
           id: sel[0],
           x: single.attrs.x + dx,
           y: single.attrs.y + dy,
@@ -1473,8 +1581,9 @@ export default function PlanView() {
         const v = currentVisitor();
         if (v) void setVisitor({ x: v.x + dx, y: v.y + dy });
       } else if ((dx !== 0 || dy !== 0) && sel.length > 0) {
-        void run("edit_move", { ids: sel, dx, dy });
+        pending = run("edit_move", { ids: sel, dx, dy });
       }
+      if (pending) settle(g, pending);
       draw();
     } else if (g.kind === "band") {
       // Dragged from right to left: also what the band only touches
@@ -1483,7 +1592,10 @@ export default function PlanView() {
         ...elementsInRect(input.home, effectiveLevel, g.start, g.end, crossing),
         ...guidesInRect(input.home, effectiveLevel, g.start, g.end, crossing).map((x) => x.id),
       ];
-      setSelection(ids);
+      // With Shift or Ctrl the band adds to the selection
+      setSelection(
+        g.extend ? [...new Set([...sel.filter((id) => id !== VISITOR_ID), ...ids])] : ids,
+      );
       draw();
     }
   };
@@ -1621,6 +1733,20 @@ export default function PlanView() {
     ];
   };
 
+  /** Menu entry of a command of the registry: the same label, shortcut and state as in the menus. */
+  const reg = commandItem;
+
+  /** Opens the context menu for the selection as it is, from the keyboard (Shift+F10). */
+  const openMenuForSelection = () => {
+    const c = canvasRef.current;
+    if (!input || !c) return;
+    const rect = c.getBoundingClientRect();
+    const x = rect.width / 2;
+    const y = rect.height / 2;
+    const sel = useStore.getState().selection;
+    setMenu({ x, y, items: menuItems(toWorld(rect.left + x, rect.top + y), sel) });
+  };
+
   /** Items of the context menu for the selection `sel` at the plan point `p`. */
   const menuItems = (p: Pt, sel: string[]): MenuItem[] => {
     if (!input) return [];
@@ -1631,7 +1757,6 @@ export default function PlanView() {
     const groups = furniture.filter((f) => f.type === "group");
     const rooms = home.rooms.filter((r) => has(r.attrs.id));
     const lines = home.polylines.filter((l) => has(l.attrs.id));
-    const furnitureIds = furniture.map((f) => f.attrs.id as string);
     const selectNew = (r: unknown) => {
       const ids = (r as { ids?: string[] } | undefined)?.ids;
       if (ids) setSelection(ids);
@@ -1654,100 +1779,41 @@ export default function PlanView() {
         { label: t("Fit plan to window"), action: () => refit() },
       ];
     }
+    // The commands of the menus, with their labels and shortcuts; they act on the selection,
+    // which is the one this menu was opened for
+    if (sel.length > 0) items.push(reg("edit.cut"), reg("edit.copy"));
+    items.push(reg("edit.paste"));
     if (sel.length > 0) {
       items.push(
-        {
-          label: t("Cut"),
-          shortcut: "Ctrl+X",
-          action: () =>
-            void run("edit_copy", { ids: sel }).then((r) => {
-              if (r) void run("edit_delete", { ids: sel });
-            }),
-        },
-        { label: t("Copy"), shortcut: "Ctrl+C", action: () => void run("edit_copy", { ids: sel }) },
-      );
-    }
-    items.push({
-      label: t("Paste"),
-      shortcut: "Ctrl+V",
-      action: () => void run("edit_paste", levelParam()).then(selectNew),
-    });
-    if (sel.length > 0) {
-      items.push(
-        {
-          label: t("Paste style"),
-          action: () => void run("edit_paste_style", { ids: sel }),
-        },
-        {
-          label: t("Duplicate"),
-          shortcut: "Ctrl+D",
-          action: () => void run("edit_duplicate", { ids: sel }).then(selectNew),
-        },
-        {
-          label: t("Delete"),
-          shortcut: "Del",
-          action: () => void run("edit_delete", { ids: sel }),
-        },
+        reg("edit.pasteStyle"),
+        reg("edit.duplicate"),
+        reg("edit.delete"),
+        reg("edit.selectSimilar"),
         { separator: true },
-        {
-          label: t("Flip horizontally"),
-          action: () => void run("edit_flip", { ids: sel, axis: "horizontal" }),
-        },
-        {
-          label: t("Flip vertically"),
-          action: () => void run("edit_flip", { ids: sel, axis: "vertical" }),
-        },
+        reg("edit.moveBy"),
+        reg("edit.rotateBy"),
+        reg("furniture.rotate"),
+        reg("edit.flipH"),
+        reg("edit.flipV"),
       );
     }
     if (furniture.length > 1 || groups.length > 0) {
       items.push({ separator: true });
-      if (furniture.length > 1) {
-        items.push({
-          label: t("Group"),
-          shortcut: "Ctrl+G",
-          action: () =>
-            void run("furniture_group", { ids: furnitureIds }).then((r) => {
-              const id = (r as { id?: string } | undefined)?.id;
-              if (id) setSelection([id]);
-            }),
-        });
-      }
-      if (groups.length > 0) {
-        items.push({
-          label: t("Ungroup"),
-          shortcut: "Ctrl+Shift+G",
-          action: () =>
-            void run("furniture_ungroup", { ids: groups.map((g) => g.attrs.id) }).then(selectNew),
-        });
-      }
+      if (furniture.length > 1) items.push(reg("furniture.group"));
+      if (groups.length > 0) items.push(reg("furniture.ungroup"));
     }
     if (furniture.length > 1) {
-      // The piece selected last leads, like in Sweet Home 3D
-      const leader = [...sel].reverse().find((id) => furnitureIds.includes(id));
-      const align = (how: string) => () =>
-        void run("furniture_align", { ids: furnitureIds, how, leader });
-      items.push(
-        { heading: t("Align to the piece selected last") },
-        { label: t("Left sides"), action: align("left") },
-        { label: t("Right sides"), action: align("right") },
-        { label: t("Front sides"), action: align("front") },
-        { label: t("Back sides"), action: align("back") },
-        { label: t("Tops"), action: align("top") },
-        { label: t("Bottoms (elevation)"), action: align("bottom") },
-        { label: t("Side by side"), action: align("side_by_side") },
-      );
+      items.push({
+        label: t("Align"),
+        items: [
+          { heading: t("Align to the piece selected last") },
+          ...["left", "right", "front", "back", "top", "bottom", "side_by_side"].map((how) =>
+            reg(`furniture.align.${how}`),
+          ),
+        ],
+      });
       if (furniture.length > 2) {
-        items.push(
-          {
-            label: t("Distribute horizontally"),
-            action: () =>
-              void run("furniture_distribute", { ids: furnitureIds, axis: "horizontal" }),
-          },
-          {
-            label: t("Distribute vertically"),
-            action: () => void run("furniture_distribute", { ids: furnitureIds, axis: "vertical" }),
-          },
-        );
+        items.push(reg("furniture.distributeH"), reg("furniture.distributeV"));
       }
     }
     // A ruler parallel to the selected wall or ruler, at a typed or dragged distance
@@ -1755,7 +1821,7 @@ export default function PlanView() {
       sel.length === 1 ? levelGuides(home, effectiveLevel).find((g) => g.id === sel[0]) : undefined;
     if (sel.length === 1 && (walls.length === 1 || guide)) {
       items.push({
-        label: t("Ruler at a distance…"),
+        label: t("Guide line at a distance…"),
         action: () => {
           if (guide) {
             startOffsetGuide([guide.x_start, guide.y_start], [guide.x_end, guide.y_end], 0);
@@ -1769,11 +1835,9 @@ export default function PlanView() {
     if (walls.length > 0) {
       const wallIds = walls.map((w) => w.attrs.id);
       items.push({ separator: true });
-      items.push({
-        label: walls.length > 1 ? t("Reverse wall directions") : t("Reverse wall direction"),
-        action: () => void run("wall_reverse", { ids: wallIds }),
-      });
+      items.push(reg("wall.reverse"));
       if (walls.length === 1) {
+        // At the clicked point; the menu command splits in the middle
         items.push({
           label: t("Split wall here"),
           action: () =>
@@ -1783,15 +1847,9 @@ export default function PlanView() {
             }).then(selectNew),
         });
       }
-      if (walls.length >= 2) {
-        items.push({
-          label: t("Join walls"),
-          shortcut: "J",
-          action: () => void run("wall_join", { ids: wallIds }),
-        });
-      }
+      if (walls.length >= 2) items.push(reg("wall.join"));
       if (walls.some((w) => w.attrs.wall_at_start || w.attrs.wall_at_end)) {
-        items.push({ label: t("Detach"), action: () => void run("wall_detach", { ids: wallIds }) });
+        items.push(reg("wall.detach"));
       }
     }
     // Dimensions of a single wall or piece
@@ -1898,25 +1956,8 @@ export default function PlanView() {
       if (extra.length) items.push({ separator: true }, ...extra);
     }
     items.push({ separator: true });
-    if (sel.length === 0) {
-      items.push(
-        {
-          label: t("Select all"),
-          shortcut: "Ctrl+A",
-          action: () =>
-            setSelection(elementsInRect(home, effectiveLevel, [-1e9, -1e9], [1e9, 1e9])),
-        },
-        { label: t("Fit plan to window"), action: () => refit() },
-      );
-    }
-    const locked = home.attrs.base_plan_locked === true;
-    items.push({
-      label: locked ? t("Unlock base plan") : t("Lock base plan"),
-      action: () => {
-        void run("home_set", { base_plan_locked: !locked });
-        if (!locked) setSelection([]);
-      },
-    });
+    if (sel.length === 0) items.push(reg("edit.selectAll"), reg("plan.fit"));
+    items.push(reg("edit.lockBasePlan"));
     return items;
   };
 
@@ -2136,7 +2177,7 @@ export default function PlanView() {
     typed.current = null;
     setHint(
       t(
-        "Move the mouse to the side of the new ruler and click, or type the distance + Enter · Esc: cancel",
+        "Move the mouse to the side of the new guide line and click, or type the distance + Enter · Esc: cancel",
       ),
     );
     draw();
@@ -2189,12 +2230,11 @@ export default function PlanView() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.tagName === "SELECT"
-      )
-        return;
+      // A dialog takes all keys: Del must not delete the selection behind it
+      if (modalOpen()) return;
+      // Text fields type; check boxes and drop-downs keep their plain keys (Space, arrows)
+      const focus = keyTarget(target);
+      if (focus === "text" || (focus === "control" && !e.ctrlKey && !e.metaKey)) return;
       // Keys typed in the 3D view (walking in the virtual visit) are not for the plan
       if (target.closest?.(".view3d-canvas") && !e.ctrlKey && !e.metaKey) return;
       const state = useStore.getState();
@@ -2224,8 +2264,20 @@ export default function PlanView() {
         if (onShortcut(key, sel, e.shiftKey) || "acdgvx".includes(key)) e.preventDefault();
         return;
       }
+      // The menu key or Shift+F10 opens the context menu of the selection
+      if (state.tool === "select" && (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) {
+        openMenuForSelection();
+        e.preventDefault();
+        return;
+      }
+      // Space held: dragging with the left button pans the plan, whatever the tool
+      if (e.key === " " && typed.current === null && target.tagName !== "BUTTON") {
+        spaceHeld.current = true;
+        e.preventDefault();
+        return;
+      }
       if (offsetFrom.current) {
-        // "Ruler at a distance": the typed distance, Enter adds the ruler, Esc cancels
+        // "Guide line at a distance": the typed distance, Enter adds the line, Esc cancels
         if (e.key === "Enter") finishOffsetGuide();
         else if (e.key === "Escape") {
           offsetFrom.current = null;
@@ -2266,23 +2318,20 @@ export default function PlanView() {
         e.preventDefault();
         return;
       }
+      if (e.key === "Escape" && (useUi.getState().pick || useUi.getState().placing)) {
+        // Ends the pipette or the placing of a catalog piece
+        useUi.getState().setPick(null);
+        e.preventDefault();
+        return;
+      }
       if (e.key === "Escape") {
         if (state.tool !== "select") state.setTool("select");
         else setSelection([]);
       } else if ((e.key === "Delete" || e.key === "Backspace") && sel.length > 0) {
         void run("edit_delete", { ids: sel });
       } else if ((e.key === "r" || e.key === "R") && sel.length > 0 && state.opened) {
-        // Rotate the selected furniture by 15° (Shift: other direction)
-        const step = e.shiftKey ? -15 : 15;
-        forEachPiece(state.opened.home.furniture, (p) => {
-          if (p.attrs.id && sel.includes(p.attrs.id)) {
-            const angle = ((p.attrs.angle ?? 0) * 180) / Math.PI + step;
-            void run("furniture_update", {
-              id: p.attrs.id,
-              angle_deg: ((angle % 360) + 360) % 360,
-            });
-          }
-        });
+        // Rotate the selection by 15° (Shift: other direction)
+        rotateSelection(e.shiftKey ? -15 : 15);
       } else if ((e.key === "j" || e.key === "J") && state.opened) {
         // Join the selected walls
         const walls = state.opened.home.walls.filter((w) => sel.includes(w.attrs.id));
@@ -2299,8 +2348,17 @@ export default function PlanView() {
       }
       e.preventDefault();
     };
+    const release = (e: KeyboardEvent | FocusEvent) => {
+      if (!("key" in e) || e.key === " ") spaceHeld.current = false;
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", release);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", release);
+      window.removeEventListener("blur", release);
+    };
   }, [tool, input, wallThickness]);
 
   // Preferences read while drawing: redraw plan and rulers when they change
@@ -2308,7 +2366,7 @@ export default function PlanView() {
   useEffect(() => {
     draw();
     drawRulers();
-  }, [unit, roomRendering, leftSideColor, rightSideColor]);
+  }, [unit, roomRendering, underlay, leftSideColor, rightSideColor]);
 
   // Actions of the menus, the tool bar and the command search
   // biome-ignore lint/correctness/useExhaustiveDependencies: handlers read current state when called
@@ -2320,6 +2378,11 @@ export default function PlanView() {
           if (c) zoomAt(c.width / 2, c.height / 2, factor);
         },
         selectAll: () => void onShortcut("a", useStore.getState().selection),
+        selectSimilar: () => {
+          if (!input) return;
+          setSelection(similarElements(input.home, effectiveLevel, useStore.getState().selection));
+          draw();
+        },
         paste: () => void onShortcut("v", useStore.getState().selection),
         isDrawing: takesTypedInput,
       }),
@@ -2345,7 +2408,65 @@ export default function PlanView() {
       return d && { x: d.x, y: d.y, angleDeg: d.angleDeg };
     };
 
+  // The pipette or the placing ended: nothing of it stays in the plan
+  // biome-ignore lint/correctness/useExhaustiveDependencies: draw reads the current state
+  useEffect(() => {
+    if (pick || placing) return;
+    drop.current = null;
+    surfaceHover.current = null;
+    if (canvasRef.current) canvasRef.current.style.cursor = cursorStyle[tool];
+    draw();
+  }, [pick, placing]);
+
+  /** Places a catalog piece at a point of the plan: in a wall, docked to one, or free. */
+  const placeCatalogItem = async (item: CatalogDragData, p: Pt, altKey: boolean) => {
+    if (!input) return;
+    let result: unknown;
+    const wall = item.doorOrWindow ? nearestWall(input.home, effectiveLevel, p, pxToCm(40)) : null;
+    if (wall) {
+      // Opens to the side of the wall it is dropped on (front of the piece: left of the wall)
+      const w = input.home.walls.find((x) => x.attrs.id === wall.id)?.attrs;
+      const side = w
+        ? (p[0] - w.x_start) * -(w.y_end - w.y_start) + (p[1] - w.y_start) * (w.x_end - w.x_start)
+        : 0;
+      result = await run("furniture_add_in_wall", {
+        catalog_id: item.catalogId,
+        name: item.name,
+        wall_id: wall.id,
+        offset: Math.round(wall.offset),
+        ...(side < 0 ? { flip: true } : {}),
+      });
+    } else {
+      // Where the preview showed it: at the cursor, or docked to a wall
+      const at = dropPreview(input.home, effectiveLevel, item, p, pxToCm(40), catalogDock(altKey));
+      const angleDeg = Math.round(((at.angle * 180) / Math.PI) * 100) / 100;
+      result = await run("furniture_add", {
+        catalog_id: item.catalogId,
+        name: item.name,
+        x: at.center[0],
+        y: at.center[1],
+        ...(angleDeg ? { angle_deg: angleDeg } : {}),
+        ...levelParam(),
+      });
+    }
+    const id = (result as { id?: string } | undefined)?.id;
+    if (id) {
+      setSelection([id]);
+      useCatalogPrefs.getState().noteUsed(item.catalogId);
+    }
+  };
+
   const onDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes(TEXTURE_DRAG_TYPE) && input) {
+      // A texture: the floor, wall side or piece it would land on
+      e.preventDefault();
+      const p = toWorld(e.clientX, e.clientY);
+      const target = surfaceAt(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+      e.dataTransfer.dropEffect = target ? "copy" : "none";
+      surfaceHover.current = target;
+      draw();
+      return;
+    }
     if (e.dataTransfer.types.includes(CATALOG_DRAG_TYPE) && input) {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
@@ -2370,56 +2491,33 @@ export default function PlanView() {
   };
 
   const onDragLeave = () => {
-    if (!drop.current) return;
+    if (!drop.current && !surfaceHover.current) return;
     drop.current = null;
+    surfaceHover.current = null;
     draw();
   };
 
   const onDrop = async (e: React.DragEvent) => {
     drop.current = null;
+    surfaceHover.current = null;
     draw();
-    const raw = e.dataTransfer.getData(CATALOG_DRAG_TYPE);
-    if (!raw || !input) return;
-    e.preventDefault();
-    const item = JSON.parse(raw) as CatalogDragData;
+    if (!input) return;
     const p = toWorld(e.clientX, e.clientY);
-    let result: unknown;
-    const wall = item.doorOrWindow ? nearestWall(input.home, effectiveLevel, p, pxToCm(40)) : null;
-    if (wall) {
-      // Opens to the side of the wall it is dropped on (front of the piece: left of the wall)
-      const w = input.home.walls.find((x) => x.attrs.id === wall.id)?.attrs;
-      const side = w
-        ? (p[0] - w.x_start) * -(w.y_end - w.y_start) + (p[1] - w.y_start) * (w.x_end - w.x_start)
-        : 0;
-      result = await run("furniture_add_in_wall", {
-        catalog_id: item.catalogId,
-        name: item.name,
-        wall_id: wall.id,
-        offset: Math.round(wall.offset),
-        ...(side < 0 ? { flip: true } : {}),
-      });
-    } else {
-      // Where the preview showed it: at the cursor, or docked to a wall
-      const at = dropPreview(
-        input.home,
-        effectiveLevel,
-        item,
-        p,
-        pxToCm(40),
-        catalogDock(e.altKey),
-      );
-      const angleDeg = Math.round(((at.angle * 180) / Math.PI) * 100) / 100;
-      result = await run("furniture_add", {
-        catalog_id: item.catalogId,
-        name: item.name,
-        x: at.center[0],
-        y: at.center[1],
-        ...(angleDeg ? { angle_deg: angleDeg } : {}),
-        ...levelParam(),
-      });
+    const texture = e.dataTransfer.getData(TEXTURE_DRAG_TYPE);
+    if (texture) {
+      e.preventDefault();
+      const { catalogId } = JSON.parse(texture) as TextureDragData;
+      const target = surfaceAt(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+      if (!target) return;
+      useUi.getState().noteTexture(catalogId);
+      await run("texture_apply", { id: target.id, surface: target.surface, texture: catalogId });
+      setSelection([target.id]);
+      return;
     }
-    const id = (result as { id?: string } | undefined)?.id;
-    if (id) setSelection([id]);
+    const raw = e.dataTransfer.getData(CATALOG_DRAG_TYPE);
+    if (!raw) return;
+    e.preventDefault();
+    await placeCatalogItem(JSON.parse(raw) as CatalogDragData, p, e.altKey);
   };
 
   return (
@@ -2444,6 +2542,10 @@ export default function PlanView() {
           onPointerLeave={() => {
             cursor.current = null;
             mouseWorld.current = null;
+            if (useUi.getState().pick || useUi.getState().placing) {
+              drop.current = null;
+              surfaceHover.current = null;
+            }
             usePointer.setState({ pt: null });
             draw();
           }}
@@ -2453,7 +2555,17 @@ export default function PlanView() {
           onDragLeave={onDragLeave}
           onDrop={(e) => void onDrop(e)}
         />
-        {opened && hint && <div className="plan-hint">{hint}</div>}
+        {opened && (pick || placing || hint) && (
+          <div className="plan-hint">
+            {pick
+              ? pick.label
+              : placing
+                ? t("Click to place “{name}” · Shift+click places several · Esc cancels", {
+                    name: placing.data.name,
+                  })
+                : hint}
+          </div>
+        )}
         {menu && (
           <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
         )}

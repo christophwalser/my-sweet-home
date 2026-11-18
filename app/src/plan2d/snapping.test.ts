@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { Pt } from "../model";
 import { usePreferences } from "../preferences";
-import { makeHome, makeRoom, makeWall, roundPt, straightShape } from "../testFixtures";
+import { makeHome, makeLevel, makeRoom, makeWall, roundPt, straightShape } from "../testFixtures";
 import {
   offsetOutline,
   pointKey,
@@ -33,6 +33,7 @@ afterEach(() => {
     snapAngles: true,
     snapObjects: true,
     snapToRulers: true,
+    underlay: "below",
   });
 });
 
@@ -314,6 +315,33 @@ describe("snapContext", () => {
     expect(snapDraw([51, 3], [50, 100], c).note).toBe("perpendicular");
   });
 
+  it("lets a new wall start on a face flush with the corner of a nearby wall", () => {
+    const c = snapContext("wall", home, shapes, null, 10, { near: [205, 0], thickness: 4 });
+    const t = w1.attrs.thickness / 2;
+    // On the end face, 2 cm (half the new wall) from each corner
+    expect(c.labels?.get(pointKey([200, t - 2]))).toBe("flush with wall corner");
+    expect(c.labels?.get(pointKey([200, -t + 2]))).toBe("flush with wall corner");
+    // On the side faces too
+    expect(c.labels?.get(pointKey([198, t]))).toBe("flush with wall corner");
+    expect(snapDraw([201, t - 2.5], null, c).pt).toEqual([200, t - 2]);
+    // Without the thickness of the new wall there are none
+    const plain = snapContext("wall", home, shapes, null, 10, { near: [205, 0] });
+    expect([...(plain.labels?.values() ?? [])]).not.toContain("flush with wall corner");
+  });
+
+  it("keeps the face points of a thick wall when zoomed in (small snap radius)", () => {
+    const thick = makeWall("t", [0, 0], [200, 0], { thickness: 40 });
+    const h = makeHome({ walls: [thick] });
+    // The cursor on the face, 20 cm from the axis; the radius is only 0.5 cm
+    const c = snapContext("wall", h, [straightShape(thick)], null, 0.5, {
+      near: [100, 20],
+      thickness: 10,
+    });
+    expect(c.labels?.get(pointKey([200, 15]))).toBe("flush with wall corner");
+    expect(c.hints?.length).toBeGreaterThan(0);
+    expect(snapDraw([199.8, 15.2], null, c).note).toBe("flush with wall corner");
+  });
+
   it("leaves out the element being edited and the point being moved", () => {
     const c = snapContext("wall", home, shapes, null, 10, {
       excludeId: "w1",
@@ -484,13 +512,13 @@ describe("ruler guides and the snap switches", () => {
   it("snaps to the ends, middles, crossings and lines of rulers", () => {
     const c = snapContext("wall", home, shapes, null, 10);
     expect(c.points).toContainEqual([100, 300]);
-    expect(c.labels?.get(pointKey([100, 100]))).toBe("ruler middle");
+    expect(c.labels?.get(pointKey([100, 100]))).toBe("guide line middle");
     // Crossing of the two rulers and of a ruler with the wall axis
-    expect(c.labels?.get(pointKey([100, 200]))).toBe("ruler crossing");
-    expect(c.labels?.get(pointKey([100, 0]))).toBe("ruler crossing");
+    expect(c.labels?.get(pointKey([100, 200]))).toBe("guide line crossing");
+    expect(c.labels?.get(pointKey([100, 0]))).toBe("guide line crossing");
     const s = snapDraw([104, 150], null, c);
     expect(s.pt).toEqual([100, 150]);
-    expect(s.note).toBe("on ruler");
+    expect(s.note).toBe("on guide line");
   });
 
   it("leaves rulers, objects or angles out when they are switched off", () => {
@@ -509,5 +537,43 @@ describe("ruler guides and the snap switches", () => {
       snapContext("room", home, shapes, null, 1),
     );
     expect(angleOf([0, 100], free.pt)).toBeCloseTo(3);
+  });
+});
+
+describe("snapContext with an underlay level", () => {
+  const below = makeWall("below", [0, 0], [400, 0], { level: "ground", thickness: 20 });
+  const own = makeWall("own", [0, 300], [400, 300], { level: "first", thickness: 20 });
+  const above = makeWall("above", [50, 50], [50, 250], { level: "roof", thickness: 20 });
+  const home = makeHome({
+    levels: [makeLevel("ground", 0), makeLevel("first", 262), makeLevel("roof", 524)],
+    walls: [below, own, above],
+  });
+  const shapes = home.walls.map(straightShape);
+
+  it("offers the wall ends and corners of the level below", () => {
+    const c = snapContext("wall", home, shapes, "first", 10);
+    expect(c.labels?.get(pointKey([400, 0]))).toBe("wall end (other level)");
+    expect(c.labels?.get(pointKey([400, -10]))).toBe("wall corner (other level)");
+    expect(c.refs).toContainEqual([0, 0]);
+    // The level above is not the underlay
+    expect(c.labels?.get(pointKey([50, 50]))).toBeUndefined();
+    expect(snapDraw([398, 2], null, c).pt).toEqual([400, 0]);
+  });
+
+  it("follows the underlay chosen in the status bar", () => {
+    usePreferences.setState({ underlay: "above" });
+    const up = snapContext("wall", home, shapes, "first", 10);
+    expect(up.labels?.get(pointKey([50, 50]))).toBe("wall end (other level)");
+    expect(up.labels?.get(pointKey([400, 0]))).toBeUndefined();
+    usePreferences.setState({ underlay: "off" });
+    const off = snapContext("wall", home, shapes, "first", 10);
+    expect(off.labels?.get(pointKey([50, 50]))).toBeUndefined();
+    expect(off.labels?.get(pointKey([400, 0]))).toBeUndefined();
+  });
+
+  it("gives nothing without magnetism to objects", () => {
+    usePreferences.setState({ snapObjects: false });
+    const c = snapContext("wall", home, shapes, "first", 10);
+    expect(c.points).toHaveLength(0);
   });
 });

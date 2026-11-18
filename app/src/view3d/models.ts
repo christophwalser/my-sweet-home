@@ -470,6 +470,7 @@ function applyPieceMaterials(
           const scale = t.scale ?? 1;
           tex.repeat.set(1 / ((t.width || 100) * scale), 1 / ((t.height || 100) * scale));
           tex.rotation = t.angle ?? 0;
+          tex.offset.set(t.x_offset ?? 0, t.y_offset ?? 0);
         }
         c.map = tex;
         c.color = new THREE.Color(0xffffff);

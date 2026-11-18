@@ -459,3 +459,32 @@ export function nearestWall(
   }
   return best;
 }
+
+/** What kind of element an ID stands for; pieces of furniture by their catalog item. */
+function similarityKey(home: Home, id: string): string | null {
+  if (home.walls.some((w) => w.attrs.id === id)) return "wall";
+  if (home.rooms.some((r) => r.attrs.id === id)) return "room";
+  if (home.polylines.some((p) => p.attrs.id === id)) return "polyline";
+  if (home.labels.some((l) => l.attrs.id === id)) return "label";
+  if (home.dimension_lines.some((d) => d.attrs.id === id)) return "dimension";
+  for (const { piece, topId } of piecesWithTop(home.furniture)) {
+    if (topId !== id) continue;
+    // A group counts as such; a piece by its catalog item, else by its name
+    return topId === piece.attrs.id
+      ? `piece:${piece.attrs.catalog_id ?? piece.attrs.name}`
+      : "group";
+  }
+  return null;
+}
+
+/**
+ * The elements of the level that are of the same kind as the selected ones: all walls for a
+ * wall, all rooms for a room, the same pieces of furniture for a piece ("Select similar").
+ */
+export function similarElements(home: Home, levelId: string | null, selection: string[]): string[] {
+  const keys = new Set(selection.map((id) => similarityKey(home, id)).filter(Boolean));
+  if (keys.size === 0) return selection;
+  return elementsInRect(home, levelId, [-1e9, -1e9], [1e9, 1e9]).filter((id) =>
+    keys.has(similarityKey(home, id)),
+  );
+}

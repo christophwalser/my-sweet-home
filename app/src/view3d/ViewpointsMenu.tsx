@@ -1,10 +1,11 @@
 // Points of view of the 3D view: store the current view under a name, go back to it
-// later or delete it. Also the "All levels" switch of the 3D view.
+// later or delete it. Also the levels shown in the 3D view.
 
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { poseParams, useStore, type ViewMode } from "../store";
 import type { CameraPose } from "./camera";
+import { LEVELS_3D_OPTIONS, levels3dMode } from "./levels3d";
 
 type Props = {
   /** Camera of the 3D view right now */
@@ -15,8 +16,9 @@ type Props = {
 
 export default function ViewpointsMenu({ currentPose, onSettings }: Props) {
   const opened = useStore((s) => s.opened);
+  const selectedLevel = useStore((s) => s.selectedLevel);
   const run = useStore((s) => s.run);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<"views" | "levels" | null>(null);
   const [name, setName] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
@@ -24,7 +26,7 @@ export default function ViewpointsMenu({ currentPose, onSettings }: Props) {
   useEffect(() => {
     if (!open) return;
     const close = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      if (!ref.current?.contains(e.target as Node)) setOpen(null);
     };
     window.addEventListener("pointerdown", close);
     return () => window.removeEventListener("pointerdown", close);
@@ -32,14 +34,20 @@ export default function ViewpointsMenu({ currentPose, onSettings }: Props) {
 
   if (!opened) return null;
   const stored = opened.home.cameras.filter((c) => c.attrs.role === "storedCamera");
-  const allLevels = opened.home.environment?.attrs.all_levels_visible === true;
+  const mode = levels3dMode(opened.home);
   const hasLevels = opened.home.levels.length > 1;
+  // Highest level first, like the storeys of the house
+  const levels = [...opened.home.levels].sort(
+    (a, b) =>
+      b.attrs.elevation - a.attrs.elevation ||
+      (b.attrs.elevation_index ?? 0) - (a.attrs.elevation_index ?? 0),
+  );
 
   const store = () => {
     const n = name.trim();
     if (!n) return;
-    const { mode, pose } = currentPose();
-    void run("viewpoint_store", { name: n, mode, ...poseParams(pose) });
+    const { mode: viewMode, pose } = currentPose();
+    void run("viewpoint_store", { name: n, mode: viewMode, ...poseParams(pose) });
     setName("");
   };
 
@@ -48,25 +56,22 @@ export default function ViewpointsMenu({ currentPose, onSettings }: Props) {
       <button
         type="button"
         className="view3d-button"
-        onClick={() => setOpen(!open)}
+        aria-expanded={open === "views"}
+        onClick={() => setOpen(open === "views" ? null : "views")}
         title={t("Store the current view or go to a stored point of view")}
       >
         {t("Points of view ▾")}
       </button>
       {hasLevels && (
-        <label
+        <button
+          type="button"
           className="view3d-button"
-          title={t("Show all levels, not only the selected one and the ones below")}
+          aria-expanded={open === "levels"}
+          onClick={() => setOpen(open === "levels" ? null : "levels")}
+          title={t("Levels shown in the 3D view")}
         >
-          <input
-            type="checkbox"
-            checked={allLevels}
-            onChange={(e) =>
-              void run("view3d_update", { all_levels_visible: e.currentTarget.checked })
-            }
-          />
-          {t("All levels")}
-        </label>
+          {t("Levels ▾")}
+        </button>
       )}
       <button
         type="button"
@@ -76,7 +81,39 @@ export default function ViewpointsMenu({ currentPose, onSettings }: Props) {
       >
         {t("3D settings…")}
       </button>
-      {open && (
+      {open === "levels" && (
+        <div className="viewpoints-menu levels3d-menu">
+          {LEVELS_3D_OPTIONS.map(([value, label]) => (
+            <label key={value} className="levels3d-row">
+              <input
+                type="radio"
+                name="levels3d"
+                checked={mode === value}
+                onChange={() => void run("view3d_update", { levels: value })}
+              />
+              {label}
+            </label>
+          ))}
+          <hr />
+          {levels.map((l) => (
+            <label
+              key={l.attrs.id}
+              className={`levels3d-row${l.attrs.id === selectedLevel ? " current" : ""}`}
+            >
+              <input
+                type="checkbox"
+                checked={l.attrs.viewable !== false}
+                onChange={(e) =>
+                  void run("level_update", { id: l.attrs.id, viewable: e.currentTarget.checked })
+                }
+              />
+              {l.attrs.name}
+            </label>
+          ))}
+          <p className="muted small">{t("A level without a tick is never shown in 3D.")}</p>
+        </div>
+      )}
+      {open === "views" && (
         <div className="viewpoints-menu">
           <form
             className="viewpoints-store"
@@ -105,7 +142,7 @@ export default function ViewpointsMenu({ currentPose, onSettings }: Props) {
                   className="viewpoints-go"
                   onClick={() => {
                     void run("viewpoint_go", { name: n });
-                    setOpen(false);
+                    setOpen(null);
                   }}
                   title={c.observer ? t("Virtual visit") : t("Aerial view")}
                 >

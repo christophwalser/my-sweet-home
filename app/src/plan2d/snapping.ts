@@ -17,7 +17,7 @@ import {
   wallAtLevel,
 } from "../model";
 import { usePreferences } from "../preferences";
-import { sameLevel } from "./drawPlan";
+import { sameLevel, underlayLevel } from "./drawPlan";
 import { levelGuides } from "./guideData";
 
 export type Segment = [Pt, Pt];
@@ -37,7 +37,7 @@ export type SnapContext = {
   labels?: Map<string, string>;
   /** Shown when the point snaps onto one of `lines` */
   lineLabel?: string;
-  /** Labels of single lines instead of `lineLabel` (same index as `lines`), e.g. "on ruler" */
+  /** Labels of single lines instead of `lineLabel` (same index as `lines`), e.g. "on guide line" */
   lineLabels?: (string | undefined)[];
   /** Snap points of nearby elements, drawn as markers so the user sees where to click */
   hints?: { pt: Pt; label: string }[];
@@ -366,8 +366,11 @@ export function snapContext(
       s.right[0],
       s.right[s.right.length - 1],
     ];
+    // Close to the wall: within some snap radii of its faces (measured from the axis, so the
+    // half thickness is added; otherwise the faces of thick walls are out of reach when zoomed in)
+    const reach = radius * 8 + (a.thickness ?? 0) / 2;
     if (purpose === "wall") {
-      showHints = !!near && distanceToWall(near, start, end) < radius * 8;
+      showHints = !!near && distanceToWall(near, start, end) < reach;
       named(start, "wall end");
       named(end, "wall end");
       if (showHints && !a.arc_extent) {
@@ -378,6 +381,27 @@ export function snapContext(
           lineLabelOf.set(face, "on wall face");
         }
         for (const c of corners.filter(keep)) named(c, "wall corner");
+        // A wall started on a face (also an end face) with one side flush with its corner
+        const half = (thickness ?? 0) / 2;
+        const last = s.left.length - 1;
+        const faces: Segment[] = [
+          [s.left[0], s.left[last]],
+          [s.right[0], s.right[s.right.length - 1]],
+          [s.left[0], s.right[0]],
+          [s.left[last], s.right[s.right.length - 1]],
+        ];
+        for (const [p0, p1] of half > 0 ? faces : []) {
+          const len = dist(p0, p1);
+          if (len < 2 * half + 1) continue;
+          const ux = (p1[0] - p0[0]) / len;
+          const uy = (p1[1] - p0[1]) / len;
+          for (const q of [
+            [p0[0] + ux * half, p0[1] + uy * half],
+            [p1[0] - ux * half, p1[1] - uy * half],
+          ] as Pt[]) {
+            if (keep(q)) named(q, "flush with wall corner");
+          }
+        }
       }
       if (!a.arc_extent) {
         lines.push([start, end]);
@@ -414,7 +438,7 @@ export function snapContext(
     }
     if (anchor && !a.arc_extent && purpose !== "polyline" && near) {
       // Foot of the perpendicular from the previous point on the axis and the faces
-      if (distanceToWall(near, start, end) < radius * 8) {
+      if (distanceToWall(near, start, end) < reach) {
         const segs: Segment[] = [
           [s.left[0], s.left[s.left.length - 1]],
           [s.right[0], s.right[s.right.length - 1]],
@@ -436,6 +460,31 @@ export function snapContext(
       }
     }
   });
+
+  // Walls of the underlay level: their ends and corners, to put walls exactly above the
+  // ones of the storey below (or below the ones above)
+  const underlay = purpose === "polyline" ? null : underlayLevel(home, levelId);
+  if (underlay) {
+    showHints = false;
+    home.walls.forEach((w, i) => {
+      const a = w.attrs;
+      if (a.level !== underlay || wallAtLevel(home, w, levelId)) return;
+      const s = wallShapes[i];
+      const ends: Pt[] = [
+        [a.x_start, a.y_start],
+        [a.x_end, a.y_end],
+      ];
+      const corners: Pt[] = [
+        s.left[0],
+        s.left[s.left.length - 1],
+        s.right[0],
+        s.right[s.right.length - 1],
+      ];
+      for (const q of ends.filter(keep)) named(q, "wall end (other level)");
+      for (const q of corners.filter(keep)) named(q, "wall corner (other level)");
+      refs.push(...ends.filter(keep), ...corners.filter(keep));
+    });
+  }
 
   if (purpose !== "polyline") {
     for (const room of home.rooms) {
@@ -536,20 +585,20 @@ export function snapContext(
     rulers.forEach((s, i) => {
       const [a, b] = s;
       if (dist(a, b) < 1) return;
-      named(a, "ruler end");
-      named(b, "ruler end");
-      named([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], "ruler middle");
+      named(a, "guide line end");
+      named(b, "guide line end");
+      named([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], "guide line middle");
       refs.push(...[a, b].filter(keep));
       directions.push(Math.atan2(b[1] - a[1], b[0] - a[0]));
       for (const o of [...others, ...rulers.slice(i + 1)]) {
         const x = segmentIntersection(s, o);
         if (x && keep(x)) {
           points.push(x);
-          labels.set(pointKey(x), "ruler crossing");
+          labels.set(pointKey(x), "guide line crossing");
         }
       }
       lines.push(s);
-      lineLabels.push("on ruler");
+      lineLabels.push("on guide line");
     });
   }
   // Avoid directions that are too many to be meaningful
@@ -640,6 +689,18 @@ export function offsetOutline(pts: Pt[], half: number): Pt[] {
     right.push([pts[i][0] - nx * m, pts[i][1] - ny * m]);
   }
   return [...left, ...right.reverse()];
+}
+
+/**
+ * Axis of a wall path whose points describe one of its sides (as `side` of wall_add_path):
+ * the path moved by half the thickness to the other side, with mitered corners.
+ */
+export function sideAxis(pts: Pt[], line: "axis" | "left" | "right", thickness: number): Pt[] {
+  if (line === "axis" || pts.length < 2) return pts;
+  const outline = offsetOutline(pts, thickness / 2);
+  const n = pts.length;
+  // The outline lists the left side, then the right side backwards
+  return line === "right" ? outline.slice(0, n) : outline.slice(n).reverse();
 }
 
 /** Left normal (like the left side of a wall: (sin, −cos) of the direction). */

@@ -37,7 +37,8 @@ struct CopyParams {
 #[derive(Deserialize, JsonSchema)]
 struct PasteParams {
     /// Offset in cm. Default: 20 cm right and down if the copied elements are still in
-    /// the home, otherwise the original position.
+    /// the home and are pasted on their own level, otherwise the original position
+    /// (e.g. exactly above the originals on another level).
     dx: Option<f32>,
     dy: Option<f32>,
     /// Target level (default: selected level)
@@ -75,7 +76,8 @@ pub(super) fn register(r: &mut Registry) {
                 + clip.furniture.len()
                 + clip.polylines.len()
                 + clip.dimension_lines.len()
-                + clip.labels.len();
+                + clip.labels.len()
+                + clip.guides.len();
             doc.clipboard = Some(clip);
             Ok(json!({ "copied": count }))
         },
@@ -228,48 +230,52 @@ fn element_level(home: &Home, ids: &[String]) -> Option<String> {
         .flatten()
 }
 
+/// Doors and windows standing in one of the walls with the given IDs, without those that
+/// are among the IDs themselves: they follow their wall when it is moved or rotated.
+pub(super) fn carried_openings(home: &Home, ids: &HashSet<&str>) -> HashSet<String> {
+    let shapes = msh_geometry::wall_shapes(home);
+    let outlines: Vec<(Option<String>, Vec<[f32; 2]>)> = home
+        .walls
+        .iter()
+        .zip(&shapes)
+        .filter(|(w, _)| ids.contains(w.attrs.id.as_str()))
+        .map(|(w, s)| (w.attrs.level.clone(), s.polygon()))
+        .collect();
+    let mut carried = HashSet::new();
+    fn collect(
+        items: &[Furniture],
+        outlines: &[(Option<String>, Vec<[f32; 2]>)],
+        out: &mut HashSet<String>,
+    ) {
+        for item in items {
+            match item {
+                Furniture::Piece(p) if p.kind == msh_model::PieceKind::DoorOrWindow => {
+                    let center = [p.attrs.x, p.attrs.y];
+                    if outlines.iter().any(|(level, poly)| {
+                        *level == p.attrs.level && msh_geometry::point_in_polygon(center, poly)
+                    }) {
+                        out.extend(p.attrs.id.clone());
+                    }
+                }
+                Furniture::Group(g) => collect(&g.items, outlines, out),
+                Furniture::Piece(_) => {}
+            }
+        }
+    }
+    if !outlines.is_empty() {
+        collect(&home.furniture, &outlines, &mut carried);
+    }
+    carried.retain(|id| !ids.contains(id.as_str()));
+    carried
+}
+
 /// Moves the elements with the given IDs; returns how many were moved.
 pub(super) fn move_elements(home: &mut Home, ids: &[String], dx: f32, dy: f32) -> usize {
     let ids: HashSet<&str> = ids.iter().map(String::as_str).collect();
     let mut moved = 0;
 
     // Doors and windows standing in a moved wall move with it (unless selected themselves)
-    let carried: HashSet<String> = {
-        let shapes = msh_geometry::wall_shapes(home);
-        let outlines: Vec<(Option<String>, Vec<[f32; 2]>)> = home
-            .walls
-            .iter()
-            .zip(&shapes)
-            .filter(|(w, _)| ids.contains(w.attrs.id.as_str()))
-            .map(|(w, s)| (w.attrs.level.clone(), s.polygon()))
-            .collect();
-        let mut carried = HashSet::new();
-        fn collect(
-            items: &[Furniture],
-            outlines: &[(Option<String>, Vec<[f32; 2]>)],
-            out: &mut HashSet<String>,
-        ) {
-            for item in items {
-                match item {
-                    Furniture::Piece(p) if p.kind == msh_model::PieceKind::DoorOrWindow => {
-                        let center = [p.attrs.x, p.attrs.y];
-                        if outlines.iter().any(|(level, poly)| {
-                            *level == p.attrs.level && msh_geometry::point_in_polygon(center, poly)
-                        }) {
-                            out.extend(p.attrs.id.clone());
-                        }
-                    }
-                    Furniture::Group(g) => collect(&g.items, outlines, out),
-                    Furniture::Piece(_) => {}
-                }
-            }
-        }
-        if !outlines.is_empty() {
-            collect(&home.furniture, &outlines, &mut carried);
-        }
-        carried.retain(|id| !ids.contains(id.as_str()));
-        carried
-    };
+    let carried = carried_openings(home, &ids);
     let has = |id: &Option<String>| {
         id.as_deref()
             .is_some_and(|i| ids.contains(i) || carried.contains(i))

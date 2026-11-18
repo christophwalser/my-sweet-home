@@ -9,6 +9,7 @@ import {
   cssColor,
   forEachPiece,
   type Home,
+  isReference,
   type Piece,
   type Pt,
   pieceAtLevel,
@@ -20,7 +21,7 @@ import {
   wallAtLevel,
   wallPolygon,
 } from "../model";
-import { usePreferences } from "../preferences";
+import { type Underlay, usePreferences } from "../preferences";
 import { formatArea, formatLength as formatUnitLength } from "../units";
 import { baseboardOf, baseboardPolygon } from "../view3d/wallSides";
 import { curveSegments, polylinePath } from "./curve";
@@ -64,7 +65,11 @@ export type PlanInput = {
   topView?: (p: Piece) => CanvasImageSource | null;
 };
 
-/** Bounding box of all walls, rooms and furniture on a level. */
+/**
+ * Area to fit the plan of a level to: the building, that is its walls. Without walls, all rooms,
+ * lines, furniture, dimensions and texts; reference objects (terrain, scans) count only when there
+ * is nothing else. Terrain, parcel lines and the like around the house never widen it.
+ */
 export function planBounds(input: PlanInput): [number, number, number, number] | null {
   let minX = Infinity;
   let minY = Infinity;
@@ -81,6 +86,7 @@ export function planBounds(input: PlanInput): [number, number, number, number] |
     if (!wallAtLevel(home, w, levelId)) return;
     for (const p of wallPolygon(wallShapes[i])) add(p[0], p[1]);
   });
+  if (Number.isFinite(minX)) return [minX, minY, maxX, maxY];
   for (const r of home.rooms) {
     if (!sameLevel(r.attrs.level, levelId)) continue;
     for (const p of r.points) add(p.x, p.y);
@@ -89,8 +95,11 @@ export function planBounds(input: PlanInput): [number, number, number, number] |
     if (!sameLevel(pl.attrs.level, levelId)) continue;
     for (const p of pl.points) add(p.x, p.y);
   }
+  const references: Piece[] = [];
   forEachPiece(home.furniture, (p) => {
-    if (pieceAtLevel(home, p, levelId)) add(p.attrs.x, p.attrs.y);
+    if (!pieceAtLevel(home, p, levelId)) return;
+    if (isReference(p)) references.push(p);
+    else add(p.attrs.x, p.attrs.y);
   });
   for (const d of home.dimension_lines) {
     if (!sameLevel(d.attrs.level, levelId)) continue;
@@ -118,6 +127,8 @@ export function planBounds(input: PlanInput): [number, number, number, number] |
     add(bb[0], bb[1]);
     add(bb[2], bb[3]);
   }
+  // Only terrain or scans yet: fit to them
+  if (!hasElements && !bb) for (const p of references) add(p.attrs.x, p.attrs.y);
   return Number.isFinite(minX) ? [minX, minY, maxX, maxY] : null;
 }
 
@@ -139,18 +150,45 @@ export function backgroundBounds(
   return [x0, y0, x0 + img.naturalWidth * s, y0 + img.naturalHeight * s];
 }
 
-/** The level directly below `levelId` (lower elevation, or same elevation and lower index). */
-export function levelBelow(home: Home, levelId: string | null): string | null {
+/**
+ * The level next to `levelId`: directly below it (lower elevation, or same elevation and
+ * lower index) or directly above it.
+ */
+function neighborLevel(home: Home, levelId: string | null, above: boolean): string | null {
   const current = home.levels.find((l) => l.attrs.id === levelId);
   if (!current) return null;
   const key = (l: { attrs: { elevation: number; elevation_index: number | null } }) =>
     l.attrs.elevation * 1000 + (l.attrs.elevation_index ?? 0);
+  const sign = above ? -1 : 1;
   let best: { id: string; k: number } | null = null;
   for (const l of home.levels) {
-    const k = key(l);
-    if (k < key(current) && (!best || k > best.k)) best = { id: l.attrs.id, k };
+    const k = key(l) * sign;
+    if (k < key(current) * sign && (!best || k > best.k)) best = { id: l.attrs.id, k };
   }
   return best?.id ?? null;
+}
+
+/** The level directly below `levelId` (lower elevation, or same elevation and lower index). */
+export function levelBelow(home: Home, levelId: string | null): string | null {
+  return neighborLevel(home, levelId, false);
+}
+
+/** The level directly above `levelId`. */
+export function levelAbove(home: Home, levelId: string | null): string | null {
+  return neighborLevel(home, levelId, true);
+}
+
+/**
+ * The level shown faded under the plan of `levelId` and offered to the magnetism: the one
+ * below, the one above or none, as chosen in the status bar.
+ */
+export function underlayLevel(
+  home: Home,
+  levelId: string | null,
+  mode: Underlay = usePreferences.getState().underlay,
+): string | null {
+  if (mode === "off") return null;
+  return neighborLevel(home, levelId, mode === "above");
 }
 
 export function sameLevel(itemLevel: string | null, levelId: string | null): boolean {
@@ -210,8 +248,8 @@ export function drawPlan(
     ctx.restore();
   }
 
-  // The level below as a faded background (like Sweet Home 3D), to align walls and rooms
-  const below = levelBelow(home, levelId);
+  // The level below (or above) as a faded background, to align walls and rooms
+  const below = underlayLevel(home, levelId);
   if (below) {
     ctx.save();
     ctx.globalAlpha = 0.35;

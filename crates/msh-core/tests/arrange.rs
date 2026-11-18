@@ -208,10 +208,10 @@ fn style_of_the_copied_element_is_pasted() {
     );
     assert_eq!(styled["styled"], json!(1));
     let a = &doc.home().walls[1].attrs;
-    assert_eq!(a.thickness, 30.0);
     assert_eq!(a.left_side_color, Some(Color(0xFFAA3300)));
     assert_eq!(a.pattern.as_deref(), Some("crossHatch"));
-    // Geometry stays
+    // Geometry stays, the thickness too
+    assert_eq!(a.thickness, 10.0);
     assert_eq!((a.y_start, a.y_end), (300.0, 300.0));
     assert!(
         r.execute(&mut doc, "edit_paste_style", json!({ "ids": ["chair"] }))

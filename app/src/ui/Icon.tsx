@@ -4,6 +4,13 @@
 import type { JSX } from "react";
 
 const PATHS = {
+  pipette: (
+    <>
+      <path d="M13 7l4 4" />
+      <path d="M11.5 8.5L4 16v4h4l7.5-7.5" />
+      <path d="M14.5 4.5a2.1 2.1 0 0 1 3 0l2 2a2.1 2.1 0 0 1 0 3L17 12l-5-5z" />
+    </>
+  ),
   new: (
     <>
       <path d="M6 3h8l4 4v14H6z" />
@@ -303,6 +310,14 @@ const PATHS = {
       <path d="m12 2 9 5-9 5-9-5z" />
       <path d="m3 12 9 5 9-5" />
       <path d="m3 17 9 5 9-5" />
+    </>
+  ),
+  hidden: (
+    <>
+      <path d="M3 3l18 18" />
+      <path d="M10.6 5.1A9.6 9.6 0 0 1 12 5c6 0 9.5 7 9.5 7a15.6 15.6 0 0 1-2.7 3.5" />
+      <path d="M6.6 6.6A15.4 15.4 0 0 0 2.5 12s3.5 7 9.5 7a9.4 9.4 0 0 0 4.3-1" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
     </>
   ),
   furniture: (

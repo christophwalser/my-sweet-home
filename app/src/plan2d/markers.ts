@@ -9,9 +9,9 @@ export type MarkerShape = "square" | "triangle" | "cross" | "perpendicular" | "d
 export function markerShape(label: string | null | undefined): MarkerShape {
   if (!label) return "circle";
   if (label.startsWith("perpendicular")) return "perpendicular";
-  if (label.includes("crossing") || label.startsWith("flush") || label === "wall corner")
+  if (label.includes("crossing") || label.startsWith("flush") || label.startsWith("wall corner"))
     return "cross";
-  if (label.includes("ruler") && !label.startsWith("on ")) return "diamond";
+  if (label.includes("guide line") && !label.startsWith("on ")) return "diamond";
   if (label.includes("middle")) return "triangle";
   if (
     label.includes("end") ||
@@ -72,14 +72,17 @@ const NOTES: Record<string, string> = {
   "wall end": t("wall end"),
   "wall middle": t("wall middle"),
   "wall corner": t("wall corner"),
+  "wall end (other level)": t("wall end (other level)"),
+  "wall corner (other level)": t("wall corner (other level)"),
   "flush with wall end": t("flush with wall end"),
+  "flush with wall corner": t("flush with wall corner"),
   "on wall axis": t("on wall axis"),
   "on wall face": t("on wall face"),
   "on edge": t("on edge"),
-  "on ruler": t("on ruler"),
-  "ruler end": t("ruler end"),
-  "ruler middle": t("ruler middle"),
-  "ruler crossing": t("ruler crossing"),
+  "on guide line": t("on guide line"),
+  "guide line end": t("guide line end"),
+  "guide line middle": t("guide line middle"),
+  "guide line crossing": t("guide line crossing"),
   perpendicular: t("perpendicular"),
   close: t("close"),
   "finish room": t("finish room"),

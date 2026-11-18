@@ -7,7 +7,7 @@ import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
 import { errorText } from "./errorText";
 import { language } from "./i18n";
-import { forEachGroup, forEachPiece, type OpenedHome } from "./model";
+import { forEachGroup, forEveryPiece, type OpenedHome } from "./model";
 import { homeGuides } from "./plan2d/guides";
 import { usePreferences } from "./preferences";
 import type { CameraPose } from "./view3d/camera";
@@ -33,6 +33,9 @@ export type Tool =
   /** Ruler: a guide line that stays in the plan (measuring tool without the length) */
   | "ruler";
 
+/** A line of a wall: its axis or one of its faces (left = left from the start to the end). */
+export type WallLine = "axis" | "left" | "right";
+
 type State = {
   opened: OpenedHome | null;
   selectedLevel: string | null;
@@ -41,6 +44,18 @@ type State = {
   tool: Tool;
   /** Thickness of new walls drawn in the plan (cm) */
   wallThickness: number;
+  /** Height of new walls (cm); null: the wall height of the home */
+  wallHeight: number | null;
+  /** Line of new walls that runs through the drawn points */
+  wallLine: WallLine;
+  /** Arc of new round walls in degrees */
+  arcExtent: number;
+  /** Line of a wall that stays when its thickness is changed in the properties */
+  wallKeepLine: WallLine;
+  /** A new elevation or height of a level moves the levels above along (properties) */
+  levelShiftAbove: boolean;
+  /** A new height of a level is given to its walls of full height (properties) */
+  levelAdjustWalls: boolean;
   /** Incremented to ask the plan to fit the view (e.g. after importing a background image) */
   fitRequest: number;
   requestFit: () => void;
@@ -94,6 +109,12 @@ export const useStore = create<State>((set, get) => ({
   selection: [],
   tool: "select",
   wallThickness: usePreferences.getState().newWallThickness,
+  wallHeight: null,
+  wallLine: "axis",
+  arcExtent: 90,
+  wallKeepLine: "axis",
+  levelShiftAbove: true,
+  levelAdjustWalls: true,
   highlightSide: null,
   fitRequest: 0,
   requestFit: () => set((s) => ({ fitRequest: s.fitRequest + 1 })),
@@ -259,7 +280,8 @@ export function poseParams(p: CameraPose): Record<string, number> {
 function allIds(opened: OpenedHome): Set<string> {
   const ids = new Set<string>();
   const h = opened.home;
-  forEachPiece(h.furniture, (p) => {
+  // Hidden pieces stay selected: their panel is where they are shown again
+  forEveryPiece(h.furniture, (p) => {
     if (p.attrs.id) ids.add(p.attrs.id);
   });
   forEachGroup(h.furniture, (g) => {

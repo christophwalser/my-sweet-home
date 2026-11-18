@@ -27,7 +27,7 @@ const GROUP_LABELS: [SelectionGroup, () => string][] = [
   ["text", () => t("Texts")],
   ["dimension", () => t("Dimensions")],
   ["line", () => t("Lines")],
-  ["ruler", () => t("Rulers")],
+  ["ruler", () => t("Guide lines")],
   ["other", () => t("Other")],
 ];
 
@@ -112,7 +112,7 @@ export function selectionItems(
   for (const g of homeGuides(home)) {
     byId.set(g.id, {
       id: g.id,
-      kind: t("Ruler"),
+      kind: t("Guide line"),
       group: "ruler",
       name: formatLength(Math.hypot(g.x_end - g.x_start, g.y_end - g.y_start)),
     });

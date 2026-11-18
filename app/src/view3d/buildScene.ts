@@ -46,24 +46,7 @@ export function levelInfos(home: Home): Map<string | null, LevelInfo> {
   return map;
 }
 
-/** Levels shown in 3D: the selected level and all levels below it. */
-export function visibleLevels(home: Home, selected: string | null): Set<string | null> {
-  const set = new Set<string | null>();
-  if (home.levels.length === 0) {
-    set.add(null);
-    return set;
-  }
-  const all = home.environment?.attrs.all_levels_visible === true;
-  const sel = home.levels.find((l) => l.attrs.id === selected);
-  const maxElevation = sel ? sel.attrs.elevation : Number.POSITIVE_INFINITY;
-  for (const l of home.levels) {
-    // `visible` is derived state saved by Sweet Home 3D (levels above the selected
-    // one); only `viewable` is the user's choice.
-    if (l.attrs.viewable === false) continue;
-    if (all || l.attrs.elevation <= maxElevation) set.add(l.attrs.id);
-  }
-  return set;
-}
+export { visibleLevels } from "./levels3d";
 
 export function colorOf(argb: number | null | undefined, fallback: number): THREE.Color {
   return new THREE.Color(argb === null || argb === undefined ? fallback : argb & 0xffffff);
@@ -81,6 +64,7 @@ export function loadTiledTexture(url: string, t: Texture, onLoad: () => void): T
   const scale = t.scale ?? 1;
   tex.repeat.set(1 / (t.width * scale), 1 / (t.height * scale));
   tex.rotation = t.angle ?? 0;
+  tex.offset.set(t.x_offset ?? 0, t.y_offset ?? 0);
   return tex;
 }
 
@@ -449,7 +433,13 @@ export function buildWalls(
       textures.get(rightTexture),
       a.right_side_shininess,
     );
-    const materials = [leftMaterial, rightMaterial, wallMaterial(a.top_color, wallsAlpha, null)];
+    // Top (and ends and bottom): its own color and texture, seen on walls lower than the ceiling
+    const topTexture = wall.textures?.find((t) => t.role === "topTexture");
+    const materials = [
+      leftMaterial,
+      rightMaterial,
+      wallMaterial(a.top_color, wallsAlpha, textures.get(topTexture)),
+    ];
     // Like Sweet Home 3D, walls of upper levels reach down through the floor slab to the top
     // of the walls below, otherwise a gap of the floor thickness shows between the storeys
     const drop =
@@ -505,7 +495,7 @@ class TextureCache {
 
   get(t: Texture | null | undefined): THREE.Texture | null {
     if (!t) return null;
-    const key = `${t.image}|${t.width}|${t.height}|${t.angle ?? 0}|${t.scale ?? 1}`;
+    const key = `${t.image}|${t.width}|${t.height}|${t.angle ?? 0}|${t.scale ?? 1}|${t.x_offset ?? 0}|${t.y_offset ?? 0}`;
     let tex = this.map.get(key);
     if (!tex) {
       tex = loadTiledTexture(docResourceUrl(this.docId, t.image), t, this.onLoad);
@@ -561,6 +551,8 @@ export function buildRooms(
   const stairs = staircases(opened.home, levels);
   const evaluator = new Evaluator();
   evaluator.useGroups = true;
+  const ceilings: { level: string | null; points: Pt[]; ceilingY: number; mat: THREE.Material }[] =
+    [];
   for (const room of opened.home.rooms) {
     const a = room.attrs;
     if (!shown.has(a.level) || room.points.length < 3) continue;
@@ -639,6 +631,7 @@ export function buildRooms(
         slab.rotateX(Math.PI / 2);
         ceilingGeometry = facesDown(cutOut(evaluator, slab, ceilingHoles, [mat, mat]), -1);
       }
+      ceilings.push({ level: a.level, points: room.points.map((p) => [p.x, p.y]), ceilingY, mat });
       const ceiling = new THREE.Mesh(ceilingGeometry, mat);
       // The cut slab's lower face is 1 cm below its top
       ceiling.position.y = ceilingY + (ceilingHoles.length > 0 ? 1 : 0);
@@ -646,7 +639,71 @@ export function buildRooms(
       group.add(ceiling);
     }
   }
+  for (const cap of wallCeilingCaps(opened.home, ceilings)) group.add(cap);
   return group;
+}
+
+/**
+ * The ceilings of rooms end at their walls. Above a wall lower than the ceiling (a half-height
+ * wall) that left a gap, through which the sky showed when the level above is not displayed:
+ * such walls get a piece of the ceiling of the room next to them.
+ */
+function wallCeilingCaps(
+  home: OpenedHome["home"],
+  ceilings: { level: string | null; points: Pt[]; ceilingY: number; mat: THREE.Material }[],
+): THREE.Mesh[] {
+  const caps: THREE.Mesh[] = [];
+  const defaultHeight = home.attrs.wall_height ?? 250;
+  const levelElevation = (id: string | null) =>
+    home.levels.find((l) => l.attrs.id === id)?.attrs.elevation ?? 0;
+  for (const wall of home.walls) {
+    const a = wall.attrs;
+    if (a.arc_extent) continue;
+    const dx = a.x_end - a.x_start;
+    const dy = a.y_end - a.y_start;
+    const len = Math.hypot(dx, dy);
+    if (len < 1) continue;
+    const ux = dx / len;
+    const uy = dy / len;
+    const half = a.thickness / 2;
+    const top =
+      levelElevation(a.level) +
+      Math.max(a.height ?? defaultHeight, a.height_at_end ?? a.height ?? defaultHeight);
+    // Points just beside both faces: the room whose ceiling covers them is next to the wall
+    const probes: Pt[] = [];
+    for (const t of [0.25, 0.5, 0.75]) {
+      for (const side of [1, -1]) {
+        const d = side * (half + 2);
+        probes.push([a.x_start + dx * t - uy * d, a.y_start + dy * t + ux * d]);
+      }
+    }
+    const next = ceilings.find(
+      (c) =>
+        c.level === a.level &&
+        top < c.ceilingY - 1 &&
+        probes.some((p) => insidePolygon(p, c.points)),
+    );
+    if (!next) continue;
+    // A little wider (3 cm) and longer (10 cm, into the walls it meets) than the wall, so no slit stays to the rooms' ceilings
+    const w = half + 3;
+    const [sx, sy] = [a.x_start - ux * 10, a.y_start - uy * 10];
+    const [ex, ey] = [a.x_end + ux * 10, a.y_end + uy * 10];
+    const corners: Pt[] = [
+      [sx - uy * w, sy + ux * w],
+      [ex - uy * w, ey + ux * w],
+      [ex + uy * w, ey - ux * w],
+      [sx + uy * w, sy - ux * w],
+    ];
+    const geom = new THREE.ShapeGeometry(
+      new THREE.Shape(corners.map(([x, y]) => new THREE.Vector2(x, y))),
+    );
+    geom.rotateX(Math.PI / 2); // faces down like the ceilings
+    const cap = new THREE.Mesh(geom, next.mat);
+    cap.position.y = next.ceilingY;
+    cap.name = `wallCeiling:${a.id}`;
+    caps.push(cap);
+  }
+  return caps;
 }
 
 /** True if `p` lies inside the polygon (even-odd rule). */

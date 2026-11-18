@@ -2,14 +2,24 @@
 // selected). Every change runs an *_update command: one undo step per field.
 
 import { useEffect, useState } from "react";
-import { docResourceUrl } from "../api";
+import { api, docResourceUrl } from "../api";
 import { t } from "../i18n";
-import { forEachPiece, type Home, isReference, type Piece, type Wall } from "../model";
+import {
+  forEachPiece,
+  forEveryPiece,
+  type Home,
+  isReference,
+  type Piece,
+  type Room,
+  type Wall,
+} from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { guideAngle, guideEnd, guideLength, homeGuides } from "../plan2d/guides";
 import { usePreferences } from "../preferences";
 import { formatMoney, piecePrice } from "../prices";
-import { currentVisitor, setVisitor, useStore, VISITOR_ID } from "../store";
+import { currentVisitor, setVisitor, useStore, VISITOR_ID, type WallLine } from "../store";
+import { deleteLevel } from "../ui/commands";
+import { WALL_LINES } from "../ui/ToolOptions";
 import { useUi } from "../ui/uiStore";
 import { formatArea, formatLength } from "../units";
 import { spotAngle } from "../view3d/lights";
@@ -27,7 +37,7 @@ import {
   WALL_PATTERNS,
 } from "./fields";
 import LocationFields from "./LocationFields";
-import MultiPanel from "./MultiPanel";
+import MultiPanel, { common, commonTexture } from "./MultiPanel";
 import OpeningDistances from "./OpeningDistances";
 import { type Dimension, resizedPiece } from "./pieceSize";
 import TextStyleFields from "./TextStyleFields";
@@ -145,6 +155,7 @@ function WallSide({
         label={t("Texture")}
         current={byRole(wall.textures, `${side}SideTexture`)}
         onCommit={(v) => update("texture", v)}
+        target={{ ids: [id], surface: `${side}_side` }}
       />
       <SurfaceField
         value={side === "left" ? wall.attrs.left_side_shininess : wall.attrs.right_side_shininess}
@@ -186,6 +197,46 @@ function WallSide({
         </>
       )}
     </SideSection>
+  );
+}
+
+/** Color and texture of the top of a wall (seen in 3D on walls lower than the ceiling). */
+function WallTop({
+  wall,
+  run,
+}: {
+  wall: Wall;
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const id = wall.attrs.id;
+  const color = wall.attrs.top_color;
+  return (
+    <fieldset className="side-section">
+      <h3 title={t("Seen in 3D on walls lower than the ceiling, e.g. a half-height wall")}>
+        {t("Top")}
+      </h3>
+      <Field
+        label={t("Color")}
+        type="color"
+        value={toHex(color)}
+        onCommit={(v) => void run("wall_update", { id, top_color: v })}
+      />
+      {color !== null && (
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => void run("wall_update", { id, top_color: "" })}
+        >
+          {t("Default color")}
+        </button>
+      )}
+      <TextureField
+        label={t("Texture")}
+        current={byRole(wall.textures, "topTexture")}
+        onCommit={(v) => void run("wall_update", { id, top_texture: v })}
+        target={{ ids: [id], surface: "top" }}
+      />
+    </fieldset>
   );
 }
 
@@ -264,6 +315,63 @@ function VisitorSection() {
   );
 }
 
+/**
+ * Reference objects of the home (terrain, scans, neighbor houses): each can be shown or hidden
+ * (in the plan and in 3D) and selected to change it.
+ */
+function ReferenceObjectsSection({
+  home,
+  run,
+}: {
+  home: Home;
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const setSelection = useStore((s) => s.setSelection);
+  const references: Piece[] = [];
+  // Hidden ones too, so that they can be shown again
+  forEveryPiece(home.furniture, (p) => {
+    if (isReference(p) && p.attrs.id) references.push(p);
+  });
+  return (
+    <>
+      <h2>{t("Reference objects")}</h2>
+      <p className="muted small">
+        {t(
+          "Terrain, scans and neighbor houses: like the background image they lie faint under the plan, and they show in 3D.",
+        )}
+      </p>
+      {references.length === 0 && (
+        <p className="muted small">
+          {t(
+            "None yet: mark terrain, scans or neighbor houses as reference object in their properties.",
+          )}
+        </p>
+      )}
+      {references.map((p) => (
+        <div key={p.attrs.id} className="prop-row prop-check">
+          <input
+            type="checkbox"
+            checked={p.attrs.visible !== false}
+            title={t("Visible")}
+            aria-label={t("Show {name}", { name: p.attrs.name })}
+            onChange={(e) =>
+              void run("furniture_update", { id: p.attrs.id, visible: e.currentTarget.checked })
+            }
+          />
+          <button
+            type="button"
+            className="link-button"
+            title={t("Select it to change it")}
+            onClick={() => p.attrs.id && setSelection([p.attrs.id])}
+          >
+            {p.attrs.name} ({t("Change…")})
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** Compass of the home: position, size, and the location with its north direction. */
 function CompassSection({
   home,
@@ -321,6 +429,134 @@ function SurfaceField({
         <option value="shiny">{t("Shiny")}</option>
       </select>
     </label>
+  );
+}
+
+/**
+ * Color, texture, surface and baseboard of all wall sides that face a room, whatever the
+ * drawing direction of each wall (room_walls finds the sides, room_walls_update changes them).
+ */
+function RoomWalls({
+  room,
+  home,
+  run,
+}: {
+  room: Room;
+  home: Home;
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const id = room.attrs.id as string;
+  const [sides, setSides] = useState<{ id: string; side: "left" | "right" }[]>([]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the sides follow the walls and the outline of the room
+  useEffect(() => {
+    let current = true;
+    api
+      .execute("room_walls", { id })
+      .then((r) => {
+        if (current) setSides((r as { walls: { id: string; side: "left" | "right" }[] }).walls);
+      })
+      .catch(() => {
+        if (current) setSides([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [id, home.walls, room.points]);
+  const faces = sides.flatMap((s) => {
+    const wall = home.walls.find((w) => w.attrs.id === s.id);
+    return wall ? [{ wall, side: s.side }] : [];
+  });
+  const title = (
+    <h3 title={t("The sides of the walls around this room that face it")}>
+      {t("Walls of this room")}
+    </h3>
+  );
+  if (faces.length === 0) {
+    return (
+      <>
+        {title}
+        <p className="muted small">{t("No wall faces this room.")}</p>
+      </>
+    );
+  }
+  const update = (values: Record<string, unknown>) =>
+    void run("room_walls_update", { id, ...values });
+  const color = common(
+    faces.map((f) =>
+      f.side === "left" ? f.wall.attrs.left_side_color : f.wall.attrs.right_side_color,
+    ),
+  );
+  const texture = commonTexture(faces.map((f) => byRole(f.wall.textures, `${f.side}SideTexture`)));
+  const shiny = common(
+    faces.map((f) => {
+      const a = f.wall.attrs;
+      return ((f.side === "left" ? a.left_side_shininess : a.right_side_shininess) ?? 0) > 0;
+    }),
+  );
+  const baseboards = faces.flatMap(
+    (f) => f.wall.baseboards?.filter((b) => b.attrs.role === `${f.side}SideBaseboard`) ?? [],
+  );
+  const hasBaseboard = common(
+    faces.map(
+      (f) => f.wall.baseboards?.some((b) => b.attrs.role === `${f.side}SideBaseboard`) ?? false,
+    ),
+  );
+  const bbHeight = common(baseboards.map((b) => b.attrs.height));
+  return (
+    <>
+      {title}
+      <p className="muted small">
+        {t(
+          "{n} wall sides face this room. A wall longer than the room changes on its whole side.",
+          { n: faces.length },
+        )}
+      </p>
+      <Field
+        label={t("Color")}
+        type="color"
+        value={toHex(color.value)}
+        mixed={color.mixed}
+        onCommit={(v) => update({ color: v })}
+      />
+      {(color.mixed || (color.value !== null && color.value !== undefined)) && (
+        <button type="button" className="link-button" onClick={() => update({ color: "" })}>
+          {t("Default color")}
+        </button>
+      )}
+      <TextureField
+        label={t("Texture")}
+        current={texture.value}
+        mixed={texture.mixed}
+        onCommit={(v) => update({ texture: v })}
+      />
+      <SelectField
+        label={t("Surface")}
+        value={shiny.value ? "shiny" : "matt"}
+        mixed={shiny.mixed}
+        options={[
+          ["matt", t("Matt")],
+          ["shiny", t("Shiny")],
+        ]}
+        onCommit={(v) => update({ shininess: v === "shiny" ? SHINY : -1 })}
+      />
+      <Field
+        label={t("Baseboard")}
+        type="checkbox"
+        value={hasBaseboard.value}
+        mixed={hasBaseboard.mixed}
+        onCommit={(v) => update({ baseboard: { height: v ? (bbHeight.value ?? 7) : 0 } })}
+      />
+      {baseboards.length > 0 && (
+        <Field
+          label={t("Height")}
+          type="number"
+          unit="cm"
+          value={bbHeight.value}
+          mixed={bbHeight.mixed}
+          onCommit={(v) => update({ baseboard: { height: v } })}
+        />
+      )}
+    </>
   );
 }
 
@@ -547,6 +783,9 @@ export default function PropertiesPanel() {
   const selection = useStore((s) => s.selection);
   const levelId = useStore((s) => s.selectedLevel);
   const run = useStore((s) => s.run);
+  const keepLine = useStore((s) => s.wallKeepLine);
+  const shiftAbove = useStore((s) => s.levelShiftAbove);
+  const adjustWalls = useStore((s) => s.levelAdjustWalls);
   if (!opened) return <div className="props muted">{t("No home open")}</div>;
   const home = opened.home;
 
@@ -723,14 +962,27 @@ export default function PropertiesPanel() {
               type="number"
               unit="cm"
               value={level.attrs.elevation}
-              onCommit={(v) => void run("level_update", { id: level.attrs.id, elevation: v })}
+              onCommit={(v) =>
+                void run("level_update", {
+                  id: level.attrs.id,
+                  elevation: v,
+                  shift_above: shiftAbove,
+                })
+              }
             />
             <Field
               label={t("Height")}
               type="number"
               unit="cm"
               value={level.attrs.height}
-              onCommit={(v) => void run("level_update", { id: level.attrs.id, height: v })}
+              onCommit={(v) =>
+                void run("level_update", {
+                  id: level.attrs.id,
+                  height: v,
+                  shift_above: shiftAbove,
+                  adjust_walls: adjustWalls,
+                })
+              }
             />
             <Field
               label={t("Floor thickness")}
@@ -740,11 +992,22 @@ export default function PropertiesPanel() {
               onCommit={(v) => void run("level_update", { id: level.attrs.id, floor_thickness: v })}
             />
             <Field
-              label={t("Visible in 3D")}
+              label={t("Levels above follow")}
               type="checkbox"
-              value={level.attrs.viewable !== false}
-              onCommit={(v) => void run("level_update", { id: level.attrs.id, viewable: v })}
+              value={shiftAbove}
+              onCommit={(v) => useStore.setState({ levelShiftAbove: v === true })}
             />
+            <Field
+              label={t("Walls follow the height")}
+              type="checkbox"
+              value={adjustWalls}
+              onCommit={(v) => useStore.setState({ levelAdjustWalls: v === true })}
+            />
+            <p className="muted small">
+              {t(
+                "A new elevation or height moves the levels above along, and walls as high as the level get the new height.",
+              )}
+            </p>
             <div className="prop-actions">
               <button
                 type="button"
@@ -763,7 +1026,7 @@ export default function PropertiesPanel() {
               <button
                 type="button"
                 title={t("Delete this level and everything on it (Ctrl+Z restores it)")}
-                onClick={() => void run("edit_delete", { ids: [level.attrs.id] })}
+                onClick={() => void deleteLevel()}
               >
                 {t("Delete level")}
               </button>
@@ -780,6 +1043,7 @@ export default function PropertiesPanel() {
             <BackgroundImageSection levelId={null} background={home.background_image ?? null} />
           )
         )}
+        <ReferenceObjectsSection home={home} run={run} />
         <CompassSection home={home} run={run} />
         <p className="muted">{t("Click an element in the plan to edit it.")}</p>
       </div>
@@ -820,8 +1084,9 @@ export default function PropertiesPanel() {
     );
   }
 
+  // Hidden pieces too (selected in the furniture list or the home details)
   let piece: Piece | null = null;
-  forEachPiece(home.furniture, (p) => {
+  forEveryPiece(home.furniture, (p) => {
     if (p.attrs.id === id) piece = p;
   });
   if (piece) {
@@ -829,6 +1094,55 @@ export default function PropertiesPanel() {
     const a = p.attrs;
     const set = (field: string) => (v: string | number | boolean) =>
       void run("furniture_update", { id, [field]: v });
+    if (isReference(p)) {
+      // A reference object is not furniture: only what places it in the plan and 3D
+      return (
+        <div className="props">
+          <h2>{t("Reference object")}</h2>
+          {a.description && <p className="muted small">{a.description}</p>}
+          <Field label={t("Name")} type="text" value={a.name} onCommit={set("name")} />
+          <Field
+            label={t("Visible")}
+            type="checkbox"
+            value={a.visible !== false}
+            onCommit={set("visible")}
+          />
+          <Field label="X" type="number" unit="cm" value={a.x} onCommit={set("x")} />
+          <Field label="Y" type="number" unit="cm" value={a.y} onCommit={set("y")} />
+          <Field
+            label={t("Elevation")}
+            type="number"
+            unit="cm"
+            value={a.elevation ?? 0}
+            onCommit={set("elevation")}
+          />
+          <Field
+            label={t("Angle")}
+            type="number"
+            unit="°"
+            value={Math.round(((a.angle ?? 0) * 1800) / Math.PI) / 10}
+            onCommit={set("angle_deg")}
+          />
+          <p className="muted small">
+            {t(
+              "Shown faint under the plan of every level and as it is in 3D; it is saved as a piece of furniture, so Sweet Home 3D opens it too.",
+            )}
+          </p>
+          <div className="prop-actions">
+            <button
+              type="button"
+              title={t("Show it in the furniture list and let it be picked in the plan again")}
+              onClick={() => set("reference")(false)}
+            >
+              {t("Make it a piece of furniture")}
+            </button>
+            <button type="button" onClick={() => void run("edit_delete", { ids: [id] })}>
+              {t("Delete")}
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="props">
         <h2>
@@ -891,6 +1205,7 @@ export default function PropertiesPanel() {
           label={t("Texture")}
           current={p.texture}
           onCommit={(v) => set("texture")(v)}
+          target={{ ids: [id], surface: "piece" }}
         />
         <label className="prop-row">
           <span className="prop-label">{t("Surface")}</span>
@@ -1035,6 +1350,27 @@ export default function PropertiesPanel() {
         />
         <Field label={t("X end")} type="number" unit="cm" value={a.x_end} onCommit={set("x_end")} />
         <Field label={t("Y end")} type="number" unit="cm" value={a.y_end} onCommit={set("y_end")} />
+        {/* Clockwise from the x axis, as typed while drawing; the start stays */}
+        <Field
+          label={t("Direction")}
+          type="number"
+          unit="°"
+          value={
+            Math.round(
+              (((Math.atan2(a.y_end - a.y_start, a.x_end - a.x_start) * 180) / Math.PI + 360) %
+                360) *
+                100,
+            ) / 100
+          }
+          onCommit={set("direction_deg")}
+        />
+        <Field
+          label={t("Arc")}
+          type="number"
+          unit="°"
+          value={Math.round((((a.arc_extent ?? 0) * 180) / Math.PI) * 100) / 100}
+          onCommit={set("arc_extent_deg")}
+        />
         <CornerAngleField label={t("Angle at start")} home={home} wall={wall} atStart run={run} />
         <CornerAngleField
           label={t("Angle at end")}
@@ -1048,7 +1384,20 @@ export default function PropertiesPanel() {
           type="number"
           unit="cm"
           value={a.thickness}
-          onCommit={set("thickness")}
+          onCommit={(v) =>
+            void run("wall_update", {
+              id: a.id,
+              thickness: v,
+              // A round wall always grows around its axis
+              ...(keepLine !== "axis" && !a.arc_extent && { keep_side: keepLine }),
+            })
+          }
+        />
+        <SelectField
+          label={t("Stays in place")}
+          value={keepLine}
+          options={WALL_LINES}
+          onCommit={(v) => useStore.setState({ wallKeepLine: v as WallLine })}
         />
         <Field
           label={t("Height")}
@@ -1072,6 +1421,7 @@ export default function PropertiesPanel() {
         />
         <WallSide wall={wall} side="left" run={run} />
         <WallSide wall={wall} side="right" run={run} />
+        <WallTop wall={wall} run={run} />
         {wallActions}
         {actions}
       </div>
@@ -1175,6 +1525,7 @@ export default function PropertiesPanel() {
           label={t("Texture")}
           current={byRole(room.textures, "floorTexture")}
           onCommit={set("floor_texture")}
+          target={{ ids: [id], surface: "floor" }}
         />
         <SurfaceField value={a.floor_shininess} onCommit={set("floor_shininess")} />
         <h3>{t("Ceiling")}</h3>
@@ -1193,8 +1544,10 @@ export default function PropertiesPanel() {
           label={t("Texture")}
           current={byRole(room.textures, "ceilingTexture")}
           onCommit={set("ceiling_texture")}
+          target={{ ids: [id], surface: "ceiling" }}
         />
         <SurfaceField value={a.ceiling_shininess} onCommit={set("ceiling_shininess")} />
+        <RoomWalls room={room} home={home} run={run} />
         {actions}
       </div>
     );
@@ -1207,7 +1560,7 @@ export default function PropertiesPanel() {
       void run("guide_update", { id: guide.id, [field]: v });
     return (
       <div className="props">
-        <h2>{t("Ruler")}</h2>
+        <h2>{t("Guide line")}</h2>
         <Field
           label={t("Length")}
           type="number"
@@ -1242,6 +1595,19 @@ export default function PropertiesPanel() {
           options={DASH_STYLES}
           onCommit={set("dash_style")}
         />
+        {home.levels.length > 0 && (
+          <label
+            className="prop-row prop-check"
+            title={t("Shows the guide line on every level, e.g. to line up the floors")}
+          >
+            <input
+              type="checkbox"
+              checked={guide.all_levels === true}
+              onChange={(e) => set("all_levels")(e.currentTarget.checked)}
+            />
+            <span>{t("On all levels")}</span>
+          </label>
+        )}
         <p className="muted small">
           {t(
             "A guide for placing elements; it is saved with the home but not printed or exported. Drag it to move it, drag its ends to change it.",

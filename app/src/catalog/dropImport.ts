@@ -63,7 +63,19 @@ export async function importFiles(paths: string[], returnTo?: DialogName): Promi
   const model = MODEL_ORDER.map((ext) => paths.find((p) => extensionOf(p) === ext)).find(Boolean);
   if (model) {
     useUi.getState().openDialog("importFurniture", model, returnTo);
-    return done.length ? t("Imported {names}.", { names: done.join(", ") }) : "";
+    // The import dialog takes one model: the others are named instead of dropped silently
+    const others = paths.filter((p) => p !== model && MODEL_ORDER.includes(extensionOf(p)));
+    return [
+      done.length ? t("Imported {names}.", { names: done.join(", ") }) : "",
+      others.length
+        ? t("Only “{name}” was opened. Import the other models one after another: {names}", {
+            name: fileName(model),
+            names: others.map(fileName).join(", "),
+          })
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
 
   // ZIP files: a model inside opens the furniture import, otherwise a material package

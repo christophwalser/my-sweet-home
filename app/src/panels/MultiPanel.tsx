@@ -5,16 +5,27 @@
 import { useState } from "react";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Room, type Texture, type Wall } from "../model";
+import { type Guide, homeGuides } from "../plan2d/guides";
+import { usePreferences } from "../preferences";
 import { useStore, VISITOR_ID } from "../store";
+import { useUi } from "../ui/uiStore";
 import { formatArea, formatLength } from "../units";
-import { byRole, Field, SelectField, SideSection, toHex, WALL_PATTERNS } from "./fields";
+import {
+  byRole,
+  DASH_STYLES,
+  Field,
+  SelectField,
+  SideSection,
+  toHex,
+  WALL_PATTERNS,
+} from "./fields";
 import { type SelectionGroup, selectionGroups, selectionItems } from "./selectionItems";
 import TextureField from "./TextureField";
 
 type Run = (command: string, params: Record<string, unknown>) => Promise<unknown>;
 
 /** Common value of all items, or `undefined` if they differ ("mixed"). */
-function common<T>(values: T[]): { value: T | undefined; mixed: boolean } {
+export function common<T>(values: T[]): { value: T | undefined; mixed: boolean } {
   if (values.length === 0) return { value: undefined, mixed: false };
   const first = values[0];
   const same = values.every((v) => v === first);
@@ -22,7 +33,10 @@ function common<T>(values: T[]): { value: T | undefined; mixed: boolean } {
 }
 
 /** Common texture (by image) of all items. */
-function commonTexture(textures: (Texture | null)[]): { value: Texture | null; mixed: boolean } {
+export function commonTexture(textures: (Texture | null)[]): {
+  value: Texture | null;
+  mixed: boolean;
+} {
   const c = common(textures.map((t) => t?.image ?? null));
   return { value: c.mixed ? null : (textures[0] ?? null), mixed: c.mixed };
 }
@@ -84,6 +98,7 @@ function WallsSection({ walls, home, run }: { walls: Wall[]; home: Home; run: Ru
       {(["left", "right"] as const).map((side) => (
         <WallsSide key={side} walls={walls} side={side} update={update} />
       ))}
+      <WallsTop walls={walls} update={update} />
     </>
   );
 }
@@ -137,6 +152,7 @@ function WallsSide({
         current={texture.value}
         mixed={texture.mixed}
         onCommit={(v) => update({ [field("texture")]: v })}
+        target={{ ids: walls.map((w) => w.attrs.id), surface: `${side}_side` }}
       />
       <Field
         label={t("Baseboard")}
@@ -182,6 +198,44 @@ function WallsSide({
         </>
       )}
     </SideSection>
+  );
+}
+
+/** Color and texture of the top of several walls. */
+function WallsTop({
+  walls,
+  update,
+}: {
+  walls: Wall[];
+  update: (values: Record<string, unknown>) => void;
+}) {
+  const color = common(walls.map((w) => w.attrs.top_color));
+  const texture = commonTexture(walls.map((w) => byRole(w.textures, "topTexture")));
+  return (
+    <fieldset className="side-section">
+      <h3 title={t("Seen in 3D on walls lower than the ceiling, e.g. a half-height wall")}>
+        {t("Top")}
+      </h3>
+      <Field
+        label={t("Color")}
+        type="color"
+        value={toHex(color.value)}
+        mixed={color.mixed}
+        onCommit={(v) => update({ top_color: v })}
+      />
+      {(color.mixed || color.value !== null) && (
+        <button type="button" className="link-button" onClick={() => update({ top_color: "" })}>
+          {t("Default color")}
+        </button>
+      )}
+      <TextureField
+        label={t("Texture")}
+        current={texture.value}
+        mixed={texture.mixed}
+        onCommit={(v) => update({ top_texture: v })}
+        target={{ ids: walls.map((w) => w.attrs.id), surface: "top" }}
+      />
+    </fieldset>
   );
 }
 
@@ -249,6 +303,7 @@ function RoomsSection({ rooms, run }: { rooms: Room[]; run: Run }) {
         current={floorTexture.value}
         mixed={floorTexture.mixed}
         onCommit={set("floor_texture")}
+        target={{ ids: rooms.map((r) => r.attrs.id as string), surface: "floor" }}
       />
       <h3>{t("Ceilings")}</h3>
       <Field
@@ -263,6 +318,7 @@ function RoomsSection({ rooms, run }: { rooms: Room[]; run: Run }) {
         current={ceilingTexture.value}
         mixed={ceilingTexture.mixed}
         onCommit={set("ceiling_texture")}
+        target={{ ids: rooms.map((r) => r.attrs.id as string), surface: "ceiling" }}
       />
     </>
   );
@@ -278,6 +334,18 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
   const depth = common(pieces.map((p) => p.attrs.depth));
   const height = common(pieces.map((p) => p.attrs.height));
   const color = common(pieces.map((p) => p.attrs.color));
+  const texture = commonTexture(pieces.map((p) => p.texture ?? null));
+  const surface = common(
+    pieces.map((p) => {
+      const s = p.attrs.shininess;
+      return s === null || s === undefined ? "model" : s > 0 ? "shiny" : "matt";
+    }),
+  );
+  // One typed dimension changes the other two of each piece by the same factor
+  const keep = useUi((s) => s.keepProportions);
+  const setKeep = useUi((s) => s.setKeepProportions);
+  const size = (field: string) => (v: string | number | boolean) =>
+    void run("furniture_update", { ids, [field]: v, ...(keep ? { keep_proportions: true } : {}) });
   const visible = common(pieces.map((p) => p.attrs.visible !== false));
   const mirrored = common(pieces.map((p) => !!p.attrs.model_mirrored));
   return (
@@ -307,7 +375,7 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
         unit="cm"
         value={width.value}
         mixed={width.mixed}
-        onCommit={set("width")}
+        onCommit={size("width")}
       />
       <Field
         label={t("Depth")}
@@ -315,7 +383,7 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
         unit="cm"
         value={depth.value}
         mixed={depth.mixed}
-        onCommit={set("depth")}
+        onCommit={size("depth")}
       />
       <Field
         label={t("Height")}
@@ -323,8 +391,15 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
         unit="cm"
         value={height.value}
         mixed={height.mixed}
-        onCommit={set("height")}
+        onCommit={size("height")}
       />
+      <label
+        className="prop-row prop-check"
+        title={t("One changed dimension changes the other two of each piece by the same factor")}
+      >
+        <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.currentTarget.checked)} />
+        <span>{t("Keep proportions")}</span>
+      </label>
       <Field
         label={t("Color")}
         type="color"
@@ -337,6 +412,24 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
           {t("Restore model colors")}
         </button>
       )}
+      <TextureField
+        label={t("Texture")}
+        current={texture.value}
+        mixed={texture.mixed}
+        onCommit={set("texture")}
+        target={{ ids, surface: "piece" }}
+      />
+      <SelectField
+        label={t("Surface")}
+        value={surface.value ?? ""}
+        mixed={surface.mixed}
+        options={[
+          ["model", t("Like the model")],
+          ["matt", t("Matt")],
+          ["shiny", t("Shiny")],
+        ]}
+        onCommit={(v) => set("shininess")(v === "model" ? -1 : v === "shiny" ? 0.25 : 0)}
+      />
       <Field
         label={t("Mirrored")}
         type="checkbox"
@@ -355,7 +448,50 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
   );
 }
 
-/** Sections for the walls, rooms and furniture among the selected elements. */
+/** Color, dashes and "on all levels" of several rulers. */
+function RulersSection({ guides, home, run }: { guides: Guide[]; home: Home; run: Run }) {
+  const prefs = usePreferences.getState();
+  const ids = guides.map((g) => g.id);
+  const set = (field: string) => (v: string | number | boolean) =>
+    void run("guide_update", { ids, [field]: v });
+  const color = common(
+    guides.map((g) => (g.color ?? (prefs.rulerColor || "#b0267e")).toLowerCase()),
+  );
+  const dashes = common(guides.map((g) => g.dash_style ?? prefs.rulerDashStyle));
+  const allLevels = common(guides.map((g) => g.all_levels === true));
+  return (
+    <>
+      <h2>
+        {guides.length} {t("guide lines")}
+      </h2>
+      <Field
+        label={t("Color")}
+        type="color"
+        value={color.value}
+        mixed={color.mixed}
+        onCommit={set("color")}
+      />
+      <SelectField
+        label={t("Dashes")}
+        value={dashes.value ?? ""}
+        mixed={dashes.mixed}
+        options={DASH_STYLES}
+        onCommit={set("dash_style")}
+      />
+      {home.levels.length > 0 && (
+        <Field
+          label={t("On all levels")}
+          type="checkbox"
+          value={allLevels.value}
+          mixed={allLevels.mixed}
+          onCommit={set("all_levels")}
+        />
+      )}
+    </>
+  );
+}
+
+/** Sections for the walls, rooms, furniture and rulers among the selected elements. */
 export default function MultiPanel({
   home,
   selection,
@@ -372,11 +508,13 @@ export default function MultiPanel({
   forEachPiece(home.furniture, (p) => {
     if (p.attrs.id && sel.has(p.attrs.id)) pieces.push(p);
   });
+  const guides = homeGuides(home).filter((g) => sel.has(g.id));
   return (
     <>
       {walls.length > 0 && <WallsSection walls={walls} home={home} run={run} />}
       {rooms.length > 0 && <RoomsSection rooms={rooms} run={run} />}
       {pieces.length > 0 && <FurnitureSection pieces={pieces} run={run} />}
+      {guides.length > 0 && <RulersSection guides={guides} home={home} run={run} />}
       <SelectionList home={home} selection={selection} />
     </>
   );

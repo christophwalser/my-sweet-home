@@ -95,6 +95,13 @@ function Entries({
   );
 }
 
+/** The entries that can take the focus, in the order shown. */
+function enabledItems(menu: HTMLElement | null): HTMLButtonElement[] {
+  return Array.from(
+    menu?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)') ?? [],
+  );
+}
+
 export default function ContextMenu({
   x,
   y,
@@ -128,12 +135,66 @@ export default function ContextMenu({
     });
   }, [x, y, fixed]);
 
+  // The menu takes the keyboard while it is open and gives the focus back afterwards
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    enabledItems(ref.current)[0]?.focus();
+    return () => {
+      if (before?.isConnected) before.focus();
+    };
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
+      // No key reaches the plan or the commands behind the menu
+      e.stopPropagation();
+      const items = enabledItems(ref.current);
+      const at = items.indexOf(document.activeElement as HTMLButtonElement);
+      const focus = (i: number) => items[(i + items.length) % items.length]?.focus();
+      const current = at >= 0 ? items[at] : null;
+      switch (e.key) {
+        case "Escape":
+        case "Tab":
+          onClose();
+          break;
+        case "ArrowDown":
+          focus(at + 1);
+          break;
+        case "ArrowUp":
+          focus(at < 0 ? -1 : at - 1);
+          break;
+        case "Home":
+          focus(0);
+          break;
+        case "End":
+          focus(-1);
+          break;
+        case "ArrowRight":
+          // Opens the sub-entries and goes to the first one
+          if (current?.getAttribute("aria-haspopup") && current.ariaExpanded !== "true") {
+            current.click();
+            requestAnimationFrame(() => {
+              const next = enabledItems(ref.current);
+              next[next.indexOf(current) + 1]?.focus();
+            });
+          }
+          break;
+        case "ArrowLeft": {
+          // Back to the entry of the open sub-entries, closing them
+          const parent = current
+            ?.closest(".context-menu-sub")
+            ?.parentElement?.querySelector<HTMLButtonElement>(":scope > button");
+          if (parent) {
+            parent.click();
+            parent.focus();
+          }
+          break;
+        }
+        default:
+          // Enter and Space press the focused entry themselves
+          return;
       }
+      e.preventDefault();
     };
     const onDown = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) onClose();

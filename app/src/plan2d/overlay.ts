@@ -31,7 +31,8 @@ export type PlanOverlay = {
   /** Left and right sides of the selected walls (colored like in the properties panel) */
   wallSides: { left: Pt[][]; right: Pt[][]; highlight: "left" | "right" | null } | null;
   /** Points of the path being drawn, including the cursor point */
-  draft: { points: Pt[]; kind: DraftKind; thickness: number } | null;
+  /** `axis`: where the wall will lie when the points describe one of its sides */
+  draft: { points: Pt[]; kind: DraftKind; thickness: number; axis?: Pt[] } | null;
   /** Alignment guides of the current snap */
   guides: Segment[];
   /** Explanation of a direction snap shown at the cursor (e.g. "⊥ wall") */
@@ -66,6 +67,8 @@ export type PlanOverlay = {
   visitorHandle: Pt | null;
   /** Catalog piece dragged over the plan, at its size where it will land */
   dropPreview?: { preview: DropPreview; icon: HTMLImageElement | null } | null;
+  /** Surface under a dragged texture or the pipette: a wall side (line) or a floor or piece */
+  surfaceTarget?: { outline: Pt[]; closed: boolean } | null;
   accent: string;
   /** Color of guides */
   guide: string;
@@ -263,7 +266,7 @@ export function drawOverlay(
     ctx.strokeStyle = overlay.accent;
     if (draft.kind === "wall" && pts.length >= 2) {
       // Walls with their real thickness
-      const outline = offsetOutline(pts, draft.thickness / 2);
+      const outline = offsetOutline(draft.axis ?? pts, draft.thickness / 2);
       ctx.fillStyle = withAlpha(overlay.accent, 0.25);
       ctx.beginPath();
       outline.forEach(([x, y], i) => {
@@ -360,6 +363,24 @@ export function drawOverlay(
   }
   for (const [a, b, text] of overlay.gaps) drawGap(ctx, a, b, overlay.guide, px, text);
   if (overlay.dropPreview) drawDropPreview(ctx, overlay.dropPreview, overlay.accent, px);
+  if (overlay.surfaceTarget && overlay.surfaceTarget.outline.length > 1) {
+    const { outline, closed } = overlay.surfaceTarget;
+    ctx.strokeStyle = overlay.accent;
+    ctx.lineCap = "round";
+    ctx.lineWidth = (closed ? 3 : 7) * px;
+    if (closed) {
+      ctx.fillStyle = withAlpha(overlay.accent, 0.2);
+      ctx.beginPath();
+      outline.forEach(([x, y], i) => {
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fill();
+    }
+    strokePath(ctx, outline, closed);
+    ctx.lineCap = "butt";
+  }
   for (const d of overlay.autoDims) drawDimensionPreview(ctx, d, overlay.accent, px);
   if (overlay.dimensionDraft) {
     drawDimensionPreview(ctx, overlay.dimensionDraft, overlay.accent, px);

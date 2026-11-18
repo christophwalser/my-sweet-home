@@ -554,7 +554,8 @@ furniture is read by its home reader.
   piece's orientation, top, bottom, side by side; the leading piece is `leader` or the last of
   `ids`, i.e. the one selected last, like Sweet Home 3D), `furniture_distribute` (equal gaps
   along x or y, the outer pieces stay), `edit_paste_style` (style of the first copied element
-  of the same kind: wall colors, textures, baseboards, pattern, thickness and heights; room
+  of the same kind: wall colors, textures, baseboards and pattern (thickness and heights
+  stay, they are geometry); room
   floor, ceiling and text styles; furniture color, texture and materials of the same model;
   polyline, dimension and label styles; textures of the copied element are merged into the
   home first, `Clipboard::merged_into`).
@@ -1200,6 +1201,104 @@ the process tree (the app and its WebView2 processes; Sweet Home 3D 7.6.1 is one
 - Lamp lights in the virtual visit passed through walls (no shadows). The four lamps nearest
   to the visitor now cast shadows (512 px maps, drawn once and again when models are loaded,
   not every frame); lamp models themselves cast none, since their light source lies inside.
+
+### 4.50 Precise drawing after the UX review (2026-11-17)
+
+- Keys: an open dialog (`.dialog-backdrop`) takes all keys; `ui/keyTarget.ts` tells text
+  fields (all keys theirs) from check boxes, drop-downs and sliders (plain keys theirs, Ctrl
+  shortcuts for the app). Letters choose tools (`TOOL_LETTERS` in `ui/toolKeys.ts`; R and J
+  stay rotate and join), Space held pans with the left button.
+- `edit_rotate` (IDs, angle, optional point): rotates walls, rooms, furniture, lines,
+  dimensions, texts (upright) and guide lines around a point, by default the center of
+  their bounding box. Doors and windows in a rotated wall follow (`carried_openings`, shared
+  with `edit_move`), the touching end of joined walls too. `furniture_update` takes
+  `rotate_deg` (each piece around its own center). R in the plan rotates furniture each
+  around itself and any other selection as a whole. **Edit › Rotate… / Move…** type the
+  values (`ui/TransformDialog.tsx`).
+- Reference line of walls: `wall_add_path` takes `side` (axis, left, right): the points are
+  that line and the axis is the path offset by half the thickness with mitered corners.
+  `wall_update` takes `keep_side` (the line that stays when the thickness changes) and
+  `direction_deg` (the end turns around the start). Neither is stored: Sweet Home 3D walls
+  have only an axis. The plan mirrors the offset for the preview (`sideAxis` in
+  `plan2d/snapping.ts`).
+- Tool options above the plan (`ui/ToolOptions.tsx`): thickness, height, reference line or
+  arc for walls, text size for texts. They live in the store until the window closes.
+- Pasting on another level keeps the position (20 cm offset only on the level copied from).
+  Paste style leaves wall thickness and heights alone.
+- Selection: Ctrl+click toggles like Shift+click, a rubber band with Shift or Ctrl adds,
+  **Select similar** (`similarElements`) selects the same kind on the level.
+- Context menu of the plan: entries of commands come from the registry (`reg` in
+  `PlanView.tsx`), so labels, shortcuts and enabled states match the menus; entries that need
+  the clicked point (split wall here, add point) stay local. `ContextMenu` takes the focus:
+  arrow keys, Home / End, Enter, Escape; Shift+F10 or the menu key opens it for the selection.
+- "Ruler" in the UI now only means the rulers along the edges; the lines drawn in the plan
+  are guide lines (the tool and store IDs keep `ruler` / `guide`).
+- Open from the review: door and window tools with built-in models, guide lines dragged out
+  of the edge rulers, configurable shortcuts, align and array copy for walls and texts.
+
+### 4.51 Levels after the UX review (2026-11-18)
+
+- `level_duplicate` (ID, optional name and elevation; `rooms`, `openings`, `furniture`,
+  `annotations`): a new level on top of the highest one with copies of the walls of the
+  given level at the same place, made with the clipboard code (`Clipboard::copy` and `paste`
+  with a zero offset), so joins between the copies and their resources are kept. The dialog
+  is `ui/LevelDuplicateDialog.tsx`.
+- `level_update` takes `shift_above` (levels above move by the change of this level's top),
+  `adjust_walls` (walls as high as the old level height get the new one; lower walls and
+  sloped ends stay) and `elevation_index` (order among levels at the same elevation, the
+  others are renumbered). The two switches of the properties panel live in the store and are
+  on by default; the command defaults stay off.
+- Underlay of the plan: the preference `underlay` (below, above, off; switch in the status
+  bar) chooses the level drawn faded under the plan (`underlayLevel` in `plan2d/drawPlan.ts`).
+  `snapContext` offers the wall ends and side corners of that level as points and alignment
+  references ("wall end (other level)", "wall corner (other level)").
+- Level tabs: "+" adds a level, a right-click selects the tab and opens a menu made from the
+  registry (`ui/menuItems.ts`, also used by the plan): rename, duplicate, add at the same
+  elevation, move left or right, show in 3D, delete. A level hidden in 3D shows an icon.
+- Levels in 3D: `view3d_update` takes `levels` (selected, up_to_selected, all). "All" is
+  Sweet Home 3D's `allLevelsVisible`; "selected" is the home property
+  `mySweetHome.levelsIn3d`, which Sweet Home 3D keeps and ignores. `view3d/levels3d.ts` holds
+  the mode and `visibleLevels`. The 3D view has one **Levels** popover with the mode and a
+  tick per level; the "All levels" check box and the "Visible in 3D" field of the properties
+  are gone.
+- Open from the review: a table of all levels.
+
+### 4.52 Furnishing and textures after the UX review (2026-11-18)
+
+- `commands/surface.rs` works on the look (color, texture, shininess) of a surface: `floor` and
+  `ceiling` of a room, `left_side`, `right_side` and `top` of a wall, `piece` for furniture.
+  `surface_copy` gives surfaces the look of another one (the pipette), `texture_apply` gives
+  rooms, walls and furniture a catalog texture in one step (default surfaces: floor, both wall
+  sides, the whole piece), `texture_adjust` sets angle, size factor and shift of a texture
+  (`angle`, `scale`, `xOffset`, `yOffset` of Sweet Home 3D; the 3D view applies the shift as
+  texture offset).
+- `room_walls` lists the wall sides that face a room: side lines of the wall outlines
+  (`msh_geometry::wall_shapes`) are probed 2 cm outside the wall at five points per segment
+  against the room polygon. `room_walls_update` changes color, texture, shininess and
+  baseboard of these sides. Walls are not split: a wall longer than the room changes on its
+  whole side.
+- `furniture_replace` swaps pieces for a catalog item and keeps ID, position, angle,
+  elevation, level, visibility and mirroring (`keep_size` keeps the size too).
+  `furniture_update` takes `keep_proportions`: one given dimension scales the other two of
+  each piece; pieces that are not deformable always do so.
+- Plan: `plan2d/surfaces.ts` finds the surface under a point (the nearer side of a wall, a
+  floor, a piece). A texture dragged from the catalog (`TEXTURE_DRAG_TYPE`) highlights it and
+  is applied on the drop. Two modes of `ui/uiStore.ts` wait for a click in the plan: `pick`
+  (the pipette of `TextureField`) and `placing` (a catalog piece hanging at the pointer after
+  a double-click in the catalog; Shift+click places several). Escape ends both.
+- Catalog (`catalog/CatalogPanel.tsx`, `catalog/catalogPrefs.ts`): favorites, pieces used
+  last, open categories and list or tiles are kept in the local storage; rows take the
+  keyboard and run the menu entries whose shortcuts the menu shows; search results have
+  "Show all". Several models dropped together are named instead of skipped silently.
+- Furniture list (`catalog/furnitureRows.ts`): search over all shown columns, remembered
+  order, range selection, renaming with F2, equal pieces combined with their number.
+- Properties: a color field shows and takes #RRGGBB, marks "no color" and offers the colors
+  of the home (`panels/homeColors.ts`); the room has "Walls of this room"; several pieces
+  have texture, surface and "Keep proportions"; "mixed" is translated.
+- Open from the review: the import chain of the library editor (dialog stack, queue for
+  several models, tile sizes of several textures), sorting and a library filter in the
+  catalog, grouping the furniture list by level or room, sections for several texts,
+  dimensions and lines, RAL and NCS palettes.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 
