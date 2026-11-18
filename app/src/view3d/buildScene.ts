@@ -64,6 +64,7 @@ export function loadTiledTexture(url: string, t: Texture, onLoad: () => void): T
   const scale = t.scale ?? 1;
   tex.repeat.set(1 / (t.width * scale), 1 / (t.height * scale));
   tex.rotation = t.angle ?? 0;
+  tex.offset.set(t.x_offset ?? 0, t.y_offset ?? 0);
   return tex;
 }
 
@@ -494,7 +495,7 @@ class TextureCache {
 
   get(t: Texture | null | undefined): THREE.Texture | null {
     if (!t) return null;
-    const key = `${t.image}|${t.width}|${t.height}|${t.angle ?? 0}|${t.scale ?? 1}`;
+    const key = `${t.image}|${t.width}|${t.height}|${t.angle ?? 0}|${t.scale ?? 1}|${t.x_offset ?? 0}|${t.y_offset ?? 0}`;
     let tex = this.map.get(key);
     if (!tex) {
       tex = loadTiledTexture(docResourceUrl(this.docId, t.image), t, this.onLoad);

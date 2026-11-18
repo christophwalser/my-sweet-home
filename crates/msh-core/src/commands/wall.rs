@@ -176,15 +176,15 @@ struct UpdateParams {
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct BaseboardParams {
+pub(super) struct BaseboardParams {
     /// Height in cm (default 7); 0 removes the baseboard
-    height: Option<f32>,
+    pub(super) height: Option<f32>,
     /// Thickness in cm (default 1)
-    thickness: Option<f32>,
+    pub(super) thickness: Option<f32>,
     /// Color as #RRGGBB, "" for the wall side color
-    color: Option<String>,
+    pub(super) color: Option<String>,
     /// Catalog ID of a texture, "" to remove it
-    texture: Option<String>,
+    pub(super) texture: Option<String>,
 }
 
 /// Texture role of the top of a wall. Sweet Home 3D has no such texture: it ignores it when
@@ -601,7 +601,7 @@ pub(super) fn move_joined_end(joined: &mut WallAttrs, id: &str, old: (f32, f32),
     }
 }
 
-fn update_baseboard(
+pub(super) fn update_baseboard(
     w: &mut Wall,
     role: &str,
     p: &BaseboardParams,

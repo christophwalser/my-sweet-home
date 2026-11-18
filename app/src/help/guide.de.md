@@ -30,6 +30,7 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 - Klicke die Ecken eines Raums, oder **doppelklicke** zwischen Wände, um einen Raum zu erzeugen, der sie ausfüllt. Wände, die schon einen Raum umschließen, ergeben keinen zweiten.
 - Ein ausgewählter Raum hat in der Mitte jeder Kante einen Griff: Ziehen fügt eine Ecke ein, mit **Umschalt** verschiebt es die ganze Kante parallel. Gezogene Ecken rasten rechtwinklig und in Flucht mit den Nachbarkanten ein.
 - In den Eigenschaften legst du Namen, Boden und Decke (Farbe, Textur, matt oder glänzend) fest und ob die Fläche angezeigt wird. Name und Fläche lassen sich im Plan verschieben.
+- **Wände dieses Raums** in den Eigenschaften gibt allen Wandseiten, die dem Raum zugewandt sind, dieselbe Farbe, Textur, Oberfläche und Sockelleiste, egal in welcher Richtung jede Wand gezeichnet wurde. Eine Wand, die länger ist als der Raum, ändert sich auf ihrer ganzen Seite.
 
 ## Bemaßungen, Texte und Linien
 
@@ -76,6 +77,9 @@ Geländemodelle, Laserscans oder Nachbarhäuser, die als Möbel importiert sind,
 ## Möbel platzieren
 
 - Ziehe ein Möbel aus dem Katalog in den Plan. In der Nähe einer Wand dreht es sich schon beim Ziehen mit dem Rücken zur Wand.
+- Oder doppelklicke ein Möbel im Katalog (oder drücke **Enter**) und klicke in den Plan: Das Möbel hängt in seiner Größe am Mauszeiger. **Shift+Klick** platziert mehrere, **Esc** beendet es.
+- **Auswahl hierdurch ersetzen** im Menü eines Katalogeintrags tauscht die gewählten Möbel dagegen aus; Platz, Winkel, Höhe über Boden und Ebene bleiben.
+- Der Katalog merkt sich die offenen Kategorien, zeigt **Favoriten** (Menü eines Eintrags) und die **zuletzt verwendeten** Möbel oben und stellt die Einträge als Liste oder Kacheln dar. Seine Zeilen lassen sich mit der Tastatur bedienen: Pfeiltasten, **Enter**, **Entf**, **Strg+D** und die Menütaste.
 - Türen und Fenster rasten in der nächsten Wand ein, übernehmen ihre Dicke und zeigen die Abstände zu den Wandenden und anderen Öffnungen.
 - Möbel, die auf einem Tisch, einem Regal oder einem anderen Möbel abgelegt werden, landen obendrauf.
 
@@ -90,7 +94,7 @@ Geländemodelle, Laserscans oder Nachbarhäuser, die als Möbel importiert sind,
 
 ## Möbelliste
 
-Die Liste unter dem Katalog zeigt die Möbel des Hauses. Ein Klick auf eine Spaltenüberschrift sortiert. **Spalten…** wählt die Spalten; die Auswahl wird wie in Sweet Home 3D im Haus gespeichert.
+Die Liste unter dem Katalog zeigt die Möbel des Hauses. Ein Klick auf eine Spaltenüberschrift sortiert; die Reihenfolge bleibt gemerkt. **Spalten…** wählt die Spalten; die Auswahl wird wie in Sweet Home 3D im Haus gespeichert. Die Suche sieht in allen gezeigten Spalten nach. **Strg+Klick** nimmt eine Zeile zur Auswahl hinzu, **Shift+Klick** wählt einen Bereich, die Pfeiltasten gehen durch die Zeilen, **F2** oder ein Doppelklick auf den Namen benennt ein Möbel um. **Gleiche zusammenfassen** zeigt gleiche Möbel in einer Zeile mit ihrer Anzahl, wie eine Stückliste.
 
 ## Preise
 
@@ -98,7 +102,10 @@ Wähle eine Währung unter **Einstellungen › Allgemein › Preise**, um Preise
 
 # Texturen und Bibliotheken
 
-- Texturfelder in den Eigenschaften öffnen eine durchsuchbare Liste aller Texturen.
+- Texturfelder in den Eigenschaften öffnen eine durchsuchbare Liste aller Texturen. **Drehen, skalieren, verschieben** unter einer Textur dreht sie (z. B. Parkett um 90°), ändert ihre Größe in Prozent und versetzt sie.
+- Ziehe eine Textur aus dem Katalog auf einen Boden, eine Wandseite oder ein Möbel im Plan; die Fläche, auf der sie landet, wird hervorgehoben. Ein Doppelklick auf eine Textur gibt sie der Auswahl: dem Boden von Räumen, beiden Seiten von Wänden, ganzen Möbeln.
+- Die Pipette neben einem Texturfeld übernimmt Farbe, Textur und Oberfläche von einer Wandseite, einem Boden oder einem Möbel, das du im Plan anklickst.
+- Ein Farbfeld zeigt die Farbe als #RRGGBB, die sich auch eintippen lässt, und listet die im Haus schon verwendeten Farben. Ein Feld ohne Farbe ist durchgestrichen.
 - **Möbel › Zur Bibliothek hinzufügen** importiert Modelle (OBJ, DAE, 3DS, glTF, FBX, STL, 3MF, PLY, VRML, ZIP) und Texturen (JPG, PNG, BMP, GIF, WebP, TIFF, SVG, Materialpakete). Dateien können auch auf den Katalog gezogen werden.
 - **Bibliotheken…** öffnet den Bibliothekseditor: Bibliotheken anlegen, Eigenschaften von Einträgen ändern, in andere Kategorien verschieben, importieren und entfernen.
 - **Hinzufügen… › Online suchen…** im Katalog durchsucht die freien Bibliotheken von Sweet Home 3D, ambientCG und Poly Haven und importiert mit einem Klick.

@@ -109,6 +109,11 @@ export const RENDER_VIDEO_EVENT = "render-video";
 /** MIME type of catalog items dragged onto the plan. */
 export const CATALOG_DRAG_TYPE = "application/x-msh-catalog";
 
+/** MIME type of catalog textures dragged onto a surface of the plan. */
+export const TEXTURE_DRAG_TYPE = "application/x-msh-texture";
+
+export type TextureDragData = { catalogId: string; name: string };
+
 export type CatalogDragData = {
   catalogId: string;
   doorOrWindow: boolean;

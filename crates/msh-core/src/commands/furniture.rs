@@ -137,6 +137,9 @@ struct UpdateParams {
     /// Reference object (terrain, scan, neighbor house): shown in the plan faint and in 3D,
     /// but not picked or snapped to in the plan; selected in the furniture list
     reference: Option<bool>,
+    /// With one of width, depth and height: the other two change by the same factor, for
+    /// each piece (default false)
+    keep_proportions: Option<bool>,
 }
 
 /// A decimal for the file: at most `digits` decimals, without trailing zeros.
@@ -147,6 +150,18 @@ fn decimal_string(v: f64, digits: usize) -> String {
     } else {
         s
     }
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct ReplaceParams {
+    /// Piece to replace (or use `ids`)
+    id: Option<String>,
+    /// Several pieces that are all replaced by the catalog piece (one undo step)
+    ids: Option<Vec<String>>,
+    /// Catalog ID of the new piece (see catalog_search)
+    catalog_id: String,
+    /// Keep width, depth and height of the replaced piece instead of the catalog size
+    keep_size: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -328,6 +343,42 @@ pub(super) fn register(r: &mut Registry) {
         },
     );
     r.add(
+        "furniture_replace",
+        "Replaces pieces of furniture by a piece from the catalog. ID, position, angle, \
+         elevation, level, visibility and mirroring stay; name, model, size and materials come \
+         from the catalog (the size stays with keep_size).",
+        true,
+        |doc, p: ReplaceParams| {
+            let entry = catalog_entry(&p.catalog_id)?;
+            let targets = target_ids(p.id.clone(), p.ids.clone())?;
+            for id in &targets {
+                let mut new = piece_from_catalog(doc, &entry)?;
+                let old = find_piece_mut(doc, id)?;
+                let o = &old.attrs;
+                let a = &mut new.attrs;
+                a.id = o.id.clone();
+                a.level = o.level.clone();
+                a.x = o.x;
+                a.y = o.y;
+                a.angle = o.angle;
+                a.elevation = o.elevation;
+                a.visible = o.visible;
+                a.name_visible = o.name_visible;
+                a.model_mirrored = o.model_mirrored;
+                a.bound_to_wall = o.bound_to_wall;
+                if p.keep_size == Some(true) {
+                    apply_size(a, Some(o.width), Some(o.depth), Some(o.height));
+                } else if old.kind == PieceKind::DoorOrWindow && new.kind == PieceKind::DoorOrWindow
+                {
+                    // The depth of a door or window is fitted to its wall
+                    new.attrs.depth = old.attrs.depth;
+                }
+                *old = new;
+            }
+            Ok(updated(&targets))
+        },
+    );
+    r.add(
         "furniture_add_in_wall",
         "Places a door or window from the catalog in a wall: centered on the wall axis at `offset` \
          cm from the wall start, rotated along the wall, with its depth fitted to the wall thickness.",
@@ -449,7 +500,12 @@ pub(super) fn register(r: &mut Registry) {
                 if let Some(v) = p.elevation {
                     a.elevation = Some(v);
                 }
-                apply_size(a, p.width, p.depth, p.height);
+                // Models that may not be deformed always keep their proportions
+                if p.keep_proportions == Some(true) || a.deformable == Some(false) {
+                    apply_size_proportional(a, p.width, p.depth, p.height);
+                } else {
+                    apply_size(a, p.width, p.depth, p.height);
+                }
                 if p.pitch_deg.is_some() || p.roll_deg.is_some() {
                     if piece.kind == PieceKind::DoorOrWindow
                         || a.horizontally_rotatable == Some(false)
@@ -679,6 +735,23 @@ fn apply_size(a: &mut PieceAttrs, width: Option<f32>, depth: Option<f32>, height
     }
     if let Some(v) = height.filter(|v| *v > 0.0) {
         a.height = v;
+    }
+}
+
+/// Like [`apply_size`], but one given dimension scales the other two by the same factor.
+fn apply_size_proportional(
+    a: &mut PieceAttrs,
+    width: Option<f32>,
+    depth: Option<f32>,
+    height: Option<f32>,
+) {
+    let given = [(width, a.width), (depth, a.depth), (height, a.height)];
+    let mut factors = given
+        .iter()
+        .filter_map(|(new, old)| new.filter(|v| *v > 0.0 && *old > 0.0).map(|v| v / old));
+    match (factors.next(), factors.next()) {
+        (Some(f), None) => apply_size(a, Some(a.width * f), Some(a.depth * f), Some(a.height * f)),
+        _ => apply_size(a, width, depth, height),
     }
 }
 

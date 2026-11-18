@@ -8,6 +8,7 @@ import { forEachPiece, type Home, type Piece, type Room, type Texture, type Wall
 import { type Guide, homeGuides } from "../plan2d/guides";
 import { usePreferences } from "../preferences";
 import { useStore, VISITOR_ID } from "../store";
+import { useUi } from "../ui/uiStore";
 import { formatArea, formatLength } from "../units";
 import {
   byRole,
@@ -24,7 +25,7 @@ import TextureField from "./TextureField";
 type Run = (command: string, params: Record<string, unknown>) => Promise<unknown>;
 
 /** Common value of all items, or `undefined` if they differ ("mixed"). */
-function common<T>(values: T[]): { value: T | undefined; mixed: boolean } {
+export function common<T>(values: T[]): { value: T | undefined; mixed: boolean } {
   if (values.length === 0) return { value: undefined, mixed: false };
   const first = values[0];
   const same = values.every((v) => v === first);
@@ -32,7 +33,10 @@ function common<T>(values: T[]): { value: T | undefined; mixed: boolean } {
 }
 
 /** Common texture (by image) of all items. */
-function commonTexture(textures: (Texture | null)[]): { value: Texture | null; mixed: boolean } {
+export function commonTexture(textures: (Texture | null)[]): {
+  value: Texture | null;
+  mixed: boolean;
+} {
   const c = common(textures.map((t) => t?.image ?? null));
   return { value: c.mixed ? null : (textures[0] ?? null), mixed: c.mixed };
 }
@@ -148,6 +152,7 @@ function WallsSide({
         current={texture.value}
         mixed={texture.mixed}
         onCommit={(v) => update({ [field("texture")]: v })}
+        target={{ ids: walls.map((w) => w.attrs.id), surface: `${side}_side` }}
       />
       <Field
         label={t("Baseboard")}
@@ -228,6 +233,7 @@ function WallsTop({
         current={texture.value}
         mixed={texture.mixed}
         onCommit={(v) => update({ top_texture: v })}
+        target={{ ids: walls.map((w) => w.attrs.id), surface: "top" }}
       />
     </fieldset>
   );
@@ -297,6 +303,7 @@ function RoomsSection({ rooms, run }: { rooms: Room[]; run: Run }) {
         current={floorTexture.value}
         mixed={floorTexture.mixed}
         onCommit={set("floor_texture")}
+        target={{ ids: rooms.map((r) => r.attrs.id as string), surface: "floor" }}
       />
       <h3>{t("Ceilings")}</h3>
       <Field
@@ -311,6 +318,7 @@ function RoomsSection({ rooms, run }: { rooms: Room[]; run: Run }) {
         current={ceilingTexture.value}
         mixed={ceilingTexture.mixed}
         onCommit={set("ceiling_texture")}
+        target={{ ids: rooms.map((r) => r.attrs.id as string), surface: "ceiling" }}
       />
     </>
   );
@@ -326,6 +334,18 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
   const depth = common(pieces.map((p) => p.attrs.depth));
   const height = common(pieces.map((p) => p.attrs.height));
   const color = common(pieces.map((p) => p.attrs.color));
+  const texture = commonTexture(pieces.map((p) => p.texture ?? null));
+  const surface = common(
+    pieces.map((p) => {
+      const s = p.attrs.shininess;
+      return s === null || s === undefined ? "model" : s > 0 ? "shiny" : "matt";
+    }),
+  );
+  // One typed dimension changes the other two of each piece by the same factor
+  const keep = useUi((s) => s.keepProportions);
+  const setKeep = useUi((s) => s.setKeepProportions);
+  const size = (field: string) => (v: string | number | boolean) =>
+    void run("furniture_update", { ids, [field]: v, ...(keep ? { keep_proportions: true } : {}) });
   const visible = common(pieces.map((p) => p.attrs.visible !== false));
   const mirrored = common(pieces.map((p) => !!p.attrs.model_mirrored));
   return (
@@ -355,7 +375,7 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
         unit="cm"
         value={width.value}
         mixed={width.mixed}
-        onCommit={set("width")}
+        onCommit={size("width")}
       />
       <Field
         label={t("Depth")}
@@ -363,7 +383,7 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
         unit="cm"
         value={depth.value}
         mixed={depth.mixed}
-        onCommit={set("depth")}
+        onCommit={size("depth")}
       />
       <Field
         label={t("Height")}
@@ -371,8 +391,15 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
         unit="cm"
         value={height.value}
         mixed={height.mixed}
-        onCommit={set("height")}
+        onCommit={size("height")}
       />
+      <label
+        className="prop-row prop-check"
+        title={t("One changed dimension changes the other two of each piece by the same factor")}
+      >
+        <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.currentTarget.checked)} />
+        <span>{t("Keep proportions")}</span>
+      </label>
       <Field
         label={t("Color")}
         type="color"
@@ -385,6 +412,24 @@ function FurnitureSection({ pieces, run }: { pieces: Piece[]; run: Run }) {
           {t("Restore model colors")}
         </button>
       )}
+      <TextureField
+        label={t("Texture")}
+        current={texture.value}
+        mixed={texture.mixed}
+        onCommit={set("texture")}
+        target={{ ids, surface: "piece" }}
+      />
+      <SelectField
+        label={t("Surface")}
+        value={surface.value ?? ""}
+        mixed={surface.mixed}
+        options={[
+          ["model", t("Like the model")],
+          ["matt", t("Matt")],
+          ["shiny", t("Shiny")],
+        ]}
+        onCommit={(v) => set("shininess")(v === "model" ? -1 : v === "shiny" ? 0.25 : 0)}
+      />
       <Field
         label={t("Mirrored")}
         type="checkbox"

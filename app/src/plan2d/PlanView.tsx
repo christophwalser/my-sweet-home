@@ -22,7 +22,10 @@ import {
   type CatalogDragData,
   currentCatalogDrag,
   docResourceUrl,
+  TEXTURE_DRAG_TYPE,
+  type TextureDragData,
 } from "../api";
+import { useCatalogPrefs } from "../catalog/catalogPrefs";
 import { evalLength } from "../expression";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
@@ -114,6 +117,7 @@ import {
   snapDraw,
 } from "./snapping";
 import { dropElevation } from "./support";
+import { type SurfaceTarget, surfaceAt } from "./surfaces";
 import TextEditor, { type TextEdit } from "./TextEditor";
 import { topView } from "./topView";
 
@@ -357,6 +361,11 @@ export default function PlanView() {
   const [textEdit, setTextEdit] = useState<TextEdit | null>(null);
   /** Catalog piece dragged over the plan */
   const drop = useRef<{ preview: DropPreview; icon: HTMLImageElement | null } | null>(null);
+  /** Surface under a dragged texture or under the pipette */
+  const surfaceHover = useRef<SurfaceTarget | null>(null);
+  /** A click awaited in the plan: the pipette, or a catalog piece being placed */
+  const pick = useUi((s) => s.pick);
+  const placing = useUi((s) => s.placing);
   const dark = useDarkMode();
   const colors = dark ? DARK : LIGHT;
   const rulerColors = dark ? DARK_RULER : LIGHT_RULER;
@@ -711,6 +720,7 @@ export default function PlanView() {
           : null;
       })(),
       dropPreview: drop.current,
+      surfaceTarget: surfaceHover.current,
       accent,
       guide: guideColor,
       measureColor,
@@ -1129,6 +1139,20 @@ export default function PlanView() {
     }
     if (e.button !== 0 || !input) return;
     const p = toWorld(e.clientX, e.clientY);
+    const ui = useUi.getState();
+    if (ui.pick) {
+      // The pipette: the clicked surface gives its look
+      const from = surfaceAt(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+      if (from) ui.pick.onPick(from);
+      ui.setPick(null);
+      return;
+    }
+    if (ui.placing) {
+      // Shift+click places the piece and keeps it at the pointer for the next one
+      void placeCatalogItem(ui.placing.data, p, e.altKey);
+      if (!e.shiftKey) ui.setPlacing(null);
+      return;
+    }
     if (offsetFrom.current) {
       finishOffsetGuide();
       return;
@@ -1225,6 +1249,34 @@ export default function PlanView() {
     const g = gesture.current;
     mouseWorld.current = toWorld(e.clientX, e.clientY);
     usePointer.setState({ pt: mouseWorld.current });
+    const ui = useUi.getState();
+    if (!g && input && (ui.pick || ui.placing)) {
+      // The surface the pipette would take, or the piece where the click would place it
+      if (ui.pick) {
+        surfaceHover.current = surfaceAt(
+          input.home,
+          input.wallShapes,
+          effectiveLevel,
+          mouseWorld.current,
+          pxToCm(PICK_PX),
+        );
+      } else if (ui.placing) {
+        drop.current = {
+          preview: dropPreview(
+            input.home,
+            effectiveLevel,
+            ui.placing.data,
+            mouseWorld.current,
+            pxToCm(40),
+            catalogDock(e.altKey),
+          ),
+          icon: ui.placing.icon,
+        };
+      }
+      if (canvasRef.current) canvasRef.current.style.cursor = "crosshair";
+      draw();
+      return;
+    }
     const o = offsetFrom.current;
     if (o && !g) {
       // The side and distance of the parallel ruler follow the mouse (whole cm with magnetism)
@@ -2266,6 +2318,12 @@ export default function PlanView() {
         e.preventDefault();
         return;
       }
+      if (e.key === "Escape" && (useUi.getState().pick || useUi.getState().placing)) {
+        // Ends the pipette or the placing of a catalog piece
+        useUi.getState().setPick(null);
+        e.preventDefault();
+        return;
+      }
       if (e.key === "Escape") {
         if (state.tool !== "select") state.setTool("select");
         else setSelection([]);
@@ -2350,7 +2408,65 @@ export default function PlanView() {
       return d && { x: d.x, y: d.y, angleDeg: d.angleDeg };
     };
 
+  // The pipette or the placing ended: nothing of it stays in the plan
+  // biome-ignore lint/correctness/useExhaustiveDependencies: draw reads the current state
+  useEffect(() => {
+    if (pick || placing) return;
+    drop.current = null;
+    surfaceHover.current = null;
+    if (canvasRef.current) canvasRef.current.style.cursor = cursorStyle[tool];
+    draw();
+  }, [pick, placing]);
+
+  /** Places a catalog piece at a point of the plan: in a wall, docked to one, or free. */
+  const placeCatalogItem = async (item: CatalogDragData, p: Pt, altKey: boolean) => {
+    if (!input) return;
+    let result: unknown;
+    const wall = item.doorOrWindow ? nearestWall(input.home, effectiveLevel, p, pxToCm(40)) : null;
+    if (wall) {
+      // Opens to the side of the wall it is dropped on (front of the piece: left of the wall)
+      const w = input.home.walls.find((x) => x.attrs.id === wall.id)?.attrs;
+      const side = w
+        ? (p[0] - w.x_start) * -(w.y_end - w.y_start) + (p[1] - w.y_start) * (w.x_end - w.x_start)
+        : 0;
+      result = await run("furniture_add_in_wall", {
+        catalog_id: item.catalogId,
+        name: item.name,
+        wall_id: wall.id,
+        offset: Math.round(wall.offset),
+        ...(side < 0 ? { flip: true } : {}),
+      });
+    } else {
+      // Where the preview showed it: at the cursor, or docked to a wall
+      const at = dropPreview(input.home, effectiveLevel, item, p, pxToCm(40), catalogDock(altKey));
+      const angleDeg = Math.round(((at.angle * 180) / Math.PI) * 100) / 100;
+      result = await run("furniture_add", {
+        catalog_id: item.catalogId,
+        name: item.name,
+        x: at.center[0],
+        y: at.center[1],
+        ...(angleDeg ? { angle_deg: angleDeg } : {}),
+        ...levelParam(),
+      });
+    }
+    const id = (result as { id?: string } | undefined)?.id;
+    if (id) {
+      setSelection([id]);
+      useCatalogPrefs.getState().noteUsed(item.catalogId);
+    }
+  };
+
   const onDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes(TEXTURE_DRAG_TYPE) && input) {
+      // A texture: the floor, wall side or piece it would land on
+      e.preventDefault();
+      const p = toWorld(e.clientX, e.clientY);
+      const target = surfaceAt(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+      e.dataTransfer.dropEffect = target ? "copy" : "none";
+      surfaceHover.current = target;
+      draw();
+      return;
+    }
     if (e.dataTransfer.types.includes(CATALOG_DRAG_TYPE) && input) {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
@@ -2375,56 +2491,33 @@ export default function PlanView() {
   };
 
   const onDragLeave = () => {
-    if (!drop.current) return;
+    if (!drop.current && !surfaceHover.current) return;
     drop.current = null;
+    surfaceHover.current = null;
     draw();
   };
 
   const onDrop = async (e: React.DragEvent) => {
     drop.current = null;
+    surfaceHover.current = null;
     draw();
-    const raw = e.dataTransfer.getData(CATALOG_DRAG_TYPE);
-    if (!raw || !input) return;
-    e.preventDefault();
-    const item = JSON.parse(raw) as CatalogDragData;
+    if (!input) return;
     const p = toWorld(e.clientX, e.clientY);
-    let result: unknown;
-    const wall = item.doorOrWindow ? nearestWall(input.home, effectiveLevel, p, pxToCm(40)) : null;
-    if (wall) {
-      // Opens to the side of the wall it is dropped on (front of the piece: left of the wall)
-      const w = input.home.walls.find((x) => x.attrs.id === wall.id)?.attrs;
-      const side = w
-        ? (p[0] - w.x_start) * -(w.y_end - w.y_start) + (p[1] - w.y_start) * (w.x_end - w.x_start)
-        : 0;
-      result = await run("furniture_add_in_wall", {
-        catalog_id: item.catalogId,
-        name: item.name,
-        wall_id: wall.id,
-        offset: Math.round(wall.offset),
-        ...(side < 0 ? { flip: true } : {}),
-      });
-    } else {
-      // Where the preview showed it: at the cursor, or docked to a wall
-      const at = dropPreview(
-        input.home,
-        effectiveLevel,
-        item,
-        p,
-        pxToCm(40),
-        catalogDock(e.altKey),
-      );
-      const angleDeg = Math.round(((at.angle * 180) / Math.PI) * 100) / 100;
-      result = await run("furniture_add", {
-        catalog_id: item.catalogId,
-        name: item.name,
-        x: at.center[0],
-        y: at.center[1],
-        ...(angleDeg ? { angle_deg: angleDeg } : {}),
-        ...levelParam(),
-      });
+    const texture = e.dataTransfer.getData(TEXTURE_DRAG_TYPE);
+    if (texture) {
+      e.preventDefault();
+      const { catalogId } = JSON.parse(texture) as TextureDragData;
+      const target = surfaceAt(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
+      if (!target) return;
+      useUi.getState().noteTexture(catalogId);
+      await run("texture_apply", { id: target.id, surface: target.surface, texture: catalogId });
+      setSelection([target.id]);
+      return;
     }
-    const id = (result as { id?: string } | undefined)?.id;
-    if (id) setSelection([id]);
+    const raw = e.dataTransfer.getData(CATALOG_DRAG_TYPE);
+    if (!raw) return;
+    e.preventDefault();
+    await placeCatalogItem(JSON.parse(raw) as CatalogDragData, p, e.altKey);
   };
 
   return (
@@ -2449,6 +2542,10 @@ export default function PlanView() {
           onPointerLeave={() => {
             cursor.current = null;
             mouseWorld.current = null;
+            if (useUi.getState().pick || useUi.getState().placing) {
+              drop.current = null;
+              surfaceHover.current = null;
+            }
             usePointer.setState({ pt: null });
             draw();
           }}
@@ -2458,7 +2555,17 @@ export default function PlanView() {
           onDragLeave={onDragLeave}
           onDrop={(e) => void onDrop(e)}
         />
-        {opened && hint && <div className="plan-hint">{hint}</div>}
+        {opened && (pick || placing || hint) && (
+          <div className="plan-hint">
+            {pick
+              ? pick.label
+              : placing
+                ? t("Click to place “{name}” · Shift+click places several · Esc cancels", {
+                    name: placing.data.name,
+                  })
+                : hint}
+          </div>
+        )}
         {menu && (
           <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
         )}

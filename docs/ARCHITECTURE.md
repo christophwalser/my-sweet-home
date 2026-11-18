@@ -1263,6 +1263,43 @@ the process tree (the app and its WebView2 processes; Sweet Home 3D 7.6.1 is one
   are gone.
 - Open from the review: a table of all levels.
 
+### 4.52 Furnishing and textures after the UX review (2026-11-18)
+
+- `commands/surface.rs` works on the look (color, texture, shininess) of a surface: `floor` and
+  `ceiling` of a room, `left_side`, `right_side` and `top` of a wall, `piece` for furniture.
+  `surface_copy` gives surfaces the look of another one (the pipette), `texture_apply` gives
+  rooms, walls and furniture a catalog texture in one step (default surfaces: floor, both wall
+  sides, the whole piece), `texture_adjust` sets angle, size factor and shift of a texture
+  (`angle`, `scale`, `xOffset`, `yOffset` of Sweet Home 3D; the 3D view applies the shift as
+  texture offset).
+- `room_walls` lists the wall sides that face a room: side lines of the wall outlines
+  (`msh_geometry::wall_shapes`) are probed 2 cm outside the wall at five points per segment
+  against the room polygon. `room_walls_update` changes color, texture, shininess and
+  baseboard of these sides. Walls are not split: a wall longer than the room changes on its
+  whole side.
+- `furniture_replace` swaps pieces for a catalog item and keeps ID, position, angle,
+  elevation, level, visibility and mirroring (`keep_size` keeps the size too).
+  `furniture_update` takes `keep_proportions`: one given dimension scales the other two of
+  each piece; pieces that are not deformable always do so.
+- Plan: `plan2d/surfaces.ts` finds the surface under a point (the nearer side of a wall, a
+  floor, a piece). A texture dragged from the catalog (`TEXTURE_DRAG_TYPE`) highlights it and
+  is applied on the drop. Two modes of `ui/uiStore.ts` wait for a click in the plan: `pick`
+  (the pipette of `TextureField`) and `placing` (a catalog piece hanging at the pointer after
+  a double-click in the catalog; Shift+click places several). Escape ends both.
+- Catalog (`catalog/CatalogPanel.tsx`, `catalog/catalogPrefs.ts`): favorites, pieces used
+  last, open categories and list or tiles are kept in the local storage; rows take the
+  keyboard and run the menu entries whose shortcuts the menu shows; search results have
+  "Show all". Several models dropped together are named instead of skipped silently.
+- Furniture list (`catalog/furnitureRows.ts`): search over all shown columns, remembered
+  order, range selection, renaming with F2, equal pieces combined with their number.
+- Properties: a color field shows and takes #RRGGBB, marks "no color" and offers the colors
+  of the home (`panels/homeColors.ts`); the room has "Walls of this room"; several pieces
+  have texture, surface and "Keep proportions"; "mixed" is translated.
+- Open from the review: the import chain of the library editor (dialog stack, queue for
+  several models, tile sizes of several textures), sorting and a library filter in the
+  catalog, grouping the furniture list by level or room, sections for several texts,
+  dimensions and lines, RAL and NCS palettes.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

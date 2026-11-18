@@ -475,14 +475,15 @@ input[type="search"]:focus {
 
 .texture-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
   gap: 4px;
-  max-height: 220px;
+  max-height: 260px;
   overflow-y: auto;
 }
 
 .texture-grid button {
-  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
   padding: 0;
   overflow: hidden;
   font-size: 10px;
@@ -490,9 +491,94 @@ input[type="search"]:focus {
 
 .texture-grid img {
   width: 100%;
-  height: 100%;
+  aspect-ratio: 1;
   object-fit: cover;
   display: block;
+}
+
+.texture-name {
+  width: 100%;
+  padding: 1px 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.texture-adjust {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 2px 0 4px;
+}
+
+.texture-adjust summary {
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.texture-adjust[open] summary {
+  margin-bottom: 4px;
+}
+
+.prop-row .icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+}
+
+/* A color row: the picker keeps a visible width, the hex field takes the rest and shrinks in a
+   narrow panel, so the button of the home colors stays inside the row */
+.prop-row:has(> input[type="color"]) {
+  grid-template-columns: 96px 34px minmax(0, 1fr);
+}
+
+.color-extra {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.prop-row input.color-hex {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  max-width: 76px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+}
+
+.color-extra .icon-button {
+  flex: none;
+}
+
+/* A color field without a color: struck through instead of looking like white */
+.prop-row input[type="color"].unset {
+  background: repeating-linear-gradient(135deg, var(--panel-2) 0 5px, var(--border) 5px 6px);
+  opacity: 0.75;
+}
+
+.prop-row input[type="color"].unset::-webkit-color-swatch {
+  opacity: 0;
+}
+
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 4px;
+}
+
+.color-swatches button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 
 .prop-check {
@@ -1232,6 +1318,70 @@ input[type="search"]:focus {
 
 .catalog-more {
   padding: 8px 18px;
+}
+
+.catalog-item:focus-visible,
+.furniture-list tr:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.catalog-star {
+  color: var(--accent);
+}
+
+/* Items as large tiles */
+.catalog-list.tiles ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 4px;
+  padding: 0 8px 4px;
+}
+
+.catalog-list.tiles .catalog-item {
+  position: relative;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.catalog-list.tiles .catalog-item img,
+.catalog-list.tiles .catalog-icon-placeholder {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.catalog-list.tiles .catalog-item-name {
+  font-size: 11px;
+}
+
+.catalog-list.tiles .catalog-item-more {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+
+.furniture-count {
+  font-weight: 600;
+}
+
+.furniture-list input.furniture-rename {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 0 3px;
+}
+
+.furniture-list-footer label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
 }
 
 /* Furniture list ("In home" tab) */

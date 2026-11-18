@@ -2,7 +2,7 @@
 // selected). Every change runs an *_update command: one undo step per field.
 
 import { useEffect, useState } from "react";
-import { docResourceUrl } from "../api";
+import { api, docResourceUrl } from "../api";
 import { t } from "../i18n";
 import {
   forEachPiece,
@@ -10,6 +10,7 @@ import {
   type Home,
   isReference,
   type Piece,
+  type Room,
   type Wall,
 } from "../model";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
@@ -36,7 +37,7 @@ import {
   WALL_PATTERNS,
 } from "./fields";
 import LocationFields from "./LocationFields";
-import MultiPanel from "./MultiPanel";
+import MultiPanel, { common, commonTexture } from "./MultiPanel";
 import OpeningDistances from "./OpeningDistances";
 import { type Dimension, resizedPiece } from "./pieceSize";
 import TextStyleFields from "./TextStyleFields";
@@ -154,6 +155,7 @@ function WallSide({
         label={t("Texture")}
         current={byRole(wall.textures, `${side}SideTexture`)}
         onCommit={(v) => update("texture", v)}
+        target={{ ids: [id], surface: `${side}_side` }}
       />
       <SurfaceField
         value={side === "left" ? wall.attrs.left_side_shininess : wall.attrs.right_side_shininess}
@@ -232,6 +234,7 @@ function WallTop({
         label={t("Texture")}
         current={byRole(wall.textures, "topTexture")}
         onCommit={(v) => void run("wall_update", { id, top_texture: v })}
+        target={{ ids: [id], surface: "top" }}
       />
     </fieldset>
   );
@@ -426,6 +429,134 @@ function SurfaceField({
         <option value="shiny">{t("Shiny")}</option>
       </select>
     </label>
+  );
+}
+
+/**
+ * Color, texture, surface and baseboard of all wall sides that face a room, whatever the
+ * drawing direction of each wall (room_walls finds the sides, room_walls_update changes them).
+ */
+function RoomWalls({
+  room,
+  home,
+  run,
+}: {
+  room: Room;
+  home: Home;
+  run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const id = room.attrs.id as string;
+  const [sides, setSides] = useState<{ id: string; side: "left" | "right" }[]>([]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the sides follow the walls and the outline of the room
+  useEffect(() => {
+    let current = true;
+    api
+      .execute("room_walls", { id })
+      .then((r) => {
+        if (current) setSides((r as { walls: { id: string; side: "left" | "right" }[] }).walls);
+      })
+      .catch(() => {
+        if (current) setSides([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [id, home.walls, room.points]);
+  const faces = sides.flatMap((s) => {
+    const wall = home.walls.find((w) => w.attrs.id === s.id);
+    return wall ? [{ wall, side: s.side }] : [];
+  });
+  const title = (
+    <h3 title={t("The sides of the walls around this room that face it")}>
+      {t("Walls of this room")}
+    </h3>
+  );
+  if (faces.length === 0) {
+    return (
+      <>
+        {title}
+        <p className="muted small">{t("No wall faces this room.")}</p>
+      </>
+    );
+  }
+  const update = (values: Record<string, unknown>) =>
+    void run("room_walls_update", { id, ...values });
+  const color = common(
+    faces.map((f) =>
+      f.side === "left" ? f.wall.attrs.left_side_color : f.wall.attrs.right_side_color,
+    ),
+  );
+  const texture = commonTexture(faces.map((f) => byRole(f.wall.textures, `${f.side}SideTexture`)));
+  const shiny = common(
+    faces.map((f) => {
+      const a = f.wall.attrs;
+      return ((f.side === "left" ? a.left_side_shininess : a.right_side_shininess) ?? 0) > 0;
+    }),
+  );
+  const baseboards = faces.flatMap(
+    (f) => f.wall.baseboards?.filter((b) => b.attrs.role === `${f.side}SideBaseboard`) ?? [],
+  );
+  const hasBaseboard = common(
+    faces.map(
+      (f) => f.wall.baseboards?.some((b) => b.attrs.role === `${f.side}SideBaseboard`) ?? false,
+    ),
+  );
+  const bbHeight = common(baseboards.map((b) => b.attrs.height));
+  return (
+    <>
+      {title}
+      <p className="muted small">
+        {t(
+          "{n} wall sides face this room. A wall longer than the room changes on its whole side.",
+          { n: faces.length },
+        )}
+      </p>
+      <Field
+        label={t("Color")}
+        type="color"
+        value={toHex(color.value)}
+        mixed={color.mixed}
+        onCommit={(v) => update({ color: v })}
+      />
+      {(color.mixed || (color.value !== null && color.value !== undefined)) && (
+        <button type="button" className="link-button" onClick={() => update({ color: "" })}>
+          {t("Default color")}
+        </button>
+      )}
+      <TextureField
+        label={t("Texture")}
+        current={texture.value}
+        mixed={texture.mixed}
+        onCommit={(v) => update({ texture: v })}
+      />
+      <SelectField
+        label={t("Surface")}
+        value={shiny.value ? "shiny" : "matt"}
+        mixed={shiny.mixed}
+        options={[
+          ["matt", t("Matt")],
+          ["shiny", t("Shiny")],
+        ]}
+        onCommit={(v) => update({ shininess: v === "shiny" ? SHINY : -1 })}
+      />
+      <Field
+        label={t("Baseboard")}
+        type="checkbox"
+        value={hasBaseboard.value}
+        mixed={hasBaseboard.mixed}
+        onCommit={(v) => update({ baseboard: { height: v ? (bbHeight.value ?? 7) : 0 } })}
+      />
+      {baseboards.length > 0 && (
+        <Field
+          label={t("Height")}
+          type="number"
+          unit="cm"
+          value={bbHeight.value}
+          mixed={bbHeight.mixed}
+          onCommit={(v) => update({ baseboard: { height: v } })}
+        />
+      )}
+    </>
   );
 }
 
@@ -1074,6 +1205,7 @@ export default function PropertiesPanel() {
           label={t("Texture")}
           current={p.texture}
           onCommit={(v) => set("texture")(v)}
+          target={{ ids: [id], surface: "piece" }}
         />
         <label className="prop-row">
           <span className="prop-label">{t("Surface")}</span>
@@ -1393,6 +1525,7 @@ export default function PropertiesPanel() {
           label={t("Texture")}
           current={byRole(room.textures, "floorTexture")}
           onCommit={set("floor_texture")}
+          target={{ ids: [id], surface: "floor" }}
         />
         <SurfaceField value={a.floor_shininess} onCommit={set("floor_shininess")} />
         <h3>{t("Ceiling")}</h3>
@@ -1411,8 +1544,10 @@ export default function PropertiesPanel() {
           label={t("Texture")}
           current={byRole(room.textures, "ceilingTexture")}
           onCommit={set("ceiling_texture")}
+          target={{ ids: [id], surface: "ceiling" }}
         />
         <SurfaceField value={a.ceiling_shininess} onCommit={set("ceiling_shininess")} />
+        <RoomWalls room={room} home={home} run={run} />
         {actions}
       </div>
     );

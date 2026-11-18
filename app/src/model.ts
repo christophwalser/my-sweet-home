@@ -21,6 +21,10 @@ export type Texture = {
   height: number;
   angle: number | null;
   scale: number | null;
+  /** Shift along the width and the height, as a share of the texture from 0 to 1 */
+  x_offset?: number | null;
+  y_offset?: number | null;
+  catalog_id?: string | null;
 };
 
 /**

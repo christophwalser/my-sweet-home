@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { create } from "zustand";
+import type { CatalogDragData } from "../api";
 import { addRecent } from "../panels/recentTextures";
 
 /** Dialogs and panels that commands can open. Only one is open at a time. */
@@ -76,6 +77,18 @@ type UiState = {
   /** Catalog IDs of the textures chosen last, newest first */
   recentTextures: string[];
   noteTexture: (catalogId: string) => void;
+  /** The next click on a surface of the plan is handed to `onPick` (pipette) */
+  pick: SurfacePick | null;
+  setPick: (pick: SurfacePick | null) => void;
+  /** Catalog piece that the next click in the plan places (Shift+click: several) */
+  placing: { data: CatalogDragData; icon: HTMLImageElement | null } | null;
+  setPlacing: (placing: UiState["placing"]) => void;
+};
+
+/** A click awaited in the plan, with the hint shown meanwhile. */
+export type SurfacePick = {
+  label: string;
+  onPick: (from: { id: string; surface: string }) => void;
 };
 
 const THEME_KEY = "msh.theme";
@@ -146,6 +159,10 @@ export const useUi = create<UiState>((set, get) => ({
     set({ recentTextures });
     saveJson(RECENT_TEXTURES_KEY, recentTextures);
   },
+  pick: null,
+  setPick: (pick) => set({ pick, placing: null }),
+  placing: null,
+  setPlacing: (placing) => set({ placing, pick: null }),
 }));
 
 /** Sets the theme on the document; "system" lets the CSS follow `prefers-color-scheme`. */

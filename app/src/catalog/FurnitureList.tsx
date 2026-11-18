@@ -1,11 +1,13 @@
 // Furniture of the open home as a sortable table (like Sweet Home 3D's furniture list).
-// Clicking a row selects the piece (and its level); the Visible column shows or hides it.
-// Groups are listed as one row. The columns are chosen per home (stored like Sweet Home 3D's
+// Clicking a row selects the piece (and its level), Ctrl+click adds it, Shift+click selects a
+// range; the arrow keys walk the rows and F2 or a double-click renames a piece. The search
+// looks in all shown columns, and equal pieces can share a row ("6 × Chair"). Groups are
+// listed as one row. The columns are chosen per home (stored like Sweet Home 3D's
 // `furnitureVisibleProperty`); price columns need a currency in the preferences.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
-import { type Furniture, isReference } from "../model";
+import { isReference } from "../model";
 import { usePreferences } from "../preferences";
 import { formatMoney } from "../prices";
 import { useStore } from "../store";
@@ -20,8 +22,40 @@ import {
   shownColumns,
   toggled,
 } from "./furnitureColumns";
+import {
+  type ListedFurniture,
+  type ListRow,
+  listRows,
+  matchesWords,
+  rangeIds,
+} from "./furnitureRows";
 
 const PRICE_COLUMNS: ColumnId[] = ["PRICE", "VALUE_ADDED_TAX", "PRICE_VALUE_ADDED_TAX_INCLUDED"];
+
+type Sort = { column: ColumnId; desc: boolean };
+
+const SORT_KEY = "msh.furnitureSort";
+const COMBINE_KEY = "msh.furnitureCombine";
+
+function loadSort(): Sort {
+  try {
+    const v = JSON.parse(localStorage.getItem(SORT_KEY) ?? "null") as Partial<Sort> | null;
+    if (v && COLUMNS.some((c) => c.id === v.column)) {
+      return { column: v.column as ColumnId, desc: v.desc === true };
+    }
+  } catch {
+    // Storage unavailable or damaged: the default order
+  }
+  return { column: "NAME", desc: false };
+}
+
+function remember(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage unavailable: kept until the window is closed
+  }
+}
 
 /** CSS class of a header or cell: check box, amount (wider), number or text. */
 function cellClass(id: ColumnId, numeric: boolean): string {
@@ -36,59 +70,83 @@ export default function FurnitureList({ query }: { query: string }) {
   const run = useStore((s) => s.run);
   const currency = usePreferences((s) => s.currency);
   const vatEnabled = usePreferences((s) => s.vatEnabled);
-  const [sort, setSort] = useState<{ column: ColumnId; desc: boolean }>({
-    column: "NAME",
-    desc: false,
-  });
+  const [sort, setSort] = useState<Sort>(loadSort);
+  const [combine, setCombine] = useState(() => localStorage.getItem(COMBINE_KEY) === "true");
   const [choosing, setChoosing] = useState(false);
+  /** Piece whose name is edited in its row */
+  const [renaming, setRenaming] = useState<string | null>(null);
+  /** Row clicked last: the other end of a Shift+click range */
+  const anchor = useRef<number | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const home = opened?.home ?? null;
   const prices = { currency, vatEnabled };
   const columns = home ? shownColumns(home, prices) : [];
-  const rows = useMemo(() => {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the columns follow from the home and the price settings
+  const rows = useMemo((): ListRow[] => {
     if (!home) return [];
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const list = home.furniture
-      .filter((f): f is Furniture & { attrs: { id: string } } => !!f.attrs.id)
+      .filter((f): f is ListedFurniture => !!f.attrs.id)
       // Reference objects (terrain, scans) are no furniture: they are in the home details
       .filter((f) => f.type !== "piece" || !isReference(f))
-      .filter((f) => words.every((w) => f.attrs.name.toLowerCase().includes(w)));
+      .filter((f) =>
+        matchesWords(
+          columns.map((c) => cellText(cellValue(f, home, c.id), c.id, currency)),
+          query,
+        ),
+      );
     const { column, desc } = sort;
     list.sort((a, b) => {
       const cmp = compareCells(cellValue(a, home, column), cellValue(b, home, column));
       return desc ? -cmp : cmp;
     });
-    return list;
-  }, [home, query, sort]);
+    return listRows(list, combine);
+  }, [home, query, sort, combine, currency, vatEnabled]);
+
+  // A piece selected in the plan is shown in the list
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scrolls when the selection changes
+  useEffect(() => {
+    listRef.current?.querySelector("tr.selected")?.scrollIntoView({ block: "nearest" });
+  }, [selection]);
 
   if (!home) return <p className="muted small catalog-empty">{t("No home open")}</p>;
   const hasTotals = columns.some((c) => PRICE_COLUMNS.includes(c.id));
 
-  const select = (f: Furniture, add: boolean) => {
-    const id = f.attrs.id as string;
+  const select = (index: number, e: { shiftKey: boolean; ctrlKey: boolean }) => {
+    const row = rows[index];
+    if (!row) return;
     const state = useStore.getState();
-    const level = f.attrs.level;
+    const level = row.first.attrs.level;
     if (level && level !== state.selectedLevel) state.selectLevel(level);
-    state.setSelection(
-      add
-        ? selection.includes(id)
-          ? selection.filter((s) => s !== id)
-          : [...selection, id]
-        : [id],
-    );
+    if (e.shiftKey && anchor.current !== null) {
+      state.setSelection(rangeIds(rows, anchor.current, index));
+      return;
+    }
+    anchor.current = index;
+    if (!e.ctrlKey) state.setSelection(row.ids);
+    else if (row.ids.every((id) => selection.includes(id))) {
+      state.setSelection(selection.filter((id) => !row.ids.includes(id)));
+    } else {
+      state.setSelection([...selection, ...row.ids.filter((id) => !selection.includes(id))]);
+    }
   };
 
   const total = (id: ColumnId) => {
     let sum: number | null = null;
-    for (const f of rows) {
-      const v = cellValue(f, home, id);
-      if (typeof v === "number") sum = (sum ?? 0) + v;
+    for (const row of rows) {
+      const v = cellValue(row.first, home, id);
+      if (typeof v === "number") sum = (sum ?? 0) + v * row.ids.length;
     }
     return sum;
   };
 
+  const rename = (ids: string[], name: string) => {
+    setRenaming(null);
+    if (name.trim()) void run("furniture_update", { ids, name: name.trim() });
+  };
+
   return (
-    <div className="furniture-list">
+    <div className="furniture-list" ref={listRef}>
       <table>
         <thead>
           <tr>
@@ -96,9 +154,11 @@ export default function FurnitureList({ query }: { query: string }) {
               <th key={c.id} className={cellClass(c.id, c.numeric)}>
                 <button
                   type="button"
-                  onClick={() =>
-                    setSort((s) => ({ column: c.id, desc: s.column === c.id ? !s.desc : false }))
-                  }
+                  onClick={() => {
+                    const next = { column: c.id, desc: sort.column === c.id ? !sort.desc : false };
+                    setSort(next);
+                    remember(SORT_KEY, next);
+                  }}
                   title={`${c.full()} · ${t("Sort")}`}
                 >
                   {c.id === "VISIBLE" ? "" : c.label()}
@@ -109,14 +169,38 @@ export default function FurnitureList({ query }: { query: string }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((f) => {
-            const id = f.attrs.id as string;
+          {rows.map((row, index) => {
+            const f = row.first;
+            const id = f.attrs.id;
             const visible = f.attrs.visible !== false;
+            const selected = row.ids.every((i) => selection.includes(i));
             return (
               <tr
                 key={id}
-                className={`${selection.includes(id) ? "selected" : ""} ${visible ? "" : "hidden-row"}`}
-                onClick={(e) => select(f, e.shiftKey || e.ctrlKey)}
+                className={`${selected ? "selected" : ""} ${visible ? "" : "hidden-row"}`}
+                tabIndex={0}
+                onClick={(e) => {
+                  // The row takes the keyboard: the arrow keys walk the list from here
+                  e.currentTarget.focus();
+                  select(index, e);
+                }}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    const next = index + (e.key === "ArrowDown" ? 1 : -1);
+                    if (rows[next]) {
+                      select(next, { shiftKey: e.shiftKey, ctrlKey: false });
+                      const tr = e.currentTarget.parentElement?.children[next];
+                      (tr as HTMLElement | undefined)?.focus();
+                    }
+                  } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                    // Nothing to do in the list, and not a key of the plan either
+                  } else if (e.key === "F2" && f.type === "piece") setRenaming(id);
+                  else return;
+                  // Not keys of the plan (the arrows would move the selection there)
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
               >
                 {columns.map((c) => {
                   if (c.id === "VISIBLE") {
@@ -129,19 +213,54 @@ export default function FurnitureList({ query }: { query: string }) {
                           disabled={f.type === "group"}
                           onClick={(e) => e.stopPropagation()}
                           onChange={(e) =>
-                            void run("furniture_update", { id, visible: e.currentTarget.checked })
+                            void run("furniture_update", {
+                              ids: row.ids,
+                              visible: e.currentTarget.checked,
+                            })
                           }
                         />
                       </td>
                     );
                   }
                   const text = cellText(cellValue(f, home, c.id), c.id, currency);
+                  if (c.id === "NAME" && renaming === id) {
+                    return (
+                      <td key={c.id} className="name">
+                        <input
+                          type="text"
+                          className="furniture-rename"
+                          aria-label={t("Name")}
+                          defaultValue={f.attrs.name}
+                          ref={(el) => el?.select()}
+                          onClick={(e) => e.stopPropagation()}
+                          onBlur={(e) => rename(row.ids, e.currentTarget.value)}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") e.currentTarget.blur();
+                            else if (e.key === "Escape") setRenaming(null);
+                          }}
+                        />
+                      </td>
+                    );
+                  }
                   return (
                     <td
                       key={c.id}
                       className={c.numeric ? cellClass(c.id, true) : "name"}
-                      title={c.numeric ? undefined : text}
+                      title={
+                        c.numeric
+                          ? undefined
+                          : c.id === "NAME" && f.type === "piece"
+                            ? `${text} · ${t("F2 or double-click to rename")}`
+                            : text
+                      }
+                      onDoubleClick={
+                        c.id === "NAME" && f.type === "piece" ? () => setRenaming(id) : undefined
+                      }
                     >
+                      {c.id === "NAME" && row.ids.length > 1 && (
+                        <span className="furniture-count">{row.ids.length} × </span>
+                      )}
                       {text}
                       {c.id === "NAME" && f.type === "group" && (
                         <span className="muted"> ({f.items.length})</span>
@@ -170,7 +289,24 @@ export default function FurnitureList({ query }: { query: string }) {
         )}
       </table>
       <div className="furniture-list-footer muted small">
-        <span>{t("{n} items · sizes in {unit}", { n: rows.length, unit: unitSymbol() })}</span>
+        <span>
+          {t("{n} items · sizes in {unit}", {
+            n: rows.reduce((n, r) => n + r.ids.length, 0),
+            unit: unitSymbol(),
+          })}
+        </span>
+        <label title={t("Equal pieces share a row with their number, like in a parts list")}>
+          <input
+            type="checkbox"
+            checked={combine}
+            onChange={(e) => {
+              setCombine(e.currentTarget.checked);
+              remember(COMBINE_KEY, e.currentTarget.checked);
+              anchor.current = null;
+            }}
+          />{" "}
+          {t("Combine equal pieces")}
+        </label>
         <button
           type="button"
           className="link-button"

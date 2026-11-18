@@ -26,6 +26,7 @@ mod online;
 mod room;
 mod rotate;
 mod sun;
+mod surface;
 mod text;
 mod view;
 mod visit;
@@ -47,6 +48,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     wall::register(r);
     wall_ops::register(r);
     room::register(r);
+    surface::register(r);
     furniture::register(r);
     group::register(r);
     guide::register(r);

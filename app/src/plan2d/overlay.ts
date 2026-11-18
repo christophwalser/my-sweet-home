@@ -67,6 +67,8 @@ export type PlanOverlay = {
   visitorHandle: Pt | null;
   /** Catalog piece dragged over the plan, at its size where it will land */
   dropPreview?: { preview: DropPreview; icon: HTMLImageElement | null } | null;
+  /** Surface under a dragged texture or the pipette: a wall side (line) or a floor or piece */
+  surfaceTarget?: { outline: Pt[]; closed: boolean } | null;
   accent: string;
   /** Color of guides */
   guide: string;
@@ -361,6 +363,24 @@ export function drawOverlay(
   }
   for (const [a, b, text] of overlay.gaps) drawGap(ctx, a, b, overlay.guide, px, text);
   if (overlay.dropPreview) drawDropPreview(ctx, overlay.dropPreview, overlay.accent, px);
+  if (overlay.surfaceTarget && overlay.surfaceTarget.outline.length > 1) {
+    const { outline, closed } = overlay.surfaceTarget;
+    ctx.strokeStyle = overlay.accent;
+    ctx.lineCap = "round";
+    ctx.lineWidth = (closed ? 3 : 7) * px;
+    if (closed) {
+      ctx.fillStyle = withAlpha(overlay.accent, 0.2);
+      ctx.beginPath();
+      outline.forEach(([x, y], i) => {
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fill();
+    }
+    strokePath(ctx, outline, closed);
+    ctx.lineCap = "butt";
+  }
   for (const d of overlay.autoDims) drawDimensionPreview(ctx, d, overlay.accent, px);
   if (overlay.dimensionDraft) {
     drawDimensionPreview(ctx, overlay.dimensionDraft, overlay.accent, px);

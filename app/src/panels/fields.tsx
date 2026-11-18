@@ -2,12 +2,13 @@
 // command and undo step per change) and can show "mixed" values when several
 // elements with different values are selected.
 
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { evalLength, evalNumber } from "../expression";
 import { formatNumber, t } from "../i18n";
 import type { Texture } from "../model";
 import { useStore } from "../store";
 import { formatFieldValue, fromUnit, type LengthUnit, toUnit, unitSymbol, useUnit } from "../units";
+import { homeColors, parseHex } from "./homeColors";
 
 /**
  * Properties of one wall side. Its color matches the marking of that side in the
@@ -50,8 +51,9 @@ type FieldProps = {
   onCommit: (value: string | number | boolean) => void;
 };
 
+/** `#rrggbb` of a color of the model; "" for no color (a color field shows it as unset). */
 export function toHex(argb: number | null | undefined): string {
-  if (argb === null || argb === undefined) return "#ffffff";
+  if (argb === null || argb === undefined) return "";
   return `#${(argb & 0xffffff).toString(16).padStart(6, "0")}`;
 }
 
@@ -79,6 +81,8 @@ function roundTo(value: number, decimals: number): number {
 export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps) {
   // A mixed color field shows a placeholder color: only a real change may commit it
   const changed = useRef(false);
+  /** The colors used in the home are shown below a color field */
+  const [swatches, setSwatches] = useState(false);
   // Lengths are given in cm and shown in the unit of the preferences
   const lengthUnit = useUnit();
   const isLength = unit === "cm" && type === "number";
@@ -116,10 +120,14 @@ export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps)
         ? ""
         : String(value ?? "");
   // Text of the untouched field: what Escape and an invalid input go back to
-  const initial = type === "color" && mixed ? "#ffffff" : String(display);
+  // A color field without a color: the picker needs one, the field is marked as unset
+  const unset = type === "color" && !mixed && !value;
+  const initial = type === "color" && (mixed || unset) ? "#ffffff" : String(display);
   /** The value typed: `null` when it is no valid input, `undefined` when it changes nothing. */
   const parse = (raw: string): string | number | null | undefined => {
-    if (mixed && (raw === "" || (type === "color" && !changed.current))) return undefined;
+    if (mixed && raw === "") return undefined;
+    // The color picker shows a placeholder for "mixed" and "none": only a real change counts
+    if (type === "color" && !changed.current) return undefined;
     if (isLength) {
       const cm = evalLength(raw, lengthUnit, typeof value === "number" && !mixed ? value : null);
       if (cm === null) return null;
@@ -162,61 +170,113 @@ export function Field({ label, type, value, unit, mixed, onCommit }: FieldProps)
     input.removeAttribute("aria-invalid");
     changed.current = true;
   };
+  const colors = swatches ? homeColors(useStore.getState().opened?.home ?? null) : [];
   return (
-    <label className="prop-row">
-      <span className="prop-label">{label}</span>
-      <input
-        ref={(el) => {
-          if (!el || !numeric) return;
-          // A property handler, so that the wheel does not scroll the panel meanwhile
-          el.onwheel = (e) => {
-            if (document.activeElement !== el) return;
-            e.preventDefault();
-            step(el, (e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 10 : 1));
-          };
-        }}
-        // Re-create the input when the value changes from outside (undo, CLI, MCP)
-        key={String(display)}
-        type={type === "color" ? "color" : "text"}
-        inputMode={(type === "number" || type === "angle") && !isLength ? "decimal" : undefined}
-        defaultValue={initial}
-        placeholder={mixed ? "mixed" : undefined}
-        // Also for colors: one command (and undo step) when leaving the field
-        onInput={(e) => {
-          changed.current = true;
-          e.currentTarget.removeAttribute("aria-invalid");
-        }}
-        onBlur={(e) => commit(e.currentTarget)}
-        onKeyDown={(e) => {
-          const input = e.currentTarget;
-          if (e.key === "Enter") {
-            // An invalid input stays for correcting it, marked as such
-            if (parse(input.value) === null) {
-              input.setAttribute("aria-invalid", "true");
-              input.select();
-            } else input.blur();
-          } else if (e.key === "Escape") {
-            // The first Escape takes the typed value back, only the next one goes on (e.g.
-            // to close a dialog)
-            if (input.value !== initial) {
-              e.stopPropagation();
-              input.value = initial;
-              changed.current = false;
-              input.removeAttribute("aria-invalid");
+    <>
+      <label className="prop-row">
+        <span className="prop-label">{label}</span>
+        <input
+          className={unset ? "unset" : undefined}
+          ref={(el) => {
+            if (!el || !numeric) return;
+            // A property handler, so that the wheel does not scroll the panel meanwhile
+            el.onwheel = (e) => {
+              if (document.activeElement !== el) return;
+              e.preventDefault();
+              step(el, (e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 10 : 1));
+            };
+          }}
+          // Re-create the input when the value changes from outside (undo, CLI, MCP)
+          key={String(display)}
+          type={type === "color" ? "color" : "text"}
+          inputMode={(type === "number" || type === "angle") && !isLength ? "decimal" : undefined}
+          defaultValue={initial}
+          placeholder={mixed ? t("mixed") : undefined}
+          // Also for colors: one command (and undo step) when leaving the field
+          onInput={(e) => {
+            changed.current = true;
+            e.currentTarget.removeAttribute("aria-invalid");
+          }}
+          onBlur={(e) => commit(e.currentTarget)}
+          onKeyDown={(e) => {
+            const input = e.currentTarget;
+            if (e.key === "Enter") {
+              // An invalid input stays for correcting it, marked as such
+              if (parse(input.value) === null) {
+                input.setAttribute("aria-invalid", "true");
+                input.select();
+              } else input.blur();
+            } else if (e.key === "Escape") {
+              // The first Escape takes the typed value back, only the next one goes on (e.g.
+              // to close a dialog)
+              if (input.value !== initial) {
+                e.stopPropagation();
+                input.value = initial;
+                changed.current = false;
+                input.removeAttribute("aria-invalid");
+              }
+              input.blur();
+            } else if (numeric && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+              e.preventDefault();
+              step(input, (e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 10 : 1));
             }
-            input.blur();
-          } else if (numeric && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-            e.preventDefault();
-            step(input, (e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 10 : 1));
-          }
-        }}
-      />
-      {(unit || (mixed && type === "color")) && (
-        <span className="prop-unit">
-          {mixed && type === "color" ? "mixed" : isLength ? unitSymbol(lengthUnit) : unit}
-        </span>
+          }}
+        />
+        {type === "color" ? (
+          <span className="color-extra">
+            <input
+              // Re-created with the value, like the picker
+              key={`${display}|${mixed}`}
+              type="text"
+              className="color-hex"
+              aria-label={t("Color as #RRGGBB")}
+              defaultValue={mixed || unset ? "" : String(display)}
+              placeholder={mixed ? t("mixed") : t("none")}
+              maxLength={7}
+              spellCheck={false}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+                else if (e.key === "Escape") e.currentTarget.value = mixed || unset ? "" : display;
+              }}
+              onBlur={(e) => {
+                const hex = parseHex(e.currentTarget.value);
+                if (hex && hex !== display) onCommit(hex);
+                else e.currentTarget.value = mixed || unset ? "" : display;
+              }}
+            />
+            <button
+              type="button"
+              className="icon-button"
+              aria-expanded={swatches}
+              title={t("Colors used in the home")}
+              aria-label={t("Colors used in the home")}
+              onClick={() => setSwatches(!swatches)}
+            >
+              {swatches ? "▴" : "▾"}
+            </button>
+          </span>
+        ) : (
+          unit && <span className="prop-unit">{isLength ? unitSymbol(lengthUnit) : unit}</span>
+        )}
+      </label>
+      {type === "color" && swatches && (
+        <div className="color-swatches">
+          {colors.length === 0 && (
+            <span className="muted small">{t("No colors are used in the home yet.")}</span>
+          )}
+          {colors.map((c) => (
+            <button
+              type="button"
+              key={c}
+              style={{ background: c }}
+              title={c}
+              aria-label={c}
+              onClick={() => onCommit(c)}
+            />
+          ))}
+        </div>
       )}
-    </label>
+    </>
   );
 }
 

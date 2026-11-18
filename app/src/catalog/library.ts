@@ -112,8 +112,14 @@ export function openEditor(path?: string, index?: number): void {
 export type MenuContext = {
   /** Shows a message with an optional undo button */
   notify: (message: string, undo?: boolean) => void;
-  /** The catalog in the side bar offers "Add to home" */
-  addToHome?: () => void;
+  /** The catalog in the side bar places furniture in the plan */
+  place?: () => void;
+  /** The catalog in the side bar replaces the selected furniture by the item */
+  replace?: () => void;
+  /** The catalog in the side bar gives a texture to the selected elements */
+  apply?: () => void;
+  /** The catalog in the side bar marks favorites */
+  favorite?: { on: boolean; toggle: () => void };
   /** Opens an item in the editor (the editor selects it, the catalog opens the editor) */
   edit: (path: string, index: number) => void;
 };
@@ -129,9 +135,22 @@ export function itemMenu(
   ctx: MenuContext,
 ): MenuItem[] {
   const entries: MenuItem[] = [];
-  if (ctx.addToHome) {
-    entries.push({ label: t("Add to home"), shortcut: "Enter", action: ctx.addToHome });
+  if (ctx.place) {
+    entries.push({ label: t("Place in the plan"), shortcut: "Enter", action: ctx.place });
   }
+  if (ctx.apply) {
+    entries.push({ label: t("Apply to the selection"), shortcut: "Enter", action: ctx.apply });
+  }
+  if (ctx.replace) {
+    entries.push({ label: t("Replace the selection with this"), action: ctx.replace });
+  }
+  if (ctx.favorite) {
+    entries.push({
+      label: ctx.favorite.on ? t("Remove from the favorites") : t("Add to the favorites"),
+      action: ctx.favorite.toggle,
+    });
+  }
+  if (entries.length > 0 && lib) entries.push({ separator: true });
   if (!lib) return entries;
   const fail = (e: unknown) => ctx.notify(String(e));
   if (!lib.editable) {

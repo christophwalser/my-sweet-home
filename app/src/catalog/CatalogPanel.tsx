@@ -1,30 +1,36 @@
 // Catalog panel: furniture and textures of all installed libraries, grouped by
 // category, with full-text search over name, category, tags and creator. Each item has a
-// context menu (right click or ⋯): add to the home, edit, move to another category,
-// duplicate, delete – the same menu as in the library editor.
+// context menu (right click or ⋯): place in the plan or apply to the selection, replace the
+// selection, favorite, edit, move to another category, duplicate, delete. Furniture is placed
+// by a double-click and a click in the plan or by dragging; textures are dragged onto a floor,
+// a wall side or a piece, or applied to the selection by a double-click. The rows take the
+// keyboard: arrow keys, Enter, Delete, Ctrl+D and the menu key.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  api,
   CATALOG_DRAG_TYPE,
   type CatalogDragData,
   type CatalogItem,
   type CatalogKind,
   libResourceUrl,
   setCatalogDrag,
+  TEXTURE_DRAG_TYPE,
+  type TextureDragData,
 } from "../api";
 import { language, t } from "../i18n";
 import Splitter from "../layout/Splitter";
+import { forEachPiece } from "../model";
 import ContextMenu, { type MenuItem } from "../plan2d/ContextMenu";
 import { usePreferences } from "../preferences";
 import { useStore } from "../store";
 import { useUi } from "../ui/uiStore";
 import { formatPrecise } from "../units";
+import { useCatalogPrefs } from "./catalogPrefs";
 import { importDroppedFiles } from "./dropImport";
 import FurnitureList from "./FurnitureList";
-import { homeCenter } from "./ImportFurnitureDialog";
 import { categoriesFor, itemMenu, libraryOf, openEditor, undoLibrary } from "./library";
 
+/** Search results shown before "Show all". */
 const MAX_RESULTS = 300;
 
 /** Transparent picture shown under the pointer while an item is dragged. */
@@ -34,19 +40,56 @@ const EMPTY_DRAG_IMAGE = (() => {
   return img;
 })();
 
-/** Places a catalog piece in the middle of the home, on the selected level. */
-async function addToHome(item: CatalogItem): Promise<void> {
-  const opened = useStore.getState().opened;
-  if (!opened || !item.id || item.kind !== "furniture") return;
-  const level = useStore.getState().selectedLevel;
-  const [x, y] = homeCenter(opened.home);
-  const added = (await api.execute("furniture_add", {
-    catalog_id: item.id,
-    x,
-    y,
-    ...(level ? { level } : {}),
-  })) as { id?: string };
-  if (added.id) useStore.getState().setSelection([added.id]);
+/** What the plan needs to show and place a catalog piece. */
+function dragData(item: CatalogItem): CatalogDragData {
+  return {
+    catalogId: item.id as string,
+    doorOrWindow: item.doorOrWindow,
+    name: item.name,
+    width: item.width,
+    depth: item.depth,
+  };
+}
+
+/** Icon of an item, loaded for the plan canvas (which must stay readable for exports). */
+function planIcon(item: CatalogItem): HTMLImageElement | null {
+  if (!item.icon) return null;
+  const icon = new Image();
+  icon.crossOrigin = "anonymous";
+  icon.src = libResourceUrl(item.library, item.icon);
+  return icon;
+}
+
+/** The next click in the plan places the piece (Shift+click places several). */
+function startPlacing(item: CatalogItem): void {
+  const state = useStore.getState();
+  if (!state.opened || !item.id || item.kind !== "furniture") return;
+  state.setTool("select");
+  useUi.getState().setPlacing({ data: dragData(item), icon: planIcon(item) });
+}
+
+/** IDs of the selected pieces of furniture (no groups). */
+function selectedPieces(): string[] {
+  const { opened, selection } = useStore.getState();
+  const ids: string[] = [];
+  if (opened) {
+    forEachPiece(opened.home.furniture, (p) => {
+      if (p.attrs.id && selection.includes(p.attrs.id)) ids.push(p.attrs.id);
+    });
+  }
+  return ids;
+}
+
+/** IDs of the selected rooms, walls and pieces: what a texture can be applied to. */
+function texturable(): string[] {
+  const { opened, selection } = useStore.getState();
+  if (!opened) return [];
+  const sel = new Set(selection);
+  return [
+    ...opened.home.rooms.map((r) => r.attrs.id).filter((id): id is string => !!id && sel.has(id)),
+    ...opened.home.walls.map((w) => w.attrs.id).filter((id) => sel.has(id)),
+    ...selectedPieces(),
+  ];
 }
 
 function formatSize(item: CatalogItem): string {
@@ -66,16 +109,24 @@ function ItemRow({
   item,
   libraryName,
   preview,
+  favorite,
   onHover,
   onMenu,
+  onPrimary,
+  onShortcut,
 }: {
   item: CatalogItem;
   libraryName: string;
   /** The large preview is on: no native tooltip */
   preview: boolean;
+  favorite: boolean;
   onHover: (hovered: Hovered | null) => void;
   /** Opens the item's context menu at a position in the window */
   onMenu: (item: CatalogItem, x: number, y: number) => void;
+  /** Double-click or Enter: place the piece, apply the texture */
+  onPrimary: (item: CatalogItem) => void;
+  /** Runs the menu entry with this shortcut ("Delete", "Ctrl+D") */
+  onShortcut: (item: CatalogItem, shortcut: string) => void;
 }) {
   const tooltip = [
     item.name,
@@ -89,6 +140,31 @@ function ItemRow({
   return (
     <li
       className="catalog-item"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: the rows are walked with the arrow keys
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        const row = e.currentTarget;
+        const menuKey = e.key === "ContextMenu" || (e.shiftKey && e.key === "F10");
+        if (e.key === "Enter") onPrimary(item);
+        else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          const rows = [
+            ...(row.closest(".catalog-list")?.querySelectorAll<HTMLElement>(".catalog-item") ?? []),
+          ];
+          rows[rows.indexOf(row) + (e.key === "ArrowDown" ? 1 : -1)]?.focus();
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          // Nothing to do in the list, and not a key of the plan either
+        } else if (e.key === "Delete") onShortcut(item, "Delete");
+        else if (e.ctrlKey && e.key.toLowerCase() === "d") onShortcut(item, "Ctrl+D");
+        else if (menuKey) {
+          const r = row.getBoundingClientRect();
+          onHover(null);
+          onMenu(item, r.left + 24, r.bottom);
+        } else return;
+        // Not a key of the plan (Delete would delete the selection there)
+        e.preventDefault();
+        e.stopPropagation();
+      }}
       title={preview ? undefined : tooltip}
       onMouseEnter={(e) => {
         const r = e.currentTarget.getBoundingClientRect();
@@ -100,30 +176,22 @@ function ItemRow({
         onHover(null);
         onMenu(item, e.clientX, e.clientY);
       }}
-      onDoubleClick={() => void addToHome(item)}
-      // Furniture can be dragged onto the plan
-      draggable={!!item.id && item.kind === "furniture"}
+      onDoubleClick={() => onPrimary(item)}
+      // Furniture is dragged onto the plan, a texture onto a floor, wall side or piece
+      draggable={!!item.id}
       onDragStart={(e) => {
         onHover(null);
-        if (!item.id || item.kind !== "furniture") return;
-        const data: CatalogDragData = {
-          catalogId: item.id,
-          doorOrWindow: item.doorOrWindow,
-          name: item.name,
-          width: item.width,
-          depth: item.depth,
-        };
-        e.dataTransfer.setData(CATALOG_DRAG_TYPE, JSON.stringify(data));
+        if (!item.id) return;
         e.dataTransfer.effectAllowed = "copy";
-        // The plan shows the piece at its size; no picture of the list row in the way
-        let icon: HTMLImageElement | null = null;
-        if (item.icon) {
-          // Loaded for the plan canvas (which must stay readable for exports)
-          icon = new Image();
-          icon.crossOrigin = "anonymous";
-          icon.src = libResourceUrl(item.library, item.icon);
+        if (item.kind === "textures") {
+          const texture: TextureDragData = { catalogId: item.id, name: item.name };
+          e.dataTransfer.setData(TEXTURE_DRAG_TYPE, JSON.stringify(texture));
+          return;
         }
-        setCatalogDrag({ data, icon });
+        const data = dragData(item);
+        e.dataTransfer.setData(CATALOG_DRAG_TYPE, JSON.stringify(data));
+        // The plan shows the piece at its size; no picture of the list row in the way
+        setCatalogDrag({ data, icon: planIcon(item) });
         e.dataTransfer.setDragImage(EMPTY_DRAG_IMAGE, 0, 0);
       }}
       onDragEnd={() => setCatalogDrag(null)}
@@ -134,7 +202,14 @@ function ItemRow({
         <span className="catalog-icon-placeholder" />
       )}
       <span className="catalog-item-text">
-        <span className="catalog-item-name">{item.name}</span>
+        <span className="catalog-item-name">
+          {favorite && (
+            <span className="catalog-star" title={t("Favorite")}>
+              ★{" "}
+            </span>
+          )}
+          {item.name}
+        </span>
         <span className="catalog-item-meta">{formatSize(item)}</span>
       </span>
       <button
@@ -239,22 +314,58 @@ export default function CatalogPanel() {
     setDropMessage(text);
     setCanUndo(undo);
   };
-  const openMenu = async (item: CatalogItem, x: number, y: number) => {
+  const favorites = useCatalogPrefs((s) => s.favorites);
+  const recentFurniture = useCatalogPrefs((s) => s.recent);
+  const recentTextures = useUi((s) => s.recentTextures);
+  const openKeys = useCatalogPrefs((s) => s.open);
+  const tiles = useCatalogPrefs((s) => s.tiles);
+  const [showAll, setShowAll] = useState(false);
+  /** Gives the texture to the selected rooms (floor), walls (both sides) and furniture. */
+  const applyTexture = (item: CatalogItem) => {
+    const ids = texturable();
+    if (!item.id) return;
+    if (ids.length === 0) {
+      notify(t("Select rooms, walls or furniture first, or drag the texture onto the plan."));
+      return;
+    }
+    useUi.getState().noteTexture(item.id);
+    void useStore.getState().run("texture_apply", { ids, texture: item.id });
+  };
+  const primary = (item: CatalogItem) => {
+    if (item.kind === "furniture") startPlacing(item);
+    else applyTexture(item);
+  };
+  const menuItems = async (item: CatalogItem): Promise<MenuItem[]> => {
     const all = useStore.getState().catalogAll;
     const lib = libraryOf(item, all);
     const categories = await categoriesFor(item.kind, lib?.path ?? null);
-    setMenu({
-      x,
-      y,
-      items: itemMenu(item, lib, categories, {
-        notify,
-        addToHome:
-          item.kind === "furniture" && useStore.getState().opened
-            ? () => void addToHome(item).catch((e) => notify(String(e)))
-            : undefined,
-        edit: (path, index) => openEditor(path, index),
-      }),
+    const opened = !!useStore.getState().opened;
+    const id = item.id;
+    const pieces = item.kind === "furniture" && id ? selectedPieces() : [];
+    return itemMenu(item, lib, categories, {
+      notify,
+      place: item.kind === "furniture" && opened && id ? () => startPlacing(item) : undefined,
+      apply: item.kind === "textures" && opened && id ? () => applyTexture(item) : undefined,
+      replace:
+        pieces.length > 0
+          ? () => void useStore.getState().run("furniture_replace", { ids: pieces, catalog_id: id })
+          : undefined,
+      favorite: id
+        ? {
+            on: useCatalogPrefs.getState().favorites.includes(id),
+            toggle: () => useCatalogPrefs.getState().toggleFavorite(id),
+          }
+        : undefined,
+      edit: (path, index) => openEditor(path, index),
     });
+  };
+  const openMenu = async (item: CatalogItem, x: number, y: number) =>
+    setMenu({ x, y, items: await menuItems(item) });
+  /** Runs the entry of the item's menu that shows this shortcut, if it has one. */
+  const runShortcut = async (item: CatalogItem, shortcut: string) => {
+    for (const entry of await menuItems(item)) {
+      if ("action" in entry && entry.shortcut === shortcut && !entry.disabled) entry.action();
+    }
   };
   const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
   const onDrop = async (e: React.DragEvent) => {
@@ -283,7 +394,6 @@ export default function CatalogPanel() {
     if (!rect || rect.height <= 0) return;
     setSplit(Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, (y - rect.top) / rect.height)));
   };
-  const [open, setOpen] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // Catalog content is shown in the language of the user interface when translations exist
@@ -324,13 +434,48 @@ export default function CatalogPanel() {
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [items]);
 
-  const toggle = (category: string) =>
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) next.delete(category);
-      else next.add(category);
-      return next;
-    });
+  // Favorites and the items used last, as categories above the others
+  const pinned = useMemo(() => {
+    const byId = new Map(items.filter((i) => i.id).map((i) => [i.id as string, i]));
+    const pick = (ids: string[]) =>
+      ids.map((id) => byId.get(id)).filter((i): i is CatalogItem => i !== undefined);
+    const out: [string, string, CatalogItem[]][] = [
+      ["*favorites", t("Favorites"), pick(favorites)],
+      ["*recent", t("Used last"), pick(kind === "furniture" ? recentFurniture : recentTextures)],
+    ];
+    return out.filter(([, , list]) => list.length > 0);
+  }, [items, favorites, recentFurniture, recentTextures, kind]);
+
+  const isOpen = (category: string) => openKeys.includes(`${kind}:${category}`);
+  const toggle = (category: string) => useCatalogPrefs.getState().toggleOpen(`${kind}:${category}`);
+  const row = (i: CatalogItem) => (
+    <ItemRow
+      key={`${i.library}:${i.id ?? i.name}:${i.icon}`}
+      item={i}
+      libraryName={libraryNames.get(i.library) ?? ""}
+      preview={previewOn}
+      favorite={!!i.id && favorites.includes(i.id)}
+      onHover={onHover}
+      onMenu={(i, x, y) => void openMenu(i, x, y)}
+      onPrimary={primary}
+      onShortcut={(i, shortcut) => void runShortcut(i, shortcut).catch((e) => notify(String(e)))}
+    />
+  );
+  const section = (key: string, title: string, list: CatalogItem[]) => (
+    <section key={key}>
+      <button
+        type="button"
+        className="catalog-category"
+        onClick={() => toggle(key)}
+        aria-expanded={isOpen(key)}
+      >
+        <span>{isOpen(key) ? "▾" : "▸"}</span> {title}
+        <span className="muted"> {list.length}</span>
+      </button>
+      {isOpen(key) && <ul>{list.map(row)}</ul>}
+    </section>
+  );
+  const shownResults = results && (showAll ? results : results.slice(0, MAX_RESULTS));
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: drop zone for files from the desktop; the import buttons are the keyboard way
@@ -371,7 +516,10 @@ export default function CatalogPanel() {
             type="search"
             placeholder={t("Search catalog…")}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setShowAll(false);
+            }}
             aria-label={t("Search catalog")}
           />
           <div className="catalog-tools">
@@ -390,6 +538,15 @@ export default function CatalogPanel() {
               title={t("Edit furniture and texture libraries: items, categories, names")}
             >
               {t("Libraries…")}
+            </button>
+            <button
+              type="button"
+              className="link-button"
+              aria-pressed={tiles}
+              onClick={() => useCatalogPrefs.getState().setTiles(!tiles)}
+              title={t("Show the items as a list or as large tiles")}
+            >
+              {tiles ? t("List") : t("Tiles")}
             </button>
           </div>
           {dropMessage && (
@@ -423,51 +580,30 @@ export default function CatalogPanel() {
                   })}
           </div>
         </div>
-        <div className="catalog-list" onScroll={() => onHover(null)}>
-          {results ? (
-            <ul>
-              {results.slice(0, MAX_RESULTS).map((i) => (
-                <ItemRow
-                  key={`${i.library}:${i.id ?? i.name}:${i.icon}`}
-                  item={i}
-                  libraryName={libraryNames.get(i.library) ?? ""}
-                  preview={previewOn}
-                  onHover={onHover}
-                  onMenu={(i, x, y) => void openMenu(i, x, y)}
-                />
-              ))}
-              {results.length > MAX_RESULTS && (
-                <li className="muted catalog-more">{t("Refine the search to see more…")}</li>
+        <div className={`catalog-list${tiles ? " tiles" : ""}`} onScroll={() => onHover(null)}>
+          {results && shownResults ? (
+            <>
+              <ul>{shownResults.map(row)}</ul>
+              {results.length === 0 && (
+                <p className="muted catalog-more">
+                  {t("Nothing in the catalog matches the search.")}
+                </p>
               )}
-            </ul>
-          ) : (
-            categories.map(([category, list]) => (
-              <section key={category}>
+              {results.length > shownResults.length && (
                 <button
                   type="button"
-                  className="catalog-category"
-                  onClick={() => toggle(category)}
-                  aria-expanded={open.has(category)}
+                  className="link-button catalog-more"
+                  onClick={() => setShowAll(true)}
                 >
-                  <span>{open.has(category) ? "▾" : "▸"}</span> {category}
-                  <span className="muted"> {list.length}</span>
+                  {t("Show all {n} items", { n: results.length })}
                 </button>
-                {open.has(category) && (
-                  <ul>
-                    {list.map((i) => (
-                      <ItemRow
-                        key={`${i.library}:${i.id ?? i.name}:${i.icon}`}
-                        item={i}
-                        libraryName={libraryNames.get(i.library) ?? ""}
-                        preview={previewOn}
-                        onHover={onHover}
-                        onMenu={(i, x, y) => void openMenu(i, x, y)}
-                      />
-                    ))}
-                  </ul>
-                )}
-              </section>
-            ))
+              )}
+            </>
+          ) : (
+            <>
+              {pinned.map(([key, title, list]) => section(key, title, list))}
+              {categories.map(([category, list]) => section(category, category, list))}
+            </>
           )}
         </div>
       </div>

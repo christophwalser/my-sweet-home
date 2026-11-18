@@ -30,6 +30,7 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. L
 - Click the corners of a room, or **double-click** inside walls to create a room that fills them. Walls that already enclose a room give no second one.
 - A selected room has a handle in the middle of each edge: drag it to add a corner, or with **Shift** to move the whole edge parallel. Dragged corners snap to right angles and straight lines with the neighboring edges.
 - The properties set the name, the floor and ceiling (color, texture, matt or shiny) and whether the area is shown. Drag the name or area in the plan to move it.
+- **Walls of this room** in the properties gives all wall sides that face the room the same color, texture, surface and baseboard, whatever the direction each wall was drawn in. A wall longer than the room changes on its whole side.
 
 ## Dimensions, texts and lines
 
@@ -76,6 +77,9 @@ Terrain models, laser scans or neighbor houses imported as furniture are marked 
 ## Placing furniture
 
 - Drag a piece from the catalog into the plan. Near a wall it turns with its back to the wall already while you drag it.
+- Or double-click a piece in the catalog (or press **Enter**) and click in the plan: the piece hangs at the pointer at its size. **Shift+click** places several, **Esc** ends it.
+- **Replace the selection with this** in the menu of a catalog item swaps the selected pieces for it; place, angle, elevation and level stay.
+- The catalog remembers the open categories, lists **Favorites** (menu of an item) and the pieces **used last** on top, and shows the items as a list or as tiles. Its rows take the keyboard: arrow keys, **Enter**, **Delete**, **Ctrl+D** and the menu key.
 - Doors and windows snap into the nearest wall, take its thickness and show the distances to the wall ends and other openings.
 - Pieces dropped onto a table, a shelf or another piece land on top of it.
 
@@ -90,7 +94,7 @@ Terrain models, laser scans or neighbor houses imported as furniture are marked 
 
 ## Furniture list
 
-The list below the catalog shows the furniture of the home. Click a column header to sort. **Columns…** chooses the columns; the choice is saved in the home, as in Sweet Home 3D.
+The list below the catalog shows the furniture of the home. Click a column header to sort; the order is remembered. **Columns…** chooses the columns; the choice is saved in the home, as in Sweet Home 3D. The search looks in all shown columns. **Ctrl+click** adds a row to the selection, **Shift+click** selects a range, the arrow keys walk the rows, **F2** or a double-click on the name renames a piece. **Combine equal pieces** shows equal pieces in one row with their number, like a parts list.
 
 ## Prices
 
@@ -98,7 +102,10 @@ Choose a currency in **Preferences › General › Prices** to see prices. The p
 
 # Textures and libraries
 
-- Texture fields in the properties open a searchable list of all textures.
+- Texture fields in the properties open a searchable list of all textures. **Rotate, resize, shift** below a texture turns it (e.g. parquet by 90°), changes its size in percent and shifts it.
+- Drag a texture from the catalog onto a floor, a wall side or a piece of furniture in the plan; the surface it will land on is highlighted. A double-click on a texture gives it to the selection: the floor of rooms, both sides of walls, whole pieces.
+- The pipette beside a texture field takes color, texture and surface from a wall side, floor or piece you click in the plan.
+- A color field shows the color as #RRGGBB, which can be typed, and lists the colors already used in the home. A field without a color is struck through.
 - **Furniture › Add to library** imports models (OBJ, DAE, 3DS, glTF, FBX, STL, 3MF, PLY, VRML, ZIP) and textures (JPG, PNG, BMP, GIF, WebP, TIFF, SVG, material packages). Files can also be dropped onto the catalog.
 - **Libraries…** opens the library editor: create libraries, change the properties of items, move them to other categories, import and remove.
 - **Add… › Search online…** in the catalog searches the free libraries of Sweet Home 3D, ambientCG and Poly Haven and imports with one click.
