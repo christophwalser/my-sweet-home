@@ -14,8 +14,21 @@ export const UNITS: { unit: LengthUnit; label: string }[] = [
 ];
 
 const CM_PER: Record<LengthUnit, number> = { cm: 1, mm: 0.1, m: 100, inch: 2.54 };
-/** Decimals shown in input fields. */
+/** Decimals of lengths unless the preferences set another precision. */
 const DECIMALS: Record<LengthUnit, number> = { cm: 1, mm: 0, m: 3, inch: 2 };
+/** Precisions offered in the preferences. */
+export const MAX_LENGTH_DECIMALS = 4;
+
+/**
+ * Decimals of lengths in a unit: the precision of the preferences, the same in the plan, the
+ * fields and the status bar.
+ */
+export function lengthDecimals(unit: LengthUnit = currentUnit()): number {
+  const chosen = usePreferences.getState().lengthDecimals;
+  return chosen === null || chosen === undefined
+    ? DECIMALS[unit]
+    : Math.min(MAX_LENGTH_DECIMALS, Math.max(0, Math.round(chosen)));
+}
 
 function currentUnit(): LengthUnit {
   return usePreferences.getState().unit;
@@ -33,12 +46,12 @@ export function unitSymbol(unit: LengthUnit = currentUnit()): string {
 
 /** A value of an input field (in the unit) as text in the format of the language. */
 export function formatFieldValue(value: number, unit: LengthUnit = currentUnit()): string {
-  return num(value, DECIMALS[unit]);
+  return num(value, lengthDecimals(unit));
 }
 
 /** Value in the unit, rounded for input fields. */
 export function toUnit(cm: number, unit: LengthUnit = currentUnit()): number {
-  const f = 10 ** DECIMALS[unit];
+  const f = 10 ** lengthDecimals(unit);
   return Math.round((cm / CM_PER[unit]) * f) / f;
 }
 
@@ -87,15 +100,21 @@ function feetInches(cm: number): string {
 /** A length for display in the plan and in texts, e.g. "4.20 m", "42.5 cm" or 13'9". */
 export function formatLength(cm: number, unit: LengthUnit = currentUnit()): string {
   switch (unit) {
-    case "mm":
-      return `${num(Math.round(cm * 10), 0)} mm`;
-    case "m":
-      return `${num(cm / 100, 2, 2)} m`;
+    case "mm": {
+      // From cm times ten: dividing by 0.1 would round 42.55 cm down to 425 mm
+      const f = 10 ** lengthDecimals("mm");
+      return `${num(Math.round(cm * 10 * f) / f, lengthDecimals("mm"))} mm`;
+    }
+    case "m": {
+      // At least two decimals, as usual for meters
+      const d = lengthDecimals("m");
+      return `${num(cm / 100, d, Math.min(2, d))} m`;
+    }
     case "inch":
       return feetInches(cm);
     default:
       // Always centimeters, like the input fields (no switch to meters from 1 m on)
-      return `${num(cm, DECIMALS.cm)} cm`;
+      return `${num(cm, lengthDecimals("cm"))} cm`;
   }
 }
 
@@ -103,7 +122,7 @@ export function formatLength(cm: number, unit: LengthUnit = currentUnit()): stri
 export function formatPrecise(cm: number, unit: LengthUnit = currentUnit()): string {
   return unit === "inch"
     ? feetInches(cm)
-    : `${num(toUnit(cm, unit), DECIMALS[unit])} ${unitSymbol(unit)}`;
+    : `${num(toUnit(cm, unit), lengthDecimals(unit))} ${unitSymbol(unit)}`;
 }
 
 /** An area given in cm² for display: m², or ft² with the inch unit. */

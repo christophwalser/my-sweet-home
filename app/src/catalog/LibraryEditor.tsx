@@ -7,6 +7,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { api, type CatalogItem, type CatalogKind, type LibraryInfo, libResourceUrl } from "../api";
+import { errorText } from "../errorText";
 import { language, t } from "../i18n";
 import Splitter from "../layout/Splitter";
 import ContextMenu, { type MenuItem } from "../plan2d/ContextMenu";
@@ -424,7 +425,7 @@ function ModelPreview({
         setStatus(null);
         draw();
       })
-      .catch((e) => alive && setStatus(String(e)));
+      .catch((e) => alive && setStatus(errorText(e)));
     return () => {
       alive = false;
     };
@@ -473,8 +474,8 @@ export default function LibraryEditor({
   onClose: close,
 }: {
   /**
-   * "path|index" of an item to show first, or "add" / "add:<kind>" to start adding:
-   * furniture shows the Add menu, textures open the file dialog right away.
+   * "path|index" of an item to show first, or "add" / "add:<kind>" to start adding: the file
+   * dialog for models or images opens right away.
    */
   initial: string | null;
   onClose: () => void;
@@ -528,7 +529,7 @@ export default function LibraryEditor({
         if (note) setMessage({ text: note, undo: true });
         return r as Record<string, unknown>;
       } catch (e) {
-        setMessage({ text: String(e), undo: false });
+        setMessage({ text: errorText(e), undo: false });
         return null;
       }
     },
@@ -641,7 +642,7 @@ export default function LibraryEditor({
         lang: language(),
       })
       .then((r) => setDetails(r as Details))
-      .catch((e) => setMessage({ text: String(e), undo: false }));
+      .catch((e) => setMessage({ text: errorText(e), undo: false }));
   }, [selected, data]);
 
   const select = useCallback((path: string, index: number) => {
@@ -778,7 +779,7 @@ export default function LibraryEditor({
       const note = await importFiles(paths, "libraries");
       if (note) notify(note, true);
     } catch (e) {
-      notify(String(e));
+      notify(errorText(e));
     }
   };
 
@@ -819,18 +820,14 @@ export default function LibraryEditor({
     setMenu({ x, y, items });
   };
 
-  // "Add…" opens the editor with its Add menu, or for textures with the file dialog
+  // "Add…" of the catalog opens the editor with the file dialog, for furniture and textures
+  // alike; the other sources (online, furniture of the home) are in the Add menu of the editor
   const addOnStart = useRef(adding);
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, when the libraries are known
   useEffect(() => {
-    if (!addOnStart.current || !lib || !addButton.current) return;
+    if (!addOnStart.current || !lib) return;
     addOnStart.current = false;
-    if (kind === "textures") {
-      void addFiles();
-      return;
-    }
-    const r = addButton.current.getBoundingClientRect();
-    addMenu(r.left, r.bottom + 4);
+    void addFiles();
   }, [lib]);
 
   const sel = selected?.item ?? null;

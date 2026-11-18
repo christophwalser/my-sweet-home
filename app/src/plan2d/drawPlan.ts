@@ -203,7 +203,7 @@ export function drawPlan(
   view: ViewTransform,
   input: PlanInput,
   colors: PlanColors,
-  options: { grid?: boolean } = {},
+  options: { grid?: boolean; gridSpacing?: number; backgroundOpacity?: number } = {},
 ): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = colors.background;
@@ -213,7 +213,7 @@ export function drawPlan(
   const px = 1 / view.scale; // one device pixel in world units
 
   // The grid shows faintly through the background image
-  if (options.grid !== false) drawGrid(ctx, width, height, view, colors);
+  if (options.grid !== false) drawGrid(ctx, width, height, view, colors, options.gridSpacing);
 
   const { home, wallShapes, levelId } = input;
 
@@ -234,14 +234,14 @@ export function drawPlan(
   }
   ctx.restore();
 
-  // Background image under the plan, at 70 % opacity like Sweet Home 3D; opaque over backdrops,
-  // so that the terrain does not tint the plan of the building
+  // Background image under the plan, at the opacity of the preferences (70 % like Sweet Home 3D
+  // by default); opaque over backdrops, so that the terrain does not tint the plan of the building
   const bg = backgroundImageOf(home, levelId);
   const bgImage = bg && bg.visible !== false ? input.icons.get(bg.image) : undefined;
   if (bg && bgImage?.complete && bgImage.naturalWidth > 0) {
     const s = backgroundScale(bg);
     ctx.save();
-    ctx.globalAlpha = backdrop.size > 0 ? 1 : 0.7;
+    ctx.globalAlpha = backdrop.size > 0 ? 1 : (options.backgroundOpacity ?? 0.7);
     ctx.translate(-(bg.x_origin ?? 0), -(bg.y_origin ?? 0));
     ctx.scale(s, s);
     ctx.drawImage(bgImage, 0, 0);
@@ -482,16 +482,30 @@ function tracePath(ctx: CanvasRenderingContext2D, points: Pt[]): void {
   });
 }
 
+/**
+ * Distance of the grid lines in cm at a zoom (`scale` in device pixels per cm). Without a
+ * fixed distance it is the smallest step at least ~12 pixels wide; a fixed distance too dense
+ * to be drawn shows every tenth line instead.
+ */
+export function gridStep(scale: number, fixed = 0): number {
+  if (fixed > 0) {
+    let step = fixed;
+    while (step * scale < 6 && step < 1e6) step *= 10;
+    return step;
+  }
+  const steps = [10, 25, 50, 100, 250, 500, 1000];
+  return steps.find((s) => s * scale >= 12) ?? 1000;
+}
+
 function drawGrid(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   view: ViewTransform,
   colors: PlanColors,
+  spacing = 0,
 ): void {
-  // Pick a grid step that is at least ~12 device pixels wide
-  const steps = [10, 25, 50, 100, 250, 500, 1000];
-  const step = steps.find((s) => s * view.scale >= 12) ?? 1000;
+  const step = gridStep(view.scale, spacing);
   const x0 = Math.floor(-view.offsetX / view.scale / step) * step;
   const y0 = Math.floor(-view.offsetY / view.scale / step) * step;
   const x1 = (width - view.offsetX) / view.scale;

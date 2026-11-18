@@ -5,6 +5,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { errorText } from "../errorText";
 import { t } from "../i18n";
 import { useUi } from "../ui/uiStore";
 import { formatFieldValue, parseLength, toUnit, unitSymbol, useUnit } from "../units";
@@ -115,7 +116,7 @@ export default function ImportTextureDialog({
       });
       onClose();
     } catch (e) {
-      setStatus(String(e));
+      setStatus(errorText(e));
     } finally {
       setBusy(false);
     }

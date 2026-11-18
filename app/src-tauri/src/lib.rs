@@ -102,6 +102,9 @@ pub fn run() {
             commands::recovery_open,
             commands::recovery_discard,
             commands::set_autosave_interval,
+            commands::perf_out,
+            commands::perf_backend,
+            commands::perf_write,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Tauri application");

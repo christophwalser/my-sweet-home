@@ -4,6 +4,8 @@
 export type PlanActions = {
   /** Zooms around the center of the plan by `factor` (> 1 zooms in) */
   zoom: (factor: number) => void;
+  /** Shows the selected elements as large as the plan allows */
+  zoomToSelection: () => void;
   /** Selects all elements of the selected level */
   selectAll: () => void;
   /** Selects the elements of the level that are of the same kind as the selected ones */

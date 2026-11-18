@@ -1,3 +1,4 @@
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { message } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
@@ -10,7 +11,14 @@ import OnlineDialog from "./catalog/OnlineDialog";
 import ErrorBoundary from "./ErrorBoundary";
 import ExportDialog from "./export/ExportDialog";
 import HelpDialog from "./help/HelpDialog";
-import { clampSide, DEFAULT_LAYOUT, type Maximized, useLayout } from "./layout/layout";
+import {
+  clampSide,
+  DEFAULT_LAYOUT,
+  draggedSide,
+  type Maximized,
+  SIDE_STEP,
+  useLayout,
+} from "./layout/layout";
 import Splitter from "./layout/Splitter";
 import { closeView3DWindow, findView3DWindow, syncUiState } from "./layout/view3dWindow";
 import PreferencesDialog from "./PreferencesDialog";
@@ -29,6 +37,7 @@ import Icon, { type IconName } from "./ui/Icon";
 import LevelDuplicateDialog from "./ui/LevelDuplicateDialog";
 import MenuBar from "./ui/MenuBar";
 import { commandItem } from "./ui/menuItems";
+import { useMessages } from "./ui/messages";
 import ShortcutsDialog from "./ui/ShortcutsDialog";
 import ToolBar from "./ui/ToolBar";
 import ToolOptions from "./ui/ToolOptions";
@@ -39,6 +48,7 @@ import View3D from "./view3d/View3D";
 import "./App.css";
 import { errorText } from "./errorText";
 import { followLanguage, formatDateTime, t } from "./i18n";
+import { perfMark } from "./perfMarks";
 import { followPreferences, newHomeParams, usePreferences } from "./preferences";
 
 /** Small icon button of a pane (maximize, minimize, separate window). */
@@ -93,8 +103,8 @@ function LevelNameInput({ name, onDone }: { name: string; onDone: (name: string 
   );
 }
 
-/** Seconds an error message stays in the window. */
-const ERROR_SECONDS = 6;
+/** Seconds a notice of success stays in the window (errors stay until closed). */
+const NOTICE_SECONDS = 4;
 
 export default function App() {
   const [layout, setLayout] = useLayout();
@@ -109,20 +119,37 @@ export default function App() {
   const opened = useStore((s) => s.opened);
   const loading = useStore((s) => s.loading);
   const error = useStore((s) => s.error);
+  const notice = useStore((s) => s.notice);
   const selectedLevel = useStore((s) => s.selectedLevel);
   const tool = useStore((s) => s.tool);
   const { openHome, run, selectLevel, clearError } = useStore.getState();
 
+  // Performance runs: everything the window does for a change is done here
+  useEffect(() => perfMark("commit"));
+
   // Context menu of a level tab; the tab is selected first, so its commands act on it
   const [levelMenu, setLevelMenu] = useState<{ x: number; y: number } | null>(null);
 
-  // Error messages disappear after a few seconds, unless the mouse rests on them
-  const [errorHover, setErrorHover] = useState(false);
+  // An error stays until it is closed; a notice of success leaves by itself. Both go to the
+  // list of messages of the status bar.
   useEffect(() => {
-    if (!error || errorHover) return;
-    const timer = setTimeout(() => useStore.getState().clearError(), ERROR_SECONDS * 1000);
+    if (error) useMessages.getState().add("error", error);
+  }, [error]);
+  useEffect(() => {
+    if (!notice) return;
+    useMessages.getState().add("notice", notice);
+    const timer = setTimeout(() => useStore.getState().setNotice(null), NOTICE_SECONDS * 1000);
     return () => clearTimeout(timer);
-  }, [error, errorHover]);
+  }, [notice]);
+
+  // Size of the user interface (View menu): the zoom of the WebView, so the plan, the 3D
+  // view and all texts scale together
+  const uiScale = usePreferences((s) => s.uiScale);
+  useEffect(() => {
+    void getCurrentWebview()
+      .setZoom(uiScale / 100)
+      .catch(() => {});
+  }, [uiScale]);
 
   // Preferences: changes from other windows, autosave interval, wall side colors
   const autosaveMinutes = usePreferences((s) => s.autosaveMinutes);
@@ -290,8 +317,8 @@ export default function App() {
       className="shell"
       style={
         {
-          "--left-width": `${layout.left}px`,
-          "--right-width": `${layout.right}px`,
+          "--left-width": `${layout.leftHidden ? 0 : layout.left}px`,
+          "--right-width": `${layout.rightHidden ? 0 : layout.right}px`,
         } as React.CSSProperties
       }
     >
@@ -338,36 +365,53 @@ export default function App() {
       {dialog === "help" && <HelpDialog onClose={closeDialog} />}
       {paletteOpen && <CommandPalette />}
 
-      {error && (
-        // biome-ignore lint/a11y/noStaticElementInteractions: hovering only keeps the message open
-        <div
-          className="error-bar"
-          role="alert"
-          onMouseEnter={() => setErrorHover(true)}
-          onMouseLeave={() => setErrorHover(false)}
-        >
-          <span>{error}</span>
-          <button
-            type="button"
-            className="error-close"
-            onClick={clearError}
-            title={t("Dismiss")}
-            aria-label={t("Dismiss")}
-          >
-            <Icon name="close" size={16} />
-          </button>
+      {(error || notice) && (
+        // Laid over the window: a message does not move the plan and the 3D view
+        <div className="toasts">
+          {error && (
+            <div className="toast toast-error" role="alert">
+              <span>{error}</span>
+              <button
+                type="button"
+                className="error-close"
+                onClick={clearError}
+                title={t("Dismiss")}
+                aria-label={t("Dismiss")}
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+          )}
+          {notice && (
+            <div className="toast" role="status">
+              <span>{notice}</span>
+            </div>
+          )}
         </div>
       )}
 
-      <aside className="catalog">
+      <aside className="catalog" hidden={layout.leftHidden}>
         <CatalogPanel />
       </aside>
       <Splitter
         orientation="vertical"
-        className="splitter-left"
-        title={t("Drag to resize, double-click for the default width")}
-        onDrag={(x) => setLayout({ left: clampSide(x) })}
-        onReset={() => setLayout({ left: DEFAULT_LAYOUT.left })}
+        className={`splitter-left${layout.leftHidden ? " side-hidden" : ""}`}
+        label={t("Width of the catalog")}
+        title={
+          layout.leftHidden
+            ? t("Drag or press F6 to show the catalog")
+            : t("Drag to resize or to hide, double-click for the default width")
+        }
+        onDrag={(x) => {
+          const side = draggedSide(x);
+          setLayout(
+            side.width === null ? { leftHidden: true } : { left: side.width, leftHidden: false },
+          );
+        }}
+        onStep={(dir) =>
+          setLayout({ left: clampSide(layout.left + dir * SIDE_STEP), leftHidden: false })
+        }
+        onReset={() => setLayout({ left: DEFAULT_LAYOUT.left, leftHidden: false })}
       />
 
       <div className="center" ref={centerRef}>
@@ -458,7 +502,15 @@ export default function App() {
               </span>
             </div>
           )}
-          <PlanView />
+          {/* An error while drawing the plan must not take the whole window down */}
+          <ErrorBoundary name={t("Plan")} resetKey={opened}>
+            <PlanView />
+          </ErrorBoundary>
+          {loading && (
+            <div className="plan-loading" role="status">
+              {t("Loading…")}
+            </div>
+          )}
           {opened && <StatusBar />}
           {!opened && !loading && (
             <div className="empty-hint">
@@ -474,6 +526,13 @@ export default function App() {
           orientation="horizontal"
           className={shown ? "collapsed" : ""}
           title={detached ? undefined : t("Drag to resize, double-click for equal sizes")}
+          label={t("Height of the plan")}
+          onStep={
+            detached || shown
+              ? undefined
+              : (dir) =>
+                  setLayout({ split: Math.min(0.9, Math.max(0.1, layout.split + dir * 0.05)) })
+          }
           onDrag={(x, y) => {
             if (!detached) dragSplit(x, y);
           }}
@@ -529,13 +588,26 @@ export default function App() {
 
       <Splitter
         orientation="vertical"
-        className="splitter-right"
-        title={t("Drag to resize, double-click for the default width")}
-        onDrag={(x) => setLayout({ right: clampSide(window.innerWidth - x) })}
-        onReset={() => setLayout({ right: DEFAULT_LAYOUT.right })}
+        className={`splitter-right${layout.rightHidden ? " side-hidden" : ""}`}
+        label={t("Width of the properties")}
+        title={
+          layout.rightHidden
+            ? t("Drag or press F4 to show the properties")
+            : t("Drag to resize or to hide, double-click for the default width")
+        }
+        onDrag={(x) => {
+          const side = draggedSide(window.innerWidth - x);
+          setLayout(
+            side.width === null ? { rightHidden: true } : { right: side.width, rightHidden: false },
+          );
+        }}
+        onStep={(dir) =>
+          setLayout({ right: clampSide(layout.right - dir * SIDE_STEP), rightHidden: false })
+        }
+        onReset={() => setLayout({ right: DEFAULT_LAYOUT.right, rightHidden: false })}
       />
 
-      <aside className="inspector">
+      <aside className="inspector" hidden={layout.rightHidden}>
         <PropertiesPanel />
       </aside>
     </div>

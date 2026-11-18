@@ -83,6 +83,32 @@ pub async fn execute(
     .map_err(err)?
 }
 
+/// File a performance run writes its report to, if the app was started for one
+/// (environment variable MSH_PERF_OUT, see scripts/perf.ps1).
+#[tauri::command]
+pub fn perf_out() -> Option<String> {
+    state::perf_on()
+        .then(|| std::env::var("MSH_PERF_OUT").ok())
+        .flatten()
+}
+
+/// Timings of the core for the commands run since the last call (performance run).
+#[tauri::command]
+pub fn perf_backend() -> Vec<Value> {
+    state::take_perf()
+}
+
+/// Writes the report of a performance run (also while it runs) and ends the app when done.
+#[tauri::command]
+pub fn perf_write(text: String, done: bool, app: AppHandle) -> CmdResult<()> {
+    let path = std::env::var("MSH_PERF_OUT").map_err(err)?;
+    std::fs::write(path, text).map_err(err)?;
+    if done {
+        app.exit(0);
+    }
+    Ok(())
+}
+
 /// Opens a new window for another home: empty, with the file `path`, or with the
 /// recovered home `recovery`.
 #[tauri::command]

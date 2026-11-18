@@ -8,6 +8,7 @@
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { api } from "../api";
+import { errorText } from "../errorText";
 import { formatNumber, t } from "../i18n";
 import { type CatalogFeed, usePreferences } from "../preferences";
 import Icon from "../ui/Icon";
@@ -148,7 +149,7 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
       }));
       if (offset === 0 && resultsRef.current) resultsRef.current.scrollTop = 0;
     } catch (e) {
-      setError(String(e));
+      setError(errorText(e));
       if (offset === 0) useOnline.setState({ items: [], total: 0, listed: null });
     } finally {
       loading.current = false;
@@ -234,7 +235,7 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
       }
       setItemState(item.id, "done");
     } catch (e) {
-      setItemState(item.id, String(e));
+      setItemState(item.id, errorText(e));
     }
   };
 

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { SECOND_KEY_MS, toolForDigit, toolForLetter, toolShortcut } from "./toolKeys";
+import {
+  SECOND_KEY_MS,
+  toolForDigit,
+  toolForLetter,
+  toolLetters,
+  toolShortcut,
+  withToolKey,
+} from "./toolKeys";
 
 describe("tool keys", () => {
   it("chooses the first tool of a group with its digit", () => {
@@ -39,5 +46,26 @@ describe("tool keys", () => {
     // R rotates and J joins the selection: no tools
     expect(toolForLetter("R")).toBeNull();
     expect(toolForLetter("J")).toBeNull();
+  });
+});
+
+describe("custom tool letters", () => {
+  it("replaces the default letter of a tool", () => {
+    const letters = toolLetters({ "tool.wall": "A" });
+    expect(letters.A).toBe("tool.wall");
+    expect(letters.W).toBeUndefined();
+    expect(toolLetters({ "tool.measure": "" }).M).toBeUndefined();
+  });
+
+  it("takes a letter from the tool that had it", () => {
+    const custom = withToolKey({}, "tool.arcwall", "w");
+    expect(custom).toEqual({ "tool.arcwall": "W", "tool.wall": "" });
+    expect(toolLetters(custom).W).toBe("tool.arcwall");
+  });
+
+  it("refuses reserved letters and anything that is no letter", () => {
+    expect(withToolKey({}, "tool.wall", "R")).toEqual({});
+    expect(withToolKey({}, "tool.wall", "1")).toEqual({});
+    expect(withToolKey({}, "tool.wall", "")).toEqual({ "tool.wall": "" });
   });
 });

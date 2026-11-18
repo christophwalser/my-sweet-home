@@ -1,14 +1,17 @@
 // Preferences dialog: plan, units and magnetism, defaults of new elements, 3D view and general
 // settings, on tabs. Changes apply at once and are kept for all windows of the app.
 
+import { ask } from "@tauri-apps/plugin-dialog";
 import { type ReactNode, useEffect, useState } from "react";
 import CatalogFeedsPage from "./CatalogFeedsPage";
 import { LANGUAGES, type LanguageChoice, languageChoice, setLanguage, t } from "./i18n";
 import { DASH_STYLES, Field, WALL_PATTERNS } from "./panels/fields";
 import { type Preferences, usePreferences } from "./preferences";
 import { useStore } from "./store";
+import { command } from "./ui/commands";
+import { toolLetters, withToolKey } from "./ui/toolKeys";
 import { type ThemeChoice, useUi } from "./ui/uiStore";
-import { UNITS } from "./units";
+import { formatLength, MAX_LENGTH_DECIMALS, UNITS } from "./units";
 
 type Tab = "plan" | "tools" | "new" | "view3d" | "general" | "catalogs";
 /** Currencies offered for furniture prices (ISO 4217), as in Sweet Home 3D's list. */
@@ -33,6 +36,22 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "new", label: t("New elements") },
   { id: "view3d", label: t("3D view") },
   { id: "catalogs", label: t("Catalogs") },
+];
+
+/** Plan tools that can have a letter key, in the order of the tool bar. */
+const TOOL_IDS = [
+  "tool.select",
+  "tool.pan",
+  "tool.wall",
+  "tool.arcwall",
+  "tool.room",
+  "tool.roomauto",
+  "tool.polyline",
+  "tool.dimension",
+  "tool.heightdim",
+  "tool.label",
+  "tool.measure",
+  "tool.ruler",
 ];
 
 function Check({
@@ -241,16 +260,35 @@ export default function PreferencesDialog({
                     onChange={(magnetism) => set({ magnetism })}
                   />
                   <Choice
-                    label={t("Angle steps")}
-                    value={p.angleStep}
+                    label={t("Decimals")}
+                    value={p.lengthDecimals ?? -1}
                     options={[
-                      [1, "1°"],
-                      [5, "5°"],
-                      [15, "15°"],
-                      [45, "45°"],
+                      [-1, t("By the unit")],
+                      ...Array.from(
+                        { length: MAX_LENGTH_DECIMALS + 1 },
+                        (_, n): [number, string] => [n, String(n)],
+                      ),
                     ]}
-                    onChange={(angleStep) => set({ angleStep })}
+                    onChange={(n) => set({ lengthDecimals: n < 0 ? null : n })}
                   />
+                  <p className="muted small">
+                    {t("The same precision in the plan, the fields and the status bar.")}
+                  </p>
+                  <label className="prop-row">
+                    <span className="prop-label">{t("Angle steps")}</span>
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={90}
+                      step={0.5}
+                      value={p.angleStep}
+                      onChange={(e) => {
+                        const v = Number(e.currentTarget.value);
+                        if (v >= 0.5 && v <= 90) set({ angleStep: v });
+                      }}
+                    />
+                    <span className="prop-unit">°</span>
+                  </label>
                 </Group>
                 <Group title={t("Display")}>
                   <Check
@@ -260,6 +298,15 @@ export default function PreferencesDialog({
                     onChange={(rulers) => set({ rulers })}
                   />
                   <Check label={t("Grid")} checked={p.grid} onChange={(grid) => set({ grid })} />
+                  <Choice
+                    label={t("Grid lines")}
+                    value={p.gridSpacing}
+                    options={[
+                      [0, t("Automatic, by the zoom")],
+                      ...[10, 25, 50, 100].map((cm): [number, string] => [cm, formatLength(cm)]),
+                    ]}
+                    onChange={(gridSpacing) => set({ gridSpacing })}
+                  />
                   <Check
                     label={t("Furniture seen from above")}
                     hint={t("Rendered from its 3D model; off: the catalog icon")}
@@ -312,6 +359,42 @@ export default function PreferencesDialog({
                     value={p.measureColor}
                     onChange={(measureColor) => set({ measureColor })}
                   />
+                </Group>
+                <Group title={t("Keys of the plan tools")}>
+                  {TOOL_IDS.map((id) => {
+                    const letter =
+                      Object.entries(toolLetters(p.toolKeys)).find(
+                        ([, tool]) => tool === id,
+                      )?.[0] ?? "";
+                    return (
+                      <label className="prop-row" key={id}>
+                        <span className="prop-label">{command(id).label}</span>
+                        <input
+                          type="text"
+                          className="tool-key"
+                          maxLength={1}
+                          value={letter}
+                          aria-label={t("Key of {tool}", { tool: command(id).label })}
+                          onChange={(e) =>
+                            set({ toolKeys: withToolKey(p.toolKeys, id, e.currentTarget.value) })
+                          }
+                        />
+                      </label>
+                    );
+                  })}
+                  <p className="muted small">
+                    {t(
+                      "One letter per tool; a letter given to another tool is taken from the one that had it. R and J stay with rotating and joining walls. The digits follow the groups of the tool bar.",
+                    )}
+                  </p>
+                  <button
+                    type="button"
+                    className="link-button"
+                    disabled={Object.keys(p.toolKeys).length === 0}
+                    onClick={() => set({ toolKeys: {} })}
+                  >
+                    {t("Default keys")}
+                  </button>
                 </Group>
               </>
             )}
@@ -479,7 +562,12 @@ export default function PreferencesDialog({
         <div className="dialog-actions">
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
+              const sure = await ask(t("Set all preferences back to their default values?"), {
+                title: t("Preferences"),
+                kind: "warning",
+              });
+              if (!sure) return;
               p.reset();
               setTheme("system");
               useStore.getState().setWallThickness(usePreferences.getState().newWallThickness);

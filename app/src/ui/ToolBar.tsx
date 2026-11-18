@@ -9,6 +9,7 @@ import { type Command, command, isEnabled, type MenuEntry, runCommand } from "./
 import Icon, { type IconName } from "./Icon";
 import MenuList from "./MenuList";
 import { useDarkMode, useUi } from "./uiStore";
+import { stepLabel } from "./undoLabels";
 
 /** Tooltip of a command: label, shortcut and hint. */
 function tip(c: Command): string {
@@ -200,6 +201,27 @@ export default function ToolBar() {
       <Group label={t("History")}>
         <ToolButton id="edit.undo" />
         <ToolButton id="edit.redo" />
+        <MenuButton
+          label={t("History: undo several steps at once")}
+          icon="recent"
+          disabled={!opened?.undoHistory?.length}
+          entries={() =>
+            (opened?.undoHistory ?? []).map(
+              (step, i): MenuEntry => ({
+                kind: "command",
+                command: {
+                  id: `history.${i}`,
+                  label: `${i + 1}. ${stepLabel(step)}`,
+                  icon: "undo",
+                  // Undoes this step and all newer ones
+                  run: async () => {
+                    for (let n = 0; n <= i; n++) await useStore.getState().undo();
+                  },
+                },
+              }),
+            )
+          }
+        />
       </Group>
       <Group label={t("Selection")}>
         <ToolButton id="tool.select" />

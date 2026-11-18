@@ -13,7 +13,8 @@ import {
 } from "../api";
 import { t } from "../i18n";
 import { VIEW3D_PREFIX } from "../layout/view3dWindow";
-import { forEachPiece, type Home } from "../model";
+import { forEachPiece, type Home, type Piece } from "../model";
+import { perfMark, perfOn, perfScene } from "../perfMarks";
 import { usePreferences } from "../preferences";
 import { poseParams, useStore, type ViewMode } from "../store";
 import Icon from "../ui/Icon";
@@ -181,6 +182,14 @@ export default function View3D() {
     walls: WallGeometryCache;
     /** Replaced content, freed after the next frame (see `retire`) */
     trash: THREE.Object3D[];
+    /** Objects of the furniture by piece ID, reused while the piece does not change */
+    pieces: Map<string, { piece: Piece; base: number; object: THREE.Group }>;
+    /** Parts of the scene (walls, rooms, ground, ...) with the inputs they were built from */
+    parts: Map<string, { deps: unknown[]; object: THREE.Object3D | null }>;
+    /** Inputs the colliders of the virtual visit were built from */
+    colliderDeps: unknown[] | null;
+    /** The next frame is drawn after the window showed the plan (see `requestRender`) */
+    renderLater: boolean;
   } | null>(null);
 
   // Renderer, camera and controls live as long as the component
@@ -250,6 +259,18 @@ export default function View3D() {
       }
       pivotMarker.group.visible = marked;
       renderer.render(scene, camera);
+      if (perfOn()) {
+        // The graphics card works in the background: a performance run waits for it
+        renderer.getContext().finish();
+        perfMark("3d-render");
+        const { render: r, memory: m } = renderer.info;
+        perfScene({
+          calls: r.calls,
+          triangles: r.triangles,
+          geometries: m.geometries,
+          textures: m.textures,
+        });
+      }
       // The new content now uses the shader programs: freeing the replaced content's
       // materials no longer makes three.js compile them again
       for (const o of trash.splice(0)) disposeObject(o);
@@ -257,7 +278,17 @@ export default function View3D() {
       placePivot();
     };
     const requestRender = () => {
-      if (!frame) frame = requestAnimationFrame(render);
+      if (frame) return;
+      if (state.renderLater) {
+        // After a change of the home the plan is shown first: this frame belongs to it, the
+        // 3D view (new data for the graphics card, a full render) follows in the next one
+        state.renderLater = false;
+        frame = requestAnimationFrame(() => {
+          frame = requestAnimationFrame(render);
+        });
+      } else {
+        frame = requestAnimationFrame(render);
+      }
     };
     controls.addEventListener("change", requestRender);
     controls.addEventListener("start", () => {
@@ -332,6 +363,10 @@ export default function View3D() {
       requestRender,
       walls: new WallGeometryCache(),
       trash,
+      pieces: new Map(),
+      parts: new Map(),
+      colliderDeps: null,
+      renderLater: false,
     };
     ctx.current = state;
     visitor.onChange = (pose) => {
@@ -382,12 +417,101 @@ export default function View3D() {
   useEffect(() => {
     const c = ctx.current;
     if (!c) return;
+    perfMark("3d-build-start");
+    // Rebuilt for a change of the home: its frame is drawn after the plan was shown
+    c.renderLater = lastDocId.current === (opened?.id ?? null);
     if (lastDocId.current !== (opened?.id ?? null)) {
       // Models of the previous home are no longer needed
       clearModelCache();
       c.walls.clear();
+      c.pieces.clear();
+      c.parts.clear();
+      c.colliderDeps = null;
       lastDocId.current = opened?.id ?? null;
     }
+    // Furniture that did not change keeps its object (the model is not cloned and its data is
+    // not sent to the graphics card again). Unchanged pieces are the same objects as before,
+    // see applyHome. They leave the old content first, so they are not freed with it.
+    const kept = new Map<string, THREE.Group>();
+    if (opened) {
+      const levelsNow = levelInfos(opened.home);
+      const shownNow = visibleLevels(opened.home, levelId);
+      forEachPiece(opened.home.furniture, (p) => {
+        const id = p.attrs.id;
+        const cached = id ? c.pieces.get(id) : undefined;
+        if (!id || !cached || cached.piece !== p || !shownNow.has(p.attrs.level)) return;
+        const base = (levelsNow.get(p.attrs.level) ?? levelsNow.get(null))?.elevation ?? 0;
+        if (cached.base !== base) return;
+        cached.object.removeFromParent();
+        kept.set(id, cached.object);
+      });
+    }
+    c.pieces.clear();
+    // Parts of the scene whose inputs did not change are kept as well: unchanged parts of the
+    // home are the same objects as before, so comparing them with === is enough. Kept parts
+    // leave the old content before that is freed.
+    const parts: typeof c.parts = new Map();
+    const reuse = <T extends THREE.Object3D | null>(
+      name: string,
+      deps: unknown[],
+      build: () => T,
+    ): T => {
+      const cached = c.parts.get(name);
+      if (
+        cached &&
+        cached.deps.length === deps.length &&
+        cached.deps.every((d, i) => d === deps[i])
+      ) {
+        cached.object?.removeFromParent();
+        parts.set(name, cached);
+        return cached.object as T;
+      }
+      const object = build();
+      parts.set(name, { deps, object });
+      return object;
+    };
+    let built: {
+      sky: THREE.Mesh | null;
+      ground: THREE.Mesh;
+      walls: THREE.Group;
+      rooms: THREE.Group;
+      annotations: THREE.Object3D;
+    } | null = null;
+    const doors: Piece[] = [];
+    const stairs: Piece[] = [];
+    const levels = opened ? levelInfos(opened.home) : null;
+    const shown = opened ? visibleLevels(opened.home, levelId) : null;
+    if (opened && levels && shown) {
+      const h = opened.home;
+      // Of the furniture only doors and windows (they cut the walls) and staircases (they
+      // cut floors and ceilings) shape the building: moving a chair rebuilds none of it
+      forEachPiece(h.furniture, (p) => {
+        if (p.kind === "DoorOrWindow") doors.push(p);
+        if (p.attrs.staircase_cut_out_shape) stairs.push(p);
+      });
+      // What decides which levels are shown and how high they are
+      const base = [opened.id, levelId, h.levels, h.properties, h.environment, h.attrs];
+      built = {
+        sky: reuse("sky", [opened.id, h.environment], () => buildSky(opened, c.requestRender)),
+        ground: reuse("ground", [opened.id, h.environment], () => {
+          const ground = buildGround(opened, c.requestRender);
+          ground.receiveShadow = true;
+          return ground;
+        }),
+        walls: reuse("walls", [...base, h.walls, opened.wallShapes, ...doors], () => {
+          const walls = buildWalls(opened, levels, shown, c.requestRender, c.walls);
+          c.walls.commit();
+          return walls;
+        }),
+        rooms: reuse("rooms", [...base, h.rooms, h.walls, ...stairs], () =>
+          buildRooms(opened, levels, shown, c.requestRender),
+        ),
+        annotations: reuse("annotations", [...base, h.labels, h.dimension_lines, h.polylines], () =>
+          buildAnnotations(h, levels, shown),
+        ),
+      };
+    }
+    c.parts = parts;
     // The replaced content is freed after the next frame, when the new content has taken
     // over its shader programs. Content that was never drawn (still waiting trash means no
     // frame since the last rebuild) holds no programs and is freed right away, so at most
@@ -399,7 +523,7 @@ export default function View3D() {
       else disposeObject(child);
     }
     c.sky = null;
-    if (!opened) {
+    if (!opened || !built || !levels || !shown) {
       c.scene.background = new THREE.Color(0x202326);
       c.requestRender();
       return;
@@ -407,21 +531,14 @@ export default function View3D() {
     const home = opened.home;
     c.scene.background = skyColor(home);
 
-    const levels = levelInfos(home);
-    const shown = visibleLevels(home, levelId);
-
     const ambient = new THREE.HemisphereLight(0xffffff, lightColor(home), AMBIENT_INTENSITY);
     ambient.name = "ambient";
     c.content.add(ambient);
 
-    c.sky = buildSky(opened, c.requestRender);
+    c.sky = built.sky;
     if (c.sky) c.content.add(c.sky);
-    const ground = buildGround(opened, c.requestRender);
-    ground.receiveShadow = true;
-    c.content.add(ground);
-    const walls = buildWalls(opened, levels, shown, c.requestRender, c.walls);
-    c.walls.commit();
-    const rooms = buildRooms(opened, levels, shown, c.requestRender);
+    c.content.add(built.ground);
+    const { walls, rooms } = built;
     for (const g of [walls, rooms]) {
       g.traverse((o) => {
         // Ceilings would darken the whole interior in the aerial view
@@ -429,7 +546,7 @@ export default function View3D() {
         o.receiveShadow = true;
       });
     }
-    c.content.add(walls, rooms, buildAnnotations(home, levels, shown));
+    c.content.add(walls, rooms, built.annotations);
 
     const furniture = new THREE.Group();
     furniture.name = "furniture";
@@ -437,28 +554,53 @@ export default function View3D() {
     forEachPiece(home.furniture, (p) => {
       if (!shown.has(p.attrs.level)) return;
       const base = (levels.get(p.attrs.level) ?? levels.get(null))?.elevation ?? 0;
-      const object = createPieceObject(p, opened.id, base, () => {
-        // Loaded furniture also stops the light of lamps
-        refreshLampShadows(c.lamps);
-        c.requestRender();
-      });
+      const object =
+        (p.attrs.id ? kept.get(p.attrs.id) : undefined) ??
+        createPieceObject(p, opened.id, base, () => {
+          // Loaded furniture also stops the light of lamps
+          refreshLampShadows(c.lamps);
+          c.requestRender();
+        });
+      if (p.attrs.id) c.pieces.set(p.attrs.id, { piece: p, base, object });
       if (p.attrs.staircase_cut_out_shape && p.attrs.visible !== false) stairObjects.push(object);
       furniture.add(object);
     });
     c.content.add(furniture);
     // Walls and doors for the virtual visitor (all levels: the visitor may change level)
-    c.visitor.colliders = buildColliders(
-      home,
+    const colliderDeps = [
+      opened.id,
+      home.walls,
       opened.wallShapes,
-      (level) => (levels.get(level) ?? levels.get(null))?.elevation ?? 0,
-    );
+      home.levels,
+      home.attrs,
+      ...doors,
+      ...stairs,
+    ];
+    const sameColliders =
+      c.colliderDeps?.length === colliderDeps.length &&
+      c.colliderDeps.every((d, i) => d === colliderDeps[i]);
+    if (!sameColliders || !c.visitor.colliders) {
+      c.visitor.colliders = buildColliders(
+        home,
+        opened.wallShapes,
+        (level) => (levels.get(level) ?? levels.get(null))?.elevation ?? 0,
+      );
+      c.colliderDeps = colliderDeps;
+    }
     c.visitor.colliders.stepSurfaces = (p) => stepSurfaces(stairObjects, p);
     c.requestRender();
+    perfMark("3d-build-end");
   }, [opened, levelId]);
 
   // Position of the sun from the location, date and time of the home (computed by the
   // core); it follows the clock if the home says so
   const [sun, setSun] = useState<SunInfo | null>(null);
+  const homeId = opened?.id;
+  const compass = opened?.home.compass;
+  const homeProperties = opened?.home.properties;
+  const cameras = opened?.home.cameras;
+  const homeAttrs = opened?.home.attrs;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the sun depends on these parts of the home only
   useEffect(() => {
     if (!opened) {
       setSun(null);
@@ -469,7 +611,12 @@ export default function View3D() {
       api
         .execute("sun_get", {})
         .then((s) => {
-          if (alive) setSun(s as SunInfo);
+          // The same position as before changes nothing (and draws nothing again)
+          if (alive) {
+            setSun((before) =>
+              JSON.stringify(before) === JSON.stringify(s) ? before : (s as SunInfo),
+            );
+          }
         })
         .catch(() => {});
     };
@@ -481,7 +628,10 @@ export default function View3D() {
       alive = false;
       clearInterval(timer);
     };
-  }, [opened]);
+    // Asked again only when what the sun depends on changed (location and north of the
+    // compass, date and time of the cameras, "follow the clock"): these parts of the home
+    // keep their identity through all other changes (see applyHome)
+  }, [homeId, compass, homeProperties, cameras, homeAttrs]);
   const sunRef = useRef<SunInfo | null>(null);
   sunRef.current = sun;
 

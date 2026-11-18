@@ -6,7 +6,7 @@
 // a wall side or a piece, or applied to the selection by a double-click. The rows take the
 // keyboard: arrow keys, Enter, Delete, Ctrl+D and the menu key.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   CATALOG_DRAG_TYPE,
   type CatalogDragData,
@@ -17,6 +17,7 @@ import {
   TEXTURE_DRAG_TYPE,
   type TextureDragData,
 } from "../api";
+import { errorText } from "../errorText";
 import { language, t } from "../i18n";
 import Splitter from "../layout/Splitter";
 import { forEachPiece } from "../model";
@@ -283,7 +284,7 @@ function loadSplit(): number {
   }
 }
 
-export default function CatalogPanel() {
+function CatalogPanel() {
   const catalog = useStore((s) => s.catalog);
   const loading = useStore((s) => s.catalogLoading);
   const loadCatalog = useStore((s) => s.loadCatalog);
@@ -377,7 +378,7 @@ export default function CatalogPanel() {
     try {
       setDropMessage((await importDroppedFiles(files)) || null);
     } catch (err) {
-      setDropMessage(String(err));
+      setDropMessage(errorText(err));
     }
   };
 
@@ -458,7 +459,7 @@ export default function CatalogPanel() {
       onHover={onHover}
       onMenu={(i, x, y) => void openMenu(i, x, y)}
       onPrimary={primary}
-      onShortcut={(i, shortcut) => void runShortcut(i, shortcut).catch((e) => notify(String(e)))}
+      onShortcut={(i, shortcut) => void runShortcut(i, shortcut).catch((e) => notify(errorText(e)))}
     />
   );
   const section = (key: string, title: string, list: CatalogItem[]) => (
@@ -558,7 +559,7 @@ export default function CatalogPanel() {
                   className="link-button"
                   onClick={() => {
                     setDropMessage(null);
-                    void undoLibrary().catch((e) => notify(String(e)));
+                    void undoLibrary().catch((e) => notify(errorText(e)));
                   }}
                 >
                   {t("Undo")}
@@ -642,3 +643,6 @@ export default function CatalogPanel() {
     </div>
   );
 }
+
+// Rendered again only for what it shows, not with every change of the window around it
+export default memo(CatalogPanel);

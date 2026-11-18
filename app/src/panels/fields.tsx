@@ -3,6 +3,7 @@
 // elements with different values are selected.
 
 import { type ReactNode, useRef, useState } from "react";
+import { create } from "zustand";
 import { evalLength, evalNumber } from "../expression";
 import { formatNumber, t } from "../i18n";
 import type { Texture } from "../model";
@@ -30,12 +31,77 @@ export function SideSection({
       onMouseEnter={() => setHighlight(side)}
       onMouseLeave={() => setHighlight(null)}
     >
-      <h3 title={t("Seen when walking along the wall from its start to its end")}>
-        <span className="side-swatch" aria-hidden="true" />
-        {title}
-      </h3>
-      {children}
+      <Section
+        id={`wall.${side}`}
+        hint={t("Seen when walking along the wall from its start to its end")}
+        title={
+          <>
+            <span className="side-swatch" aria-hidden="true" />
+            {title}
+          </>
+        }
+      >
+        {children}
+      </Section>
     </fieldset>
+  );
+}
+
+const SECTIONS_KEY = "msh.sections";
+
+function loadClosed(): string[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SECTIONS_KEY) ?? "[]");
+    return Array.isArray(stored) ? stored.filter((s) => typeof s === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Sections of the properties the user closed; remembered between sessions. */
+const useSections = create<{ closed: string[]; toggle: (id: string, open: boolean) => void }>(
+  (set, get) => ({
+    closed: loadClosed(),
+    toggle: (id, open) => {
+      const closed = open ? get().closed.filter((c) => c !== id) : [...get().closed, id];
+      set({ closed });
+      try {
+        localStorage.setItem(SECTIONS_KEY, JSON.stringify(closed));
+      } catch {
+        // Storage unavailable: remembered until the window is closed
+      }
+    },
+  }),
+);
+
+/**
+ * Group of fields of the properties that can be closed; whether it is open is remembered per
+ * `id`, for all elements of the kind.
+ */
+export function Section({
+  id,
+  title,
+  hint,
+  children,
+}: {
+  id: string;
+  title: ReactNode;
+  hint?: string;
+  children: ReactNode;
+}) {
+  const open = useSections((s) => !s.closed.includes(id));
+  const toggle = useSections((s) => s.toggle);
+  return (
+    <details
+      className="prop-section"
+      open={open}
+      onToggle={(e) => {
+        if (e.currentTarget.open !== open) toggle(id, e.currentTarget.open);
+      }}
+    >
+      <summary title={hint}>{title}</summary>
+      {open && <div className="prop-section-body">{children}</div>}
+    </details>
   );
 }
 

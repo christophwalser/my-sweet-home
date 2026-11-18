@@ -5,9 +5,9 @@
 // listed as one row. The columns are chosen per home (stored like Sweet Home 3D's
 // `furnitureVisibleProperty`); price columns need a currency in the preferences.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
-import { isReference } from "../model";
+import { type Home, isReference } from "../model";
 import { usePreferences } from "../preferences";
 import { formatMoney } from "../prices";
 import { useStore } from "../store";
@@ -64,8 +64,12 @@ function cellClass(id: ColumnId, numeric: boolean): string {
   return numeric ? "num" : "";
 }
 
-export default function FurnitureList({ query }: { query: string }) {
-  const opened = useStore((s) => s.opened);
+function FurnitureList({ query }: { query: string }) {
+  // Only what the list shows: unchanged parts of the home keep their identity (see applyHome),
+  // so the list is not rendered again when e.g. a wall moves
+  const furniture = useStore((s) => s.opened?.home.furniture);
+  const levels = useStore((s) => s.opened?.home.levels);
+  const visibleProperties = useStore((s) => s.opened?.home.furniture_visible_properties);
   const selection = useStore((s) => s.selection);
   const run = useStore((s) => s.run);
   const currency = usePreferences((s) => s.currency);
@@ -79,7 +83,13 @@ export default function FurnitureList({ query }: { query: string }) {
   const anchor = useRef<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const home = opened?.home ?? null;
+  const home = useMemo(
+    () =>
+      furniture && levels
+        ? ({ furniture, levels, furniture_visible_properties: visibleProperties } as Home)
+        : null,
+    [furniture, levels, visibleProperties],
+  );
   const prices = { currency, vatEnabled };
   const columns = home ? shownColumns(home, prices) : [];
   // biome-ignore lint/correctness/useExhaustiveDependencies: the columns follow from the home and the price settings
@@ -337,3 +347,6 @@ export default function FurnitureList({ query }: { query: string }) {
     </div>
   );
 }
+
+// Rendered again only for what it shows, not with every change of the window around it
+export default memo(FurnitureList);

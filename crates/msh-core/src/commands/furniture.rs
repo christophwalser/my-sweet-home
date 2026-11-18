@@ -140,6 +140,8 @@ struct UpdateParams {
     /// With one of width, depth and height: the other two change by the same factor, for
     /// each piece (default false)
     keep_proportions: Option<bool>,
+    /// Level the pieces move to (their position in the plan stays)
+    level: Option<String>,
 }
 
 /// A decimal for the file: at most `digits` decimals, without trailing zeros.
@@ -476,6 +478,10 @@ pub(super) fn register(r: &mut Registry) {
                     "give either angle_deg or rotate_deg, not both",
                 ));
             }
+            let level = match &p.level {
+                Some(id) => resolve_level(doc.home(), Some(id.clone()))?,
+                None => None,
+            };
             let targets = target_ids(p.id.clone(), p.ids.clone())?;
             if targets.len() > 1 && (p.x.is_some() || p.y.is_some()) {
                 return Err(CommandError::failed(
@@ -496,6 +502,9 @@ pub(super) fn register(r: &mut Registry) {
                 }
                 if let Some(v) = p.rotate_deg {
                     a.angle = Some(normalize_angle(a.angle_or_default() + rad(v)));
+                }
+                if level.is_some() {
+                    a.level = level.clone();
                 }
                 if let Some(v) = p.elevation {
                     a.elevation = Some(v);

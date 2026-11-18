@@ -24,8 +24,7 @@ export type DialogName =
   | "move"
   | "duplicateLevel"
   | "help"
-  | "about"
-  | "plugins";
+  | "about";
 
 /** Color theme: following the system, or fixed. */
 export type ThemeChoice = "system" | "light" | "dark";
