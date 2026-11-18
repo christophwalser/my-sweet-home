@@ -112,7 +112,8 @@ Choose a currency in **Preferences › General › Prices** to see prices. The p
 - A color field shows the color as #RRGGBB, which can be typed, and lists the colors already used in the home. A field without a color is struck through.
 - **Furniture › Add to library** imports models (OBJ, DAE, 3DS, glTF, FBX, STL, 3MF, PLY, VRML, ZIP) and textures (JPG, PNG, BMP, GIF, WebP, TIFF, SVG, material packages). Files can also be dropped onto the catalog.
 - **Libraries…** opens the library editor: create libraries, change the properties of items, move them to other categories, import and remove.
-- **Add… › Search online…** in the catalog searches the free libraries of Sweet Home 3D, ambientCG and Poly Haven and imports with one click.
+- **Add…** in the catalog opens the library editor and right away the file dialog: for 3D models under **Furniture**, for images under **Textures**.
+- **Add › Search online…** in the library editor searches the free libraries of Sweet Home 3D, ambientCG and Poly Haven and imports with one click.
 
 Everything you import is stored in Sweet Home 3D's library folders, so both programs use it.
 

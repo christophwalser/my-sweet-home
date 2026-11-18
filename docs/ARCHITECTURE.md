@@ -945,8 +945,9 @@ furniture is read by its home reader.
 
 - One place for everything about libraries; it replaces the libraries dialog and takes in the
   import steps. Principle: one way per result. The catalog in the side bar keeps two entries,
-  "Add…" (the editor's Add menu: files, online search, furniture of the home; files dropped onto
-  the catalog lead to the same step) and "Libraries…"; the menus offer "Add to library…" and
+  "Add…" (opens the editor and at once the file dialog for models or images, for furniture and
+  textures alike since 2026-11-18; online search and furniture of the home are in the editor's
+  Add menu; files dropped onto the catalog lead to the same import) and "Libraries…"; the menus offer "Add to library…" and
   "Libraries…". Moving items to another category is no longer done by drag and drop but through
   the item's context menu ("Move to" with the categories and "New category…"), the same menu in
   the catalog and in the editor (`catalog/library.ts`, `plan2d/ContextMenu.tsx` with sub-entries).

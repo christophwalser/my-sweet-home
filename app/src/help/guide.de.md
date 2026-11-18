@@ -112,7 +112,8 @@ Wähle eine Währung unter **Einstellungen › Allgemein › Preise**, um Preise
 - Ein Farbfeld zeigt die Farbe als #RRGGBB, die sich auch eintippen lässt, und listet die im Haus schon verwendeten Farben. Ein Feld ohne Farbe ist durchgestrichen.
 - **Möbel › Zur Bibliothek hinzufügen** importiert Modelle (OBJ, DAE, 3DS, glTF, FBX, STL, 3MF, PLY, VRML, ZIP) und Texturen (JPG, PNG, BMP, GIF, WebP, TIFF, SVG, Materialpakete). Dateien können auch auf den Katalog gezogen werden.
 - **Bibliotheken…** öffnet den Bibliothekseditor: Bibliotheken anlegen, Eigenschaften von Einträgen ändern, in andere Kategorien verschieben, importieren und entfernen.
-- **Hinzufügen… › Online suchen…** im Katalog durchsucht die freien Bibliotheken von Sweet Home 3D, ambientCG und Poly Haven und importiert mit einem Klick.
+- **Hinzufügen…** im Katalog öffnet den Bibliothekseditor und gleich die Dateiauswahl: für 3D-Modelle unter **Möbel**, für Bilder unter **Texturen**.
+- **Hinzufügen › Online suchen…** im Bibliothekseditor durchsucht die freien Bibliotheken von Sweet Home 3D, ambientCG und Poly Haven und importiert mit einem Klick.
 
 Alles Importierte liegt in den Bibliotheksordnern von Sweet Home 3D, so nutzen es beide Programme.
 

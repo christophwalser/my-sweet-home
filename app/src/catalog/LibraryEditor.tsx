@@ -474,8 +474,8 @@ export default function LibraryEditor({
   onClose: close,
 }: {
   /**
-   * "path|index" of an item to show first, or "add" / "add:<kind>" to start adding:
-   * furniture shows the Add menu, textures open the file dialog right away.
+   * "path|index" of an item to show first, or "add" / "add:<kind>" to start adding: the file
+   * dialog for models or images opens right away.
    */
   initial: string | null;
   onClose: () => void;
@@ -820,18 +820,14 @@ export default function LibraryEditor({
     setMenu({ x, y, items });
   };
 
-  // "Add…" opens the editor with its Add menu, or for textures with the file dialog
+  // "Add…" of the catalog opens the editor with the file dialog, for furniture and textures
+  // alike; the other sources (online, furniture of the home) are in the Add menu of the editor
   const addOnStart = useRef(adding);
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, when the libraries are known
   useEffect(() => {
-    if (!addOnStart.current || !lib || !addButton.current) return;
+    if (!addOnStart.current || !lib) return;
     addOnStart.current = false;
-    if (kind === "textures") {
-      void addFiles();
-      return;
-    }
-    const r = addButton.current.getBoundingClientRect();
-    addMenu(r.left, r.bottom + 4);
+    void addFiles();
   }, [lib]);
 
   const sel = selected?.item ?? null;
