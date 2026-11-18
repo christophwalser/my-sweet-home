@@ -8,12 +8,14 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useMemo, useState } from "react";
 import { api, type CatalogItem, docResourceUrl, libResourceUrl } from "../api";
 import { TEXTURE_EXTENSIONS } from "../catalog/modelConvert";
+import { errorText } from "../errorText";
 import { t } from "../i18n";
 import type { Texture } from "../model";
 import type { Surface } from "../plan2d/surfaces";
 import { useStore } from "../store";
 import Icon from "../ui/Icon";
 import { useUi } from "../ui/uiStore";
+import { parseLength } from "../units";
 import { Field } from "./fields";
 
 /** Number of textures shown at once in the grid (keeps the panel fast). */
@@ -161,8 +163,9 @@ export default function TextureField({ label, current, mixed, onCommit, target }
 
   const importTexture = async () => {
     if (!pending) return;
-    const width = Number.parseFloat(pending.width.replace(",", "."));
-    const height = Number.parseFloat(pending.height.replace(",", "."));
+    // In cm; a unit may be typed with the number ("30 cm", "12 in")
+    const width = parseLength(pending.width, "cm") ?? Number.NaN;
+    const height = parseLength(pending.height, "cm") ?? Number.NaN;
     if (!(width > 0) || !(height > 0)) {
       setError(t("Width and height must be positive numbers."));
       return;
@@ -177,7 +180,7 @@ export default function TextureField({ label, current, mixed, onCommit, target }
       setPending(null);
       pick(r.catalog_id);
     } catch (e) {
-      setError(String(e));
+      setError(errorText(e));
     }
   };
 

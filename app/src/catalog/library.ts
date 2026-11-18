@@ -3,6 +3,7 @@
 // of msh-core, so it can be undone with library_undo and the catalog reloads afterwards.
 
 import { api, type CatalogData, type CatalogItem, type LibraryInfo } from "../api";
+import { errorText } from "../errorText";
 import { language, t } from "../i18n";
 import type { MenuItem } from "../plan2d/ContextMenu";
 import { useStore } from "../store";
@@ -152,7 +153,7 @@ export function itemMenu(
   }
   if (entries.length > 0 && lib) entries.push({ separator: true });
   if (!lib) return entries;
-  const fail = (e: unknown) => ctx.notify(String(e));
+  const fail = (e: unknown) => ctx.notify(errorText(e));
   if (!lib.editable) {
     entries.push({
       label: t("Edit as copy…"),

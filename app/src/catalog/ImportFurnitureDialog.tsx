@@ -8,9 +8,11 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { api, stageResourceUrl } from "../api";
+import { errorText } from "../errorText";
 import { t } from "../i18n";
 import { useStore } from "../store";
 import { useUi } from "../ui/uiStore";
+import { parseLength } from "../units";
 import { disposeObject, loadModelUncached } from "../view3d/models";
 import CategoryField from "./CategoryField";
 import { MODEL_EXTENSIONS, prepareModel } from "./modelConvert";
@@ -46,6 +48,11 @@ function rotationRowMajor(m: THREE.Matrix4): number[] {
 }
 
 const fmt = (v: number) => String(Math.round(v * 10) / 10);
+
+/** Centimeters of a typed size; a unit may be typed with it ("60 cm", "24 in", "1.2 m"). */
+function cmOf(text: string): number {
+  return parseLength(text, "cm") ?? Number.NaN;
+}
 
 export default function ImportFurnitureDialog({
   initialPath,
@@ -191,7 +198,7 @@ export default function ImportFurnitureDialog({
       setName(fileStem(chosen));
       setStatus(null);
     } catch (e) {
-      setStatus(String(e));
+      setStatus(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -214,11 +221,11 @@ export default function ImportFurnitureDialog({
   };
 
   const changeSize = (field: "width" | "depth" | "height", value: string) => {
-    const n = Number.parseFloat(value.replace(",", "."));
-    const old = Number.parseFloat(size[field]);
+    const n = cmOf(value);
+    const old = cmOf(size[field]);
     if (keepRatio && n > 0 && old > 0) {
       const f = n / old;
-      const scaled = (v: string) => fmt(Number.parseFloat(v) * f);
+      const scaled = (v: string) => fmt(cmOf(v) * f);
       setSize({
         width: field === "width" ? value : scaled(size.width),
         depth: field === "depth" ? value : scaled(size.depth),
@@ -243,8 +250,7 @@ export default function ImportFurnitureDialog({
 
   const doImport = async () => {
     if (!staged) return;
-    const num = (v: string) => Number.parseFloat(v.replace(",", "."));
-    const [w, d, h] = [num(size.width), num(size.depth), num(size.height)];
+    const [w, d, h] = [cmOf(size.width), cmOf(size.depth), cmOf(size.height)];
     if (!(w > 0 && d > 0 && h > 0)) {
       setStatus(t("Width, depth and height must be positive."));
       return;
@@ -260,7 +266,7 @@ export default function ImportFurnitureDialog({
         width: w,
         depth: d,
         height: h,
-        elevation: num(elevation) || 0,
+        elevation: cmOf(elevation) || 0,
         door_or_window: doorOrWindow,
         staircase,
         ...(library ? { library } : {}),
@@ -281,7 +287,7 @@ export default function ImportFurnitureDialog({
       useUi.getState().noteImport();
       onClose();
     } catch (e) {
-      setStatus(String(e));
+      setStatus(errorText(e));
     } finally {
       setBusy(false);
     }

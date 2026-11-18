@@ -1300,6 +1300,48 @@ the process tree (the app and its WebView2 processes; Sweet Home 3D 7.6.1 is one
   catalog, grouping the furniture list by level or room, sections for several texts,
   dimensions and lines, RAL and NCS palettes.
 
+### 4.53 Shell and accessibility after the UX review (2026-11-18)
+
+- Menu bar (`ui/MenuBar.tsx`, `ui/MenuList.tsx`, `ui/mnemonics.ts`): Alt or F10 goes to the
+  bar and shows the access keys (the first free letter of each menu), Alt+letter opens a
+  menu, arrow keys, Home, End, Enter and Escape move in it, a letter goes to the entries
+  starting with it and runs the only one. An open menu takes all keys (listener on the
+  document, before those of the window). Submenus open and close after 250 ms and overlap
+  their menu. Alt held while a mouse button is down stays the magnetism switch of the plan.
+- Menus: a **View** menu (zoom, grid, rulers, magnetism, side panels, plan or 3D alone,
+  theme, size of the user interface, command search); the Plan menu groups its tools; the
+  empty Extensions menu and the second entry for the 3D settings dialog are gone.
+- Layout (`layout/layout.ts`) is a store: the commands `view.catalog` (F6) and
+  `view.properties` (F4) hide the side panels, a panel dragged below 110 px hides too, the
+  splitters take the arrow keys. The size of the user interface is the zoom of the WebView
+  (`core:webview:allow-set-webview-zoom`), so plan, 3D view and texts scale together.
+- Properties: `Section` (`panels/fields.tsx`) groups fields in parts that close, remembered
+  per kind in the local storage; the actions of the selection are a header that stays in
+  view; `furniture_update` takes `level`, offered as a field of a piece.
+- Plan: Escape discards the drawing (Enter, a double-click or a right click keep it); a
+  double-click on nothing no longer fits the plan. The grid has a fixed distance or follows
+  the zoom (`gridStep`), the status bar shows the nominal scale and the grid distance, the
+  angle step is free, "Zoom to the selection" fits the selected elements.
+- Messages: errors and notices are laid over the window (no layout jump), errors stay until
+  closed, saving reports success, `ui/messages.ts` keeps the last 30 for the status bar. The
+  catalog and the import dialogs show core errors through `errorText`.
+- Undo: `Document::undo_labels` and `redo_labels` give the command names of the steps, sent
+  to the window as `undoHistory` and `redoHistory`; `ui/undoLabels.ts` turns a command name
+  into "Wall: changed". The tool bar lists the steps to take back several at once.
+- Background image: the calibration length and the origin use the unit of the preferences,
+  the buttons are in the order Back, Next, Cancel, the opacity is a preference
+  (`backgroundOpacity`).
+- One precision for lengths (`lengthDecimals` in `units.ts`, preference) in the plan, the
+  fields and the status bar. Sizes in the furniture import and the texture import of a
+  texture field accept units.
+- Command search: letters in their order match (`ui/fuzzy.ts`), the commands used last are
+  listed first, the active entry scrolls into view. Resetting the preferences asks first.
+  The letter keys of the plan tools can be changed (`toolKeys` preference, `ui/toolKeys.ts`).
+- Open from the review: plan and 3D view side by side, snapping to the grid, progress and
+  cancel for export, open and save, straightening a skewed background image, feet and inches
+  with fractions in the fields, units in the library editor, preferences that apply only
+  with OK.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

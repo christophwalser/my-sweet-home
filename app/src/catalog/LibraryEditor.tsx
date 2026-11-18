@@ -7,6 +7,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { api, type CatalogItem, type CatalogKind, type LibraryInfo, libResourceUrl } from "../api";
+import { errorText } from "../errorText";
 import { language, t } from "../i18n";
 import Splitter from "../layout/Splitter";
 import ContextMenu, { type MenuItem } from "../plan2d/ContextMenu";
@@ -424,7 +425,7 @@ function ModelPreview({
         setStatus(null);
         draw();
       })
-      .catch((e) => alive && setStatus(String(e)));
+      .catch((e) => alive && setStatus(errorText(e)));
     return () => {
       alive = false;
     };
@@ -528,7 +529,7 @@ export default function LibraryEditor({
         if (note) setMessage({ text: note, undo: true });
         return r as Record<string, unknown>;
       } catch (e) {
-        setMessage({ text: String(e), undo: false });
+        setMessage({ text: errorText(e), undo: false });
         return null;
       }
     },
@@ -641,7 +642,7 @@ export default function LibraryEditor({
         lang: language(),
       })
       .then((r) => setDetails(r as Details))
-      .catch((e) => setMessage({ text: String(e), undo: false }));
+      .catch((e) => setMessage({ text: errorText(e), undo: false }));
   }, [selected, data]);
 
   const select = useCallback((path: string, index: number) => {
@@ -778,7 +779,7 @@ export default function LibraryEditor({
       const note = await importFiles(paths, "libraries");
       if (note) notify(note, true);
     } catch (e) {
-      notify(String(e));
+      notify(errorText(e));
     }
   };
 

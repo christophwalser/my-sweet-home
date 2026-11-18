@@ -8,7 +8,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
 import { type BackgroundImage, backgroundScale, type Pt } from "../model";
+import { usePreferences } from "../preferences";
 import { useStore } from "../store";
+import {
+  formatFieldValue,
+  formatLength,
+  fromUnit,
+  parseLength,
+  toUnit,
+  unitSymbol,
+  useUnit,
+} from "../units";
 
 type Step = "image" | "scale" | "origin";
 
@@ -464,7 +474,7 @@ export default function BackgroundImageWizard({
           [bg.scale_distance_x_start, bg.scale_distance_y_start],
           [bg.scale_distance_x_end, bg.scale_distance_y_end],
         ]);
-        setLength(String(Math.round(bg.scale_distance * 100) / 100));
+        setLength(formatFieldValue(toUnit(bg.scale_distance)));
         const s = backgroundScale(bg);
         setOrigin([(bg.x_origin ?? 0) / s, (bg.y_origin ?? 0) / s]);
       },
@@ -528,7 +538,10 @@ export default function BackgroundImageWizard({
   };
 
   const markerPx = Math.hypot(marker[1][0] - marker[0][0], marker[1][1] - marker[0][1]);
-  const lengthCm = Number.parseFloat(length.replace(",", "."));
+  // In the unit of the preferences; an explicit unit ("8.73 m") is taken as typed
+  const unit = useUnit();
+  const opacity = usePreferences((s) => s.backgroundOpacity);
+  const lengthCm = parseLength(length, unit) ?? Number.NaN;
   const lengthOk = Number.isFinite(lengthCm) && lengthCm > 0 && markerPx >= 1;
   const cmPerPx = lengthOk ? lengthCm / markerPx : null;
 
@@ -656,19 +669,17 @@ export default function BackgroundImageWizard({
                   type="text"
                   inputMode="decimal"
                   value={length}
-                  placeholder="e.g. 873"
                   onChange={(e) => setLength(e.currentTarget.value)}
                 />
-                {t("cm")}
+                {unitSymbol(unit)}
               </label>
               <span className="muted small">
                 {t("Marker:")} {Math.round(markerPx * 10) / 10} {t("px")}
-                {cmPerPx ? ` · ${Math.round(cmPerPx * 1000) / 1000} cm per pixel` : ""}
-                {cmPerPx
-                  ? ` · image ${Math.round((source.img.naturalWidth * cmPerPx) / 10) / 10} × ${
-                      Math.round((source.img.naturalHeight * cmPerPx) / 10) / 10
-                    } m`
-                  : ""}
+                {cmPerPx &&
+                  ` · ${t("image {width} × {height}", {
+                    width: formatLength(source.img.naturalWidth * cmPerPx),
+                    height: formatLength(source.img.naturalHeight * cmPerPx),
+                  })}`}
               </span>
             </div>
           </div>
@@ -697,24 +708,24 @@ export default function BackgroundImageWizard({
                   <input
                     type="number"
                     step={1}
-                    value={Math.round(origin[0] * cmPerPx * 10) / 10}
+                    value={toUnit(origin[0] * cmPerPx)}
                     onChange={(e) =>
-                      setOrigin([Number(e.currentTarget.value) / cmPerPx, origin[1]])
+                      setOrigin([fromUnit(Number(e.currentTarget.value)) / cmPerPx, origin[1]])
                     }
                   />
-                  {t("cm")}
+                  {unitSymbol(unit)}
                 </label>
                 <label className="bg-inline">
                   Y
                   <input
                     type="number"
                     step={1}
-                    value={Math.round(origin[1] * cmPerPx * 10) / 10}
+                    value={toUnit(origin[1] * cmPerPx)}
                     onChange={(e) =>
-                      setOrigin([origin[0], Number(e.currentTarget.value) / cmPerPx])
+                      setOrigin([origin[0], fromUnit(Number(e.currentTarget.value)) / cmPerPx])
                     }
                   />
-                  {t("cm")}
+                  {unitSymbol(unit)}
                 </label>
                 <span className="muted small">{t("from the top-left corner of the image")}</span>
               </div>
@@ -725,10 +736,26 @@ export default function BackgroundImageWizard({
         {error && <p className="bg-error">{error}</p>}
         <div className="dialog-actions">
           {busy && <span className="muted small">{busy}</span>}
+          <label
+            className="bg-inline"
+            title={t("How strongly the background image shows under the plan (for all homes)")}
+          >
+            {t("Opacity")}
+            <input
+              type="range"
+              min={10}
+              max={100}
+              step={5}
+              value={opacity}
+              onChange={(e) =>
+                usePreferences
+                  .getState()
+                  .update({ backgroundOpacity: Number(e.currentTarget.value) })
+              }
+            />
+            {opacity} %
+          </label>
           <span className="spacer" />
-          <button type="button" onClick={onClose} disabled={!!busy}>
-            {t("Cancel")}
-          </button>
           {index > 0 && (
             <button type="button" onClick={() => setStep(steps[index - 1].id)} disabled={!!busy}>
               {t("Back")}
@@ -754,6 +781,10 @@ export default function BackgroundImageWizard({
               {existing ? t("Apply") : t("Import")}
             </button>
           )}
+          {/* Back, Next, Cancel: the order of Windows wizards */}
+          <button type="button" onClick={onClose} disabled={!!busy}>
+            {t("Cancel")}
+          </button>
         </div>
       </div>
     </div>

@@ -9,6 +9,9 @@ const VIEW_KEYS: [string, string][] = [
   [t("Arrow keys"), t("Move the selection by 1 cm (Shift: 10 cm, Alt: 1 mm)")],
   [formatShortcut("Shift+R"), t("Rotate the selection by -15°")],
   [t("Enter / double-click"), t("Finish the drawing")],
+  ["Esc", t("Discard the drawing; end the pipette or the placing of a piece")],
+  ["Alt / F10", t("Go to the menu bar; Alt and a letter opens a menu")],
+  ["F6 / F4", t("Show or hide the catalog / the properties")],
   [t("Backspace"), t("Remove the last point while drawing")],
   [
     t("Digits + Enter (while drawing)"),

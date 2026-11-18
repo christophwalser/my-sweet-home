@@ -179,6 +179,26 @@ impl Document {
         Some(snap.label)
     }
 
+    /// Labels (command names) of the steps that can be undone, the next one first.
+    pub fn undo_labels(&self, max: usize) -> Vec<String> {
+        self.undo
+            .iter()
+            .rev()
+            .take(max)
+            .map(|s| s.label.clone())
+            .collect()
+    }
+
+    /// Labels (command names) of the steps that can be redone, the next one first.
+    pub fn redo_labels(&self, max: usize) -> Vec<String> {
+        self.redo
+            .iter()
+            .rev()
+            .take(max)
+            .map(|s| s.label.clone())
+            .collect()
+    }
+
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
     }

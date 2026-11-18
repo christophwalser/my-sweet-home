@@ -1,12 +1,37 @@
-// Command search (Ctrl+K): finds any command of the menus by its name, menu or keywords.
+// Command search (Ctrl+K): finds any command of the menus by its name, menu or keywords, also
+// by letters typed in their order ("rtwl" for "Round walls"). Without a query it lists the
+// commands used last.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatShortcut, t } from "../i18n";
 import { type Command, isEnabled, MENUS, type MenuEntry, runCommand } from "./commands";
+import { queryScore } from "./fuzzy";
 import Icon from "./Icon";
 import { useUi } from "./uiStore";
 
 type Found = { command: Command; path: string };
+
+const RECENT_KEY = "msh.recentCommands";
+/** Number of commands kept as used last. */
+const MAX_RECENT = 8;
+
+function loadRecent(): string[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(stored) ? stored.filter((s) => typeof s === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function noteRecent(id: string): void {
+  try {
+    const next = [id, ...loadRecent().filter((r) => r !== id)].slice(0, MAX_RECENT);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    // Storage unavailable: nothing is remembered
+  }
+}
 
 /** All commands of the menus with the menu path they are in. */
 function collect(): Found[] {
@@ -26,11 +51,15 @@ function collect(): Found[] {
   return found;
 }
 
-/** Whether all words of the query occur in the command's texts. */
-function matches(f: Found, words: string[]): boolean {
-  const text =
-    `${f.command.label} ${f.path} ${f.command.keywords ?? ""} ${f.command.hint ?? ""}`.toLowerCase();
-  return words.every((w) => text.includes(w));
+/** Rank of a command for the query: lower is better, null if it does not match. */
+function rank(f: Found, words: string[]): number | null {
+  const label = f.command.label.toLowerCase();
+  const inLabel = queryScore(label, words);
+  // A match in the name counts more than one in the menu path, the keywords or the hint
+  if (inLabel !== null) return inLabel;
+  const rest = `${label} ${f.path} ${f.command.keywords ?? ""} ${f.command.hint ?? ""}`;
+  const elsewhere = queryScore(rest.toLowerCase(), words);
+  return elsewhere === null ? null : 100 + elsewhere;
 }
 
 export default function CommandPalette() {
@@ -38,24 +67,42 @@ export default function CommandPalette() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const all = useMemo(collect, []);
+  const recent = useMemo(loadRecent, []);
+  const list = useRef<HTMLDivElement>(null);
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const results = all
-    .filter((f) => matches(f, words))
-    // Enabled commands and label matches first
-    .sort((a, b) => {
-      const ea = isEnabled(a.command) ? 0 : 1;
-      const eb = isEnabled(b.command) ? 0 : 1;
-      const la = words.every((w) => a.command.label.toLowerCase().includes(w)) ? 0 : 1;
-      const lb = words.every((w) => b.command.label.toLowerCase().includes(w)) ? 0 : 1;
-      return ea - eb || la - lb;
-    })
-    .slice(0, 50);
+  const results =
+    words.length === 0
+      ? // Nothing typed: the commands used last, then all others
+        [
+          ...recent.flatMap((id) => all.filter((f) => f.command.id === id)),
+          ...all.filter((f) => !recent.includes(f.command.id)),
+        ].slice(0, 50)
+      : all
+          .map((f) => ({ f, rank: rank(f, words) }))
+          .filter((r): r is { f: Found; rank: number } => r.rank !== null)
+          // Enabled commands first, then the better matches
+          .sort(
+            (a, b) =>
+              (isEnabled(a.f.command) ? 0 : 1) - (isEnabled(b.f.command) ? 0 : 1) ||
+              a.rank - b.rank,
+          )
+          .map((r) => r.f)
+          .slice(0, 50);
+  const recentShown =
+    words.length === 0 ? results.filter((f) => recent.includes(f.command.id)) : [];
   const close = () => setOpen(false);
   const choose = (f: Found | undefined) => {
     if (!f || !isEnabled(f.command)) return;
+    noteRecent(f.command.id);
     close();
     runCommand(f.command);
   };
+
+  // The entry chosen with the arrow keys stays in view
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scrolls when the active entry changes
+  useEffect(() => {
+    list.current?.querySelector(".palette-item.active")?.scrollIntoView({ block: "nearest" });
+  }, [active, query]);
 
   return (
     <div
@@ -85,7 +132,7 @@ export default function CommandPalette() {
             }}
           />
         </label>
-        <div className="palette-results" role="listbox" aria-label={t("Commands")}>
+        <div className="palette-results" role="listbox" aria-label={t("Commands")} ref={list}>
           {results.length === 0 && <p className="muted palette-empty">{t("No command found")}</p>}
           {results.map((f, i) => (
             <button
@@ -104,7 +151,9 @@ export default function CommandPalette() {
                 <span className="icon-blank" />
               )}
               <span className="menu-label">{f.command.label}</span>
-              <span className="palette-path">{f.path}</span>
+              <span className="palette-path">
+                {recentShown.includes(f) ? `${t("Used last")} · ${f.path}` : f.path}
+              </span>
               <span className="menu-shortcut">
                 {f.command.shortcut && formatShortcut(f.command.shortcut)}
               </span>

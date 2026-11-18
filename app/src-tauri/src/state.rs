@@ -86,8 +86,14 @@ pub struct HomeView {
     pub modified: bool,
     pub can_undo: bool,
     pub can_redo: bool,
+    /// Command names of the steps that can be undone and redone, the next one first
+    pub undo_history: Vec<String>,
+    pub redo_history: Vec<String>,
     pub camera_moves: u32,
 }
+
+/// Number of undo and redo steps the window lists.
+const HISTORY_SHOWN: usize = 30;
 
 impl HomeView {
     pub fn of(active: &ActiveDoc) -> Self {
@@ -100,6 +106,8 @@ impl HomeView {
             modified: active.doc.modified,
             can_undo: active.doc.can_undo(),
             can_redo: active.doc.can_redo(),
+            undo_history: active.doc.undo_labels(HISTORY_SHOWN),
+            redo_history: active.doc.redo_labels(HISTORY_SHOWN),
             camera_moves: active.camera_moves,
         }
     }

@@ -6,7 +6,7 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
 import { errorText } from "./errorText";
-import { language } from "./i18n";
+import { language, t } from "./i18n";
 import { forEachGroup, forEveryPiece, type OpenedHome } from "./model";
 import { homeGuides } from "./plan2d/guides";
 import { usePreferences } from "./preferences";
@@ -66,6 +66,9 @@ type State = {
   setTool: (tool: Tool) => void;
   setWallThickness: (cm: number) => void;
   error: string | null;
+  /** Message that something worked (e.g. saved); leaves by itself */
+  notice: string | null;
+  setNotice: (notice: string | null) => void;
   loading: boolean;
   viewMode: ViewMode;
   /** Live position of the virtual visitor (shown in the plan while walking) */
@@ -123,6 +126,8 @@ export const useStore = create<State>((set, get) => ({
   setTool: (tool) => set({ tool }),
   setWallThickness: (wallThickness) => set({ wallThickness }),
   error: null,
+  notice: null,
+  setNotice: (notice) => set({ notice }),
   loading: false,
   viewMode: "aerial",
   visitorPose: null,
@@ -174,7 +179,10 @@ export const useStore = create<State>((set, get) => ({
     }
     // The camera moves are kept in the 3D view until now (they are no undo steps)
     await syncCameras();
-    await get().run("home_save", { path });
+    const saved = await get().run("home_save", { path });
+    if (saved !== undefined) {
+      set({ notice: t("Saved {file}", { file: path.split(/[\\/]/).pop() ?? path }) });
+    }
   },
 
   selectLevel: (id) => set({ selectedLevel: id }),

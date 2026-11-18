@@ -388,6 +388,9 @@ export type OpenedHome = {
   modified: boolean;
   canUndo: boolean;
   canRedo: boolean;
+  /** Command names of the steps that can be undone and redone, the next one first */
+  undoHistory?: string[];
+  redoHistory?: string[];
   /** Counts camera moves by commands (camera_set, viewpoint_go) */
   cameraMoves: number;
 };

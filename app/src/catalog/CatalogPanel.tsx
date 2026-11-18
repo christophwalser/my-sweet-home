@@ -17,6 +17,7 @@ import {
   TEXTURE_DRAG_TYPE,
   type TextureDragData,
 } from "../api";
+import { errorText } from "../errorText";
 import { language, t } from "../i18n";
 import Splitter from "../layout/Splitter";
 import { forEachPiece } from "../model";
@@ -377,7 +378,7 @@ export default function CatalogPanel() {
     try {
       setDropMessage((await importDroppedFiles(files)) || null);
     } catch (err) {
-      setDropMessage(String(err));
+      setDropMessage(errorText(err));
     }
   };
 
@@ -458,7 +459,7 @@ export default function CatalogPanel() {
       onHover={onHover}
       onMenu={(i, x, y) => void openMenu(i, x, y)}
       onPrimary={primary}
-      onShortcut={(i, shortcut) => void runShortcut(i, shortcut).catch((e) => notify(String(e)))}
+      onShortcut={(i, shortcut) => void runShortcut(i, shortcut).catch((e) => notify(errorText(e)))}
     />
   );
   const section = (key: string, title: string, list: CatalogItem[]) => (
@@ -558,7 +559,7 @@ export default function CatalogPanel() {
                   className="link-button"
                   onClick={() => {
                     setDropMessage(null);
-                    void undoLibrary().catch((e) => notify(String(e)));
+                    void undoLibrary().catch((e) => notify(errorText(e)));
                   }}
                 >
                   {t("Undo")}

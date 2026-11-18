@@ -9,7 +9,11 @@ The window has four parts:
 - **3D view** below the plan: the home as an aerial view or as a virtual visit.
 - **Properties** on the right: the values of the selected element, or of the home when nothing is selected.
 
-Every change can be undone with **Ctrl+Z** and redone with **Ctrl+Y**. **Ctrl+K** searches all commands by name.
+Every change can be undone with **Ctrl+Z** and redone with **Ctrl+Y**; the **Edit** menu names the step, and the history button beside undo takes back several steps at once. **Ctrl+K** searches all commands by name, also by a few of their letters, and lists the commands used last.
+
+The menu bar works as in Windows: **Alt** or **F10** goes to it and underlines the access keys, **Alt** and a letter opens a menu, the arrow keys move in it, a letter goes to the entries starting with it. The **View** menu holds the zoom, the grid, the rulers and the magnetism, hides the catalog (**F6**) and the properties (**F4**), shows the plan or the 3D view alone and sets the size of the user interface. A side panel can also be dragged shut at its edge; the grip at the window edge brings it back.
+
+Errors stay in the window until you close them; the status bar under the plan lists the messages of the window.
 
 # Drawing the plan
 
@@ -17,7 +21,7 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. L
 
 ## Walls
 
-- Click the start point, then each corner. **Double-click**, **Enter** or **Escape** ends the wall, **Backspace** removes the last point.
+- Click the start point, then each corner. **Double-click** or **Enter** ends the wall, **Escape** discards what is being drawn, **Backspace** removes the last point.
 - Type a length and press **Enter** to fix the next wall at that length. Units and arithmetic work too: `3.5m`, `5'3"`, `240+11.5`. **Tab** switches to the angle (degrees, clockwise from the x axis); the value not typed follows the mouse. `@dx,dy` places the point relative to the last one, `#x,y` at absolute coordinates, `300<45` gives length and angle at once.
 - Magnetism snaps to right angles, 45°, parallel walls, wall ends, wall faces (a new wall also starts flush with the corner of a wall face), the foot of the perpendicular on a nearby wall and guide lines; hold **Shift** for 1° steps and **Alt** to switch magnetism off for a moment.
 - Select a wall to change its thickness, height (also different at both ends), length, colors, textures, surface (matt or shiny), baseboards and pattern; **Top** gives a wall lower than the ceiling (e.g. a half-height wall) its own color and texture on top. **Make 90°** straightens the corner to the next wall.
@@ -52,7 +56,7 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. L
 
 ## Background image
 
-**Plan › Import background image** places a scanned plan or a page of a PDF under the plan. Mark a known length and type it in, then set the origin. Walls and rooms can then be drawn on top at the right scale.
+**Plan › Import background image** places a scanned plan or a page of a PDF under the plan. Mark a known length and type it in, then set the origin. Walls and rooms can then be drawn on top at the right scale. The length is typed in the unit of the preferences (or with a unit, e.g. `8.73 m`); **Opacity** sets how strongly the image shows under the plan.
 
 ## Terrain and scans as reference objects
 

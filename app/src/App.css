@@ -181,20 +181,69 @@ input[type="search"]:focus {
   color: var(--accent-text);
 }
 
-.error-bar {
-  grid-area: error;
+/* Messages laid over the window, below the tool bar */
+.toasts {
+  position: fixed;
+  top: 92px;
+  left: 50%;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(720px, calc(100% - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 6px 12px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+
+.toast-error {
+  border-color: var(--danger);
   color: var(--danger);
 }
 
-.error-bar span {
+.toast span {
   flex: 1;
+  overflow-wrap: anywhere;
 }
 
-.error-bar .error-close {
+.plan-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 4;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* A visible focus for everything used with the keyboard */
+button:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.toast .error-close {
   display: flex;
   padding: 2px;
   border: none;
@@ -387,6 +436,60 @@ input[type="search"]:focus {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+
+/* The actions of the selection: a header that stays in view while the properties scroll */
+.props > .prop-actions-main {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  order: -1;
+  margin: -12px -12px 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.prop-actions-main button {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+/* Sections of the properties that can be closed */
+.prop-section {
+  min-width: 0;
+}
+
+.prop-section > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.prop-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.prop-section > summary::before {
+  content: "▸";
+  width: 10px;
+}
+
+.prop-section[open] > summary::before {
+  content: "▾";
+}
+
+.prop-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 
 .texture-button {
@@ -742,6 +845,10 @@ input[type="search"]:focus {
 .plan-status-switch {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  /* Targets of at least 24 px */
+  min-width: 26px;
+  min-height: 24px;
   padding: 1px 5px;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -764,6 +871,7 @@ input[type="search"]:focus {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-height: 24px;
   margin-left: 6px;
   padding: 1px 6px;
   border: 1px solid transparent;
@@ -1643,6 +1751,23 @@ input[type="search"]:focus {
   right: calc(var(--right-width, 250px) - 3px);
 }
 
+/* A hidden side panel leaves a grip at the edge of the window to drag it out again */
+.splitter-left.side-hidden {
+  left: 0;
+}
+
+.splitter-right.side-hidden {
+  right: 0;
+}
+
+.splitter.side-hidden {
+  background: var(--border);
+}
+
+.shell > aside[hidden] {
+  display: none;
+}
+
 .splitter-horizontal {
   flex: none;
   height: 5px;
@@ -2272,9 +2397,19 @@ kbd {
   box-shadow: var(--shadow);
 }
 
+/* Overlaps its menu, so the pointer never crosses a gap on the way to the submenu */
 .menu-flyout {
   top: -7px;
-  left: calc(100% + 4px);
+  left: calc(100% - 4px);
+}
+
+.menu-sub.open > .menu-item {
+  background: var(--hover);
+}
+
+.menu-category u {
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
 }
 
 .menu-sub {
@@ -3539,4 +3674,25 @@ body.moving-dialog * {
 .shape-editor-handle {
   fill: #d92d20;
   cursor: nwse-resize;
+}
+
+/* Preferences: the letter key of a plan tool */
+.prop-row input.tool-key {
+  width: 34px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.prop-row input[type="number"] {
+  font: inherit;
+  color: inherit;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  min-width: 0;
+}
+
+.bg-inline input[type="range"] {
+  width: 110px;
 }

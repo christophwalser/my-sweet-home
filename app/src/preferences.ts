@@ -30,6 +30,8 @@ export type Preferences = {
   snapRadius: number;
   /** Level shown faded under the plan of the shown level, and attracting the pointer */
   underlay: Underlay;
+  /** Opacity of the background image of the plan in percent */
+  backgroundOpacity: number;
   /** Furniture in the plan seen from above (rendered from the model) instead of its icon */
   furnitureTopView: boolean;
   /** Rooms in the plan: their floor color or texture, or one neutral color */
@@ -45,6 +47,14 @@ export type Preferences = {
   catalogPreview: boolean;
   /** Unit of lengths shown and typed (internally always cm) */
   unit: LengthUnit;
+  /** Decimals of lengths in the plan, the fields and the status bar; null: those of the unit */
+  lengthDecimals: number | null;
+  /** Distance of the grid lines in cm; 0: chosen by the zoom */
+  gridSpacing: number;
+  /** Size of the user interface in percent */
+  uiScale: number;
+  /** Letter keys of the plan tools the user changed: tool command ID → letter ("" for none) */
+  toolKeys: Record<string, string>;
   // Tools
   /** Color of new ruler guides (#RRGGBB, "" for the default of the theme) */
   rulerColor: string;
@@ -96,6 +106,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   snapToRulers: true,
   snapRadius: 10,
   underlay: "below",
+  backgroundOpacity: 70,
   furnitureTopView: true,
   roomRendering: "floor",
   leftSideColor: "#e8913a",
@@ -104,6 +115,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   onlineSources: true,
   catalogs: [],
   unit: "cm",
+  lengthDecimals: null,
+  gridSpacing: 0,
+  uiScale: 100,
+  toolKeys: {},
   rulerColor: "",
   rulerDashStyle: "DASH",
   measureColor: "",

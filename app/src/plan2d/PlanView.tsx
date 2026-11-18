@@ -69,6 +69,7 @@ import {
 } from "./handles";
 import {
   distanceToSegment,
+  elementOutlines,
   elementsInRect,
   hitTest,
   hitTestAll,
@@ -294,7 +295,7 @@ const cursorStyle: Record<Tool, string> = {
 };
 
 const FINISH = t(
-  "Enter, Esc, right-click or double-click to finish · Backspace: remove last point",
+  "Enter, right-click or double-click to finish · Esc: discard · Backspace: remove last point",
 );
 
 /** Side lines of the selected walls for the overlay. */
@@ -331,6 +332,9 @@ export default function PlanView() {
   const pendingFit = useRef(false);
   const showRulers = usePreferences((s) => s.rulers);
   const showGrid = usePreferences((s) => s.grid);
+  const gridSpacing = usePreferences((s) => s.gridSpacing);
+  const backgroundOpacity = usePreferences((s) => s.backgroundOpacity);
+  const lengthDecimals = usePreferences((s) => s.lengthDecimals);
   const unit = usePreferences((s) => s.unit);
   const roomRendering = usePreferences((s) => s.roomRendering);
   const underlay = usePreferences((s) => s.underlay);
@@ -632,7 +636,14 @@ export default function PlanView() {
     }
     drawPlan(ctx, canvas.width, canvas.height, viewRef.current, input, colors, {
       grid: showGrid,
+      gridSpacing,
+      backgroundOpacity: backgroundOpacity / 100,
     });
+    // The status bar names the zoom and the distance of the grid lines
+    const shownScale = viewRef.current.scale;
+    if (usePointer.getState().scale !== shownScale) {
+      queueMicrotask(() => usePointer.setState({ scale: shownScale }));
+    }
     if (settling.current && settling.current.home !== input.home) settling.current = null;
     const g = gesture.current ?? settling.current?.gesture ?? null;
     const drawing = isPathTool(tool);
@@ -1619,8 +1630,6 @@ export default function PlanView() {
           text: label.text,
           size: label.text_style?.font_size ?? 18,
         });
-      } else if (useStore.getState().selection.length === 0) {
-        refit();
       }
     }
   };
@@ -2021,13 +2030,9 @@ export default function PlanView() {
       return true;
     } else if (e.key === "Escape" && typed.current !== null) {
       typed.current = null;
-    } else if (e.key === "Escape" && drawing && dimOffset.current !== null) {
-      // Escape while placing a dimension cancels it
-      resetDraft();
     } else if (e.key === "Escape" && drawing) {
-      // Escape keeps what was drawn (if it is complete), like Enter
-      void finishDraft();
-      return true;
+      // Escape discards what is being drawn; Enter or a double-click keeps it
+      resetDraft();
     } else {
       return false;
     }
@@ -2366,7 +2371,16 @@ export default function PlanView() {
   useEffect(() => {
     draw();
     drawRulers();
-  }, [unit, roomRendering, underlay, leftSideColor, rightSideColor]);
+  }, [
+    unit,
+    roomRendering,
+    underlay,
+    leftSideColor,
+    rightSideColor,
+    gridSpacing,
+    lengthDecimals,
+    backgroundOpacity,
+  ]);
 
   // Actions of the menus, the tool bar and the command search
   // biome-ignore lint/correctness/useExhaustiveDependencies: handlers read current state when called
@@ -2376,6 +2390,37 @@ export default function PlanView() {
         zoom: (factor) => {
           const c = canvasRef.current;
           if (c) zoomAt(c.width / 2, c.height / 2, factor);
+        },
+        zoomToSelection: () => {
+          const canvas = canvasRef.current;
+          if (!input || !canvas) return;
+          const pts = useStore
+            .getState()
+            .selection.flatMap((id) => elementOutlines(input.home, input.wallShapes, id))
+            .flatMap((o) => o.pts);
+          if (pts.length === 0) return;
+          const xs = pts.map((p) => p[0]);
+          const ys = pts.map((p) => p[1]);
+          const [x0, y0, x1, y1] = [
+            Math.min(...xs),
+            Math.min(...ys),
+            Math.max(...xs),
+            Math.max(...ys),
+          ];
+          const margin = 60 * devicePixelRatio;
+          const scale = Math.min(
+            (canvas.width - 2 * margin) / Math.max(x1 - x0, 50),
+            (canvas.height - 2 * margin) / Math.max(y1 - y0, 50),
+            50,
+          );
+          userMoved.current = true;
+          viewRef.current = {
+            scale,
+            offsetX: canvas.width / 2 - ((x0 + x1) / 2) * scale,
+            offsetY: canvas.height / 2 - ((y0 + y1) / 2) * scale,
+          };
+          draw();
+          drawRulers();
         },
         selectAll: () => void onShortcut("a", useStore.getState().selection),
         selectSimilar: () => {

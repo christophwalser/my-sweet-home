@@ -509,3 +509,43 @@ fn furniture_update_keeps_the_proportions_of_each_piece() {
     let a = piece(&doc, "a").attrs;
     assert_eq!((a.width, a.depth, a.height), (80.0, 80.0, 140.0));
 }
+
+#[test]
+fn furniture_update_moves_pieces_to_another_level() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let ground = id_of(&run(&r, &mut doc, "level_add", json!({ "name": "Ground" })));
+    let first = id_of(&run(&r, &mut doc, "level_add", json!({ "name": "First" })));
+    push_piece(&mut doc, "a");
+    push_piece(&mut doc, "b");
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "ids": ["a", "b"], "level": first }),
+    );
+    assert_eq!(
+        piece(&doc, "a").attrs.level.as_deref(),
+        Some(first.as_str())
+    );
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": "a", "level": ground }),
+    );
+    assert_eq!(
+        piece(&doc, "a").attrs.level.as_deref(),
+        Some(ground.as_str())
+    );
+    assert_eq!(
+        piece(&doc, "b").attrs.level.as_deref(),
+        Some(first.as_str())
+    );
+    run_err(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": "a", "level": "level-x" }),
+    );
+}

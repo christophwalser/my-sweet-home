@@ -7,6 +7,7 @@ import { ask, message, open } from "@tauri-apps/plugin-dialog";
 import { api } from "../api";
 import { errorText } from "../errorText";
 import { t } from "../i18n";
+import { useLayoutStore } from "../layout/layout";
 import {
   closeView3DWindow,
   openView3DWindow,
@@ -24,6 +25,7 @@ import { keyTarget, modalOpen } from "./keyTarget";
 import { planActions } from "./planBridge";
 import { type ToolKeyState, toolForDigit, toolForLetter, toolShortcut } from "./toolKeys";
 import { type DialogName, isDark, useUi } from "./uiStore";
+import { stepLabel } from "./undoLabels";
 
 export type Command = {
   id: string;
@@ -298,6 +300,9 @@ async function exitApp(): Promise<void> {
 
 // ---------------------------------------------------------------- definitions
 
+/** Sizes of the user interface offered in the View menu, in percent. */
+export const UI_SCALES = [90, 100, 110, 125, 150];
+
 const multipleFurniture = () => selectedFurniture().length > 1;
 const alignCommand = (how: string, label: string, icon: IconName = "align"): Command => ({
   id: `furniture.align.${how}`,
@@ -318,7 +323,10 @@ const toolCommand = (
   label,
   icon,
   hint,
-  shortcut: shortcut ?? toolShortcut(`tool.${tool}`),
+  // Read when shown: the letters can be changed in the preferences
+  get shortcut() {
+    return shortcut ?? toolShortcut(`tool.${tool}`);
+  },
   enabled: hasHome,
   checked: () => store().tool === tool,
   run: () => chooseTool(tool),
@@ -375,7 +383,11 @@ const LIST: Command[] = [
   // Edit
   {
     id: "edit.undo",
-    label: t("Undo"),
+    // Names the step: "Undo: Wall: changed"
+    get label() {
+      const step = store().opened?.undoHistory?.[0];
+      return step ? t("Undo: {step}", { step: stepLabel(step) }) : t("Undo");
+    },
     icon: "undo",
     shortcut: "Ctrl+Z",
     enabled: () => !!store().opened?.canUndo,
@@ -383,7 +395,10 @@ const LIST: Command[] = [
   },
   {
     id: "edit.redo",
-    label: t("Redo"),
+    get label() {
+      const step = store().opened?.redoHistory?.[0];
+      return step ? t("Redo: {step}", { step: stepLabel(step) }) : t("Redo");
+    },
     icon: "redo",
     shortcut: "Ctrl+Y",
     enabled: () => !!store().opened?.canRedo,
@@ -598,6 +613,13 @@ const LIST: Command[] = [
     shortcut: "Ctrl+0",
     enabled: hasHome,
     run: () => store().requestFit(),
+  },
+  {
+    id: "plan.zoomSelection",
+    label: t("Zoom to the selection"),
+    icon: "zoomfit",
+    enabled: hasSelection,
+    run: () => planActions()?.zoomToSelection(),
   },
   {
     id: "plan.rulers",
@@ -892,17 +914,10 @@ const LIST: Command[] = [
   },
   {
     id: "view3d.settings",
-    label: t("3D settings…"),
+    label: t("3D settings, location and sun…"),
     icon: "settings",
-    hint: t("Ground, sky, light, walls transparency"),
-    enabled: hasHome,
-    run: () => open3DDialog("settings3d"),
-  },
-  {
-    id: "view3d.location",
-    label: t("Location and sun…"),
-    icon: "location",
-    keywords: "compass time date city",
+    hint: t("Ground, sky, light, walls transparency, location, compass, date and time"),
+    keywords: "compass time date city location sun",
     enabled: hasHome,
     run: () => open3DDialog("settings3d"),
   },
@@ -958,15 +973,62 @@ const LIST: Command[] = [
     shortcut: "Ctrl+K",
     run: () => useUi.getState().setPaletteOpen(true),
   },
-  // Extensions (plugins follow in a later version)
+  // View: panels, panes and the size of the user interface
   {
-    id: "plugins.manage",
-    label: t("Manage plugins…"),
-    icon: "plugin",
-    hint: t("Plugins follow in a later version"),
-    enabled: () => false,
-    run: () => {},
+    id: "view.catalog",
+    label: t("Catalog and furniture list"),
+    icon: "collapsedown",
+    shortcut: "F6",
+    hint: t("Show or hide the catalog on the left"),
+    keywords: "panel sidebar hide show",
+    checked: () => !useLayoutStore.getState().leftHidden,
+    run: () =>
+      useLayoutStore.getState().update({ leftHidden: !useLayoutStore.getState().leftHidden }),
   },
+  {
+    id: "view.properties",
+    label: t("Properties"),
+    icon: "collapsedown",
+    shortcut: "F4",
+    hint: t("Show or hide the properties on the right"),
+    keywords: "panel sidebar inspector hide show",
+    checked: () => !useLayoutStore.getState().rightHidden,
+    run: () =>
+      useLayoutStore.getState().update({ rightHidden: !useLayoutStore.getState().rightHidden }),
+  },
+  {
+    id: "view.onlyPlan",
+    label: t("Plan only"),
+    icon: "maximize",
+    enabled: () => !useUi.getState().detached,
+    checked: () => useLayoutStore.getState().maximized === "plan",
+    run: () => useLayoutStore.getState().update({ maximized: "plan" }),
+  },
+  {
+    id: "view.only3d",
+    label: t("3D view only"),
+    icon: "maximize",
+    enabled: () => !useUi.getState().detached,
+    checked: () => useLayoutStore.getState().maximized === "3d",
+    run: () => useLayoutStore.getState().update({ maximized: "3d" }),
+  },
+  {
+    id: "view.both",
+    label: t("Plan and 3D view"),
+    icon: "restore",
+    enabled: () => !useUi.getState().detached,
+    checked: () => useLayoutStore.getState().maximized === null,
+    run: () => useLayoutStore.getState().update({ maximized: null }),
+  },
+  ...UI_SCALES.map(
+    (percent): Command => ({
+      id: `view.scale.${percent}`,
+      label: `${percent} %`,
+      keywords: "zoom size font larger smaller scale",
+      checked: () => usePreferences.getState().uiScale === percent,
+      run: () => usePreferences.getState().update({ uiScale: percent }),
+    }),
+  ),
   // Help
   {
     id: "help.guide",
@@ -1115,18 +1177,64 @@ export const MENUS: Menu[] = [
     ],
   },
   {
+    label: t("View"),
+    entries: () => [
+      cmd("plan.zoomIn"),
+      cmd("plan.zoomOut"),
+      cmd("plan.fit"),
+      cmd("plan.zoomSelection"),
+      sep,
+      cmd("plan.rulers"),
+      cmd("plan.grid"),
+      {
+        kind: "submenu",
+        label: t("Magnetism"),
+        icon: "magnet",
+        entries: () => [
+          cmd("plan.magnetism"),
+          sep,
+          cmd("plan.snapAngles"),
+          cmd("plan.snapObjects"),
+          cmd("plan.snapRulers"),
+        ],
+      },
+      sep,
+      cmd("view.catalog"),
+      cmd("view.properties"),
+      sep,
+      cmd("view.both"),
+      cmd("view.onlyPlan"),
+      cmd("view.only3d"),
+      cmd("view3d.detach"),
+      sep,
+      cmd("window.theme"),
+      cmd("window.themeSystem"),
+      {
+        kind: "submenu",
+        label: t("Size of the user interface"),
+        icon: "zoomin",
+        entries: () => UI_SCALES.map((percent) => cmd(`view.scale.${percent}`)),
+      },
+      sep,
+      cmd("window.search"),
+    ],
+  },
+  {
     label: t("Plan"),
     entries: () => [
       cmd("tool.select"),
       cmd("tool.pan"),
+      { kind: "heading", label: t("Draw") },
       cmd("tool.wall"),
       cmd("tool.arcwall"),
       cmd("tool.room"),
       cmd("tool.roomauto"),
       cmd("tool.polyline"),
+      { kind: "heading", label: t("Annotate") },
       cmd("tool.dimension"),
       cmd("tool.heightdim"),
       cmd("tool.label"),
+      { kind: "heading", label: t("Measure") },
       cmd("tool.measure"),
       cmd("tool.ruler"),
       cmd("plan.clearGuides"),
@@ -1153,17 +1261,6 @@ export const MENUS: Menu[] = [
           cmd("plan.backgroundDelete"),
         ],
       },
-      sep,
-      cmd("plan.zoomIn"),
-      cmd("plan.zoomOut"),
-      cmd("plan.fit"),
-      sep,
-      cmd("plan.rulers"),
-      cmd("plan.grid"),
-      cmd("plan.magnetism"),
-      cmd("plan.snapAngles"),
-      cmd("plan.snapObjects"),
-      cmd("plan.snapRulers"),
     ],
   },
   {
@@ -1231,30 +1328,14 @@ export const MENUS: Menu[] = [
         entries: () => LEVELS_3D_OPTIONS.map(([mode]) => cmd(`view3d.levels.${mode}`)),
       },
       cmd("view3d.settings"),
-      cmd("view3d.location"),
       sep,
       cmd("view3d.photo"),
       cmd("view3d.video"),
-      sep,
-      cmd("view3d.detach"),
     ],
-  },
-  {
-    label: t("Extensions"),
-    entries: () => [cmd("plugins.manage")],
   },
   {
     label: t("Help"),
-    entries: () => [
-      cmd("help.guide"),
-      cmd("window.search"),
-      cmd("help.shortcuts"),
-      sep,
-      cmd("window.theme"),
-      cmd("window.themeSystem"),
-      sep,
-      cmd("help.about"),
-    ],
+    entries: () => [cmd("help.guide"), cmd("help.shortcuts"), sep, cmd("help.about")],
   },
 ];
 

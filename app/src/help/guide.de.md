@@ -9,7 +9,11 @@ Das Fenster hat vier Bereiche:
 - **3D-Ansicht** unter dem Plan: das Haus als Luftbild oder als Rundgang.
 - **Eigenschaften** rechts: die Werte des gewählten Elements, oder des Hauses, wenn nichts gewählt ist.
 
-Jede Änderung lässt sich mit **Strg+Z** rückgängig machen und mit **Strg+Y** wiederholen. **Strg+K** sucht alle Befehle nach Namen.
+Jede Änderung lässt sich mit **Strg+Z** rückgängig machen und mit **Strg+Y** wiederholen; das Menü **Bearbeiten** nennt den Schritt, und der Verlaufsknopf neben Rückgängig nimmt mehrere Schritte auf einmal zurück. **Strg+K** sucht alle Befehle nach Namen, auch nach einigen ihrer Buchstaben, und listet die zuletzt benutzten Befehle.
+
+Die Menüleiste lässt sich wie in Windows bedienen: **Alt** oder **F10** springt hinein und unterstreicht die Zugriffstasten, **Alt** und ein Buchstabe öffnet ein Menü, die Pfeiltasten bewegen sich darin, ein Buchstabe springt zu den Einträgen, die damit beginnen. Das Menü **Ansicht** enthält Zoom, Raster, Lineale und Magnetismus, blendet den Katalog (**F6**) und die Eigenschaften (**F4**) aus, zeigt nur den Plan oder nur die 3D-Ansicht und stellt die Größe der Oberfläche ein. Eine Seitenleiste lässt sich auch an ihrem Rand zuschieben; der Griff am Fensterrand holt sie zurück.
+
+Fehler bleiben im Fenster stehen, bis du sie schließt; die Statusleiste unter dem Plan listet die Meldungen des Fensters.
 
 # Plan zeichnen
 
@@ -17,7 +21,7 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 
 ## Wände
 
-- Klicke den Startpunkt, dann jede Ecke. **Doppelklick**, **Enter** oder **Esc** beendet die Wand, **Rücktaste** entfernt den letzten Punkt.
+- Klicke den Startpunkt, dann jede Ecke. **Doppelklick** oder **Enter** beendet die Wand, **Esc** verwirft, was gerade gezeichnet wird, **Rücktaste** entfernt den letzten Punkt.
 - Tippe eine Länge und drücke **Enter**, um die nächste Wand auf diese Länge festzulegen. Einheiten und Rechnen gehen auch: `3.5m`, `5'3"`, `240+11.5`. **Tab** wechselt zum Winkel (Grad, im Uhrzeigersinn ab der x-Achse); der nicht getippte Wert folgt der Maus. `@dx,dy` setzt den Punkt relativ zum letzten, `#x,y` auf absolute Koordinaten, `300<45` gibt Länge und Winkel auf einmal.
 - Der Magnetismus rastet an rechten Winkeln, 45°, parallelen Wänden, Wandenden, Wandflächen (eine neue Wand beginnt auch bündig mit der Ecke einer Wandfläche), dem Lotfußpunkt auf einer nahen Wand und Hilfslinien ein; halte **Umschalt** für 1°-Schritte und **Alt**, um ihn kurz auszuschalten.
 - Wähle eine Wand, um Dicke, Höhe (auch verschieden an beiden Enden), Länge, Farben, Texturen, Oberfläche (matt oder glänzend), Sockelleisten und Muster zu ändern; **Oberseite** gibt einer Wand, die nicht bis zur Decke reicht (z. B. einer halbhohen Wand), oben eine eigene Farbe und Textur. **Auf 90° stellen** richtet die Ecke zur nächsten Wand aus.
@@ -52,7 +56,7 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 
 ## Hintergrundbild
 
-**Plan › Hintergrundbild importieren** legt einen eingescannten Plan oder eine PDF-Seite unter den Plan. Markiere eine bekannte Länge und tippe sie ein, dann setze den Nullpunkt. Danach zeichnest du Wände und Räume maßstabsgetreu darauf.
+**Plan › Hintergrundbild importieren** legt einen eingescannten Plan oder eine PDF-Seite unter den Plan. Markiere eine bekannte Länge und tippe sie ein, dann setze den Nullpunkt. Danach zeichnest du Wände und Räume maßstabsgetreu darauf. Die Länge gibst du in der Einheit der Einstellungen ein (oder mit Einheit, z. B. `8,73 m`); **Deckkraft** legt fest, wie stark das Bild unter dem Plan durchscheint.
 
 ## Gelände und Scans als Referenzobjekte
 

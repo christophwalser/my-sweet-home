@@ -31,6 +31,7 @@ import {
   byRole,
   DASH_STYLES,
   Field,
+  Section,
   SelectField,
   SideSection,
   toHex,
@@ -466,18 +467,8 @@ function RoomWalls({
     const wall = home.walls.find((w) => w.attrs.id === s.id);
     return wall ? [{ wall, side: s.side }] : [];
   });
-  const title = (
-    <h3 title={t("The sides of the walls around this room that face it")}>
-      {t("Walls of this room")}
-    </h3>
-  );
   if (faces.length === 0) {
-    return (
-      <>
-        {title}
-        <p className="muted small">{t("No wall faces this room.")}</p>
-      </>
-    );
+    return <p className="muted small">{t("No wall faces this room.")}</p>;
   }
   const update = (values: Record<string, unknown>) =>
     void run("room_walls_update", { id, ...values });
@@ -504,7 +495,6 @@ function RoomWalls({
   const bbHeight = common(baseboards.map((b) => b.attrs.height));
   return (
     <>
-      {title}
       <p className="muted small">
         {t(
           "{n} wall sides face this room. A wall longer than the room changes on its whole side.",
@@ -789,8 +779,9 @@ export default function PropertiesPanel() {
   if (!opened) return <div className="props muted">{t("No home open")}</div>;
   const home = opened.home;
 
+  // Shown as a header that stays in view while the properties scroll
   const actions = (
-    <div className="prop-actions">
+    <div className="prop-actions prop-actions-main">
       <button
         type="button"
         onClick={() => void run("edit_copy", { ids: selection })}
@@ -1159,147 +1150,165 @@ export default function PropertiesPanel() {
           value={a.description ?? ""}
           onCommit={set("description")}
         />
-        <SizeFields piece={p} run={run} />
-        <Field
-          label={t("Elevation")}
-          type="number"
-          unit="cm"
-          value={a.elevation ?? 0}
-          onCommit={set("elevation")}
-        />
-        <Field label="X" type="number" unit="cm" value={a.x} onCommit={set("x")} />
-        <Field label="Y" type="number" unit="cm" value={a.y} onCommit={set("y")} />
-        <Field
-          label={t("Angle")}
-          type="angle"
-          unit="°"
-          value={a.angle ?? 0}
-          onCommit={set("angle_deg")}
-        />
-        {p.kind !== "DoorOrWindow" && a.horizontally_rotatable !== false && (
-          <>
-            <Field
-              label={t("Tilt forward")}
-              type="angle"
-              unit="°"
-              value={a.pitch ?? 0}
-              onCommit={set("pitch_deg")}
+        <Section id="piece.place" title={t("Size and position")}>
+          <SizeFields piece={p} run={run} />
+          {home.levels.length > 1 && (
+            <SelectField
+              label={t("Level")}
+              value={a.level ?? ""}
+              options={home.levels.map((l): [string, string] => [l.attrs.id, l.attrs.name])}
+              onCommit={(v) => {
+                set("level")(v);
+                // The piece stays in view: the plan follows it to its level
+                useStore.getState().selectLevel(v);
+              }}
             />
-            <Field
-              label={t("Tilt sideways")}
-              type="angle"
-              unit="°"
-              value={a.roll ?? 0}
-              onCommit={set("roll_deg")}
-            />
-          </>
-        )}
-        {p.kind === "DoorOrWindow" && <OpeningDistances piece={p} />}
-        <Field label={t("Color")} type="color" value={toHex(a.color)} onCommit={set("color")} />
-        {a.color !== null && (
-          <button type="button" className="link-button" onClick={() => set("color")("")}>
-            {t("Restore model colors")}
-          </button>
-        )}
-        <TextureField
-          label={t("Texture")}
-          current={p.texture}
-          onCommit={(v) => set("texture")(v)}
-          target={{ ids: [id], surface: "piece" }}
-        />
-        <label className="prop-row">
-          <span className="prop-label">{t("Surface")}</span>
-          <select
-            value={
-              a.shininess === null || a.shininess === undefined
-                ? "model"
-                : a.shininess > 0
-                  ? "shiny"
-                  : "matt"
-            }
-            onChange={(e) => {
-              const v = e.currentTarget.value;
-              set("shininess")(v === "model" ? -1 : v === "shiny" ? SHINY : 0);
-            }}
-          >
-            <option value="model">{t("Like the model")}</option>
-            <option value="matt">{t("Matt")}</option>
-            <option value="shiny">{t("Shiny")}</option>
-          </select>
-        </label>
-        <MaterialsSection piece={p} docId={opened.id} run={run} />
-        {p.kind === "Light" && (
-          <>
-            <Field
-              label={t("Light power")}
-              type="number"
-              unit="%"
-              value={Math.round((a.power ?? 0.5) * 100)}
-              onCommit={set("power")}
-            />
-            <Field
-              label={t("Light cone")}
-              type="number"
-              unit="°"
-              value={spotAngle(p) ?? 0}
-              onCommit={set("spot_angle_deg")}
-            />
-            <p className="muted small">
-              {t(
-                "Light cone 0: the lamp lights in all directions; otherwise downwards through its bottom (tilt the lamp to aim it).",
-              )}
-            </p>
-          </>
-        )}
-        <PriceFields piece={p} run={run} />
-        <Field
-          label={t("Mirrored")}
-          type="checkbox"
-          value={a.model_mirrored}
-          onCommit={set("mirrored")}
-        />
-        <Field
-          label={t("Visible")}
-          type="checkbox"
-          value={a.visible !== false}
-          onCommit={set("visible")}
-        />
-        {p.kind !== "DoorOrWindow" && (
-          <Field
-            label={t("Part of the base plan")}
-            type="checkbox"
-            value={a.movable === false}
-            onCommit={(v) => set("base_plan_item")(v)}
-          />
-        )}
-        <label
-          className="prop-row prop-check"
-          title={t(
-            "For terrain, scans and neighbor houses: faint in the plan and not picked or snapped to there (select it in the furniture list); unchanged in 3D",
           )}
-        >
-          <input
+          <Field
+            label={t("Elevation")}
+            type="number"
+            unit="cm"
+            value={a.elevation ?? 0}
+            onCommit={set("elevation")}
+          />
+          <Field label="X" type="number" unit="cm" value={a.x} onCommit={set("x")} />
+          <Field label="Y" type="number" unit="cm" value={a.y} onCommit={set("y")} />
+          <Field
+            label={t("Angle")}
+            type="angle"
+            unit="°"
+            value={a.angle ?? 0}
+            onCommit={set("angle_deg")}
+          />
+          {p.kind !== "DoorOrWindow" && a.horizontally_rotatable !== false && (
+            <>
+              <Field
+                label={t("Tilt forward")}
+                type="angle"
+                unit="°"
+                value={a.pitch ?? 0}
+                onCommit={set("pitch_deg")}
+              />
+              <Field
+                label={t("Tilt sideways")}
+                type="angle"
+                unit="°"
+                value={a.roll ?? 0}
+                onCommit={set("roll_deg")}
+              />
+            </>
+          )}
+          {p.kind === "DoorOrWindow" && <OpeningDistances piece={p} />}
+        </Section>
+        <Section id="piece.look" title={t("Look")}>
+          <Field label={t("Color")} type="color" value={toHex(a.color)} onCommit={set("color")} />
+          {a.color !== null && (
+            <button type="button" className="link-button" onClick={() => set("color")("")}>
+              {t("Restore model colors")}
+            </button>
+          )}
+          <TextureField
+            label={t("Texture")}
+            current={p.texture}
+            onCommit={(v) => set("texture")(v)}
+            target={{ ids: [id], surface: "piece" }}
+          />
+          <label className="prop-row">
+            <span className="prop-label">{t("Surface")}</span>
+            <select
+              value={
+                a.shininess === null || a.shininess === undefined
+                  ? "model"
+                  : a.shininess > 0
+                    ? "shiny"
+                    : "matt"
+              }
+              onChange={(e) => {
+                const v = e.currentTarget.value;
+                set("shininess")(v === "model" ? -1 : v === "shiny" ? SHINY : 0);
+              }}
+            >
+              <option value="model">{t("Like the model")}</option>
+              <option value="matt">{t("Matt")}</option>
+              <option value="shiny">{t("Shiny")}</option>
+            </select>
+          </label>
+          <MaterialsSection piece={p} docId={opened.id} run={run} />
+          {p.kind === "Light" && (
+            <>
+              <Field
+                label={t("Light power")}
+                type="number"
+                unit="%"
+                value={Math.round((a.power ?? 0.5) * 100)}
+                onCommit={set("power")}
+              />
+              <Field
+                label={t("Light cone")}
+                type="number"
+                unit="°"
+                value={spotAngle(p) ?? 0}
+                onCommit={set("spot_angle_deg")}
+              />
+              <p className="muted small">
+                {t(
+                  "Light cone 0: the lamp lights in all directions; otherwise downwards through its bottom (tilt the lamp to aim it).",
+                )}
+              </p>
+            </>
+          )}
+        </Section>
+        <Section id="piece.more" title={t("More")}>
+          <PriceFields piece={p} run={run} />
+          <Field
+            label={t("Mirrored")}
             type="checkbox"
-            checked={isReference(p)}
-            onChange={(e) => set("reference")(e.currentTarget.checked)}
+            value={a.model_mirrored}
+            onCommit={set("mirrored")}
           />
-          <span>{t("Reference object")}</span>
-        </label>
-        <Field
-          label={t("Name in plan")}
-          type="checkbox"
-          value={a.name_visible === true}
-          onCommit={set("name_visible")}
-        />
-        {a.name_visible && (
-          <TextStyleFields
-            title={t("Name")}
-            style={p.text_style}
-            defaultSize={18}
-            prefix="name_"
-            onChange={(params) => void run("furniture_update", { id, ...params })}
+          <Field
+            label={t("Visible")}
+            type="checkbox"
+            value={a.visible !== false}
+            onCommit={set("visible")}
           />
-        )}
+          {p.kind !== "DoorOrWindow" && (
+            <Field
+              label={t("Part of the base plan")}
+              type="checkbox"
+              value={a.movable === false}
+              onCommit={(v) => set("base_plan_item")(v)}
+            />
+          )}
+          <label
+            className="prop-row prop-check"
+            title={t(
+              "For terrain, scans and neighbor houses: faint in the plan and not picked or snapped to there (select it in the furniture list); unchanged in 3D",
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={isReference(p)}
+              onChange={(e) => set("reference")(e.currentTarget.checked)}
+            />
+            <span>{t("Reference object")}</span>
+          </label>
+          <Field
+            label={t("Name in plan")}
+            type="checkbox"
+            value={a.name_visible === true}
+            onCommit={set("name_visible")}
+          />
+          {a.name_visible && (
+            <TextStyleFields
+              title={t("Name")}
+              style={p.text_style}
+              defaultSize={18}
+              prefix="name_"
+              onChange={(params) => void run("furniture_update", { id, ...params })}
+            />
+          )}
+        </Section>
         {a.catalog_id && (
           <p className="muted small">
             {t("Catalog ID:")} {a.catalog_id}
@@ -1326,99 +1335,115 @@ export default function PropertiesPanel() {
     return (
       <div className="props">
         <h2>{t("Wall")}</h2>
-        {/* The length between the end points, the same the plan shows for the selected wall */}
-        <Field
-          label={t("Length")}
-          type="number"
-          unit="cm"
-          value={Math.round(length * 10) / 10}
-          onCommit={set("length")}
-        />
-        <Field
-          label={t("X start")}
-          type="number"
-          unit="cm"
-          value={a.x_start}
-          onCommit={set("x_start")}
-        />
-        <Field
-          label={t("Y start")}
-          type="number"
-          unit="cm"
-          value={a.y_start}
-          onCommit={set("y_start")}
-        />
-        <Field label={t("X end")} type="number" unit="cm" value={a.x_end} onCommit={set("x_end")} />
-        <Field label={t("Y end")} type="number" unit="cm" value={a.y_end} onCommit={set("y_end")} />
-        {/* Clockwise from the x axis, as typed while drawing; the start stays */}
-        <Field
-          label={t("Direction")}
-          type="number"
-          unit="°"
-          value={
-            Math.round(
-              (((Math.atan2(a.y_end - a.y_start, a.x_end - a.x_start) * 180) / Math.PI + 360) %
-                360) *
-                100,
-            ) / 100
-          }
-          onCommit={set("direction_deg")}
-        />
-        <Field
-          label={t("Arc")}
-          type="number"
-          unit="°"
-          value={Math.round((((a.arc_extent ?? 0) * 180) / Math.PI) * 100) / 100}
-          onCommit={set("arc_extent_deg")}
-        />
-        <CornerAngleField label={t("Angle at start")} home={home} wall={wall} atStart run={run} />
-        <CornerAngleField
-          label={t("Angle at end")}
-          home={home}
-          wall={wall}
-          atStart={false}
-          run={run}
-        />
-        <Field
-          label={t("Thickness")}
-          type="number"
-          unit="cm"
-          value={a.thickness}
-          onCommit={(v) =>
-            void run("wall_update", {
-              id: a.id,
-              thickness: v,
-              // A round wall always grows around its axis
-              ...(keepLine !== "axis" && !a.arc_extent && { keep_side: keepLine }),
-            })
-          }
-        />
-        <SelectField
-          label={t("Stays in place")}
-          value={keepLine}
-          options={WALL_LINES}
-          onCommit={(v) => useStore.setState({ wallKeepLine: v as WallLine })}
-        />
-        <Field
-          label={t("Height")}
-          type="number"
-          unit="cm"
-          value={a.height ?? home.attrs.wall_height ?? 250}
-          onCommit={set("height")}
-        />
-        <Field
-          label={t("Height at end")}
-          type="number"
-          unit="cm"
-          value={a.height_at_end ?? a.height ?? home.attrs.wall_height ?? 250}
-          onCommit={set("height_at_end")}
-        />
-        <SelectField
-          label={t("Pattern")}
-          value={a.pattern ?? "hatchUp"}
-          options={WALL_PATTERNS}
-          onCommit={set("pattern")}
-        />
+        <Section id="wall.geometry" title={t("Position and direction")}>
+          {/* The length between the end points, the same the plan shows for the selected wall */}
+          <Field
+            label={t("Length")}
+            type="number"
+            unit="cm"
+            value={Math.round(length * 10) / 10}
+            onCommit={set("length")}
+          />
+          <Field
+            label={t("X start")}
+            type="number"
+            unit="cm"
+            value={a.x_start}
+            onCommit={set("x_start")}
+          />
+          <Field
+            label={t("Y start")}
+            type="number"
+            unit="cm"
+            value={a.y_start}
+            onCommit={set("y_start")}
+          />
+          <Field
+            label={t("X end")}
+            type="number"
+            unit="cm"
+            value={a.x_end}
+            onCommit={set("x_end")}
+          />
+          <Field
+            label={t("Y end")}
+            type="number"
+            unit="cm"
+            value={a.y_end}
+            onCommit={set("y_end")}
+          />
+          {/* Clockwise from the x axis, as typed while drawing; the start stays */}
+          <Field
+            label={t("Direction")}
+            type="number"
+            unit="°"
+            value={
+              Math.round(
+                (((Math.atan2(a.y_end - a.y_start, a.x_end - a.x_start) * 180) / Math.PI + 360) %
+                  360) *
+                  100,
+              ) / 100
+            }
+            onCommit={set("direction_deg")}
+          />
+          <Field
+            label={t("Arc")}
+            type="number"
+            unit="°"
+            value={Math.round((((a.arc_extent ?? 0) * 180) / Math.PI) * 100) / 100}
+            onCommit={set("arc_extent_deg")}
+          />
+          <CornerAngleField label={t("Angle at start")} home={home} wall={wall} atStart run={run} />
+          <CornerAngleField
+            label={t("Angle at end")}
+            home={home}
+            wall={wall}
+            atStart={false}
+            run={run}
+          />
+        </Section>
+        <Section id="wall.size" title={t("Thickness and height")}>
+          <Field
+            label={t("Thickness")}
+            type="number"
+            unit="cm"
+            value={a.thickness}
+            onCommit={(v) =>
+              void run("wall_update", {
+                id: a.id,
+                thickness: v,
+                // A round wall always grows around its axis
+                ...(keepLine !== "axis" && !a.arc_extent && { keep_side: keepLine }),
+              })
+            }
+          />
+          <SelectField
+            label={t("Stays in place")}
+            value={keepLine}
+            options={WALL_LINES}
+            onCommit={(v) => useStore.setState({ wallKeepLine: v as WallLine })}
+          />
+          <Field
+            label={t("Height")}
+            type="number"
+            unit="cm"
+            value={a.height ?? home.attrs.wall_height ?? 250}
+            onCommit={set("height")}
+          />
+          <Field
+            label={t("Height at end")}
+            type="number"
+            unit="cm"
+            value={a.height_at_end ?? a.height ?? home.attrs.wall_height ?? 250}
+            onCommit={set("height_at_end")}
+          />
+          <SelectField
+            label={t("Pattern")}
+            value={a.pattern ?? "hatchUp"}
+            options={WALL_PATTERNS}
+            onCommit={set("pattern")}
+          />
+        </Section>
         <WallSide wall={wall} side="left" run={run} />
         <WallSide wall={wall} side="right" run={run} />
         <WallTop wall={wall} run={run} />
@@ -1509,45 +1534,53 @@ export default function PropertiesPanel() {
           </button>
         )}
         <p className="muted small">{t("Drag the name or area in the plan to move it.")}</p>
-        <h3>{t("Floor")}</h3>
-        <Field
-          label={t("Color")}
-          type="color"
-          value={toHex(a.floor_color)}
-          onCommit={set("floor_color")}
-        />
-        {a.floor_color !== null && (
-          <button type="button" className="link-button" onClick={() => set("floor_color")("")}>
-            {t("Default color")}
-          </button>
-        )}
-        <TextureField
-          label={t("Texture")}
-          current={byRole(room.textures, "floorTexture")}
-          onCommit={set("floor_texture")}
-          target={{ ids: [id], surface: "floor" }}
-        />
-        <SurfaceField value={a.floor_shininess} onCommit={set("floor_shininess")} />
-        <h3>{t("Ceiling")}</h3>
-        <Field
-          label={t("Color")}
-          type="color"
-          value={toHex(a.ceiling_color)}
-          onCommit={set("ceiling_color")}
-        />
-        {a.ceiling_color !== null && (
-          <button type="button" className="link-button" onClick={() => set("ceiling_color")("")}>
-            {t("Default color")}
-          </button>
-        )}
-        <TextureField
-          label={t("Texture")}
-          current={byRole(room.textures, "ceilingTexture")}
-          onCommit={set("ceiling_texture")}
-          target={{ ids: [id], surface: "ceiling" }}
-        />
-        <SurfaceField value={a.ceiling_shininess} onCommit={set("ceiling_shininess")} />
-        <RoomWalls room={room} home={home} run={run} />
+        <Section id="room.floor" title={t("Floor")}>
+          <Field
+            label={t("Color")}
+            type="color"
+            value={toHex(a.floor_color)}
+            onCommit={set("floor_color")}
+          />
+          {a.floor_color !== null && (
+            <button type="button" className="link-button" onClick={() => set("floor_color")("")}>
+              {t("Default color")}
+            </button>
+          )}
+          <TextureField
+            label={t("Texture")}
+            current={byRole(room.textures, "floorTexture")}
+            onCommit={set("floor_texture")}
+            target={{ ids: [id], surface: "floor" }}
+          />
+          <SurfaceField value={a.floor_shininess} onCommit={set("floor_shininess")} />
+        </Section>
+        <Section id="room.ceiling" title={t("Ceiling")}>
+          <Field
+            label={t("Color")}
+            type="color"
+            value={toHex(a.ceiling_color)}
+            onCommit={set("ceiling_color")}
+          />
+          {a.ceiling_color !== null && (
+            <button type="button" className="link-button" onClick={() => set("ceiling_color")("")}>
+              {t("Default color")}
+            </button>
+          )}
+          <TextureField
+            label={t("Texture")}
+            current={byRole(room.textures, "ceilingTexture")}
+            onCommit={set("ceiling_texture")}
+            target={{ ids: [id], surface: "ceiling" }}
+          />
+          <SurfaceField value={a.ceiling_shininess} onCommit={set("ceiling_shininess")} />
+        </Section>
+        <Section
+          id="room.walls"
+          title={t("Walls of this room")}
+          hint={t("The sides of the walls around this room that face it")}
+        >
+          <RoomWalls room={room} home={home} run={run} />
+        </Section>
         {actions}
       </div>
     );
