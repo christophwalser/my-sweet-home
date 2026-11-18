@@ -17,7 +17,7 @@ import {
   wallAtLevel,
 } from "../model";
 import { usePreferences } from "../preferences";
-import { sameLevel } from "./drawPlan";
+import { sameLevel, underlayLevel } from "./drawPlan";
 import { levelGuides } from "./guideData";
 
 export type Segment = [Pt, Pt];
@@ -460,6 +460,31 @@ export function snapContext(
       }
     }
   });
+
+  // Walls of the underlay level: their ends and corners, to put walls exactly above the
+  // ones of the storey below (or below the ones above)
+  const underlay = purpose === "polyline" ? null : underlayLevel(home, levelId);
+  if (underlay) {
+    showHints = false;
+    home.walls.forEach((w, i) => {
+      const a = w.attrs;
+      if (a.level !== underlay || wallAtLevel(home, w, levelId)) return;
+      const s = wallShapes[i];
+      const ends: Pt[] = [
+        [a.x_start, a.y_start],
+        [a.x_end, a.y_end],
+      ];
+      const corners: Pt[] = [
+        s.left[0],
+        s.left[s.left.length - 1],
+        s.right[0],
+        s.right[s.right.length - 1],
+      ];
+      for (const q of ends.filter(keep)) named(q, "wall end (other level)");
+      for (const q of corners.filter(keep)) named(q, "wall corner (other level)");
+      refs.push(...ends.filter(keep), ...corners.filter(keep));
+    });
+  }
 
   if (purpose !== "polyline") {
     for (const room of home.rooms) {

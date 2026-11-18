@@ -18,6 +18,7 @@ import { levelGuides } from "../plan2d/guides";
 import { newHomeParams, prefs, usePreferences } from "../preferences";
 import { clearRecentHomes, recentHomes, recentLabel, removeRecentHome } from "../recentHomes";
 import { type Tool, useStore, VISITOR_ID } from "../store";
+import { LEVELS_3D_OPTIONS, levels3dMode } from "../view3d/levels3d";
 import type { IconName } from "./Icon";
 import { keyTarget, modalOpen } from "./keyTarget";
 import { planActions } from "./planBridge";
@@ -215,6 +216,27 @@ async function addLevel(sameElevation: boolean): Promise<void> {
   const result = (await run("level_add", params)) as { id?: string } | undefined;
   // Name the new level right away
   if (result?.id) useUi.getState().setEditingLevel(result.id);
+}
+
+/** Position of the shown level among the levels at its elevation, with their number. */
+function levelPlace(): { at: number; count: number } | null {
+  const level = currentLevel();
+  if (!level) return null;
+  const same = sortedLevels().filter((l) => l.attrs.elevation === level.attrs.elevation);
+  return { at: same.indexOf(level), count: same.length };
+}
+
+/** Whether the shown level has a neighbor at its elevation on that side of the tabs. */
+function canMoveLevel(by: number): boolean {
+  const place = levelPlace();
+  return !!place && place.at + by >= 0 && place.at + by < place.count;
+}
+
+function moveLevel(by: number): void {
+  const level = currentLevel();
+  const place = levelPlace();
+  if (!level || !place) return;
+  void run("level_update", { id: level.attrs.id, elevation_index: place.at + by });
 }
 
 /** Deletes the shown level after a confirmation (menu and properties). */
@@ -681,6 +703,30 @@ const LIST: Command[] = [
     run: () => addLevel(true),
   },
   {
+    id: "level.duplicate",
+    label: t("Duplicate level…"),
+    icon: "duplicate",
+    hint: t("Add a level with copies of the walls of this one, exactly above them"),
+    enabled: () => !!currentLevel(),
+    run: () => useUi.getState().openDialog("duplicateLevel"),
+  },
+  {
+    id: "level.moveLeft",
+    label: t("Move level to the left"),
+    icon: "level",
+    hint: t("Change the order of the levels at the same elevation"),
+    enabled: () => canMoveLevel(-1),
+    run: () => moveLevel(-1),
+  },
+  {
+    id: "level.moveRight",
+    label: t("Move level to the right"),
+    icon: "level",
+    hint: t("Change the order of the levels at the same elevation"),
+    enabled: () => canMoveLevel(1),
+    run: () => moveLevel(1),
+  },
+  {
     id: "level.rename",
     label: t("Rename level"),
     icon: "level",
@@ -705,18 +751,21 @@ const LIST: Command[] = [
     enabled: () => !!currentLevel(),
     run: deleteLevel,
   },
-  {
-    id: "level.allIn3D",
-    label: t("Show all levels in 3D"),
-    icon: "alllevels",
-    hint: t("Show all levels, not only the selected one and the ones below"),
-    enabled: () => (store().opened?.home.levels.length ?? 0) > 1,
-    checked: () => store().opened?.home.environment?.attrs.all_levels_visible === true,
-    run: () =>
-      void run("view3d_update", {
-        all_levels_visible: store().opened?.home.environment?.attrs.all_levels_visible !== true,
-      }),
-  },
+  // Levels shown in the 3D view
+  ...LEVELS_3D_OPTIONS.map(
+    ([mode, label]): Command => ({
+      id: `view3d.levels.${mode}`,
+      label,
+      icon: "alllevels",
+      hint: t("Levels shown in the 3D view"),
+      enabled: () => (store().opened?.home.levels.length ?? 0) > 1,
+      checked: () => {
+        const home = store().opened?.home;
+        return !!home && levels3dMode(home) === mode;
+      },
+      run: () => void run("view3d_update", { levels: mode }),
+    }),
+  ),
   // Furniture
   {
     id: "furniture.import",
@@ -1124,11 +1173,14 @@ export const MENUS: Menu[] = [
       ...(sortedLevels().length > 0 ? [sep] : []),
       cmd("level.add"),
       cmd("level.addSame"),
-      cmd("level.rename"),
-      cmd("level.viewable"),
-      cmd("level.delete"),
+      cmd("level.duplicate"),
       sep,
-      cmd("level.allIn3D"),
+      cmd("level.rename"),
+      cmd("level.moveLeft"),
+      cmd("level.moveRight"),
+      cmd("level.viewable"),
+      sep,
+      cmd("level.delete"),
     ],
   },
   {
@@ -1172,7 +1224,12 @@ export const MENUS: Menu[] = [
       },
       sep,
       cmd("view3d.shadows"),
-      cmd("level.allIn3D"),
+      {
+        kind: "submenu",
+        label: t("Levels shown"),
+        icon: "alllevels",
+        entries: () => LEVELS_3D_OPTIONS.map(([mode]) => cmd(`view3d.levels.${mode}`)),
+      },
       cmd("view3d.settings"),
       cmd("view3d.location"),
       sep,

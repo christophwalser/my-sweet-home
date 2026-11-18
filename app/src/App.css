@@ -530,6 +530,38 @@ input[type="search"]:focus {
   opacity: 0.6;
 }
 
+.level-tabs button .icon {
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+.levels3d-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+}
+
+.levels3d-row.current {
+  font-weight: 600;
+}
+
+.check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.check-list label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .level-tabs button.active {
   background: var(--panel-2);
   border-color: var(--border);

@@ -96,10 +96,25 @@ struct PhotoParams {
     height: Option<i64>,
 }
 
+#[derive(Deserialize, JsonSchema, Clone, Copy, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum Levels3d {
+    Selected,
+    UpToSelected,
+    All,
+}
+
+/// Home property that marks "only the selected level" in the 3D view; Sweet Home 3D only
+/// knows all levels or the ones up to the selected level.
+pub const LEVELS_3D_PROPERTY: &str = "mySweetHome.levelsIn3d";
+
 #[derive(Deserialize, JsonSchema)]
 struct View3dParams {
     /// Show all levels in the 3D view (otherwise the selected level and the ones below)
     all_levels_visible: Option<bool>,
+    /// Levels shown in the 3D view: "selected" (only the selected level), "up_to_selected"
+    /// (the selected level and the ones below) or "all"
+    levels: Option<Levels3d>,
     /// Color of the ground "#RRGGBB" ("" = default)
     ground_color: Option<String>,
     /// Catalog texture of the ground ("" = none, the color is used)
@@ -290,7 +305,7 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "view3d_update",
-        "Changes the settings of the 3D view stored in the home: all levels visible, ground and \
+        "Changes the settings of the 3D view stored in the home: the levels shown, ground and \
          sky color or texture, light brightness and walls transparency.",
         true,
         |doc, p: View3dParams| {
@@ -311,6 +326,9 @@ pub(super) fn register(r: &mut Registry) {
             let a = &mut env.attrs;
             if let Some(v) = p.all_levels_visible {
                 a.all_levels_visible = Some(v);
+            }
+            if let Some(l) = p.levels {
+                a.all_levels_visible = Some(l == Levels3d::All);
             }
             if let Some(c) = ground_color {
                 a.ground_color = c;
@@ -341,6 +359,18 @@ pub(super) fn register(r: &mut Registry) {
                 if value.is_some() {
                     env.textures.retain(|t| t.role.as_deref() != Some(role));
                     env.textures.extend(new);
+                }
+            }
+            if p.levels.is_some() || p.all_levels_visible.is_some() {
+                let home = doc.home_mut();
+                home.properties.retain(|pr| pr.name != LEVELS_3D_PROPERTY);
+                if p.levels == Some(Levels3d::Selected) {
+                    home.properties.push(Property {
+                        name: LEVELS_3D_PROPERTY.into(),
+                        value: "selected".into(),
+                        kind: None,
+                        ..Default::default()
+                    });
                 }
             }
             Ok(view3d_json(doc.home()))
@@ -521,8 +551,14 @@ fn view3d_json(home: &Home) -> Value {
     let gray = a
         .and_then(|a| a.light_color)
         .map_or(DEFAULT_LIGHT_GRAY, |c| ((c.0 >> 8) & 0xFF) as f32);
+    let all = a.and_then(|a| a.all_levels_visible).unwrap_or(false);
+    let only_selected = home
+        .properties
+        .iter()
+        .any(|p| p.name == LEVELS_3D_PROPERTY && p.value == "selected");
     json!({
-        "all_levels_visible": a.and_then(|a| a.all_levels_visible).unwrap_or(false),
+        "all_levels_visible": all,
+        "levels": if all { "all" } else if only_selected { "selected" } else { "up_to_selected" },
         "ground_color": color_hex(a.and_then(|a| a.ground_color)),
         "ground_texture": texture("groundTexture"),
         "sky_color": color_hex(a.and_then(|a| a.sky_color)),

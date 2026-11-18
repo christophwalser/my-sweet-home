@@ -46,24 +46,7 @@ export function levelInfos(home: Home): Map<string | null, LevelInfo> {
   return map;
 }
 
-/** Levels shown in 3D: the selected level and all levels below it. */
-export function visibleLevels(home: Home, selected: string | null): Set<string | null> {
-  const set = new Set<string | null>();
-  if (home.levels.length === 0) {
-    set.add(null);
-    return set;
-  }
-  const all = home.environment?.attrs.all_levels_visible === true;
-  const sel = home.levels.find((l) => l.attrs.id === selected);
-  const maxElevation = sel ? sel.attrs.elevation : Number.POSITIVE_INFINITY;
-  for (const l of home.levels) {
-    // `visible` is derived state saved by Sweet Home 3D (levels above the selected
-    // one); only `viewable` is the user's choice.
-    if (l.attrs.viewable === false) continue;
-    if (all || l.attrs.elevation <= maxElevation) set.add(l.attrs.id);
-  }
-  return set;
-}
+export { visibleLevels } from "./levels3d";
 
 export function colorOf(argb: number | null | undefined, fallback: number): THREE.Color {
   return new THREE.Color(argb === null || argb === undefined ? fallback : argb & 0xffffff);

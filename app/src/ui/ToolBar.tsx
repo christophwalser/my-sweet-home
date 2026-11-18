@@ -235,10 +235,10 @@ export default function ToolBar() {
             ...(levels.length ? [{ kind: "separator" } as MenuEntry] : []),
             cmd("level.add"),
             cmd("level.addSame"),
+            cmd("level.duplicate"),
+            { kind: "separator" },
             cmd("level.rename"),
             cmd("level.delete"),
-            { kind: "separator" },
-            cmd("level.allIn3D"),
           ]}
         />
         <ToolButton id="level.add" />

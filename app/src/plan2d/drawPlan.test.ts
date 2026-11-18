@@ -14,10 +14,12 @@ import {
   backgroundImageOf,
   boundsCenter,
   labelCenter,
+  levelAbove,
   levelBelow,
   planBounds,
   roomLabelPositions,
   sameLevel,
+  underlayLevel,
 } from "./drawPlan";
 import { pointInPolygon } from "./interaction";
 
@@ -55,6 +57,18 @@ describe("levelBelow", () => {
     expect(levelBelow(home, "ground")).toBeNull();
     expect(levelBelow(home, "nope")).toBeNull();
     expect(levelBelow(home, null)).toBeNull();
+  });
+
+  it("finds the next higher level", () => {
+    expect(levelAbove(home, "ground")).toBe("mezzanine");
+    expect(levelAbove(home, "mezzanine")).toBe("first");
+    expect(levelAbove(home, "first")).toBeNull();
+  });
+
+  it("gives the underlay of the chosen mode", () => {
+    expect(underlayLevel(home, "mezzanine", "below")).toBe("ground");
+    expect(underlayLevel(home, "mezzanine", "above")).toBe("first");
+    expect(underlayLevel(home, "mezzanine", "off")).toBeNull();
   });
 });
 

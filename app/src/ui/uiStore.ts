@@ -21,6 +21,7 @@ export type DialogName =
   | "shortcuts"
   | "rotate"
   | "move"
+  | "duplicateLevel"
   | "help"
   | "about"
   | "plugins";

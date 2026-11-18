@@ -1,4 +1,5 @@
-//! Tests of the level commands: level_add, level_update and level_select.
+//! Tests of the level commands: level_add, level_update, level_duplicate and level_select,
+//! and of the levels shown in 3D (view3d_update).
 
 mod common;
 
@@ -330,4 +331,269 @@ fn level_select_unknown_level_fails() {
     add_level(&r, &mut doc, json!({ "name": "Upper" }));
     let err = run_err(&r, &mut doc, "level_select", json!({ "id": "level-nope" }));
     assert!(err.contains("unknown level"), "{err}");
+}
+
+#[test]
+fn level_update_can_move_the_levels_above_and_adjust_the_walls() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    run(
+        &r,
+        &mut doc,
+        "wall_add",
+        json!({ "x_start": 0, "y_start": 0, "x_end": 300, "y_end": 0 }),
+    );
+    run(
+        &r,
+        &mut doc,
+        "wall_add",
+        json!({ "x_start": 0, "y_start": 0, "x_end": 0, "y_end": 300, "height": 100 }),
+    );
+    let upper = add_level(&r, &mut doc, json!({ "name": "Upper" }));
+    let attic = add_level(&r, &mut doc, json!({ "name": "Attic" }));
+    let ground = doc.home().levels[0].attrs.id.clone();
+    assert_eq!(level(&doc, &upper).elevation, 262.0);
+    assert_eq!(level(&doc, &attic).elevation, 524.0);
+
+    let before = snapshot(&doc);
+    run(
+        &r,
+        &mut doc,
+        "level_update",
+        json!({ "id": ground, "height": 270, "shift_above": true, "adjust_walls": true }),
+    );
+    assert_eq!(level(&doc, &upper).elevation, 282.0);
+    assert_eq!(level(&doc, &attic).elevation, 544.0);
+    let walls = &doc.home().walls;
+    assert_eq!(walls[0].attrs.height, Some(270.0), "wall of full height");
+    assert_eq!(
+        walls[1].attrs.height,
+        Some(100.0),
+        "the parapet keeps its height"
+    );
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+
+    // Without the options only the level itself changes
+    run(
+        &r,
+        &mut doc,
+        "level_update",
+        json!({ "id": ground, "height": 250 }),
+    );
+    assert_eq!(level(&doc, &upper).elevation, 282.0);
+    assert_eq!(doc.home().walls[0].attrs.height, Some(270.0));
+
+    // Moving a level in the middle takes only the ones above along
+    run(
+        &r,
+        &mut doc,
+        "level_update",
+        json!({ "id": upper, "elevation": 300, "shift_above": true }),
+    );
+    assert_eq!(level(&doc, &ground).elevation, 0.0);
+    assert_eq!(level(&doc, &attic).elevation, 562.0);
+}
+
+#[test]
+fn level_update_reorders_levels_at_the_same_elevation() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let a = add_level(&r, &mut doc, json!({ "name": "A", "elevation": 0 }));
+    let b = add_level(&r, &mut doc, json!({ "name": "B", "elevation": 0 }));
+    let ground = doc.home().levels[0].attrs.id.clone();
+    let index = |doc: &Document, id: &str| level(doc, id).elevation_index;
+    assert_eq!(
+        (index(&doc, &ground), index(&doc, &a), index(&doc, &b)),
+        (Some(0), Some(1), Some(2))
+    );
+    run(
+        &r,
+        &mut doc,
+        "level_update",
+        json!({ "id": b, "elevation_index": 0 }),
+    );
+    assert_eq!(
+        (index(&doc, &b), index(&doc, &ground), index(&doc, &a)),
+        (Some(0), Some(1), Some(2))
+    );
+    // Out of range: at the end
+    run(
+        &r,
+        &mut doc,
+        "level_update",
+        json!({ "id": b, "elevation_index": 99 }),
+    );
+    assert_eq!(
+        (index(&doc, &ground), index(&doc, &a), index(&doc, &b)),
+        (Some(0), Some(1), Some(2))
+    );
+}
+
+// ---------------------------------------------------------------- level_duplicate
+
+#[test]
+fn level_duplicate_copies_the_walls_to_the_same_place() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    run(
+        &r,
+        &mut doc,
+        "wall_add_path",
+        json!({ "points": [[0, 0], [400, 0], [400, 300]] }),
+    );
+    run(
+        &r,
+        &mut doc,
+        "room_add",
+        json!({ "points": [[0, 0], [400, 0], [400, 300]] }),
+    );
+    run(
+        &r,
+        &mut doc,
+        "label_add",
+        json!({ "text": "A", "x": 10, "y": 10 }),
+    );
+    doc.home_mut().furniture.push(piece("chair"));
+    add_level(&r, &mut doc, json!({ "name": "Upper", "height": 240 }));
+    let ground = doc.home().levels[0].attrs.id.clone();
+
+    let before = snapshot(&doc);
+    let res = run(&r, &mut doc, "level_duplicate", json!({ "id": ground }));
+    let id = res["id"].as_str().unwrap().to_owned();
+    assert_eq!(res["elements"], json!(2));
+    let new = level(&doc, &id);
+    assert_eq!(new.name, "Level 0 (2)");
+    assert_eq!(
+        (new.elevation, new.height, new.floor_thickness),
+        (262.0 + 240.0 + 12.0, 250.0, 12.0),
+        "on top of the highest level, with the size of the copied one"
+    );
+    let home = doc.home();
+    assert_eq!(home.attrs.selected_level.as_deref(), Some(id.as_str()));
+    let copies: Vec<_> = home
+        .walls
+        .iter()
+        .filter(|w| w.attrs.level.as_deref() == Some(id.as_str()))
+        .collect();
+    assert_eq!(copies.len(), 2);
+    let a = &copies[0].attrs;
+    assert_eq!(
+        (a.x_start, a.y_start, a.x_end, a.y_end),
+        (0.0, 0.0, 400.0, 0.0)
+    );
+    assert_eq!(
+        a.wall_at_end.as_deref(),
+        Some(copies[1].attrs.id.as_str()),
+        "the copies are joined to each other"
+    );
+    assert_eq!(home.rooms.len(), 1, "rooms only on request");
+    assert_eq!(home.labels.len(), 1);
+    assert_eq!(home.furniture.len(), 1);
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+
+    let reopened = save_and_reopen(&r, &mut doc, "level_duplicate");
+    assert_eq!(reopened.home().levels.len(), 3);
+    assert_eq!(reopened.home().walls.len(), 4);
+}
+
+#[test]
+fn level_duplicate_copies_rooms_furniture_and_annotations_on_request() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    run(
+        &r,
+        &mut doc,
+        "wall_add",
+        json!({ "x_start": 0, "y_start": 0, "x_end": 300, "y_end": 0 }),
+    );
+    run(
+        &r,
+        &mut doc,
+        "room_add",
+        json!({ "points": [[0, 0], [100, 0], [100, 100]] }),
+    );
+    run(
+        &r,
+        &mut doc,
+        "label_add",
+        json!({ "text": "A", "x": 10, "y": 10 }),
+    );
+    doc.home_mut().furniture.push(piece("chair"));
+    add_level(&r, &mut doc, json!({ "name": "Upper" }));
+    let ground = doc.home().levels[0].attrs.id.clone();
+    let res = run(
+        &r,
+        &mut doc,
+        "level_duplicate",
+        json!({
+            "id": ground, "name": "Copy", "elevation": 600,
+            "rooms": true, "furniture": true, "annotations": true
+        }),
+    );
+    assert_eq!(res["elements"], json!(4));
+    let id = res["id"].as_str().unwrap();
+    let new = level(&doc, id);
+    assert_eq!((new.name.as_str(), new.elevation), ("Copy", 600.0));
+    let home = doc.home();
+    let on = |l: &Option<String>| l.as_deref() == Some(id);
+    assert_eq!(home.rooms.iter().filter(|r| on(&r.attrs.level)).count(), 1);
+    assert_eq!(home.labels.iter().filter(|l| on(&l.attrs.level)).count(), 1);
+    let mut pieces = 0;
+    home.for_each_piece(|p| pieces += usize::from(on(&p.attrs.level)));
+    assert_eq!(pieces, 1);
+}
+
+#[test]
+fn level_duplicate_unknown_level_fails() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    add_level(&r, &mut doc, json!({ "name": "Upper" }));
+    let err = run_err(
+        &r,
+        &mut doc,
+        "level_duplicate",
+        json!({ "id": "level-nope" }),
+    );
+    assert!(err.contains("unknown level"), "{err}");
+}
+
+// ---------------------------------------------------------------- view3d_update levels
+
+#[test]
+fn view3d_update_sets_the_levels_shown() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    add_level(&r, &mut doc, json!({ "name": "Upper" }));
+    let v = run(&r, &mut doc, "view3d_update", json!({}));
+    assert_eq!(v["levels"], json!("up_to_selected"));
+    let v = run(
+        &r,
+        &mut doc,
+        "view3d_update",
+        json!({ "levels": "selected" }),
+    );
+    assert_eq!(v["levels"], json!("selected"));
+    assert_eq!(v["all_levels_visible"], json!(false));
+    let mut reopened = save_and_reopen(&r, &mut doc, "view3d_levels");
+    let v = run(&r, &mut reopened, "view3d_update", json!({}));
+    assert_eq!(v["levels"], json!("selected"));
+    let v = run(&r, &mut doc, "view3d_update", json!({ "levels": "all" }));
+    assert_eq!(v["levels"], json!("all"));
+    assert_eq!(v["all_levels_visible"], json!(true));
+    // The old switch still works and ends "only the selected level"
+    run(
+        &r,
+        &mut doc,
+        "view3d_update",
+        json!({ "levels": "selected" }),
+    );
+    let v = run(
+        &r,
+        &mut doc,
+        "view3d_update",
+        json!({ "all_levels_visible": false }),
+    );
+    assert_eq!(v["levels"], json!("up_to_selected"));
 }

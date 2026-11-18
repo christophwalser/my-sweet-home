@@ -52,6 +52,10 @@ type State = {
   arcExtent: number;
   /** Line of a wall that stays when its thickness is changed in the properties */
   wallKeepLine: WallLine;
+  /** A new elevation or height of a level moves the levels above along (properties) */
+  levelShiftAbove: boolean;
+  /** A new height of a level is given to its walls of full height (properties) */
+  levelAdjustWalls: boolean;
   /** Incremented to ask the plan to fit the view (e.g. after importing a background image) */
   fitRequest: number;
   requestFit: () => void;
@@ -109,6 +113,8 @@ export const useStore = create<State>((set, get) => ({
   wallLine: "axis",
   arcExtent: 90,
   wallKeepLine: "axis",
+  levelShiftAbove: true,
+  levelAdjustWalls: true,
   highlightSide: null,
   fitRequest: 0,
   requestFit: () => set((s) => ({ fitRequest: s.fitRequest + 1 })),

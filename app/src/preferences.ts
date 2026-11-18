@@ -7,6 +7,9 @@ import type { LengthUnit } from "./units";
 /** A catalog server of the user (msh-catalog feed, see docs/CATALOG_FEED.md). */
 export type CatalogFeed = { id: string; name: string; url: string; token: string };
 
+/** The level shown as an underlay of the plan: the one below, the one above or none. */
+export type Underlay = "below" | "above" | "off";
+
 export type Preferences = {
   // Plan
   /** Rulers along the top and left edge of the plan */
@@ -25,6 +28,8 @@ export type Preferences = {
   snapToRulers: boolean;
   /** Radius of the magnetism in screen pixels */
   snapRadius: number;
+  /** Level shown faded under the plan of the shown level, and attracting the pointer */
+  underlay: Underlay;
   /** Furniture in the plan seen from above (rendered from the model) instead of its icon */
   furnitureTopView: boolean;
   /** Rooms in the plan: their floor color or texture, or one neutral color */
@@ -90,6 +95,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   snapObjects: true,
   snapToRulers: true,
   snapRadius: 10,
+  underlay: "below",
   furnitureTopView: true,
   roomRendering: "floor",
   leftSideColor: "#e8913a",

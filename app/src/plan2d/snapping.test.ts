@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { Pt } from "../model";
 import { usePreferences } from "../preferences";
-import { makeHome, makeRoom, makeWall, roundPt, straightShape } from "../testFixtures";
+import { makeHome, makeLevel, makeRoom, makeWall, roundPt, straightShape } from "../testFixtures";
 import {
   offsetOutline,
   pointKey,
@@ -33,6 +33,7 @@ afterEach(() => {
     snapAngles: true,
     snapObjects: true,
     snapToRulers: true,
+    underlay: "below",
   });
 });
 
@@ -536,5 +537,43 @@ describe("ruler guides and the snap switches", () => {
       snapContext("room", home, shapes, null, 1),
     );
     expect(angleOf([0, 100], free.pt)).toBeCloseTo(3);
+  });
+});
+
+describe("snapContext with an underlay level", () => {
+  const below = makeWall("below", [0, 0], [400, 0], { level: "ground", thickness: 20 });
+  const own = makeWall("own", [0, 300], [400, 300], { level: "first", thickness: 20 });
+  const above = makeWall("above", [50, 50], [50, 250], { level: "roof", thickness: 20 });
+  const home = makeHome({
+    levels: [makeLevel("ground", 0), makeLevel("first", 262), makeLevel("roof", 524)],
+    walls: [below, own, above],
+  });
+  const shapes = home.walls.map(straightShape);
+
+  it("offers the wall ends and corners of the level below", () => {
+    const c = snapContext("wall", home, shapes, "first", 10);
+    expect(c.labels?.get(pointKey([400, 0]))).toBe("wall end (other level)");
+    expect(c.labels?.get(pointKey([400, -10]))).toBe("wall corner (other level)");
+    expect(c.refs).toContainEqual([0, 0]);
+    // The level above is not the underlay
+    expect(c.labels?.get(pointKey([50, 50]))).toBeUndefined();
+    expect(snapDraw([398, 2], null, c).pt).toEqual([400, 0]);
+  });
+
+  it("follows the underlay chosen in the status bar", () => {
+    usePreferences.setState({ underlay: "above" });
+    const up = snapContext("wall", home, shapes, "first", 10);
+    expect(up.labels?.get(pointKey([50, 50]))).toBe("wall end (other level)");
+    expect(up.labels?.get(pointKey([400, 0]))).toBeUndefined();
+    usePreferences.setState({ underlay: "off" });
+    const off = snapContext("wall", home, shapes, "first", 10);
+    expect(off.labels?.get(pointKey([50, 50]))).toBeUndefined();
+    expect(off.labels?.get(pointKey([400, 0]))).toBeUndefined();
+  });
+
+  it("gives nothing without magnetism to objects", () => {
+    usePreferences.setState({ snapObjects: false });
+    const c = snapContext("wall", home, shapes, "first", 10);
+    expect(c.points).toHaveLength(0);
   });
 });

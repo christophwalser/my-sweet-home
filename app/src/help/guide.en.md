@@ -63,11 +63,13 @@ Terrain models, laser scans or neighbor houses imported as furniture are marked 
 
 # Levels and stairs
 
-- The **Levels** menu adds levels above, at the same elevation, or deletes one. Each level has a tab above the plan.
-- The properties of a level set its name, elevation, height and floor thickness.
-- To take walls and rooms to another level, copy them, switch to that level and paste: the copies lie exactly above the originals. Pasted on their own level they are moved by 20 cm.
+- The **Levels** menu adds levels above, at the same elevation, or deletes one. Each level has a tab above the plan; **+** next to the tabs adds a level, a right-click on a tab renames, duplicates, moves or deletes it. A crossed-out eye marks a level hidden in 3D.
+- **Duplicate level…** starts the next storey: the walls of the level are copied to a new level on top, exactly above their originals. Tick rooms, doors and windows, furniture or texts to copy them too.
+- The properties of a level set its name, elevation, height and floor thickness. With **Levels above follow** a new elevation or height moves the levels above along; with **Walls follow the height** the walls as high as the level get the new height, lower ones such as parapets keep theirs.
+- The level below lies faded under the plan, and its wall ends and corners attract the pointer, so walls land exactly above each other. The status bar switches this underlay to the level above or off.
+- To take single walls and rooms to another level, copy them, switch to that level and paste: the copies lie exactly above the originals. Pasted on their own level they are moved by 20 cm.
 - A staircase from the catalog cuts a hole in the floor above. In the virtual visit you can walk up its steps.
-- **3D view › All levels** shows the levels above the selected one too.
+- **Levels** in the 3D view chooses what it shows: only the selected level, the levels up to it or all of them. The ticks below switch single levels off for 3D.
 
 # Furniture
 

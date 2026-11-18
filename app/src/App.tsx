@@ -16,16 +16,19 @@ import { closeView3DWindow, findView3DWindow, syncUiState } from "./layout/view3
 import PreferencesDialog from "./PreferencesDialog";
 import BackgroundImageWizard from "./panels/BackgroundImageWizard";
 import PropertiesPanel from "./panels/PropertiesPanel";
+import ContextMenu from "./plan2d/ContextMenu";
 import PlanView from "./plan2d/PlanView";
 import StatusBar from "./plan2d/StatusBar";
 import { collectTopViews } from "./plan2d/topView";
 import { addRecentHome } from "./recentHomes";
 import { applyHome, subscribeToHomeChanges, useStore } from "./store";
 import CommandPalette from "./ui/CommandPalette";
-import { chooseFile, detach3D, handleGlobalShortcut } from "./ui/commands";
+import { chooseFile, command, detach3D, handleGlobalShortcut, runCommand } from "./ui/commands";
 import { enableDialogDragging } from "./ui/dialogDragging";
 import Icon, { type IconName } from "./ui/Icon";
+import LevelDuplicateDialog from "./ui/LevelDuplicateDialog";
 import MenuBar from "./ui/MenuBar";
+import { commandItem } from "./ui/menuItems";
 import ShortcutsDialog from "./ui/ShortcutsDialog";
 import ToolBar from "./ui/ToolBar";
 import ToolOptions from "./ui/ToolOptions";
@@ -109,6 +112,9 @@ export default function App() {
   const selectedLevel = useStore((s) => s.selectedLevel);
   const tool = useStore((s) => s.tool);
   const { openHome, run, selectLevel, clearError } = useStore.getState();
+
+  // Context menu of a level tab; the tab is selected first, so its commands act on it
+  const [levelMenu, setLevelMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Error messages disappear after a few seconds, unless the mouse rests on them
   const [errorHover, setErrorHover] = useState(false);
@@ -328,6 +334,7 @@ export default function App() {
       {(dialog === "rotate" || dialog === "move") && (
         <TransformDialog mode={dialog} onClose={closeDialog} />
       )}
+      {dialog === "duplicateLevel" && <LevelDuplicateDialog onClose={closeDialog} />}
       {dialog === "help" && <HelpDialog onClose={closeDialog} />}
       {paletteOpen && <CommandPalette />}
 
@@ -388,19 +395,51 @@ export default function App() {
                       }`}
                       onClick={() => selectLevel(l.attrs.id)}
                       onDoubleClick={() => setEditingLevel(l.attrs.id)}
-                      title={t(
-                        "Elevation {v0}{v1} · double-click to rename · the level below is shown faded in the plan",
-                        {
-                          v0: formatPrecise(l.attrs.elevation),
-                          v1: l.attrs.viewable === false ? " · hidden in 3D" : "",
-                        },
-                      )}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        selectLevel(l.attrs.id);
+                        setLevelMenu({ x: e.clientX, y: e.clientY });
+                      }}
+                      title={
+                        t("Elevation {v} · double-click to rename · right-click for more", {
+                          v: formatPrecise(l.attrs.elevation),
+                        }) + (l.attrs.viewable === false ? ` · ${t("hidden in 3D")}` : "")
+                      }
                     >
+                      {l.attrs.viewable === false && <Icon name="hidden" size={12} />}
                       {l.attrs.name}
                     </button>
                   ),
                 )}
+                <button
+                  type="button"
+                  className="add-level"
+                  title={command("level.add").hint}
+                  aria-label={command("level.add").label}
+                  onClick={() => runCommand(command("level.add"))}
+                >
+                  +
+                </button>
               </nav>
+              {levelMenu && (
+                <ContextMenu
+                  x={levelMenu.x}
+                  y={levelMenu.y}
+                  fixed
+                  onClose={() => setLevelMenu(null)}
+                  items={[
+                    commandItem("level.rename"),
+                    commandItem("level.duplicate"),
+                    commandItem("level.addSame"),
+                    { separator: true },
+                    commandItem("level.moveLeft"),
+                    commandItem("level.moveRight"),
+                    commandItem("level.viewable"),
+                    { separator: true },
+                    commandItem("level.delete"),
+                  ]}
+                />
+              )}
               <span className="pane-buttons">
                 {shown !== "3d" && !detached && (
                   <PaneButton

@@ -35,9 +35,10 @@ import {
   usePreferences,
 } from "../preferences";
 import { currentVisitor, setVisitor, type Tool, useStore, VISITOR_ID } from "../store";
-import { command, isEnabled, rotateSelection, runCommand } from "../ui/commands";
+import { rotateSelection } from "../ui/commands";
 import Icon from "../ui/Icon";
 import { keyTarget, modalOpen } from "../ui/keyTarget";
+import { commandItem } from "../ui/menuItems";
 import { registerPlanActions } from "../ui/planBridge";
 import { useDarkMode, useUi } from "../ui/uiStore";
 import { formatFieldValue, toUnit, unitSymbol } from "../units";
@@ -328,6 +329,7 @@ export default function PlanView() {
   const showGrid = usePreferences((s) => s.grid);
   const unit = usePreferences((s) => s.unit);
   const roomRendering = usePreferences((s) => s.roomRendering);
+  const underlay = usePreferences((s) => s.underlay);
   const leftSideColor = usePreferences((s) => s.leftSideColor);
   const rightSideColor = usePreferences((s) => s.rightSideColor);
   const magnetism = usePreferences((s) => s.magnetism);
@@ -1680,16 +1682,7 @@ export default function PlanView() {
   };
 
   /** Menu entry of a command of the registry: the same label, shortcut and state as in the menus. */
-  const reg = (id: string): MenuItem => {
-    const c = command(id);
-    return {
-      label: c.label,
-      shortcut: c.shortcut,
-      note: c.checked?.() ? "✓" : undefined,
-      disabled: !isEnabled(c),
-      action: () => runCommand(c),
-    };
-  };
+  const reg = commandItem;
 
   /** Opens the context menu for the selection as it is, from the keyboard (Shift+F10). */
   const openMenuForSelection = () => {
@@ -2315,7 +2308,7 @@ export default function PlanView() {
   useEffect(() => {
     draw();
     drawRulers();
-  }, [unit, roomRendering, leftSideColor, rightSideColor]);
+  }, [unit, roomRendering, underlay, leftSideColor, rightSideColor]);
 
   // Actions of the menus, the tool bar and the command search
   // biome-ignore lint/correctness/useExhaustiveDependencies: handlers read current state when called

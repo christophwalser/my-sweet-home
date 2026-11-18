@@ -63,11 +63,13 @@ Geländemodelle, Laserscans oder Nachbarhäuser, die als Möbel importiert sind,
 
 # Ebenen und Treppen
 
-- Das Menü **Ebenen** fügt Ebenen darüber oder auf gleicher Höhe hinzu oder löscht eine. Jede Ebene hat einen Reiter über dem Plan.
-- Die Eigenschaften einer Ebene legen Name, Höhe über Boden, Höhe und Bodendicke fest.
-- Um Wände und Räume auf eine andere Ebene zu übernehmen: kopieren, zur Ebene wechseln und einfügen. Die Kopien liegen genau über den Originalen. Auf der eigenen Ebene eingefügt, werden sie um 20 cm versetzt.
+- Das Menü **Ebenen** fügt Ebenen darüber oder auf gleicher Höhe hinzu oder löscht eine. Jede Ebene hat einen Reiter über dem Plan; **+** neben den Reitern fügt eine Ebene hinzu, ein Rechtsklick auf einen Reiter benennt sie um, dupliziert, verschiebt oder löscht sie. Ein durchgestrichenes Auge kennzeichnet eine in 3D ausgeblendete Ebene.
+- **Ebene duplizieren…** beginnt das nächste Geschoss: Die Wände der Ebene werden in eine neue Ebene darüber kopiert, genau über ihre Originale. Mit den Haken kommen Räume, Türen und Fenster, Möbel oder Texte mit.
+- Die Eigenschaften einer Ebene legen Name, Höhe über Boden, Höhe und Bodendicke fest. Mit **Ebenen darüber mitverschieben** verschiebt eine neue Höhe über Boden oder Höhe die Ebenen darüber mit; mit **Wände an Höhe anpassen** erhalten die Wände in voller Ebenenhöhe die neue Höhe, niedrigere wie Brüstungen behalten ihre.
+- Die Ebene darunter liegt blass unter dem Plan, und ihre Wandenden und Wandecken ziehen den Zeiger an, sodass Wände genau übereinander stehen. Die Statusleiste schaltet diese Unterlage auf die Ebene darüber oder aus.
+- Um einzelne Wände und Räume auf eine andere Ebene zu übernehmen: kopieren, zur Ebene wechseln und einfügen. Die Kopien liegen genau über den Originalen. Auf der eigenen Ebene eingefügt, werden sie um 20 cm versetzt.
 - Eine Treppe aus dem Katalog schneidet ein Loch in den Boden darüber. Im Rundgang kannst du ihre Stufen hinaufgehen.
-- **3D-Ansicht › Alle Ebenen** zeigt auch die Ebenen über der gewählten.
+- **Ebenen** in der 3D-Ansicht legt fest, was sie zeigt: nur die gewählte Ebene, die Ebenen bis zu ihr oder alle. Die Haken darunter blenden einzelne Ebenen in 3D aus.
 
 # Möbel
 

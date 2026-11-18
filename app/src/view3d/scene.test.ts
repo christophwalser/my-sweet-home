@@ -49,6 +49,13 @@ describe("visibleLevels", () => {
     expect(visibleLevels(makeHome({ levels, environment }), "ground").size).toBe(3);
   });
 
+  it("shows only the selected level when the home says so", () => {
+    const properties = [{ name: "mySweetHome.levelsIn3d", value: "selected" }];
+    expect([...visibleLevels(makeHome({ levels, properties }), "first")]).toEqual(["first"]);
+    // Without a selected level there is nothing to restrict to
+    expect(visibleLevels(makeHome({ levels, properties }), "nope").size).toBe(3);
+  });
+
   it("hides levels the user made unviewable", () => {
     const hidden = [...levels.slice(0, 2), makeLevel("roof", 500, { viewable: false })];
     expect(visibleLevels(makeHome({ levels: hidden }), "roof").has("roof")).toBe(false);

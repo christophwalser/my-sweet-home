@@ -1236,6 +1236,33 @@ the process tree (the app and its WebView2 processes; Sweet Home 3D 7.6.1 is one
 - Open from the review: door and window tools with built-in models, guide lines dragged out
   of the edge rulers, configurable shortcuts, align and array copy for walls and texts.
 
+### 4.51 Levels after the UX review (2026-11-18)
+
+- `level_duplicate` (ID, optional name and elevation; `rooms`, `openings`, `furniture`,
+  `annotations`): a new level on top of the highest one with copies of the walls of the
+  given level at the same place, made with the clipboard code (`Clipboard::copy` and `paste`
+  with a zero offset), so joins between the copies and their resources are kept. The dialog
+  is `ui/LevelDuplicateDialog.tsx`.
+- `level_update` takes `shift_above` (levels above move by the change of this level's top),
+  `adjust_walls` (walls as high as the old level height get the new one; lower walls and
+  sloped ends stay) and `elevation_index` (order among levels at the same elevation, the
+  others are renumbered). The two switches of the properties panel live in the store and are
+  on by default; the command defaults stay off.
+- Underlay of the plan: the preference `underlay` (below, above, off; switch in the status
+  bar) chooses the level drawn faded under the plan (`underlayLevel` in `plan2d/drawPlan.ts`).
+  `snapContext` offers the wall ends and side corners of that level as points and alignment
+  references ("wall end (other level)", "wall corner (other level)").
+- Level tabs: "+" adds a level, a right-click selects the tab and opens a menu made from the
+  registry (`ui/menuItems.ts`, also used by the plan): rename, duplicate, add at the same
+  elevation, move left or right, show in 3D, delete. A level hidden in 3D shows an icon.
+- Levels in 3D: `view3d_update` takes `levels` (selected, up_to_selected, all). "All" is
+  Sweet Home 3D's `allLevelsVisible`; "selected" is the home property
+  `mySweetHome.levelsIn3d`, which Sweet Home 3D keeps and ignores. `view3d/levels3d.ts` holds
+  the mode and `visibleLevels`. The 3D view has one **Levels** popover with the mode and a
+  tick per level; the "All levels" check box and the "Visible in 3D" field of the properties
+  are gone.
+- Open from the review: a table of all levels.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

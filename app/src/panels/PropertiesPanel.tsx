@@ -653,6 +653,8 @@ export default function PropertiesPanel() {
   const levelId = useStore((s) => s.selectedLevel);
   const run = useStore((s) => s.run);
   const keepLine = useStore((s) => s.wallKeepLine);
+  const shiftAbove = useStore((s) => s.levelShiftAbove);
+  const adjustWalls = useStore((s) => s.levelAdjustWalls);
   if (!opened) return <div className="props muted">{t("No home open")}</div>;
   const home = opened.home;
 
@@ -829,14 +831,27 @@ export default function PropertiesPanel() {
               type="number"
               unit="cm"
               value={level.attrs.elevation}
-              onCommit={(v) => void run("level_update", { id: level.attrs.id, elevation: v })}
+              onCommit={(v) =>
+                void run("level_update", {
+                  id: level.attrs.id,
+                  elevation: v,
+                  shift_above: shiftAbove,
+                })
+              }
             />
             <Field
               label={t("Height")}
               type="number"
               unit="cm"
               value={level.attrs.height}
-              onCommit={(v) => void run("level_update", { id: level.attrs.id, height: v })}
+              onCommit={(v) =>
+                void run("level_update", {
+                  id: level.attrs.id,
+                  height: v,
+                  shift_above: shiftAbove,
+                  adjust_walls: adjustWalls,
+                })
+              }
             />
             <Field
               label={t("Floor thickness")}
@@ -846,11 +861,22 @@ export default function PropertiesPanel() {
               onCommit={(v) => void run("level_update", { id: level.attrs.id, floor_thickness: v })}
             />
             <Field
-              label={t("Visible in 3D")}
+              label={t("Levels above follow")}
               type="checkbox"
-              value={level.attrs.viewable !== false}
-              onCommit={(v) => void run("level_update", { id: level.attrs.id, viewable: v })}
+              value={shiftAbove}
+              onCommit={(v) => useStore.setState({ levelShiftAbove: v === true })}
             />
+            <Field
+              label={t("Walls follow the height")}
+              type="checkbox"
+              value={adjustWalls}
+              onCommit={(v) => useStore.setState({ levelAdjustWalls: v === true })}
+            />
+            <p className="muted small">
+              {t(
+                "A new elevation or height moves the levels above along, and walls as high as the level get the new height.",
+              )}
+            </p>
             <div className="prop-actions">
               <button
                 type="button"
