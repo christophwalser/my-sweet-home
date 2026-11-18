@@ -1342,6 +1342,41 @@ the process tree (the app and its WebView2 processes; Sweet Home 3D 7.6.1 is one
   with fractions in the fields, units in the library editor, preferences that apply only
   with OK.
 
+### 4.54 Speed of edits (2026-11-18)
+
+Measured with `scripts/perf.ps1`: the app is started with `MSH_PERF_OUT`, opens a home, runs
+typical edits through `execute` (the path of the user's actions) and writes when each stage
+was reached (`app/src/perf.ts`, marks from `perfMarks.ts`, timings of the core from
+`state::execute`). Example home with 49 walls and 132 pieces, window 2560 x 1369, release
+build: an edit is in the window after about 7 ms and the window is done with it after 12 to
+30 ms; before these changes it was about 50 ms and 60 to 75 ms in a debug build.
+
+- **Only the changes are sent.** After a command the windows get a `HomePatch`
+  (`msh_core::patch::home_changes`): the changed fields of the home and, for its lists, the
+  changed or added elements plus the order of the IDs if it changed. The backend keeps the
+  state it sent last (`ActiveDoc::sent`), each state has a number (`seq`), and a window whose
+  state does not fit the base of a patch asks for the whole home (`applyUpdate` in
+  `store.ts`, `homePatch.ts`). Sending the whole home (240 KB of JSON here) cost about 45 ms
+  per edit in serializing, transfer and parsing.
+- **Unchanged parts keep their identity.** `applyPatch` reuses every element that did not
+  change; a whole home that arrives (opening, reload) goes through `shareStructure`. Views
+  compare with `===`: the 3D view keeps the objects of unchanged furniture (`pieces`) and of
+  the sky, ground, walls, rooms and annotations when their inputs are the same (`parts` in
+  `View3D.tsx`; of the furniture only doors, windows and staircases count for walls and
+  rooms). The catalog, the furniture list, the menu bar and the status bar are memoized and
+  subscribe to the parts of the home they show.
+- **The plan comes first.** After a change of the home the 3D view draws one frame later
+  (`renderLater`), so the plan is on the screen before the graphics card gets the new scene.
+  The plan is drawn once per change (the resize observer is no longer set up again for every
+  change, and fitting an unchanged view draws nothing).
+- The position of the sun is asked from the core only when the compass, the cameras, the
+  properties or the attributes of the home changed, not after every edit.
+- A plan that is collapsed keeps its view (a negative scale made the drawing of the handles
+  of a selected wall throw, which took the whole window down); the plan has an error boundary.
+- What is left per edit: about 5 ms for a call to the backend and back (WebView2 and Tauri),
+  about 7 ms for rendering the panels and drawing the plan, 0 to 10 ms for the 3D scene (the
+  cut of the openings of a moved wall), and the wait for the next frame.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

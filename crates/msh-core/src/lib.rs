@@ -11,6 +11,7 @@ mod commands;
 pub mod document;
 mod model_formats;
 pub mod model_package;
+pub mod patch;
 pub mod registry;
 mod texture_formats;
 

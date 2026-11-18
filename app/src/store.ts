@@ -6,10 +6,13 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { api, type CatalogData, HOME_CHANGED_EVENT } from "./api";
 import { errorText } from "./errorText";
+import { applyPatch, type HomeUpdate, isPatch } from "./homePatch";
 import { language, t } from "./i18n";
 import { forEachGroup, forEveryPiece, type OpenedHome } from "./model";
+import { perfMark } from "./perfMarks";
 import { homeGuides } from "./plan2d/guides";
 import { usePreferences } from "./preferences";
+import { shareStructure } from "./structure";
 import type { CameraPose } from "./view3d/camera";
 
 export type ViewMode = "aerial" | "observer";
@@ -212,10 +215,51 @@ export const useStore = create<State>((set, get) => ({
   clearError: () => set({ error: null }),
 }));
 
-/** Applies a new state of the home (opened here or changed by the UI, CLI or MCP). */
-export function applyHome(next: OpenedHome): void {
+/**
+ * Applies what the backend sent after a command: the whole home, or the changes since the
+ * state the window has. Changes that do not fit that state (e.g. after a reload of the
+ * window) make it ask for the whole home.
+ */
+export function applyUpdate(update: HomeUpdate): void {
+  if (!isPatch(update)) {
+    applyHome(update);
+    return;
+  }
+  const prev = useStore.getState().opened;
+  // Already part of a whole home that arrived meanwhile
+  if (prev && prev.id === update.id && (prev.seq ?? -1) >= update.seq) return;
+  const next = prev ? applyPatch(prev, update) : null;
+  if (next) {
+    applyHome(next, true);
+    return;
+  }
+  void api
+    .currentHome()
+    .then((home) => {
+      if (home) applyHome(home);
+    })
+    .catch((e) => useStore.setState({ error: errorText(e) }));
+}
+
+/**
+ * Applies a new state of the home (opened here or changed by the UI, CLI or MCP). `patched`:
+ * the state was made from the previous one by `applyPatch` and shares its unchanged parts.
+ */
+export function applyHome(received: OpenedHome, patched = false): void {
   const { opened: prev, selectedLevel, viewMode, selection } = useStore.getState();
-  const newHome = prev?.id !== next.id;
+  const newHome = prev?.id !== received.id;
+  // The backend sends the whole home after every change. The parts that did not change keep
+  // their identity, so the views redo only what changed (the 3D view keeps the objects of all
+  // other furniture, lists skip their rows). The home itself is always a new object: that is
+  // how the views see that a command was applied.
+  const next: OpenedHome =
+    prev && !newHome && !patched
+      ? {
+          ...received,
+          home: { ...shareStructure(prev.home, received.home) },
+          wallShapes: shareStructure(prev.wallShapes, received.wallShapes),
+        }
+      : received;
   // Keep only selected elements that still exist (e.g. after undo or delete)
   const ids = newHome ? new Set<string>() : allIds(next);
   useStore.setState({
@@ -316,9 +360,11 @@ const CATALOG_CHANGED_EVENT = "catalog-changed";
  */
 export async function subscribeToHomeChanges(): Promise<() => void> {
   // Each window shows its own home: only its own changes count
-  const offHome = await getCurrentWebviewWindow().listen<OpenedHome>(HOME_CHANGED_EVENT, (e) =>
-    applyHome(e.payload),
-  );
+  const offHome = await getCurrentWebviewWindow().listen<HomeUpdate>(HOME_CHANGED_EVENT, (e) => {
+    perfMark("event");
+    applyUpdate(e.payload);
+    perfMark("applied");
+  });
   const offCatalog = await listen(CATALOG_CHANGED_EVENT, () => {
     void useStore.getState().loadCatalog(language());
   });

@@ -36,6 +36,17 @@ pub struct ActiveDoc {
     pub autosaved: u64,
     /// Name of the recovery files of this home (see `autosave`)
     pub recovery_key: String,
+    /// Number of the state of the home the windows have (counts the updates sent)
+    pub seq: u64,
+    /// The state sent last: the next update carries only what differs from it
+    sent: Option<Sent>,
+}
+
+/// State of a home as its windows have it.
+struct Sent {
+    id: u32,
+    home: Home,
+    wall_shapes: Vec<WallShape>,
 }
 
 impl ActiveDoc {
@@ -47,8 +58,70 @@ impl ActiveDoc {
             revision: 0,
             autosaved: 0,
             recovery_key: uuid::Uuid::new_v4().to_string(),
+            seq: 0,
+            sent: None,
         }
     }
+
+    /// What the windows need after a command: the changes since the state they have, or the
+    /// whole home if they have none of this home yet.
+    pub fn update(&mut self) -> HomeUpdate {
+        let wall_shapes = msh_geometry::wall_shapes(self.doc.home());
+        let base = self.seq;
+        self.seq += 1;
+        let update = match &self.sent {
+            Some(sent) if sent.id == self.id => HomeUpdate::Patch(HomePatch {
+                id: self.id,
+                base,
+                seq: self.seq,
+                path: self.doc.path.clone(),
+                modified: self.doc.modified,
+                can_undo: self.doc.can_undo(),
+                can_redo: self.doc.can_redo(),
+                undo_history: self.doc.undo_labels(HISTORY_SHOWN),
+                redo_history: self.doc.redo_labels(HISTORY_SHOWN),
+                camera_moves: self.camera_moves,
+                changes: msh_core::patch::home_changes(
+                    &sent.home,
+                    self.doc.home(),
+                    &sent.wall_shapes,
+                    &wall_shapes,
+                ),
+            }),
+            _ => HomeUpdate::Full(Box::new(HomeView::of(self))),
+        };
+        self.sent = Some(Sent {
+            id: self.id,
+            home: self.doc.home().clone(),
+            wall_shapes,
+        });
+        update
+    }
+}
+
+/// Sent to the windows of a home when it changed.
+#[derive(Serialize, Clone)]
+#[serde(untagged)]
+pub enum HomeUpdate {
+    Full(Box<HomeView>),
+    Patch(HomePatch),
+}
+
+/// The changes of a home since the state `base` (see `msh_core::patch`).
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct HomePatch {
+    pub id: u32,
+    pub base: u64,
+    pub seq: u64,
+    pub path: Option<PathBuf>,
+    pub modified: bool,
+    pub can_undo: bool,
+    pub can_redo: bool,
+    pub undo_history: Vec<String>,
+    pub redo_history: Vec<String>,
+    pub camera_moves: u32,
+    pub changes: msh_core::patch::HomeChanges,
 }
 
 /// Prefix of the labels of separate 3D windows.
@@ -62,6 +135,27 @@ pub fn home_label(window_label: &str) -> String {
         .to_owned()
 }
 
+/// Timings of the commands of a performance run (see `perf_on`).
+static PERF: Mutex<Vec<Value>> = Mutex::new(Vec::new());
+
+/// A performance run is going on: the app was started with MSH_PERF_OUT (scripts/perf.ps1).
+pub fn perf_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("MSH_PERF_OUT").is_some_and(|v| !v.is_empty()))
+}
+
+fn epoch_ms(t: std::time::SystemTime) -> f64 {
+    t.duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |d| d.as_secs_f64() * 1000.0)
+}
+
+/// The timings recorded since the last call.
+pub fn take_perf() -> Vec<Value> {
+    PERF.lock()
+        .map(|mut log| std::mem::take(&mut *log))
+        .unwrap_or_default()
+}
+
 /// Sends an event to a home window and its separate 3D window.
 pub fn emit_home<R: Runtime, S: Serialize + Clone>(
     app: &AppHandle<R>,
@@ -69,9 +163,16 @@ pub fn emit_home<R: Runtime, S: Serialize + Clone>(
     event: &str,
     payload: S,
 ) -> Result<(), String> {
+    // The payload is serialized for each event: not for a 3D window that is not open
+    let view3d = format!("{VIEW3D_PREFIX}{label}");
+    if app.get_webview_window(&view3d).is_none() {
+        return app
+            .emit_to(label, event, payload)
+            .map_err(|e| e.to_string());
+    }
     app.emit_to(label, event, payload.clone())
         .map_err(|e| e.to_string())?;
-    app.emit_to(format!("{VIEW3D_PREFIX}{label}").as_str(), event, payload)
+    app.emit_to(view3d.as_str(), event, payload)
         .map_err(|e| e.to_string())
 }
 
@@ -90,6 +191,8 @@ pub struct HomeView {
     pub undo_history: Vec<String>,
     pub redo_history: Vec<String>,
     pub camera_moves: u32,
+    /// Number of this state: the next changes sent apply to it (see `HomePatch`)
+    pub seq: u64,
 }
 
 /// Number of undo and redo steps the window lists.
@@ -109,6 +212,7 @@ impl HomeView {
             undo_history: active.doc.undo_labels(HISTORY_SHOWN),
             redo_history: active.doc.redo_labels(HISTORY_SHOWN),
             camera_moves: active.camera_moves,
+            seq: active.seq,
         }
     }
 }
@@ -319,6 +423,7 @@ pub fn execute<R: Runtime>(
     name: &str,
     params: Value,
 ) -> Result<Value, String> {
+    let entered = std::time::SystemTime::now();
     let state = app.state::<AppState>();
     let spec = state
         .registry
@@ -326,6 +431,8 @@ pub fn execute<R: Runtime>(
         .ok_or_else(|| format!("unknown command '{name}'"))?;
     let label = window.map_or_else(|| state.focused(), home_label);
     let mut obsolete_recovery = None;
+    let run_us;
+    let view_started;
     let (result, view) = {
         let mut docs = state.docs.lock().map_err(|e| e.to_string())?;
         let active = docs
@@ -333,7 +440,9 @@ pub fn execute<R: Runtime>(
             .or_insert_with(|| ActiveDoc::new(state.new_id(), Document::default()));
         // The clipboard is shared by all homes
         active.doc.clipboard = state.clipboard.lock().ok().and_then(|mut c| c.take());
+        let started = std::time::Instant::now();
         let result = state.registry.execute(&mut active.doc, name, params);
+        run_us = started.elapsed().as_micros();
         if let Ok(mut c) = state.clipboard.lock() {
             *c = active.doc.clipboard.take();
         }
@@ -361,13 +470,34 @@ pub fn execute<R: Runtime>(
         }
         let changed =
             replaced || spec.modifies || matches!(name, "edit_undo" | "edit_redo" | "home_save");
-        (result, changed.then(|| HomeView::of(active)))
+        view_started = std::time::Instant::now();
+        (result, changed.then(|| active.update()))
     };
+    let view_us = view_started.elapsed().as_micros();
     if let Some(key) = obsolete_recovery {
         crate::autosave::remove_recovery(app, &key);
     }
     if let Some(view) = view {
-        let _ = emit_home(app, &label, HOME_CHANGED_EVENT, view);
+        // The size is measured on a copy after the event is on its way
+        let copy = perf_on().then(|| view.clone());
+        let emit_started = std::time::Instant::now();
+        let emitted = emit_home(app, &label, HOME_CHANGED_EVENT, view);
+        let emit_us = emit_started.elapsed().as_micros();
+        let end_ms = epoch_ms(std::time::SystemTime::now());
+        let bytes = copy.map(|c| serde_json::to_string(&c).map_or(0, |s| s.len()));
+        if let (Some(bytes), Ok(mut log)) = (bytes, PERF.lock()) {
+            log.push(serde_json::json!({
+                "command": name,
+                "emitted": emitted.as_ref().err(),
+                // Wall clock, to place the core between the times of the window
+                "start_ms": epoch_ms(entered),
+                "end_ms": end_ms,
+                "run_us": run_us,
+                "view_us": view_us,
+                "emit_us": emit_us,
+                "bytes": bytes,
+            }));
+        }
     }
     if matches!(
         name,

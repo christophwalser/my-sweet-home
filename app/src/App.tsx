@@ -48,6 +48,7 @@ import View3D from "./view3d/View3D";
 import "./App.css";
 import { errorText } from "./errorText";
 import { followLanguage, formatDateTime, t } from "./i18n";
+import { perfMark } from "./perfMarks";
 import { followPreferences, newHomeParams, usePreferences } from "./preferences";
 
 /** Small icon button of a pane (maximize, minimize, separate window). */
@@ -122,6 +123,9 @@ export default function App() {
   const selectedLevel = useStore((s) => s.selectedLevel);
   const tool = useStore((s) => s.tool);
   const { openHome, run, selectLevel, clearError } = useStore.getState();
+
+  // Performance runs: everything the window does for a change is done here
+  useEffect(() => perfMark("commit"));
 
   // Context menu of a level tab; the tab is selected first, so its commands act on it
   const [levelMenu, setLevelMenu] = useState<{ x: number; y: number } | null>(null);
@@ -498,7 +502,10 @@ export default function App() {
               </span>
             </div>
           )}
-          <PlanView />
+          {/* An error while drawing the plan must not take the whole window down */}
+          <ErrorBoundary name={t("Plan")} resetKey={opened}>
+            <PlanView />
+          </ErrorBoundary>
           {loading && (
             <div className="plan-loading" role="status">
               {t("Loading…")}

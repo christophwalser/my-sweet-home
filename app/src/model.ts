@@ -388,6 +388,8 @@ export type OpenedHome = {
   modified: boolean;
   canUndo: boolean;
   canRedo: boolean;
+  /** Number of this state: the changes sent next apply to it (see homePatch.ts) */
+  seq?: number;
   /** Command names of the steps that can be undone and redone, the next one first */
   undoHistory?: string[];
   redoHistory?: string[];

@@ -6,7 +6,7 @@
 // a wall side or a piece, or applied to the selection by a double-click. The rows take the
 // keyboard: arrow keys, Enter, Delete, Ctrl+D and the menu key.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   CATALOG_DRAG_TYPE,
   type CatalogDragData,
@@ -284,7 +284,7 @@ function loadSplit(): number {
   }
 }
 
-export default function CatalogPanel() {
+function CatalogPanel() {
   const catalog = useStore((s) => s.catalog);
   const loading = useStore((s) => s.catalogLoading);
   const loadCatalog = useStore((s) => s.loadCatalog);
@@ -643,3 +643,6 @@ export default function CatalogPanel() {
     </div>
   );
 }
+
+// Rendered again only for what it shows, not with every change of the window around it
+export default memo(CatalogPanel);

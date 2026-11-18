@@ -2,7 +2,7 @@
 // grid, the snap settings (radius and angle step, also by a right click), the level shown as
 // an underlay and the position of the mouse.
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { create } from "zustand";
 import { formatDateTime, t } from "../i18n";
 import type { Pt } from "../model";
@@ -79,7 +79,7 @@ const ANGLE_STEPS = [1, 5, 15, 22.5, 30, 45];
 /** Distances of the grid lines offered by the grid menu, in cm (0: by the zoom). */
 const GRID_SPACINGS = [0, 10, 25, 50, 100];
 
-export default function StatusBar() {
+function StatusBar() {
   const prefs = usePreferences();
   const pointer = usePointer((s) => s.pt);
   const scale = usePointer((s) => s.scale);
@@ -258,3 +258,6 @@ export default function StatusBar() {
     </div>
   );
 }
+
+// Rendered again only for what it shows, not with every change of the window around it
+export default memo(StatusBar);

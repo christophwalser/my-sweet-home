@@ -3,7 +3,7 @@
 // Windows: Alt or F10 goes to the bar and shows the access keys, Alt+letter opens a menu, the
 // arrow keys move between and inside the menus, Escape goes back.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { formatShortcut, t } from "../i18n";
 import { MENUS } from "./commands";
 import Icon from "./Icon";
@@ -12,7 +12,7 @@ import MenuList, { menuItems } from "./MenuList";
 import { mnemonics, splitAtMnemonic } from "./mnemonics";
 import { useUi } from "./uiStore";
 
-export default function MenuBar() {
+function MenuBar() {
   /** Open menu, and whether the keyboard opened it (its first entry takes the focus) */
   const [open, setOpen] = useState<{ index: number; byKey: boolean } | null>(null);
   /** The bar is used with the keyboard: the access keys are underlined */
@@ -223,3 +223,6 @@ export default function MenuBar() {
     </nav>
   );
 }
+
+// Rendered again only for what it shows, not with every change of the window around it
+export default memo(MenuBar);

@@ -29,6 +29,7 @@ import { useCatalogPrefs } from "../catalog/catalogPrefs";
 import { evalLength } from "../expression";
 import { t } from "../i18n";
 import { forEachPiece, type Home, type Piece, type Pt } from "../model";
+import { perfMark } from "../perfMarks";
 import {
   magnetismActive,
   newLabelParams,
@@ -627,6 +628,8 @@ export default function PlanView() {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
+    // Nothing can be drawn at a scale that is no positive number (canvas calls would throw)
+    if (!(viewRef.current.scale > 0)) return;
     setHint(hintText());
     if (!input) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -737,6 +740,7 @@ export default function PlanView() {
       measureColor,
     };
     drawOverlay(ctx, viewRef.current, input.home, input.wallShapes, overlay);
+    perfMark("plan-draw");
     // Rulers follow a move of the selection and the drag of one of their ends
     const shownGuides = movedGuides(
       levelGuides(input.home, effectiveLevel),
@@ -798,6 +802,8 @@ export default function PlanView() {
 
   drawRef.current = draw;
 
+  /** The plan was too small to fit the home into it; done when it has a size again */
+  const fitWhenShown = useRef(false);
   const fit = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !input) return;
@@ -806,12 +812,30 @@ export default function PlanView() {
     const margin = 40 * devicePixelRatio;
     const w = Math.max(b[2] - b[0], 100);
     const h = Math.max(b[3] - b[1], 100);
+    // A plan that is collapsed (only the 3D view shown) has no room to fit into: the scale
+    // would be negative. It is fitted when it is shown again.
+    if (canvas.width <= 2 * margin + 20 || canvas.height <= 2 * margin + 20) {
+      fitWhenShown.current = true;
+      return;
+    }
+    fitWhenShown.current = false;
     const scale = Math.min((canvas.width - 2 * margin) / w, (canvas.height - 2 * margin) / h);
-    viewRef.current = {
+    const view = {
       scale,
       offsetX: canvas.width / 2 - ((b[0] + b[2]) / 2) * scale,
       offsetY: canvas.height / 2 - ((b[1] + b[3]) / 2) * scale,
     };
+    const before = viewRef.current;
+    // The same view as before (most changes of the home leave its bounds alone): the plan
+    // is drawn for the change anyway, not a second time here
+    if (
+      Math.abs(view.scale - before.scale) < 1e-9 &&
+      Math.abs(view.offsetX - before.offsetX) < 1e-6 &&
+      Math.abs(view.offsetY - before.offsetY) < 1e-6
+    ) {
+      return;
+    }
+    viewRef.current = view;
     draw();
   }, [input, draw]);
 
@@ -822,11 +846,14 @@ export default function PlanView() {
     const ro = new ResizeObserver(() => {
       canvas.width = Math.max(1, Math.round(canvas.clientWidth * devicePixelRatio));
       canvas.height = Math.max(1, Math.round(canvas.clientHeight * devicePixelRatio));
-      draw();
+      if (fitWhenShown.current) refitRef.current();
+      else drawRef.current();
     });
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [draw]);
+    // Observed once: observing again after every change of the home would clear and draw
+    // the plan a second time
+  }, []);
 
   // Fit when another home is opened or the level changes. Edits in the plan stop
   // the automatic fitting, so the plan does not jump while the user works.
@@ -2408,10 +2435,13 @@ export default function PlanView() {
             Math.max(...ys),
           ];
           const margin = 60 * devicePixelRatio;
-          const scale = Math.min(
-            (canvas.width - 2 * margin) / Math.max(x1 - x0, 50),
-            (canvas.height - 2 * margin) / Math.max(y1 - y0, 50),
-            50,
+          const scale = Math.max(
+            0.01,
+            Math.min(
+              (canvas.width - 2 * margin) / Math.max(x1 - x0, 50),
+              (canvas.height - 2 * margin) / Math.max(y1 - y0, 50),
+              50,
+            ),
           );
           userMoved.current = true;
           viewRef.current = {
