@@ -39,8 +39,36 @@ All notable changes to this project are documented in this file. The format foll
 - Grid snap ("View › Magnetism › Snap to the grid" or the switch in the status bar, off at
   first): drawn points and moved elements land on the grid that is drawn; points, faces and
   alignments of objects win over the grid.
+- The menu bar works with the keyboard as in Windows: Alt or F10 goes to it and shows the access
+  keys, Alt+letter opens a menu, and the arrow keys, Home, End and letters move in it.
+- A "View" menu with zoom, grid, rulers, magnetism, the side panels, plan or 3D view alone, the
+  theme and the size of the user interface.
+- The side panels can be hidden with F6 and F4 or by dragging them shut; the splitters take the
+  arrow keys.
+- Properties are grouped in sections that can be closed (remembered), the actions of the
+  selection stay in view above them, and furniture has a field for its level
+  (`furniture_update` takes `level`).
+- Undo and redo name the step they act on, and the tool bar lists the history.
+- Messages are laid over the window: errors stay until they are closed, saving reports its
+  success, and the status bar lists the messages.
+- The grid has a fixed or an automatic distance; the status bar shows the scale and the grid.
+- A free angle step for the angle magnetism, "Zoom to the selection" in the plan, and an opacity
+  for the background image, which now uses the unit of the preferences.
+- The command search matches loosely and lists the recent commands; the letter keys of the plan
+  tools can be changed.
+- `scripts/perf.ps1` starts the app, runs typical edits and prints the time of each stage.
 
 ### Changed
+
+- Edits are several times faster: after a command the windows get only the changes of the home
+  instead of the whole home, unchanged parts of the plan and the 3D view are kept, and the plan
+  is shown before the 3D view draws.
+- Escape discards a drawing instead of keeping it, and a double-click on an empty place no longer
+  fits the plan to the window.
+- The Plan menu groups its tools; the empty Extensions menu and the second entry for the 3D
+  settings are gone.
+- Lengths are shown with one precision everywhere.
+- "Add…" in the catalog opens the file dialog right away for furniture, as it did for textures.
 
 - Doors and windows are easier to place in a wall with the mouse: the wall they are in holds
   them at corners, they align only with openings and walls nearby, they catch the middle of the
@@ -63,6 +91,8 @@ All notable changes to this project are documented in this file. The format foll
 - The snap points on the faces of thick walls no longer disappear when the plan is zoomed in far.
 - A hidden piece of furniture or reference object stays selected and keeps its properties, so it
   can be shown again there (before, it vanished from the panel and the home details).
+- Collapsing the plan no longer takes the whole window down when a wall is selected; the plan
+  keeps its view while it is collapsed.
 - The 3D view no longer jumps back to the stored camera after the first command that touches a
   camera (e.g. a new time of the sun or a stored point of view).
 - "Room from walls" finds rooms enclosed by walls of different thickness that meet edge to edge.
