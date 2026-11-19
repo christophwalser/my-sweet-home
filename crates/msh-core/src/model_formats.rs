@@ -6,6 +6,8 @@
 //! - PLY (ASCII and binary): scans and meshes, units unknown (taken as cm); vertex colors
 //!   become one average color.
 //! - ZIP and KMZ archives: unpacked; the main model inside is read like a single file.
+//! - XYZ and ASC (Esri ASCII grid): heights of terrain in meters, turned into a mesh around
+//!   its middle. The package notes where that middle lies in the file's coordinates.
 
 use crate::model_package::{ModelError, ModelPackage, collect};
 use std::collections::HashMap;
@@ -25,6 +27,9 @@ struct Mesh {
     /// Vertex indices and color index of each triangle
     triangles: Vec<([u32; 3], usize)>,
     colors: Vec<[f32; 3]>,
+    /// What was taken off the coordinates of the file to keep the positions small (terrain
+    /// in national coordinates lies millions of meters from the zero point)
+    shift: [f64; 3],
 }
 
 impl Mesh {
@@ -55,6 +60,11 @@ impl Mesh {
                 c[0], c[1], c[2]
             );
         }
+        let shift = if z_up {
+            [self.shift[0], self.shift[2], -self.shift[1]]
+        } else {
+            self.shift
+        };
         let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
         for p in &self.positions {
             let v = if z_up { [p[0], p[2], -p[1]] } else { *p };
@@ -85,6 +95,11 @@ impl Mesh {
                 ("model.mtl".into(), mtl.into_bytes()),
             ],
             size_cm: Some([0, 1, 2].map(|i| (hi[i] - lo[i]) * cm_per_unit)),
+            center_cm: Some(
+                [0, 1, 2]
+                    .map(|i| (f64::from(lo[i] + hi[i]) / 2.0 + shift[i]) * f64::from(cm_per_unit)),
+            ),
+            unit_cm: cm_per_unit,
         })
     }
 }
@@ -210,7 +225,15 @@ fn ply_value(kind: &str, b: &[u8], format: PlyFormat) -> f64 {
 
 /// Reads a PLY file (units taken as cm, axes as they are).
 pub(crate) fn convert_ply(data: &[u8]) -> Result<ModelPackage, ModelError> {
-    parse_ply(data)?.into_package(false, 1.0)
+    let mesh = parse_ply(data)?;
+    if mesh.triangles.is_empty() && !mesh.positions.is_empty() {
+        return Err(ModelError::Format(
+            "the PLY file is a point cloud (points without faces), which cannot be shown yet: \
+             turn it into a mesh, or for terrain into a height grid (XYZ, ASC)"
+                .into(),
+        ));
+    }
+    mesh.into_package(false, 1.0)
 }
 
 fn parse_ply(data: &[u8]) -> Result<Mesh, ModelError> {
@@ -568,6 +591,304 @@ fn parse_3mf_model(xml: &str) -> Result<(Mesh, f32), ModelError> {
     Ok((mesh, cm_per_unit))
 }
 
+// ---------------------------------------------------------------- Height grids (terrain)
+
+/// Largest number of grid points along one side of a terrain mesh; finer grids are thinned.
+const TERRAIN_MAX_SIDE: usize = 300;
+/// Largest number of cells of a height grid while it is read.
+const TERRAIN_MAX_CELLS: usize = 50_000_000;
+/// Color of terrain meshes (a muted green).
+const TERRAIN_COLOR: [f32; 3] = [0.56, 0.66, 0.45];
+
+/// Heights on a regular grid, `f64::NAN` where there is none. Row 0 is the southern one.
+struct HeightGrid {
+    cols: usize,
+    rows: usize,
+    /// Position of the first node (west, south)
+    origin: [f64; 2],
+    /// Distance of the nodes to the east and to the north
+    step: [f64; 2],
+    z: Vec<f64>,
+}
+
+impl HeightGrid {
+    /// The grid as a mesh with z up, around its middle and above its lowest point.
+    fn into_mesh(self) -> Result<Mesh, ModelError> {
+        let low = self
+            .z
+            .iter()
+            .copied()
+            .filter(|v| v.is_finite())
+            .fold(f64::INFINITY, f64::min);
+        if !low.is_finite() {
+            return Err(ModelError::Empty);
+        }
+        let stride = (self.cols.max(self.rows) - 1)
+            .div_ceil(TERRAIN_MAX_SIDE - 1)
+            .max(1);
+        let cols: Vec<usize> = (0..self.cols).step_by(stride).collect();
+        let rows: Vec<usize> = (0..self.rows).step_by(stride).collect();
+        let shift = [
+            self.origin[0] + self.step[0] * (self.cols - 1) as f64 / 2.0,
+            self.origin[1] + self.step[1] * (self.rows - 1) as f64 / 2.0,
+            low,
+        ];
+        let mut mesh = Mesh {
+            shift,
+            ..Mesh::default()
+        };
+        let color = mesh.color_index(TERRAIN_COLOR);
+        let mut index = vec![u32::MAX; cols.len() * rows.len()];
+        for (j, &row) in rows.iter().enumerate() {
+            for (i, &col) in cols.iter().enumerate() {
+                let z = self.z[row * self.cols + col];
+                if z.is_finite() {
+                    index[j * cols.len() + i] = mesh.positions.len() as u32;
+                    mesh.positions.push([
+                        (self.origin[0] + self.step[0] * col as f64 - shift[0]) as f32,
+                        (self.origin[1] + self.step[1] * row as f64 - shift[1]) as f32,
+                        (z - shift[2]) as f32,
+                    ]);
+                }
+            }
+        }
+        for j in 0..rows.len() - 1 {
+            for i in 0..cols.len() - 1 {
+                let at = |i: usize, j: usize| index[j * cols.len() + i];
+                // Counterclockwise seen from above
+                let corners = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
+                let there: Vec<u32> = corners.into_iter().filter(|v| *v != u32::MAX).collect();
+                match there.as_slice() {
+                    [a, b, c, d] => {
+                        mesh.triangles.push(([*a, *b, *c], color));
+                        mesh.triangles.push(([*a, *c, *d], color));
+                    }
+                    // A cell with one corner missing keeps its other half
+                    [a, b, c] => mesh.triangles.push(([*a, *b, *c], color)),
+                    _ => {}
+                }
+            }
+        }
+        Ok(mesh)
+    }
+}
+
+/// Grids in degrees (geographic coordinates) have no length: they cannot become a mesh.
+fn check_metric(origin: [f64; 2], step: [f64; 2], format: &str) -> Result<(), ModelError> {
+    if step[0].max(step[1]) < 0.001 && origin[0].abs() <= 180.0 && origin[1].abs() <= 90.0 {
+        return Err(invalid(
+            format,
+            "the grid seems to be in degrees; it must be in meters (a projected coordinate system)",
+        ));
+    }
+    Ok(())
+}
+
+/// Reads an Esri ASCII grid (heights in meters on a square grid, rows from north to south).
+pub(crate) fn convert_asc(data: &[u8]) -> Result<ModelPackage, ModelError> {
+    parse_asc(&String::from_utf8_lossy(data))?
+        .into_mesh()?
+        .into_package(true, 100.0)
+}
+
+fn parse_asc(text: &str) -> Result<HeightGrid, ModelError> {
+    let number = |t: &str| t.replace(',', ".").parse::<f64>().ok();
+    let mut tokens = text.split_ascii_whitespace().peekable();
+    let mut header: HashMap<String, f64> = HashMap::new();
+    while let Some(key) = tokens.peek() {
+        if !key.starts_with(|c: char| c.is_ascii_alphabetic()) {
+            break;
+        }
+        let key = tokens.next().unwrap_or_default().to_ascii_lowercase();
+        let value = tokens
+            .next()
+            .and_then(number)
+            .ok_or_else(|| invalid("ASC", "a header line has no number"))?;
+        header.insert(key, value);
+    }
+    let get = |k: &str| header.get(k).copied();
+    let count = |k: &str| {
+        get(k)
+            .filter(|v| *v >= 2.0 && v.fract() == 0.0)
+            .map(|v| v as usize)
+            .ok_or_else(|| invalid("ASC", &format!("{k} is missing or below 2")))
+    };
+    let (cols, rows) = (count("ncols")?, count("nrows")?);
+    if cols.saturating_mul(rows) > TERRAIN_MAX_CELLS {
+        return Err(ModelError::TooLarge);
+    }
+    let dx = get("cellsize")
+        .or_else(|| get("dx"))
+        .filter(|v| *v > 0.0)
+        .ok_or_else(|| invalid("ASC", "cellsize is missing"))?;
+    let dy = get("dy").filter(|v| *v > 0.0).unwrap_or(dx);
+    let origin = [
+        get("xllcenter")
+            .or_else(|| get("xllcorner").map(|v| v + dx / 2.0))
+            .unwrap_or(0.0),
+        get("yllcenter")
+            .or_else(|| get("yllcorner").map(|v| v + dy / 2.0))
+            .unwrap_or(0.0),
+    ];
+    check_metric(origin, [dx, dy], "ASC")?;
+    let nodata = get("nodata_value").unwrap_or(-9999.0);
+    let mut z = vec![f64::NAN; cols * rows];
+    for row in (0..rows).rev() {
+        for col in 0..cols {
+            let v = tokens
+                .next()
+                .and_then(number)
+                .ok_or_else(|| invalid("ASC", "fewer heights than ncols x nrows"))?;
+            if (v - nodata).abs() > 1e-6 {
+                z[row * cols + col] = v;
+            }
+        }
+    }
+    Ok(HeightGrid {
+        cols,
+        rows,
+        origin,
+        step: [dx, dy],
+        z,
+    })
+}
+
+/// Reads height points as text, one "x y z" per line (east, north and height in meters),
+/// separated by blanks, tabs, commas or semicolons. Points of a regular grid keep their grid;
+/// scattered points are averaged on a grid of their mean distance.
+pub(crate) fn convert_xyz(data: &[u8]) -> Result<ModelPackage, ModelError> {
+    grid_of_points(&parse_xyz(&String::from_utf8_lossy(data)))?
+        .into_mesh()?
+        .into_package(true, 100.0)
+}
+
+fn parse_xyz(text: &str) -> Vec<[f64; 3]> {
+    text.lines()
+        .filter_map(|line| {
+            // With semicolons between the values a comma is the decimal sign
+            let decimal_comma = line.contains(';');
+            let mut values = line
+                .split(|c: char| {
+                    c.is_ascii_whitespace() || c == ';' || (c == ',' && !decimal_comma)
+                })
+                .filter(|t| !t.is_empty())
+                .map(|t| {
+                    t.replace(',', ".")
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|v| v.is_finite())
+                });
+            // Lines that do not start with three numbers (titles, comments) are skipped
+            Some([values.next()??, values.next()??, values.next()??])
+        })
+        .collect()
+}
+
+/// Distance of the grid lines along an axis if the coordinates repeat (a regular grid).
+fn axis_step(points: &[[f64; 3]], axis: usize, extent: f64) -> Option<f64> {
+    let mut values: Vec<f64> = points.iter().map(|p| p[axis]).collect();
+    values.sort_by(f64::total_cmp);
+    values.dedup_by(|a, b| (*a - *b).abs() < extent * 1e-7);
+    if values.len() < 2 || values.len() * 2 > points.len() {
+        return None;
+    }
+    let mut steps: Vec<f64> = values.windows(2).map(|w| w[1] - w[0]).collect();
+    steps.sort_by(f64::total_cmp);
+    Some(steps[steps.len() / 2])
+}
+
+fn grid_of_points(points: &[[f64; 3]]) -> Result<HeightGrid, ModelError> {
+    if points.len() < 3 {
+        return Err(invalid(
+            "XYZ",
+            "fewer than three lines with x, y and z (east, north, height)",
+        ));
+    }
+    let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
+    for p in points {
+        for i in 0..2 {
+            lo[i] = lo[i].min(p[i]);
+            hi[i] = hi[i].max(p[i]);
+        }
+    }
+    let extent = [hi[0] - lo[0], hi[1] - lo[1]];
+    if !(extent[0] > 0.0 && extent[1] > 0.0) {
+        return Err(invalid("XYZ", "the points lie on one line"));
+    }
+    let regular = axis_step(points, 0, extent[0]).zip(axis_step(points, 1, extent[1]));
+    let mut step = match regular {
+        Some((x, y)) => [x, y],
+        None => {
+            // Scattered points: cells a little larger than their mean distance, so that most
+            // cells get a point
+            let mean = (extent[0] * extent[1] / points.len() as f64).sqrt() * 1.5;
+            [mean, mean]
+        }
+    };
+    check_metric(lo, step, "XYZ")?;
+    let size = |step: [f64; 2]| {
+        [
+            (extent[0] / step[0]).round() as usize + 1,
+            (extent[1] / step[1]).round() as usize + 1,
+        ]
+    };
+    while size(step)[0].saturating_mul(size(step)[1]) > TERRAIN_MAX_CELLS {
+        step = [step[0] * 2.0, step[1] * 2.0];
+    }
+    let [cols, rows] = size(step);
+    if cols < 2 || rows < 2 {
+        return Err(invalid("XYZ", "the points lie on one line"));
+    }
+    let mut sum = vec![0.0f64; cols * rows];
+    let mut count = vec![0u32; cols * rows];
+    for p in points {
+        let col = (((p[0] - lo[0]) / step[0]).round() as usize).min(cols - 1);
+        let row = (((p[1] - lo[1]) / step[1]).round() as usize).min(rows - 1);
+        sum[row * cols + col] += p[2];
+        count[row * cols + col] += 1;
+    }
+    let mut z: Vec<f64> = sum
+        .iter()
+        .zip(&count)
+        .map(|(s, n)| if *n > 0 { s / f64::from(*n) } else { f64::NAN })
+        .collect();
+    if regular.is_none() {
+        // Empty cells between scattered points take the mean of their neighbors
+        for _ in 0..3 {
+            let before = z.clone();
+            for row in 0..rows {
+                for col in 0..cols {
+                    if before[row * cols + col].is_finite() {
+                        continue;
+                    }
+                    let (mut total, mut n) = (0.0, 0);
+                    for (dc, dr) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+                        let (c, r) = (col as i64 + dc, row as i64 + dr);
+                        if c < 0 || r < 0 || c >= cols as i64 || r >= rows as i64 {
+                            continue;
+                        }
+                        let v = before[r as usize * cols + c as usize];
+                        if v.is_finite() {
+                            total += v;
+                            n += 1;
+                        }
+                    }
+                    if n >= 2 {
+                        z[row * cols + col] = total / f64::from(n);
+                    }
+                }
+            }
+        }
+    }
+    Ok(HeightGrid {
+        cols,
+        rows,
+        origin: lo,
+        step,
+        z,
+    })
+}
+
 // ---------------------------------------------------------------- ZIP / KMZ
 
 /// Model formats in the order an archive's main model is chosen.
@@ -711,6 +1032,103 @@ mod tests {
         assert_eq!(mesh.colors, vec![[1.0, 0.0, 0.0]]);
         let p = mesh.into_package(true, cm).unwrap();
         assert_eq!(p.size_cm, Some([40.0, 80.0, 30.0]));
+    }
+
+    #[test]
+    fn asc_grid_becomes_a_terrain_mesh_around_its_middle() {
+        // 3 x 2 nodes, 10 m apart, lower left cell corner at 500000 / 5200000, rows from north
+        let asc = "ncols 3\nnrows 2\nxllcorner 500000\nyllcorner 5200000\ncellsize 10\n\
+                   NODATA_value -9999\n402 404 406\n400 401 403\n";
+        let p = convert_asc(asc.as_bytes()).unwrap();
+        // 20 m wide (x), 6 m high (y up), 10 m deep (z)
+        assert_eq!(p.size_cm, Some([2000.0, 600.0, 1000.0]));
+        assert_eq!(p.unit_cm, 100.0);
+        // The middle of the nodes, in cm from the zero point of the file: east, height, −north
+        let c = p.center_cm.unwrap();
+        assert_eq!(c, [50_001_500.0, 40_300.0, -520_001_000.0]);
+        let obj = obj_text(&p);
+        // South-west node: 10 m west and 5 m south of the middle, at the lowest height
+        assert!(obj.contains("v -10 0 5\n"), "{obj}");
+        // North-east node: 6 m above the lowest one
+        assert!(obj.contains("v 10 6 -5\n"), "{obj}");
+        assert_eq!(obj.matches("\nf ").count(), 4);
+    }
+
+    #[test]
+    fn asc_cells_without_height_leave_a_hole() {
+        let asc = "ncols 3\nnrows 3\nxllcenter 0\nyllcenter 0\ncellsize 1\nnodata_value -1\n\
+                   1 1 1\n1 1 1\n-1 1 1\n";
+        let p = convert_asc(asc.as_bytes()).unwrap();
+        // Four cells give eight triangles; the cell with the missing corner keeps one of two
+        assert_eq!(obj_text(&p).matches("\nf ").count(), 7);
+    }
+
+    #[test]
+    fn xyz_points_of_a_grid_keep_their_grid() {
+        // Title line, then a 3 x 3 grid of 2 m with a decimal comma in the heights
+        let mut xyz = String::from("x;y;z\n");
+        for row in 0..3 {
+            for col in 0..3 {
+                xyz.push_str(&format!(
+                    "{};{};{},5\n",
+                    100 + col * 2,
+                    200 + row * 2,
+                    row + col
+                ));
+            }
+        }
+        let p = convert_xyz(xyz.as_bytes()).unwrap();
+        assert_eq!(p.size_cm, Some([400.0, 400.0, 400.0]));
+        assert_eq!(p.center_cm, Some([10_200.0, 250.0, -20_200.0]));
+        assert_eq!(obj_text(&p).matches("\nf ").count(), 8);
+    }
+
+    #[test]
+    fn scattered_xyz_points_are_averaged_on_a_grid() {
+        // 400 points at odd places on a slope rising to the east
+        let mut xyz = String::new();
+        for i in 0..400u32 {
+            let x = f64::from(i * 7919 % 1000) / 10.0;
+            let y = f64::from(i * 104_729 % 1000) / 10.0;
+            xyz.push_str(&format!("{x} {y} {}\n", x / 10.0));
+        }
+        let p = convert_xyz(xyz.as_bytes()).unwrap();
+        let size = p.size_cm.unwrap();
+        // About 100 m wide and deep, and 10 m high
+        assert!((size[0] - 10_000.0).abs() < 800.0, "{size:?}");
+        assert!((size[2] - 10_000.0).abs() < 800.0, "{size:?}");
+        assert!((size[1] - 1000.0).abs() < 150.0, "{size:?}");
+        assert!(obj_text(&p).matches("\nf ").count() > 200);
+    }
+
+    #[test]
+    fn large_grids_are_thinned() {
+        let n = 1000;
+        let mut asc = format!("ncols {n}\nnrows {n}\nxllcorner 0\nyllcorner 0\ncellsize 1\n");
+        for row in 0..n {
+            for col in 0..n {
+                asc.push_str(&format!("{} ", (row + col) % 7));
+            }
+            asc.push('\n');
+        }
+        let p = convert_asc(asc.as_bytes()).unwrap();
+        let vertices = obj_text(&p).matches("\nv ").count();
+        assert!(
+            vertices <= TERRAIN_MAX_SIDE * TERRAIN_MAX_SIDE,
+            "{vertices}"
+        );
+        assert!(vertices > 200 * 200, "{vertices}");
+    }
+
+    #[test]
+    fn grids_in_degrees_and_point_clouds_are_refused_with_a_reason() {
+        let asc = "ncols 2\nnrows 2\nxllcorner 9.5\nyllcorner 47.2\ncellsize 0.0001\n1 2\n3 4\n";
+        let e = convert_asc(asc.as_bytes()).unwrap_err().to_string();
+        assert!(e.contains("degrees"), "{e}");
+        let ply = "ply\nformat ascii 1.0\nelement vertex 2\nproperty float x\nproperty float y\n\
+                   property float z\nend_header\n0 0 0\n1 1 1\n";
+        let e = convert_ply(ply.as_bytes()).unwrap_err().to_string();
+        assert!(e.contains("point cloud"), "{e}");
     }
 
     #[test]

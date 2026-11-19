@@ -34,9 +34,15 @@ struct TextureImportParams {
 #[derive(Deserialize, JsonSchema)]
 struct FurnitureImportParams {
     /// 3D model file: OBJ (with its MTL and texture files next to it), DAE, 3DS, glTF, GLB,
-    /// 3MF, STL, PLY, or a ZIP / KMZ archive with one of them. Formats other than OBJ, DAE and
-    /// 3DS are converted to OBJ (FBX and VRML are converted by the app's import dialog).
+    /// 3MF, STL, PLY, or a ZIP / KMZ archive with one of them; or the heights of terrain as
+    /// XYZ (lines "east north height") or ASC (Esri ASCII grid), in meters. Formats other than
+    /// OBJ, DAE and 3DS are converted to OBJ (FBX and VRML are converted by the app's import
+    /// dialog).
     model_path: PathBuf,
+    /// Unit of the coordinates of the model: "mm", "cm", "m", "in" or "ft". Default: what the
+    /// format says (glTF, XYZ and ASC meters, STL and 3MF millimeters), else a guess from the
+    /// size (meters for models smaller than 10 units, else centimeters)
+    unit: Option<String>,
     /// Name in the catalog (default: the file name)
     name: Option<String>,
     /// Catalog category (default "My furniture")
@@ -93,6 +99,26 @@ fn rotated_size(size: [f32; 3], rotation: Option<[f32; 9]>) -> [f32; 3] {
     out
 }
 
+/// Centimeters per unit of a model, by the name of the unit.
+fn unit_cm(unit: &str) -> Result<f32, CommandError> {
+    match unit.trim().to_ascii_lowercase().as_str() {
+        "mm" => Ok(0.1),
+        "cm" => Ok(1.0),
+        "m" => Ok(100.0),
+        "in" | "inch" => Ok(2.54),
+        "ft" | "foot" => Ok(30.48),
+        other => Err(CommandError::failed(format!(
+            "unknown unit '{other}' (use mm, cm, m, in or ft)"
+        ))),
+    }
+}
+
+/// A vector of the model after `rotation`.
+fn rotated(v: [f64; 3], rotation: Option<[f32; 9]>) -> [f64; 3] {
+    let Some(r) = rotation else { return v };
+    [0, 1, 2].map(|row| (0..3).map(|c| f64::from(r[row * 3 + c]) * v[c]).sum())
+}
+
 /// File name without extension.
 pub(super) fn stem(path: &Path) -> String {
     path.file_stem()
@@ -104,15 +130,25 @@ pub(super) fn stem(path: &Path) -> String {
 pub(super) fn register(r: &mut Registry) {
     r.add(
         "furniture_import",
-        "Imports a 3D model (OBJ, DAE, 3DS, glTF, GLB, 3MF, STL, PLY, or a ZIP / KMZ archive \
-         with one of them) as piece of furniture into the user's furniture library 'My furniture' (shared with Sweet Home 3D). Returns its catalog ID; \
-         place it with furniture_add.",
+        "Imports a 3D model (OBJ, DAE, 3DS, glTF, GLB, 3MF, STL, PLY, a ZIP / KMZ archive \
+         with one of them, or terrain heights as XYZ or ASC) as piece of furniture into the \
+         user's furniture library 'My furniture' (shared with Sweet Home 3D). Returns its \
+         catalog ID; place it with furniture_add. 'origin' in the result is the position (x, \
+         y, elevation) at which the zero point of the model lies on the zero point of the \
+         plan, e.g. for scans and terrain that must keep their place.",
         false,
         |_doc, p: FurnitureImportParams| {
             let package =
                 collect(&p.model_path).map_err(|e| CommandError::failed(e.to_string()))?;
+            // A given unit replaces the one the package assumed
+            let rescale = match &p.unit {
+                Some(u) => unit_cm(u)? / package.unit_cm,
+                None => 1.0,
+            };
             // Size: given values, the rest from the model keeping its proportions
-            let model = package.size_cm.map(|s| rotated_size(s, p.model_rotation));
+            let model = package
+                .size_cm
+                .map(|s| rotated_size(s.map(|v| v * rescale), p.model_rotation));
             let size = match (p.width, p.depth, p.height, model) {
                 (Some(w), Some(d), Some(h), _) => [w, d, h],
                 (w, d, h, Some([mx, my, mz])) => {
@@ -141,6 +177,24 @@ pub(super) fn register(r: &mut Registry) {
                     "the model has no extent in one direction ({size:?} cm); give its size"
                 )));
             }
+            // Where the piece lies if the zero point of the model is put on the zero point
+            // of the plan: the middle of its box, in the size it is imported with
+            let origin = package.center_cm.zip(model).map(|(center, [mx, my, mz])| {
+                let c = rotated(center.map(|v| v * f64::from(rescale)), p.model_rotation);
+                let factor = |given: f32, own: f32| {
+                    if own > 0.0 {
+                        f64::from(given / own)
+                    } else {
+                        1.0
+                    }
+                };
+                let r = |v: f64| (v * 100.0).round() / 100.0;
+                json!({
+                    "x": r(c[0] * factor(size[0], mx)),
+                    "y": r(c[2] * factor(size[1], mz)),
+                    "elevation": r(c[1] * factor(size[2], my) - f64::from(size[2]) / 2.0),
+                })
+            });
             let icon = match &p.icon_png_base64 {
                 Some(b64) => base64::engine::general_purpose::STANDARD
                     .decode(b64.trim_start_matches("data:image/png;base64,"))
@@ -148,27 +202,29 @@ pub(super) fn register(r: &mut Registry) {
                 None => placeholder_icon(),
             };
             let target = target_library(p.library, CatalogKind::Furniture)?;
-            let added = record("import", std::slice::from_ref(&target), || add_furniture(NewFurniture {
-                name: p.name.unwrap_or_else(|| stem(&p.model_path)),
-                category: p.category.unwrap_or_else(|| "My furniture".into()),
-                creator: p.creator,
-                icon,
-                model: package.main.clone(),
-                model_files: package.files,
-                width: size[0],
-                depth: size[1],
-                height: size[2],
-                elevation: p.elevation.unwrap_or(0.0),
-                movable: p.movable.unwrap_or(true),
-                door_or_window: p.door_or_window.unwrap_or(false),
-                model_rotation: p.model_rotation,
-                staircase_cut_out_shape: p.staircase_cut_out_shape.or_else(|| {
-                    p.staircase
-                        .unwrap_or(false)
-                        .then(|| FULL_CUT_OUT.to_owned())
-                }),
-                library: Some(target.clone()),
-            }))
+            let added = record("import", std::slice::from_ref(&target), || {
+                add_furniture(NewFurniture {
+                    name: p.name.unwrap_or_else(|| stem(&p.model_path)),
+                    category: p.category.unwrap_or_else(|| "My furniture".into()),
+                    creator: p.creator,
+                    icon,
+                    model: package.main.clone(),
+                    model_files: package.files,
+                    width: size[0],
+                    depth: size[1],
+                    height: size[2],
+                    elevation: p.elevation.unwrap_or(0.0),
+                    movable: p.movable.unwrap_or(true),
+                    door_or_window: p.door_or_window.unwrap_or(false),
+                    model_rotation: p.model_rotation,
+                    staircase_cut_out_shape: p.staircase_cut_out_shape.or_else(|| {
+                        p.staircase
+                            .unwrap_or(false)
+                            .then(|| FULL_CUT_OUT.to_owned())
+                    }),
+                    library: Some(target.clone()),
+                })
+            })
             .map_err(|e| CommandError::failed(e.to_string()))?;
             CatalogIndex::reload();
             Ok(json!({
@@ -177,6 +233,7 @@ pub(super) fn register(r: &mut Registry) {
                 "width": size[0],
                 "depth": size[1],
                 "height": size[2],
+                "origin": origin,
             }))
         },
     );

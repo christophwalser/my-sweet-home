@@ -453,3 +453,102 @@ fn imports_can_be_undone_in_the_library_history() {
     run(&r, &mut doc, "library_redo", json!({}));
     search_one(&r, &mut doc, "lamp bergen", "furniture");
 }
+
+#[test]
+fn furniture_import_takes_a_unit_and_tells_where_the_zero_point_lies() {
+    let Some(root) =
+        isolated_catalog("furniture_import_takes_a_unit_and_tells_where_the_zero_point_lies")
+    else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    // A box from the zero point of its file: 80 wide (x), 50 high (y), 40 deep (z)
+    let obj = write_box_obj(&root, "box.obj", [80.0, 50.0, 40.0]);
+    let origin = |v: &Value| {
+        let o = &v["origin"];
+        (
+            o["x"].as_f64().unwrap(),
+            o["y"].as_f64().unwrap(),
+            o["elevation"].as_f64().unwrap(),
+        )
+    };
+    let plain = import(
+        &r,
+        &mut doc,
+        "furniture_import",
+        json!({ "model_path": obj }),
+    );
+    // The middle of the box: with it there, the corner of the box lies on the zero point
+    assert_eq!(origin(&plain), (40.0, 20.0, 0.0));
+    let meters = import(
+        &r,
+        &mut doc,
+        "furniture_import",
+        json!({ "model_path": obj, "unit": "m" }),
+    );
+    assert_size(&meters, 8000.0, 4000.0, 5000.0);
+    assert_eq!(origin(&meters), (4000.0, 2000.0, 0.0));
+    let millimeters = import(
+        &r,
+        &mut doc,
+        "furniture_import",
+        json!({ "model_path": obj, "unit": "mm" }),
+    );
+    assert_size(&millimeters, 8.0, 4.0, 5.0);
+    // Twice as large: the zero point stays at the corner
+    let doubled = import(
+        &r,
+        &mut doc,
+        "furniture_import",
+        json!({ "model_path": obj, "width": 160 }),
+    );
+    assert_eq!(origin(&doubled), (80.0, 40.0, 0.0));
+    // A model with z up, turned upright: its depth axis points to the back of the plan
+    let turned = import(
+        &r,
+        &mut doc,
+        "furniture_import",
+        json!({ "model_path": obj, "model_rotation": [1, 0, 0, 0, 0, 1, 0, -1, 0] }),
+    );
+    assert_size(&turned, 80.0, 50.0, 40.0);
+    assert_eq!(origin(&turned), (40.0, -25.0, 0.0));
+    let e = run_err(
+        &r,
+        &mut doc,
+        "furniture_import",
+        json!({ "model_path": obj, "unit": "yard" }),
+    );
+    assert!(e.contains("unknown unit"), "{e}");
+}
+
+#[test]
+fn terrain_heights_are_imported_as_a_mesh() {
+    let Some(root) = isolated_catalog("terrain_heights_are_imported_as_a_mesh") else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    // 5 x 4 nodes, 5 m apart, in national coordinates, rising to the north
+    let mut asc =
+        String::from("ncols 5\nnrows 4\nxllcenter 2600000\nyllcenter 1200000\ncellsize 5\n");
+    for row in 0..4 {
+        asc.push_str(&format!("{0} {0} {0} {0} {0}\n", 450 - row));
+    }
+    let path = root.join("Slope Zermatt.asc");
+    std::fs::write(&path, asc).unwrap();
+    let added = import(
+        &r,
+        &mut doc,
+        "furniture_import",
+        json!({ "model_path": path }),
+    );
+    // 20 m wide, 15 m deep, 3 m high
+    assert_size(&added, 2000.0, 1500.0, 300.0);
+    // The middle of the grid in cm: east, −north (the plan's y points south), lowest height
+    assert_eq!(added["origin"]["x"], json!(260_001_000.0));
+    assert_eq!(added["origin"]["y"], json!(-120_000_750.0));
+    assert_eq!(added["origin"]["elevation"], json!(44_700.0));
+    let found = search_one(&r, &mut doc, "slope zermatt", "furniture");
+    assert_eq!(found["name"], "Slope Zermatt");
+}

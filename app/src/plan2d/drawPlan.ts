@@ -9,12 +9,15 @@ import {
   cssColor,
   forEachPiece,
   type Home,
+  hiddenInPlan,
   isReference,
   type Piece,
   type Pt,
   pieceAtLevel,
   pieceIsBackdrop,
+  planOpacity,
   type Room,
+  sectionHeightIn,
   type TextStyle,
   type Texture,
   type WallShape,
@@ -26,6 +29,7 @@ import { formatArea, formatLength as formatUnitLength } from "../units";
 import { baseboardOf, baseboardPolygon } from "../view3d/wallSides";
 import { curveSegments, polylinePath } from "./curve";
 import { distanceToSegment, pointInPolygon } from "./interaction";
+import type { SectionCut } from "./section";
 
 export type ViewTransform = { scale: number; offsetX: number; offsetY: number };
 
@@ -41,6 +45,8 @@ export type PlanColors = {
   furnitureStroke: string;
   text: string;
   dimension: string;
+  /** Lines of the cut through a reference object (a scan) */
+  section: string;
 };
 
 export const DEFAULT_ROOM_FONT = 24;
@@ -63,6 +69,8 @@ export type PlanInput = {
   icons: Map<string, HTMLImageElement>;
   /** View of a piece from above (rendered from its model), or null to draw its icon */
   topView?: (p: Piece) => CanvasImageSource | null;
+  /** Cut through a piece at a height above its bottom, or null while it is computed */
+  section?: (p: Piece, height: number) => SectionCut | null;
 };
 
 /**
@@ -220,17 +228,25 @@ export function drawPlan(
   // Pieces sorted by elevation like Sweet Home 3D: higher pieces are drawn on top
   const pieces: Piece[] = [];
   forEachPiece(home.furniture, (p) => {
-    if (pieceAtLevel(home, p, levelId)) pieces.push(p);
+    if (pieceAtLevel(home, p, levelId) && !hiddenInPlan(p)) pieces.push(p);
   });
   pieces.sort((a, b) => (a.attrs.elevation ?? 0) - (b.attrs.elevation ?? 0));
   // Backdrops (reference objects such as terrain and scans, pieces reaching up from a lower
   // level) lie faint at the bottom, under the background image: that is mostly the plan of the
   // building and stays readable on top of the terrain
   const backdrop = new Set(pieces.filter((p) => pieceIsBackdrop(home, p, levelId)));
+  // A reference object that is cut shows the lines of its cut instead of its view from above
+  const cuts: [Piece, number][] = [];
   ctx.save();
-  ctx.globalAlpha = BACKDROP_ALPHA;
   for (const p of backdrop) {
-    if (p.kind !== "DoorOrWindow") drawPiece(ctx, p, input, colors, px);
+    if (p.kind === "DoorOrWindow") continue;
+    const cutAt = sectionHeightIn(home, p, levelId);
+    if (cutAt !== null) {
+      cuts.push([p, cutAt]);
+    } else {
+      ctx.globalAlpha = planOpacity(p) ?? BACKDROP_ALPHA;
+      drawPiece(ctx, p, input, colors, px);
+    }
   }
   ctx.restore();
 
@@ -247,6 +263,14 @@ export function drawPlan(
     ctx.drawImage(bgImage, 0, 0);
     ctx.restore();
   }
+
+  // The lines of cuts lie on the background image, which would hide them: they are traced
+  ctx.save();
+  for (const [p, cutAt] of cuts) {
+    ctx.globalAlpha = planOpacity(p) ?? 1;
+    drawSection(ctx, p, input.section?.(p, cutAt) ?? null, colors, px);
+  }
+  ctx.restore();
 
   // The level below (or above) as a faded background, to align walls and rooms
   const below = underlayLevel(home, levelId);
@@ -566,6 +590,30 @@ function drawPiece(
   ctx.lineWidth = px;
   ctx.strokeStyle = colors.furnitureStroke;
   ctx.strokeRect(-w / 2, -d / 2, w, d);
+  ctx.restore();
+}
+
+/** The lines of the cut through a reference object; its outline while they are computed. */
+function drawSection(
+  ctx: CanvasRenderingContext2D,
+  p: Piece,
+  cut: SectionCut | null,
+  colors: PlanColors,
+  px: number,
+): void {
+  ctx.save();
+  pieceTransform(ctx, p);
+  ctx.strokeStyle = colors.section;
+  if (cut?.path) {
+    ctx.lineWidth = 1.5 * px;
+    ctx.stroke(cut.path);
+  } else if (!cut) {
+    const w = p.attrs.width_in_plan ?? p.attrs.width;
+    const d = p.attrs.depth_in_plan ?? p.attrs.depth;
+    ctx.lineWidth = px;
+    ctx.setLineDash([6 * px, 4 * px]);
+    ctx.strokeRect(-w / 2, -d / 2, w, d);
+  }
   ctx.restore();
 }
 

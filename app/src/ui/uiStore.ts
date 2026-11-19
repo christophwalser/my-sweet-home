@@ -86,9 +86,21 @@ type UiState = {
   /** The next click on a surface of the plan is handed to `onPick` (pipette) */
   pick: SurfacePick | null;
   setPick: (pick: SurfacePick | null) => void;
+  /** Points awaited in the plan, one click each (e.g. to align a reference object) */
+  pointPick: PointPick | null;
+  setPointPick: (pointPick: PointPick | null) => void;
   /** Catalog piece that the next click in the plan places (Shift+click: several) */
   placing: { data: CatalogDragData; icon: HTMLImageElement | null } | null;
   setPlacing: (placing: UiState["placing"]) => void;
+};
+
+/** Points awaited in the plan: `labels` holds the hint for each of them. */
+export type PointPick = {
+  labels: string[];
+  /** The points clicked so far, in plan coordinates (cm) */
+  points: [number, number][];
+  /** Called with all points once the last one is clicked */
+  onDone: (points: [number, number][]) => void;
 };
 
 /** A click awaited in the plan, with the hint shown meanwhile. */
@@ -170,9 +182,11 @@ export const useUi = create<UiState>((set, get) => ({
     saveJson(RECENT_TEXTURES_KEY, recentTextures);
   },
   pick: null,
-  setPick: (pick) => set({ pick, placing: null }),
+  setPick: (pick) => set({ pick, placing: null, pointPick: null }),
+  pointPick: null,
+  setPointPick: (pointPick) => set({ pointPick, pick: null, placing: null }),
   placing: null,
-  setPlacing: (placing) => set({ placing, pick: null }),
+  setPlacing: (placing) => set({ placing, pick: null, pointPick: null }),
 }));
 
 /** Sets the theme on the document; "system" lets the CSS follow `prefers-color-scheme`. */

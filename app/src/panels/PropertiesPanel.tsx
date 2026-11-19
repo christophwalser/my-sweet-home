@@ -9,10 +9,14 @@ import {
   forEveryPiece,
   type Home,
   isReference,
+  isTerrain,
   type Piece,
   type Room,
+  sectionHeight,
+  sectionSnaps,
   type Wall,
 } from "../model";
+import { startAlignPoints } from "../plan2d/alignPoints";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { guideAngle, guideEnd, guideLength, homeGuides } from "../plan2d/guides";
 import { usePreferences } from "../preferences";
@@ -41,6 +45,8 @@ import LocationFields from "./LocationFields";
 import MultiPanel, { common, commonTexture } from "./MultiPanel";
 import OpeningDistances from "./OpeningDistances";
 import { type Dimension, resizedPiece } from "./pieceSize";
+import ReferenceList from "./ReferenceList";
+import { shownIn, shownOpacity, showParams } from "./referenceObjects";
 import TextStyleFields from "./TextStyleFields";
 import TextureField from "./TextureField";
 
@@ -318,7 +324,7 @@ function VisitorSection() {
 
 /**
  * Reference objects of the home (terrain, scans, neighbor houses): each can be shown or hidden
- * (in the plan and in 3D) and selected to change it.
+ * in the plan and in 3D, made fainter, and selected to change it.
  */
 function ReferenceObjectsSection({
   home,
@@ -327,12 +333,6 @@ function ReferenceObjectsSection({
   home: Home;
   run: (command: string, params: Record<string, unknown>) => Promise<unknown>;
 }) {
-  const setSelection = useStore((s) => s.setSelection);
-  const references: Piece[] = [];
-  // Hidden ones too, so that they can be shown again
-  forEveryPiece(home.furniture, (p) => {
-    if (isReference(p) && p.attrs.id) references.push(p);
-  });
   return (
     <>
       <h2>{t("Reference objects")}</h2>
@@ -341,34 +341,7 @@ function ReferenceObjectsSection({
           "Terrain, scans and neighbor houses: like the background image they lie faint under the plan, and they show in 3D.",
         )}
       </p>
-      {references.length === 0 && (
-        <p className="muted small">
-          {t(
-            "None yet: mark terrain, scans or neighbor houses as reference object in their properties.",
-          )}
-        </p>
-      )}
-      {references.map((p) => (
-        <div key={p.attrs.id} className="prop-row prop-check">
-          <input
-            type="checkbox"
-            checked={p.attrs.visible !== false}
-            title={t("Visible")}
-            aria-label={t("Show {name}", { name: p.attrs.name })}
-            onChange={(e) =>
-              void run("furniture_update", { id: p.attrs.id, visible: e.currentTarget.checked })
-            }
-          />
-          <button
-            type="button"
-            className="link-button"
-            title={t("Select it to change it")}
-            onClick={() => p.attrs.id && setSelection([p.attrs.id])}
-          >
-            {p.attrs.name} ({t("Change…")})
-          </button>
-        </div>
-      ))}
+      <ReferenceList home={home} run={run} />
     </>
   );
 }
@@ -1093,10 +1066,27 @@ export default function PropertiesPanel() {
           {a.description && <p className="muted small">{a.description}</p>}
           <Field label={t("Name")} type="text" value={a.name} onCommit={set("name")} />
           <Field
-            label={t("Visible")}
+            label={t("Shown in the plan")}
             type="checkbox"
-            value={a.visible !== false}
-            onCommit={set("visible")}
+            value={shownIn(p).plan}
+            onCommit={(v) =>
+              void run("furniture_update", { id, ...showParams(p, "plan", v === true) })
+            }
+          />
+          <Field
+            label={t("Shown in 3D")}
+            type="checkbox"
+            value={shownIn(p).view3d}
+            onCommit={(v) =>
+              void run("furniture_update", { id, ...showParams(p, "view3d", v === true) })
+            }
+          />
+          <Field
+            label={t("Opacity in the plan")}
+            type="number"
+            unit="%"
+            value={shownOpacity(p)}
+            onCommit={(v) => set("plan_opacity")(Math.max(0, Math.min(100, Number(v))) / 100)}
           />
           <Field label="X" type="number" unit="cm" value={a.x} onCommit={set("x")} />
           <Field label="Y" type="number" unit="cm" value={a.y} onCommit={set("y")} />
@@ -1113,6 +1103,77 @@ export default function PropertiesPanel() {
             unit="°"
             value={Math.round(((a.angle ?? 0) * 1800) / Math.PI) / 10}
             onCommit={set("angle_deg")}
+          />
+          {(["width", "depth", "height"] as const).map((field) => (
+            <Field
+              key={field}
+              label={field === "width" ? t("Width") : field === "depth" ? t("Depth") : t("Height")}
+              type="number"
+              unit="cm"
+              value={a[field]}
+              onCommit={(v) =>
+                void run("furniture_update", { id, [field]: v, keep_proportions: true })
+              }
+            />
+          ))}
+          <p className="muted small">
+            {t("The size keeps its proportions: a scan or terrain is not stretched.")}
+          </p>
+          <div className="prop-actions">
+            <button
+              type="button"
+              title={t(
+                "Click a point on it and where that point belongs in the plan, twice: it is turned and moved to fit",
+              )}
+              onClick={() => startAlignPoints(id, a.name, false)}
+            >
+              {t("Align with two points…")}
+            </button>
+            <button
+              type="button"
+              title={t(
+                "Like aligning, and it is resized so that both points fit exactly (for models in an unknown scale)",
+              )}
+              onClick={() => startAlignPoints(id, a.name, true)}
+            >
+              {t("Align and resize…")}
+            </button>
+          </div>
+          <h3>{t("Cut in the plan")}</h3>
+          <Field
+            label={t("Show a cut instead of the view from above")}
+            type="checkbox"
+            value={sectionHeight(p) !== null}
+            onCommit={(v) => set("section_height")(v === true ? 100 : -1)}
+          />
+          {sectionHeight(p) !== null && (
+            <>
+              <Field
+                label={t("Height of the cut above the floor")}
+                type="number"
+                unit="cm"
+                value={sectionHeight(p) ?? 0}
+                onCommit={set("section_height")}
+              />
+              <Field
+                label={t("The lines of the cut attract the pointer")}
+                type="checkbox"
+                value={sectionSnaps(p)}
+                onCommit={set("section_snap")}
+              />
+              <p className="muted small">
+                {t(
+                  "The plan of every level shows where a plane at this height above its floor meets the model, e.g. the walls of a scanned house, which can then be traced.",
+                )}
+              </p>
+            </>
+          )}
+          <h3>{t("In 3D")}</h3>
+          <Field
+            label={t("Terrain (replaces the flat ground under it)")}
+            type="checkbox"
+            value={isTerrain(p)}
+            onCommit={set("terrain")}
           />
           <p className="muted small">
             {t(

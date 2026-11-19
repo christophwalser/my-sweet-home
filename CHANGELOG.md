@@ -57,6 +57,19 @@ All notable changes to this project are documented in this file. The format foll
 - The command search matches loosely and lists the recent commands; the letter keys of the plan
   tools can be changed.
 - `scripts/perf.ps1` starts the app, runs typical edits and prints the time of each stage.
+- Terrain from height grids: XYZ and ASC files (in meters) are imported as a terrain mesh;
+  marked as terrain, it replaces the flat ground under it in 3D.
+- Furniture import: the unit of the model can be chosen (`furniture_import` takes `unit`), the
+  model can be placed as reference object right away, and it can keep the zero point of its
+  file (`origin` in the result of `furniture_import`).
+- Reference objects can be aligned with two pairs of points clicked in the plan, optionally
+  resized to fit (`furniture_align_points`).
+- Reference objects can show a cut at a height above the floor instead of their view from
+  above, e.g. the walls of a scanned house; the lines of the cut can attract the pointer.
+- Reference objects are listed under the plan in the status bar and can be shown or hidden in
+  the plan and in 3D separately, with an opacity in the plan.
+- The map of "Align north with the map" can be used as background image of the plan, true to
+  scale and turned like the plan.
 
 ### Changed
 
@@ -69,6 +82,7 @@ All notable changes to this project are documented in this file. The format foll
   settings are gone.
 - Lengths are shown with one precision everywhere.
 - "Add…" in the catalog opens the file dialog right away for furniture, as it did for textures.
+- A PLY file that is a point cloud is refused with a reason instead of "no triangles".
 
 - Doors and windows are easier to place in a wall with the mouse: the wall they are in holds
   them at corners, they align only with openings and walls nearby, they catch the middle of the

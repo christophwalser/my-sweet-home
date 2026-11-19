@@ -23,7 +23,17 @@ const queue: (() => Promise<void>)[] = [];
 let running = false;
 let renderer: THREE.WebGLRenderer | null = null;
 
+/** Runs a job after the views that are waiting: one at a time, with pauses for input. */
+export function schedule(job: () => Promise<void>): void {
+  queue.push(job);
+  void work();
+}
+
 /** Everything that changes how a piece looks from above. */
+export function pieceKey(p: Piece, docId: number): string {
+  return key(p, docId);
+}
+
 function key(p: Piece, docId: number): string {
   const a = p.attrs;
   const r = (v: number | null | undefined) =>
@@ -141,7 +151,7 @@ async function work(): Promise<void> {
 }
 
 /** Waits until the model of a new piece object is loaded. */
-function loadPiece(piece: Piece, docId: number): Promise<THREE.Group> {
+export function loadPiece(piece: Piece, docId: number): Promise<THREE.Group> {
   return new Promise((resolve, reject) => {
     let done = false;
     const obj = createPieceObject(piece, docId, 0, () => {

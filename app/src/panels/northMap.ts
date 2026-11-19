@@ -6,16 +6,17 @@ import type { WallShape } from "../model";
 /** Closed outline in cm, relative to the middle of all walls. */
 export type Outline = [number, number][];
 
-/** Outlines of the walls (left side, then the right side backwards) around their middle. */
-export function planOutlines(shapes: WallShape[]): Outline[] {
-  const outlines = shapes
-    .map((s) => [...s.left, ...[...s.right].reverse()])
-    .filter((o) => o.length >= 3);
+function wallOutlines(shapes: WallShape[]): Outline[] {
+  return shapes.map((s) => [...s.left, ...[...s.right].reverse()]).filter((o) => o.length >= 3);
+}
+
+/** Middle of all walls in plan coordinates (cm); 0 / 0 without walls. */
+export function planMiddle(shapes: WallShape[]): [number, number] {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
-  for (const o of outlines) {
+  for (const o of wallOutlines(shapes)) {
     for (const [x, y] of o) {
       minX = Math.min(minX, x);
       maxX = Math.max(maxX, x);
@@ -23,9 +24,39 @@ export function planOutlines(shapes: WallShape[]): Outline[] {
       maxY = Math.max(maxY, y);
     }
   }
-  const cx = (minX + maxX) / 2;
-  const cy = (minY + maxY) / 2;
-  return outlines.map((o) => o.map(([x, y]): [number, number] => [x - cx, y - cy]));
+  return minX <= maxX ? [(minX + maxX) / 2, (minY + maxY) / 2] : [0, 0];
+}
+
+/** Outlines of the walls (left side, then the right side backwards) around their middle. */
+export function planOutlines(shapes: WallShape[]): Outline[] {
+  const [cx, cy] = planMiddle(shapes);
+  return wallOutlines(shapes).map((o) => o.map(([x, y]): [number, number] => [x - cx, y - cy]));
+}
+
+/**
+ * Where a square map image, turned so that it lies along the plan, belongs as background
+ * image: the real length of its side and the position of the plan's zero point on it, both in
+ * cm. `middle` is the middle of the walls in the plan (cm), `building` where that middle lies
+ * on the map and `mapCenter` the middle of the image, both in meters east and south of the
+ * home's location; `north` is the north direction of the plan in radians.
+ */
+export function mapBackground(
+  middle: [number, number],
+  building: [number, number],
+  mapCenter: [number, number],
+  north: number,
+  sizePx: number,
+  metersPerPixel: number,
+): { side: number; xOrigin: number; yOrigin: number } {
+  // From the map (north up) into the plan: the inverse of `northRotation`
+  const east = mapCenter[0] - building[0];
+  const south = mapCenter[1] - building[1];
+  const cos = Math.cos(north);
+  const sin = Math.sin(north);
+  const x = middle[0] + 100 * (east * cos - south * sin);
+  const y = middle[1] + 100 * (east * sin + south * cos);
+  const side = sizePx * metersPerPixel * 100;
+  return { side, xOrigin: side / 2 - x, yOrigin: side / 2 - y };
 }
 
 /** Meters per degree of latitude (and of longitude at the equator). */

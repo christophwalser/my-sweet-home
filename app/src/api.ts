@@ -83,10 +83,16 @@ export const api = {
   catalogLoad: (lang: string) => invoke<CatalogData>("catalog_load", { lang }),
   /** Collects a 3D model for the import preview (served under stageResourceUrl). */
   modelStage: (path: string) =>
-    invoke<{ id: number; main: string; sizeCm: [number, number, number] | null; files: string[] }>(
-      "model_stage",
-      { path },
-    ),
+    invoke<{
+      id: number;
+      main: string;
+      sizeCm: [number, number, number] | null;
+      /** Center of the model's box in cm from the zero point of its file (with `sizeCm`) */
+      centerCm: [number, number, number] | null;
+      /** Centimeters per unit of the file that the size and the center assume */
+      unitCm: number;
+      files: string[];
+    }>("model_stage", { path }),
 };
 
 /** Event sent by the backend whenever the open home changed (from the UI, CLI or MCP). */

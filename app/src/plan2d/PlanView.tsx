@@ -111,6 +111,7 @@ import {
 import { edgeOffset } from "./roomEdit";
 import { drawRuler, type RulerColors } from "./rulers";
 import { usePointer } from "./StatusBar";
+import { sectionCut } from "./section";
 import {
   projectOnSegment,
   type SnapPurpose,
@@ -135,6 +136,7 @@ const LIGHT: PlanColors = {
   furnitureStroke: "#4b5058",
   text: "#1c2026",
   dimension: "#2f6fde",
+  section: "#0f766e",
 };
 
 const DARK: PlanColors = {
@@ -147,6 +149,7 @@ const DARK: PlanColors = {
   furnitureStroke: "#aab0b8",
   text: "#e6e8eb",
   dimension: "#6c9cf2",
+  section: "#5eead4",
 };
 
 const LIGHT_RULER: RulerColors = {
@@ -378,6 +381,9 @@ export default function PlanView() {
   /** A click awaited in the plan: the pipette, or a catalog piece being placed */
   const pick = useUi((s) => s.pick);
   const placing = useUi((s) => s.placing);
+  /** Points awaited in the plan (e.g. to align a reference object) and the pointer for them */
+  const pointPick = useUi((s) => s.pointPick);
+  const pickCursor = useRef<Pt | null>(null);
   const dark = useDarkMode();
   const colors = dark ? DARK : LIGHT;
   const rulerColors = dark ? DARK_RULER : LIGHT_RULER;
@@ -445,6 +451,7 @@ export default function PlanView() {
       levelId: opened.home.levels.length ? levelId : null,
       icons,
       topView: furnitureTopView ? (p) => topView(p, opened.id, redraw) : undefined,
+      section: (p, height) => sectionCut(p, opened.id, height, redraw),
     };
   }, [opened, levelId, icons, furnitureTopView]);
   const effectiveLevel = input?.levelId ?? null;
@@ -664,7 +671,8 @@ export default function PlanView() {
     const points =
       cursor.current && drawing ? [...draft.current, typedAt ?? cursor.current] : draft.current;
     const sel = useStore.getState().selection;
-    const snap = isSnapTool(tool) ? snapState.current : null;
+    const picking = useUi.getState().pointPick;
+    const snap = isSnapTool(tool) || picking ? snapState.current : null;
     const m = tool === "measure" ? measure.current : null;
     // A ruler being drawn shows like a guide, without its length
     const rulerDraft = tool === "ruler" ? measure.current : null;
@@ -734,6 +742,7 @@ export default function PlanView() {
       handleDrag,
       rubberBand: g?.kind === "band" ? [g.start, g.end] : null,
       measure: m ? [m.a, measureEnd(m)] : (parallel?.distance ?? null),
+      pointPairs: picking ? { points: picking.points, cursor: pickCursor.current } : null,
       snap: snap?.marker ?? null,
       visitor: shownVisitor(g),
       visitorHandle: (() => {
@@ -955,6 +964,23 @@ export default function PlanView() {
     const s = snapDraw(p, previous, ctx);
     snapState.current = s;
     snapHints.current = ctx.hints ?? null;
+    return s.pt;
+  };
+
+  /** A point awaited in the plan (see `pointPick`): corners, edges and cut lines catch it. */
+  const pickPoint = (p: Pt, altKey: boolean): Pt => {
+    if (!input || !magnetismActive(altKey)) {
+      snapState.current = null;
+      return p;
+    }
+    const s = snapDraw(
+      p,
+      null,
+      snapContext("dimension", input.home, input.wallShapes, effectiveLevel, pxToCm(snapPx()), {
+        near: p,
+      }),
+    );
+    snapState.current = s;
     return s.pt;
   };
 
@@ -1197,6 +1223,16 @@ export default function PlanView() {
     if (e.button !== 0 || !input) return;
     const p = toWorld(e.clientX, e.clientY);
     const ui = useUi.getState();
+    if (ui.pointPick) {
+      const points = [...ui.pointPick.points, pickPoint(p, e.altKey)];
+      if (points.length >= ui.pointPick.labels.length) {
+        ui.pointPick.onDone(points);
+        ui.setPointPick(null);
+      } else {
+        ui.setPointPick({ ...ui.pointPick, points });
+      }
+      return;
+    }
     if (ui.pick) {
       // The pipette: the clicked surface gives its look
       const from = surfaceAt(input.home, input.wallShapes, effectiveLevel, p, pxToCm(PICK_PX));
@@ -1307,6 +1343,12 @@ export default function PlanView() {
     mouseWorld.current = toWorld(e.clientX, e.clientY);
     usePointer.setState({ pt: mouseWorld.current });
     const ui = useUi.getState();
+    if (!g && input && ui.pointPick) {
+      pickCursor.current = pickPoint(mouseWorld.current, e.altKey);
+      if (canvasRef.current) canvasRef.current.style.cursor = "crosshair";
+      draw();
+      return;
+    }
     if (!g && input && (ui.pick || ui.placing)) {
       // The surface the pipette would take, or the piece where the click would place it
       if (ui.pick) {
@@ -2392,8 +2434,11 @@ export default function PlanView() {
         e.preventDefault();
         return;
       }
-      if (e.key === "Escape" && (useUi.getState().pick || useUi.getState().placing)) {
-        // Ends the pipette or the placing of a catalog piece
+      if (
+        e.key === "Escape" &&
+        (useUi.getState().pick || useUi.getState().placing || useUi.getState().pointPick)
+      ) {
+        // Ends the pipette, the placing of a catalog piece or the clicking of points
         useUi.getState().setPick(null);
         e.preventDefault();
         return;
@@ -2528,12 +2573,19 @@ export default function PlanView() {
   // The pipette or the placing ended: nothing of it stays in the plan
   // biome-ignore lint/correctness/useExhaustiveDependencies: draw reads the current state
   useEffect(() => {
+    if (pointPick) {
+      // The next point of the same series: its marker follows the pointer again
+      draw();
+      return;
+    }
+    pickCursor.current = null;
     if (pick || placing) return;
     drop.current = null;
     surfaceHover.current = null;
+    if (!isSnapTool(tool)) snapState.current = null;
     if (canvasRef.current) canvasRef.current.style.cursor = cursorStyle[tool];
     draw();
-  }, [pick, placing]);
+  }, [pick, placing, pointPick]);
 
   /** Places a catalog piece at a point of the plan: in a wall, docked to one, or free. */
   const placeCatalogItem = async (item: CatalogDragData, p: Pt, altKey: boolean) => {
@@ -2672,15 +2724,17 @@ export default function PlanView() {
           onDragLeave={onDragLeave}
           onDrop={(e) => void onDrop(e)}
         />
-        {opened && (pick || placing || hint) && (
+        {opened && (pick || placing || pointPick || hint) && (
           <div className="plan-hint">
-            {pick
-              ? pick.label
-              : placing
-                ? t("Click to place “{name}” · Shift+click places several · Esc cancels", {
-                    name: placing.data.name,
-                  })
-                : hint}
+            {pointPick
+              ? pointPick.labels[pointPick.points.length]
+              : pick
+                ? pick.label
+                : placing
+                  ? t("Click to place “{name}” · Shift+click places several · Esc cancels", {
+                      name: placing.data.name,
+                    })
+                  : hint}
           </div>
         )}
         {menu && (

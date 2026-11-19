@@ -508,6 +508,8 @@ export function pieceAtLevel(home: Home, piece: Piece, levelId: string | null): 
   const level = levelPosition(home, levelId);
   if (!own || !level) return false;
   if (sameElevationBelow(own, level)) return true;
+  // A reference object that is cut (a scanned house) shows its cut on every level
+  if (isReference(piece) && sectionHeight(piece) !== null) return true;
   if (own.elevation >= level.elevation) return false;
   // Reference objects (terrain, scans) lie under the plan of every level above theirs
   if (isReference(piece)) return true;
@@ -526,6 +528,72 @@ export function isReference(piece: Piece): boolean {
   return (
     piece.properties?.some((pr) => pr.name === REFERENCE_PROPERTY && pr.value === "true") ?? false
   );
+}
+
+/** Piece properties of reference objects (set with `furniture_update`). */
+export const PLAN_HIDDEN_PROPERTY = "mySweetHome.planHidden";
+export const HIDDEN_3D_PROPERTY = "mySweetHome.hidden3d";
+export const PLAN_OPACITY_PROPERTY = "mySweetHome.planOpacity";
+export const SECTION_HEIGHT_PROPERTY = "mySweetHome.sectionHeight";
+export const SECTION_SNAP_PROPERTY = "mySweetHome.sectionSnap";
+export const TERRAIN_PROPERTY = "mySweetHome.terrain";
+
+function pieceProperty(piece: Piece, name: string): string | null {
+  return piece.properties?.find((pr) => pr.name === name)?.value ?? null;
+}
+
+/** True for a reference object that is hidden in the plan only (it still shows in 3D). */
+export function hiddenInPlan(piece: Piece): boolean {
+  return isReference(piece) && pieceProperty(piece, PLAN_HIDDEN_PROPERTY) === "true";
+}
+
+/** True for a reference object that is hidden in 3D only (it still shows in the plan). */
+export function hiddenIn3d(piece: Piece): boolean {
+  return isReference(piece) && pieceProperty(piece, HIDDEN_3D_PROPERTY) === "true";
+}
+
+/** Opacity of a reference object in the plan (0 to 1), or null for the default. */
+export function planOpacity(piece: Piece): number | null {
+  if (!isReference(piece)) return null;
+  const v = Number.parseFloat(pieceProperty(piece, PLAN_OPACITY_PROPERTY) ?? "");
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null;
+}
+
+/**
+ * Height in cm above the floor of the shown level at which the plan cuts a reference object
+ * instead of showing it from above, or null (no cut).
+ */
+export function sectionHeight(piece: Piece): number | null {
+  if (!isReference(piece)) return null;
+  const v = Number.parseFloat(pieceProperty(piece, SECTION_HEIGHT_PROPERTY) ?? "");
+  return Number.isFinite(v) && v >= 0 ? v : null;
+}
+
+/** True if the lines of the cut through a reference object attract the pointer. */
+export function sectionSnaps(piece: Piece): boolean {
+  return sectionHeight(piece) !== null && pieceProperty(piece, SECTION_SNAP_PROPERTY) === "true";
+}
+
+/** True for a reference object that is marked as terrain. */
+export function isTerrain(piece: Piece): boolean {
+  return isReference(piece) && pieceProperty(piece, TERRAIN_PROPERTY) === "true";
+}
+
+/** True for terrain shown in 3D: the flat ground makes room for it there. */
+export function replacesGround(piece: Piece): boolean {
+  return isTerrain(piece) && !hiddenIn3d(piece);
+}
+
+/**
+ * Height above the bottom of a reference object at which the plan of `levelId` cuts it, or
+ * null (no cut): its section height is measured from the floor of the shown level.
+ */
+export function sectionHeightIn(home: Home, piece: Piece, levelId: string | null): number | null {
+  const height = sectionHeight(piece);
+  if (height === null) return null;
+  const own = levelPosition(home, piece.attrs.level)?.elevation ?? 0;
+  const shown = levelPosition(home, levelId)?.elevation ?? own;
+  return shown + height - own - (piece.attrs.elevation ?? 0);
 }
 
 /**

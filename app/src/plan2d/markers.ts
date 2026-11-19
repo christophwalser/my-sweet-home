@@ -80,6 +80,7 @@ const NOTES: Record<string, string> = {
   "on wall face": t("on wall face"),
   "on edge": t("on edge"),
   "on guide line": t("on guide line"),
+  "on section line": t("on section line"),
   "guide line end": t("guide line end"),
   "guide line middle": t("guide line middle"),
   "guide line crossing": t("guide line crossing"),

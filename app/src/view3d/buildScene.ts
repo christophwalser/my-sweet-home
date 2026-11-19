@@ -809,7 +809,15 @@ function facesDown(geometry: THREE.BufferGeometry, y: number): THREE.BufferGeome
 
 // ------------------------------------------------------------------ Ground and environment
 
-export function buildGround(opened: OpenedHome, requestRender: () => void): THREE.Mesh {
+/**
+ * The flat ground. `holes` are footprints (plan coordinates) it leaves open, e.g. where
+ * terrain replaces it.
+ */
+export function buildGround(
+  opened: OpenedHome,
+  requestRender: () => void,
+  holes: Pt[][] = [],
+): THREE.Mesh {
   const env = opened.home.environment;
   const groundTexture = env?.textures.find((t) => t.role === "groundTexture");
   // The ground always loses against floors lying on it, also at flat viewing angles
@@ -827,7 +835,23 @@ export function buildGround(opened: OpenedHome, requestRender: () => void): THRE
     );
   }
   const size = 200000;
-  const geom = new THREE.PlaneGeometry(size, size);
+  let geom: THREE.BufferGeometry;
+  if (holes.length === 0) {
+    geom = new THREE.PlaneGeometry(size, size);
+  } else {
+    // Drawn with y up (the plan's y points to the front), so that the face looks up
+    const half = size / 2;
+    const shape = new THREE.Shape([
+      new THREE.Vector2(-half, -half),
+      new THREE.Vector2(half, -half),
+      new THREE.Vector2(half, half),
+      new THREE.Vector2(-half, half),
+    ]);
+    for (const ring of holes) {
+      shape.holes.push(new THREE.Path(ring.map(([x, y]) => new THREE.Vector2(x, -y))));
+    }
+    geom = new THREE.ShapeGeometry(shape);
+  }
   geom.rotateX(-Math.PI / 2);
   // UVs in centimeters so that tiled textures have the right size
   const uv = geom.getAttribute("uv") as THREE.BufferAttribute;
