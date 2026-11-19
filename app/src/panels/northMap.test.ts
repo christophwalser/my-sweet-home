@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   insideOutlines,
+  mapBackground,
   northRotation,
   type Outline,
   offsetPosition,
+  planMiddle,
   planOutlines,
 } from "./northMap";
 
@@ -80,5 +82,34 @@ describe("northRotation", () => {
     close(northRotation(0)(3, 4), [3, 4]);
     // North 180°: the bottom of the plan is north
     close(northRotation(Math.PI)(0, 1), [0, -1]);
+  });
+});
+
+describe("map as background image", () => {
+  it("puts the zero point of the plan where it lies on the image", () => {
+    // 1000 pixels of 20 cm, the middle of the walls (500 / 300) in the middle of the image
+    expect(mapBackground([500, 300], [0, 0], [0, 0], 0, 1000, 0.2)).toEqual({
+      side: 20000,
+      xOrigin: 9500,
+      yOrigin: 9700,
+    });
+  });
+
+  it("follows the middle of the image and of the walls on the map", () => {
+    // The image lies 10 m east of the walls: the zero point moves to the left on it
+    expect(mapBackground([500, 300], [0, 0], [10, 0], 0, 1000, 0.2).xOrigin).toBe(8500);
+    // The walls were dragged 10 m east too: as before
+    expect(mapBackground([500, 300], [10, 0], [10, 0], 0, 1000, 0.2).xOrigin).toBe(9500);
+  });
+
+  it("turns east into the plan with its north direction", () => {
+    // North points to the right of the plan: east of the walls is below them in the plan
+    const b = mapBackground([500, 300], [0, 0], [10, 0], Math.PI / 2, 1000, 0.2);
+    expect(b.xOrigin).toBeCloseTo(9500, 6);
+    expect(b.yOrigin).toBeCloseTo(8700, 6);
+  });
+
+  it("has the middle of the walls at 0 / 0 without walls", () => {
+    expect(planMiddle([])).toEqual([0, 0]);
   });
 });

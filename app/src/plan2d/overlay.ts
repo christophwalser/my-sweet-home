@@ -53,6 +53,8 @@ export type PlanOverlay = {
   rubberBand: [Pt, Pt] | null;
   /** Distance measured with the measuring tool */
   measure: [Pt, Pt] | null;
+  /** Pairs of points being clicked (a point and where it belongs), with the pointer */
+  pointPairs?: { points: Pt[]; cursor: Pt | null } | null;
   /** Free spaces beside a door or window being slid along its wall */
   gaps: Gap[];
   /** Automatic dimensions of the selected wall or piece */
@@ -85,6 +87,58 @@ export const VISITOR_PICK_RADIUS = 26;
 export function visitorHandlePos(v: { x: number; y: number; yaw: number }, px: number): Pt {
   const d = VISITOR_PICK_RADIUS + 18 * px;
   return [v.x - Math.sin(v.yaw) * d, v.y + Math.cos(v.yaw) * d];
+}
+
+/**
+ * Pairs of points being clicked to align an object: each point with its number and an arrow
+ * to where it belongs. The pointer stands in for the point that is clicked next.
+ */
+function drawPointPairs(
+  ctx: CanvasRenderingContext2D,
+  points: Pt[],
+  cursor: Pt | null,
+  color: string,
+  px: number,
+): void {
+  const all = cursor ? [...points, cursor] : points;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.5 * px;
+  ctx.font = `600 ${12 * px}px system-ui, sans-serif`;
+  for (let i = 0; i < all.length; i += 2) {
+    const [x, y] = all[i];
+    const to = all[i + 1];
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(x, y, 5 * px, 0, 2 * Math.PI);
+    ctx.moveTo(x - 9 * px, y);
+    ctx.lineTo(x + 9 * px, y);
+    ctx.moveTo(x, y - 9 * px);
+    ctx.lineTo(x, y + 9 * px);
+    ctx.stroke();
+    ctx.fillText(String(i / 2 + 1), x + 8 * px, y - 8 * px);
+    if (!to) continue;
+    const len = Math.hypot(to[0] - x, to[1] - y);
+    if (len < 1e-6) continue;
+    const ux = (to[0] - x) / len;
+    const uy = (to[1] - y) / len;
+    ctx.setLineDash([5 * px, 4 * px]);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(to[0], to[1]);
+    ctx.stroke();
+    // Arrow head at the target
+    ctx.setLineDash([]);
+    const head = Math.min(10 * px, len / 2);
+    ctx.beginPath();
+    ctx.moveTo(to[0], to[1]);
+    ctx.lineTo(to[0] - ux * head - uy * head * 0.5, to[1] - uy * head + ux * head * 0.5);
+    ctx.lineTo(to[0] - ux * head + uy * head * 0.5, to[1] - uy * head - ux * head * 0.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 /** Camera path of the video: a line through the key points, each with its number. */
@@ -178,6 +232,10 @@ export function drawOverlay(
   ctx.lineJoin = "round";
 
   if (overlay.cameraPath?.length) drawCameraPath(ctx, overlay.cameraPath, overlay.accent, px);
+  if (overlay.pointPairs) {
+    const { points, cursor } = overlay.pointPairs;
+    drawPointPairs(ctx, points, cursor, overlay.accent, px);
+  }
   if (overlay.visitor) drawVisitor(ctx, overlay.visitor, overlay.accent, px);
   if (overlay.visitor && overlay.visitorHandle) {
     ctx.strokeStyle = overlay.accent;

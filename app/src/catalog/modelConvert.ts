@@ -24,7 +24,11 @@ export const MODEL_EXTENSIONS = [
   "ply",
   "wrl",
   "vrml",
+  "xyz",
+  "asc",
 ];
+/** Height grids of terrain among them: placed as reference object that replaces the ground. */
+export const TERRAIN_EXTENSIONS = ["xyz", "asc"];
 /** Image files and material packages the texture import accepts. */
 export const TEXTURE_EXTENSIONS = [
   "jpg",

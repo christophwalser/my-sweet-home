@@ -11,9 +11,11 @@ import { useStore } from "../store";
 import Icon from "../ui/Icon";
 import {
   insideOutlines,
+  mapBackground,
   northRotation,
   type Outline,
   offsetPosition,
+  planMiddle,
   planOutlines,
 } from "./northMap";
 
@@ -235,6 +237,57 @@ export default function NorthMapDialog({ onClose }: { onClose: () => void }) {
     onClose();
   };
 
+  /**
+   * Puts the downloaded map under the plan as background image of the shown level, true to
+   * scale and turned like the walls on it; the north direction is applied too.
+   */
+  const putUnderPlan = async () => {
+    if (!map || !opened) return;
+    const north = (angle * Math.PI) / 180;
+    // Large enough for the map turned by any angle; its corners stay transparent
+    const size = Math.ceil(Math.hypot(map.width, map.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.translate(size / 2, size / 2);
+    ctx.rotate(north);
+    ctx.drawImage(map.img, -map.x, -map.y);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // The attribution stays on the image wherever it is shown or printed
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    const w = ctx.measureText(map.attribution).width;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.fillRect(size / 2 - w / 2 - 6, size / 2 + map.height / 2 - 20, w + 12, 18);
+    ctx.fillStyle = "#333";
+    ctx.fillText(map.attribution, size / 2, size / 2 + map.height / 2 - 7);
+    const place = mapBackground(
+      planMiddle(opened.wallShapes),
+      building,
+      [map.east, map.south],
+      north,
+      size,
+      map.meters_per_pixel,
+    );
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    const level = useStore.getState().selectedLevel;
+    await run("compass_update", { north_direction_deg: angle });
+    const result = await run("background_image_set", {
+      ...(level ? { level } : {}),
+      image_base64: canvas.toDataURL("image/png").split(",")[1],
+      scale_distance: r2(place.side),
+      x_start: 0,
+      y_start: 0,
+      x_end: size,
+      y_end: 0,
+      x_origin: r2(place.xOrigin),
+      y_origin: r2(place.yOrigin),
+    });
+    if (result !== undefined) onClose();
+  };
+
   return (
     <div className="dialog-backdrop">
       <div
@@ -362,6 +415,16 @@ export default function NorthMapDialog({ onClose }: { onClose: () => void }) {
             />
             <span className="prop-unit">°</span>
           </label>
+          <button
+            type="button"
+            disabled={!map || loading}
+            title={t(
+              "Applies the north direction and puts this map true to scale under the plan of the shown level, where the walls lie on it; it replaces the background image of that level",
+            )}
+            onClick={() => void putUnderPlan()}
+          >
+            {t("Use the map as background image")}
+          </button>
           <button type="button" onClick={onClose}>
             {t("Cancel")}
           </button>

@@ -20,6 +20,7 @@ import { usePreferences } from "../preferences";
 import { sameLevel, underlayLevel } from "./drawPlan";
 import { gridAlong, snapGridStep, toGrid } from "./gridSnap";
 import { levelGuides } from "./guideData";
+import { sectionSnapLines } from "./section";
 
 export type Segment = [Pt, Pt];
 
@@ -506,6 +507,14 @@ export function snapContext(
       for (const q of corners.filter(keep)) named(q, "wall corner (other level)");
       refs.push(...ends.filter(keep), ...corners.filter(keep));
     });
+  }
+
+  // Cuts through reference objects (a scanned house): their lines near the pointer
+  if (near) {
+    for (const seg of sectionSnapLines(home, levelId, near, radius * 8)) {
+      lines.push(seg);
+      lineLabelOf.set(seg, "on section line");
+    }
   }
 
   if (purpose !== "polyline") {

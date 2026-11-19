@@ -13,7 +13,7 @@ import {
 } from "../api";
 import { t } from "../i18n";
 import { VIEW3D_PREFIX } from "../layout/view3dWindow";
-import { forEachPiece, type Home, type Piece } from "../model";
+import { forEachPiece, type Home, hiddenIn3d, type Piece } from "../model";
 import { perfMark, perfOn, perfScene } from "../perfMarks";
 import { usePreferences } from "../preferences";
 import { poseParams, useStore, type ViewMode } from "../store";
@@ -68,6 +68,7 @@ import {
   viewDirection,
 } from "./standardViews";
 import { stepSurfaces } from "./stepSurfaces";
+import { groundHoles, groundHolesKey } from "./terrain";
 import VideoDialog from "./VideoDialog";
 import View3DSettings from "./View3DSettings";
 import ViewpointsMenu from "./ViewpointsMenu";
@@ -940,8 +941,8 @@ export default function View3D() {
       const base = [opened.id, levelId, h.levels, h.properties, h.environment, h.attrs];
       built = {
         sky: reuse("sky", [opened.id, h.environment], () => buildSky(opened, c.requestRender)),
-        ground: reuse("ground", [opened.id, h.environment], () => {
-          const ground = buildGround(opened, c.requestRender);
+        ground: reuse("ground", [opened.id, h.environment, groundHolesKey(h)], () => {
+          const ground = buildGround(opened, c.requestRender, groundHoles(h));
           ground.receiveShadow = true;
           return ground;
         }),
@@ -999,7 +1000,7 @@ export default function View3D() {
     furniture.name = "furniture";
     const stairObjects: THREE.Object3D[] = [];
     forEachPiece(home.furniture, (p) => {
-      if (!shown.has(p.attrs.level)) return;
+      if (!shown.has(p.attrs.level) || hiddenIn3d(p)) return;
       const base = (levels.get(p.attrs.level) ?? levels.get(null))?.elevation ?? 0;
       const object =
         (p.attrs.id ? kept.get(p.attrs.id) : undefined) ??

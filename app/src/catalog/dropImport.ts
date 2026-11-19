@@ -27,6 +27,8 @@ const MODEL_ORDER = [
   "ply",
   "wrl",
   "vrml",
+  "xyz",
+  "asc",
 ];
 
 function fileName(path: string): string {

@@ -1165,3 +1165,164 @@ fn furniture_update_rotates_several_pieces_in_one_undo_step() {
     );
     assert!(err.contains("not both"), "{err}");
 }
+
+#[test]
+fn reference_objects_keep_how_the_plan_shows_them() {
+    let r = Registry::standard();
+    let mut doc = plain_home(&r);
+    let property = |p: &Piece, name: &str| {
+        p.properties
+            .iter()
+            .find(|pr| pr.name == name)
+            .map(|pr| pr.value.clone())
+    };
+    let before = snapshot(&doc);
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({
+            "id": "table", "reference": true, "plan_visible": false, "plan_opacity": 0.456,
+            "view3d_visible": false,
+            "section_height": 100.04, "section_snap": true, "terrain": true,
+        }),
+    );
+    let after = snapshot(&doc);
+    let table = piece(&doc, "table");
+    assert_eq!(
+        property(&table, "mySweetHome.planHidden").as_deref(),
+        Some("true")
+    );
+    assert_eq!(
+        property(&table, "mySweetHome.hidden3d").as_deref(),
+        Some("true")
+    );
+    assert_eq!(
+        property(&table, "mySweetHome.planOpacity").as_deref(),
+        Some("0.46")
+    );
+    assert_eq!(
+        property(&table, "mySweetHome.sectionHeight").as_deref(),
+        Some("100")
+    );
+    assert_eq!(
+        property(&table, "mySweetHome.sectionSnap").as_deref(),
+        Some("true")
+    );
+    assert_eq!(
+        property(&table, "mySweetHome.terrain").as_deref(),
+        Some("true")
+    );
+    // The piece stays visible: it is hidden in the plan only
+    assert_ne!(table.attrs.visible, Some(false));
+    check_undo_redo(&r, &mut doc, &before, &after);
+
+    let reopened = save_and_reopen(
+        &r,
+        &mut doc,
+        "reference_objects_keep_how_the_plan_shows_them",
+    );
+    let mut kept = None;
+    reopened.home().for_each_piece(|x| {
+        if x.attrs.id.as_deref() == Some("table") {
+            kept = Some(x.clone());
+        }
+    });
+    let kept = kept.unwrap();
+    assert_eq!(
+        property(&kept, "mySweetHome.sectionHeight").as_deref(),
+        Some("100")
+    );
+    assert_eq!(
+        property(&kept, "mySweetHome.planOpacity").as_deref(),
+        Some("0.46")
+    );
+
+    // Shown again, default opacity, no cut, no snap, no terrain: the properties are gone
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({
+            "id": "table", "plan_visible": true, "view3d_visible": true, "plan_opacity": -1,
+            "section_height": -1,
+            "section_snap": false, "terrain": false,
+        }),
+    );
+    let table = piece(&doc, "table");
+    let names: Vec<&str> = table.properties.iter().map(|pr| pr.name.as_str()).collect();
+    assert_eq!(names, ["mySweetHome.reference"]);
+    // Opacity above 1 is 1
+    run(
+        &r,
+        &mut doc,
+        "furniture_update",
+        json!({ "id": "table", "plan_opacity": 3 }),
+    );
+    assert_eq!(
+        property(&piece(&doc, "table"), "mySweetHome.planOpacity").as_deref(),
+        Some("1")
+    );
+}
+
+#[test]
+fn align_points_turns_and_moves_a_piece() {
+    let r = Registry::standard();
+    let mut doc = plain_home(&r);
+    // The table lies at 100 / 100: its center and a point 40 cm to its right go to
+    // 200 / 300 and 40 cm below that, a quarter turn clockwise
+    let before = snapshot(&doc);
+    let result = run(
+        &r,
+        &mut doc,
+        "furniture_align_points",
+        json!({ "id": "table", "from": [[100, 100], [140, 100]], "to": [[200, 300], [200, 340]] }),
+    );
+    let after = snapshot(&doc);
+    let a = piece(&doc, "table").attrs;
+    assert!(close(a.x, 200.0) && close(a.y, 300.0), "{} {}", a.x, a.y);
+    assert!(close(a.angle.unwrap(), std::f32::consts::FRAC_PI_2));
+    assert_eq!((a.width, a.depth, a.height), (80.0, 60.0, 70.0));
+    assert_eq!(result["angle_deg"], json!(90.0));
+    assert_eq!(result["scale"], json!(1.0));
+    check_undo_redo(&r, &mut doc, &before, &after);
+}
+
+#[test]
+fn align_points_fits_the_middle_or_resizes() {
+    let r = Registry::standard();
+    let mut doc = plain_home(&r);
+    // The targets are twice as far apart: without resize the middle between them fits
+    let params = |resize: bool| {
+        json!({
+            "id": "table", "from": [[100, 100], [140, 100]], "to": [[200, 300], [200, 380]],
+            "resize": resize,
+        })
+    };
+    run(&r, &mut doc, "furniture_align_points", params(false));
+    let a = piece(&doc, "table").attrs;
+    assert!(close(a.x, 200.0) && close(a.y, 320.0), "{} {}", a.x, a.y);
+    assert_eq!(a.width, 80.0);
+    doc.undo();
+    // With resize both points fit and the piece is twice as large
+    let result = run(&r, &mut doc, "furniture_align_points", params(true));
+    let a = piece(&doc, "table").attrs;
+    assert!(close(a.x, 200.0) && close(a.y, 300.0), "{} {}", a.x, a.y);
+    assert_eq!((a.width, a.depth, a.height), (160.0, 120.0, 140.0));
+    assert_eq!(result["scale"], json!(2.0));
+
+    let e = run_err(
+        &r,
+        &mut doc,
+        "furniture_align_points",
+        json!({ "id": "table", "from": [[1, 1], [1, 1]], "to": [[0, 0], [5, 5]] }),
+    );
+    assert!(e.contains("apart"), "{e}");
+    let e = run_err(
+        &r,
+        &mut doc,
+        "furniture_align_points",
+        json!({ "id": "nothing", "from": [[0, 0], [1, 1]], "to": [[0, 0], [5, 5]] }),
+    );
+    assert!(e.contains("unknown piece"), "{e}");
+}

@@ -27,13 +27,18 @@ pub struct ModelPackage {
     pub files: Vec<(String, Vec<u8>)>,
     /// Size along x, y (up) and z in cm, if it could be computed
     pub size_cm: Option<[f32; 3]>,
+    /// Center of the model's box along x, y (up) and z in cm, measured from the zero point of
+    /// its file (with `size_cm`): where the model lies if its zero point is kept
+    pub center_cm: Option<[f64; 3]>,
+    /// Centimeters per unit of the file that `size_cm` and `center_cm` assume
+    pub unit_cm: f32,
 }
 
 /// Errors while reading a model.
 #[derive(Debug, thiserror::Error)]
 pub enum ModelError {
     #[error(
-        "unsupported model format '{0}' (use OBJ, DAE, 3DS, glTF, GLB, 3MF, STL, PLY, ZIP or KMZ)"
+        "unsupported model format '{0}' (use OBJ, DAE, 3DS, glTF, GLB, 3MF, STL, PLY, ZIP or KMZ, or a height grid as XYZ or ASC)"
     )]
     Unsupported(String),
     #[error("{0}")]
@@ -87,6 +92,8 @@ pub fn collect(path: &Path) -> Result<ModelPackage, ModelError> {
         "stl" => crate::model_formats::convert_stl(&read(path)?)?,
         "ply" => crate::model_formats::convert_ply(&read(path)?)?,
         "3mf" => crate::model_formats::convert_3mf(&read(path)?)?,
+        "xyz" => crate::model_formats::convert_xyz(&read(path)?)?,
+        "asc" => crate::model_formats::convert_asc(&read(path)?)?,
         "zip" | "kmz" => crate::model_formats::convert_archive(&read(path)?)?,
         other => return Err(ModelError::Unsupported(other.to_owned())),
     };
@@ -158,6 +165,8 @@ fn collect_obj(path: &Path, dir: &Path, file_name: &str) -> Result<ModelPackage,
         main: file_name.to_owned(),
         files,
         size_cm: Some(extent.map(|e| e * scale)),
+        center_cm: Some([0, 1, 2].map(|i| f64::from(lo[i] + hi[i]) / 2.0 * f64::from(scale))),
+        unit_cm: scale,
     })
 }
 
@@ -196,6 +205,8 @@ fn collect_dae(path: &Path, dir: &Path, file_name: &str) -> Result<ModelPackage,
         main: file_name.to_owned(),
         files,
         size_cm: None,
+        center_cm: None,
+        unit_cm: 1.0,
     })
 }
 
@@ -239,6 +250,8 @@ fn collect_3ds(path: &Path, dir: &Path, file_name: &str) -> Result<ModelPackage,
         main: file_name.to_owned(),
         files,
         size_cm: None,
+        center_cm: None,
+        unit_cm: 1.0,
     })
 }
 
@@ -450,6 +463,8 @@ fn convert_gltf(path: &Path, dir: &Path) -> Result<ModelPackage, ModelError> {
             (hi[1] - lo[1]) * 100.0,
             (hi[2] - lo[2]) * 100.0,
         ]),
+        center_cm: Some([0, 1, 2].map(|i| f64::from(lo[i] + hi[i]) / 2.0 * 100.0)),
+        unit_cm: 100.0,
     })
 }
 
@@ -541,6 +556,9 @@ mod tests {
         let names: Vec<&str> = p.files.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(names, vec!["box.obj", "box.mtl", "tex/wood.png"]);
         assert_eq!(p.size_cm, Some([50.0, 80.0, 30.0]));
+        // The box starts at the zero point of the file
+        assert_eq!(p.center_cm, Some([25.0, 40.0, 15.0]));
+        assert_eq!(p.unit_cm, 1.0);
         std::fs::remove_dir_all(&dir).ok();
     }
 

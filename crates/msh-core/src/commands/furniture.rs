@@ -137,6 +137,23 @@ struct UpdateParams {
     /// Reference object (terrain, scan, neighbor house): shown in the plan faint and in 3D,
     /// but not picked or snapped to in the plan; selected in the furniture list
     reference: Option<bool>,
+    /// Reference objects: shown in the plan (default true). `visible` hides the object in the
+    /// plan and in 3D; this one only in the plan
+    plan_visible: Option<bool>,
+    /// Reference objects: shown in 3D (default true), e.g. false for a scan that is only
+    /// traced in the plan and would cover the walls drawn after it
+    view3d_visible: Option<bool>,
+    /// Reference objects: opacity in the plan from 0 to 1; a negative value restores the
+    /// default
+    plan_opacity: Option<f32>,
+    /// Reference objects: the plan shows a cut through the model at this height in cm above
+    /// the floor of the shown level instead of its view from above (e.g. 100 to trace the
+    /// walls of a scanned house); a negative value shows the view from above again
+    section_height: Option<f32>,
+    /// Reference objects: the lines of that cut attract the pointer while drawing
+    section_snap: Option<bool>,
+    /// Reference objects: terrain that replaces the flat ground under it in 3D
+    terrain: Option<bool>,
     /// With one of width, depth and height: the other two change by the same factor, for
     /// each piece (default false)
     keep_proportions: Option<bool>,
@@ -441,7 +458,8 @@ pub(super) fn register(r: &mut Registry) {
     r.add(
         "furniture_update",
         "Moves, rotates, resizes, renames, colors, mirrors or hides a piece of furniture, or \
-         marks it as reference object (or several pieces with ids; x and y only for one piece).",
+         marks it as reference object and sets how the plan shows it (or several pieces \
+         with ids; x and y only for one piece).",
         true,
         |doc, p: UpdateParams| {
             // Textures of material changes are embedded once for all pieces
@@ -633,6 +651,34 @@ pub(super) fn register(r: &mut Registry) {
                         });
                     }
                 }
+                if let Some(v) = p.plan_visible {
+                    set_property(piece, PLAN_HIDDEN_PROPERTY, (!v).then(|| "true".into()));
+                }
+                if let Some(v) = p.view3d_visible {
+                    set_property(piece, HIDDEN_3D_PROPERTY, (!v).then(|| "true".into()));
+                }
+                if let Some(v) = p.plan_opacity {
+                    if !v.is_finite() {
+                        return Err(CommandError::failed("plan_opacity must be a number"));
+                    }
+                    let value =
+                        (v >= 0.0).then(|| format!("{}", (v.min(1.0) * 100.0).round() / 100.0));
+                    set_property(piece, PLAN_OPACITY_PROPERTY, value);
+                }
+                if let Some(v) = p.section_height {
+                    if !v.is_finite() {
+                        return Err(CommandError::failed("section_height must be a number"));
+                    }
+                    let value = (v >= 0.0).then(|| format!("{}", (v * 10.0).round() / 10.0));
+                    set_property(piece, SECTION_HEIGHT_PROPERTY, value);
+                }
+                if let Some(v) = p.section_snap {
+                    set_property(piece, SECTION_SNAP_PROPERTY, v.then(|| "true".into()));
+                }
+                if let Some(v) = p.terrain {
+                    set_property(piece, TERRAIN_PROPERTY, v.then(|| "true".into()));
+                }
+                let a = &mut piece.attrs;
                 // Movable is the default; the file only says so when it is not
                 if let Some(v) = p.base_plan_item
                     && piece.kind != PieceKind::DoorOrWindow
@@ -643,6 +689,88 @@ pub(super) fn register(r: &mut Registry) {
             Ok(updated(&targets))
         },
     );
+    register_align(r);
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct AlignPointsParams {
+    /// ID of the piece (e.g. a scan, terrain or a neighbor house)
+    id: String,
+    /// Two points on the piece as it lies now, in plan coordinates (cm): [[x, y], [x, y]]
+    from: [[f32; 2]; 2],
+    /// Where these two points belong in the plan, in the same order
+    to: [[f32; 2]; 2],
+    /// Also resize the piece so that both points fit exactly. Default false: the piece is
+    /// turned and moved, the middle between the two points fits and their distance stays
+    resize: Option<bool>,
+}
+
+/// Registers `furniture_align_points`.
+fn register_align(r: &mut Registry) {
+    r.add(
+        "furniture_align_points",
+        "Turns and moves a piece of furniture or a reference object (terrain, scan, neighbor \
+         house) so that two points on it land on two points of the plan; with resize it is \
+         also scaled, so that both points fit exactly.",
+        true,
+        |doc, p: AlignPointsParams| {
+            let pt = |v: [f32; 2]| [f64::from(v[0]), f64::from(v[1])];
+            let (f1, f2, t1, t2) = (pt(p.from[0]), pt(p.from[1]), pt(p.to[0]), pt(p.to[1]));
+            if [f1, f2, t1, t2].iter().flatten().any(|v| !v.is_finite()) {
+                return Err(CommandError::failed("the points must be numbers"));
+            }
+            let (fx, fy) = (f2[0] - f1[0], f2[1] - f1[1]);
+            let (tx, ty) = (t2[0] - t1[0], t2[1] - t1[1]);
+            let (from_len, to_len) = (fx.hypot(fy), tx.hypot(ty));
+            if from_len < 0.01 || to_len < 0.01 {
+                return Err(CommandError::failed(
+                    "the two points of a pair must lie apart from each other",
+                ));
+            }
+            let turn = ty.atan2(tx) - fy.atan2(fx);
+            let scale = if p.resize == Some(true) {
+                to_len / from_len
+            } else {
+                1.0
+            };
+            let piece = find_piece_mut(doc, &p.id)?;
+            let a = &mut piece.attrs;
+            // The middle between the points goes to the middle between their targets
+            let (mx, my) = ((f1[0] + f2[0]) / 2.0, (f1[1] + f2[1]) / 2.0);
+            let (dx, dy) = (f64::from(a.x) - mx, f64::from(a.y) - my);
+            let (sin, cos) = turn.sin_cos();
+            a.x = ((t1[0] + t2[0]) / 2.0 + scale * (dx * cos - dy * sin)) as f32;
+            a.y = ((t1[1] + t2[1]) / 2.0 + scale * (dx * sin + dy * cos)) as f32;
+            a.angle = Some(normalize_angle(a.angle_or_default() + turn as f32));
+            if scale != 1.0 {
+                let s = scale as f32;
+                a.width *= s;
+                a.depth *= s;
+                a.height *= s;
+                update_size_in_plan(a);
+            }
+            Ok(json!({
+                "id": p.id,
+                "x": round2(a.x),
+                "y": round2(a.y),
+                "angle_deg": deg(a.angle_or_default()),
+                "scale": (scale * 10000.0).round() / 10000.0,
+            }))
+        },
+    );
+}
+
+/// Sets or removes a property of our own on a piece.
+fn set_property(piece: &mut Piece, name: &str, value: Option<String>) {
+    piece.properties.retain(|pr| pr.name != name);
+    if let Some(value) = value {
+        piece.properties.push(msh_model::Property {
+            name: name.into(),
+            value,
+            kind: None,
+            ..Default::default()
+        });
+    }
 }
 
 /// Catalog elevations of ceiling pieces (spots, ceiling lamps) assume Sweet Home 3D's 250 cm
@@ -701,6 +829,16 @@ pub const SPOT_ANGLE_PROPERTY: &str = "mySweetHome.spotAngle";
 /// Piece property marking a reference object such as terrain or a scan (our own; Sweet Home 3D
 /// keeps it and treats the piece as any other).
 pub const REFERENCE_PROPERTY: &str = "mySweetHome.reference";
+
+/// Piece properties of reference objects (our own; Sweet Home 3D keeps them): hidden in the
+/// plan only, hidden in 3D only, opacity in the plan, height of the cut the plan shows, whether its lines catch
+/// the pointer, and terrain that replaces the ground in 3D.
+pub const PLAN_HIDDEN_PROPERTY: &str = "mySweetHome.planHidden";
+pub const HIDDEN_3D_PROPERTY: &str = "mySweetHome.hidden3d";
+pub const PLAN_OPACITY_PROPERTY: &str = "mySweetHome.planOpacity";
+pub const SECTION_HEIGHT_PROPERTY: &str = "mySweetHome.sectionHeight";
+pub const SECTION_SNAP_PROPERTY: &str = "mySweetHome.sectionSnap";
+pub const TERRAIN_PROPERTY: &str = "mySweetHome.terrain";
 
 /// Size of the box around a tilted piece, as Sweet Home 3D stores it in `widthInPlan`,
 /// `depthInPlan` and `heightInPlan`: the box rotated with Rz(−roll) · Rx(−pitch).

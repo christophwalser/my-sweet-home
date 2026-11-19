@@ -366,6 +366,10 @@ pub struct StagedModel {
     pub main: String,
     /// Size along x, y (up) and z in cm, if it could be computed (OBJ, glTF)
     pub size_cm: Option<[f32; 3]>,
+    /// Center of the model's box in cm from the zero point of its file (with `size_cm`)
+    pub center_cm: Option<[f64; 3]>,
+    /// Centimeters per unit of the file that the size and the center assume
+    pub unit_cm: f32,
     pub files: Vec<String>,
 }
 
@@ -379,12 +383,16 @@ pub async fn model_stage(path: PathBuf, state: State<'_, AppState>) -> CmdResult
     .map_err(|e| e.to_string())??;
     let main = package.main.clone();
     let size_cm = package.size_cm;
+    let center_cm = package.center_cm;
+    let unit_cm = package.unit_cm;
     let files = package.files.iter().map(|(n, _)| n.clone()).collect();
     let id = state.stage_model(package);
     Ok(StagedModel {
         id,
         main,
         size_cm,
+        center_cm,
+        unit_cm,
         files,
     })
 }

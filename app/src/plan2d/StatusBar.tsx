@@ -2,10 +2,12 @@
 // grid, the snap settings (radius and angle step, also by a right click), the level shown as
 // an underlay and the position of the mouse.
 
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { formatDateTime, t } from "../i18n";
 import type { Pt } from "../model";
+import ReferenceList from "../panels/ReferenceList";
+import { referenceObjects } from "../panels/referenceObjects";
 import { type Preferences, type Underlay, usePreferences } from "../preferences";
 import { useStore } from "../store";
 import Icon, { type IconName } from "../ui/Icon";
@@ -85,12 +87,51 @@ const ANGLE_STEPS = [1, 5, 15, 22.5, 30, 45];
 /** Distances of the grid lines offered by the grid menu, in cm (0: by the zoom). */
 const GRID_SPACINGS = [0, 10, 25, 50, 100];
 
+/** The reference objects of the home, in a panel above the status bar. */
+function ReferencePopover({ x, y, onClose }: { x: number; y: number; onClose: () => void }) {
+  const home = useStore((s) => s.opened?.home);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      // The button that opened the panel closes it itself
+      if (ref.current?.contains(target) || target?.closest('[aria-haspopup="dialog"]')) return;
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+  if (!home) return null;
+  return (
+    <div
+      ref={ref}
+      className="plan-status-popover"
+      role="dialog"
+      aria-label={t("Reference objects")}
+      style={{ left: x, bottom: window.innerHeight - y + 4 }}
+    >
+      <div className="plan-status-popover-title">{t("Reference objects")}</div>
+      <ReferenceList home={home} run={useStore.getState().run} onSelect={onClose} />
+    </div>
+  );
+}
+
 function StatusBar() {
   const prefs = usePreferences();
   const pointer = usePointer((s) => s.pt);
   const scale = usePointer((s) => s.scale);
   const [gridMenu, setGridMenu] = useState<{ x: number; y: number } | null>(null);
   const levelCount = useStore((s) => s.opened?.home.levels.length ?? 0);
+  // Only their number is watched: the list reads the home itself while it is open
+  const referenceCount = useStore((s) => referenceObjects(s.opened?.home).length);
+  const [references, setReferences] = useState<{ x: number; y: number } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [underlayMenu, setUnderlayMenu] = useState<{ x: number; y: number } | null>(null);
   const underlayItems: MenuItem[] = UNDERLAYS.map(([value, label]) => ({
@@ -213,6 +254,28 @@ function StatusBar() {
         {prefs.grid && ` · ${t("Grid")} ${formatLength(gridStep(scale, prefs.gridSpacing))}`}
         <Icon name="chevdown" size={12} />
       </button>
+      {referenceCount > 0 && (
+        <button
+          type="button"
+          className="plan-status-settings"
+          title={t(
+            "Reference objects under the plan (terrain, scans, neighbor houses): show, hide and select them",
+          )}
+          aria-haspopup="dialog"
+          aria-expanded={references !== null}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setReferences(references ? null : { x: r.left, y: r.top });
+          }}
+        >
+          <Icon name="alllevels" size={14} />
+          {t("{count} under the plan", { count: referenceCount })}
+          <Icon name="chevdown" size={12} />
+        </button>
+      )}
+      {references && (
+        <ReferencePopover x={references.x} y={references.y} onClose={() => setReferences(null)} />
+      )}
       {messages.length > 0 && (
         <button
           type="button"

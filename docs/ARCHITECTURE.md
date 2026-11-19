@@ -1470,6 +1470,57 @@ Package 6 of the UX review (D1 to D7). What is deliberately left out is listed i
   clicks, drags and types in the real window through the Chrome DevTools Protocol
   (`Input.dispatchMouseEvent`) and takes screenshots. Package 6 was checked this way.
 
+### 4.56 Terrain and scans (2026-11-19)
+
+Package 7 of the UX review (G1–G6). Reference objects stay pieces of furniture in the file;
+what is new is kept in piece properties `mySweetHome.*`, which Sweet Home 3D keeps.
+
+- **Model package.** `ModelPackage` also carries `center_cm` (the middle of the model's box
+  from the zero point of its file, as `f64`) and `unit_cm` (the centimeters per unit its size
+  assumes). `furniture_import` takes `unit` (mm, cm, m, in, ft) and returns `origin`: the
+  position (x, y, elevation) at which the zero point of the model lies on the zero point of
+  the plan, after the model rotation and in the size it is imported with. The import dialog
+  computes the same from the staged model (`importPlacement.ts`).
+- **Terrain.** `model_formats.rs` reads height grids: ASC (Esri ASCII grid) and XYZ (lines
+  "east north height"; regular grids keep their grid, scattered points are averaged on a
+  grid of 1.5 times their mean distance and small gaps are filled). `HeightGrid::into_mesh`
+  thins it to `TERRAIN_MAX_SIDE` (300) nodes per side and moves it to its middle and its
+  lowest point (`Mesh::shift`), because `f32` cannot hold national coordinates to the
+  centimeter; the shift comes back in `center_cm`. Grids in degrees and PLY point clouds are
+  refused with a reason.
+- **Properties of reference objects** (`furniture_update`): `plan_visible`
+  (`mySweetHome.planHidden`), `view3d_visible` (`hidden3d`), `plan_opacity` (`planOpacity`),
+  `section_height` (`sectionHeight`), `section_snap` (`sectionSnap`), `terrain` (`terrain`).
+  Hidden in both views is the piece's own `visible`, which Sweet Home 3D knows
+  (`referenceObjects.ts`: `shownIn`, `showParams`).
+- **Cut in the plan** (`plan2d/section.ts`). `cutTriangles` intersects the triangles of the
+  model with a horizontal plane; the lines are kept in the frame of the piece (a `Path2D` to
+  draw, a `Float32Array` for the magnetism) and cached by piece and height, computed in the
+  queue of the views from above. The height is measured from the floor of the shown level
+  (`sectionHeightIn`), so every level shows its own cut, and a reference object with a cut
+  shows on all levels. The lines are drawn on top of the background image. With
+  `section_snap` the lines within eight snap radii of the pointer (at most 200, nearest
+  first) join the lines of `snapContext` ("on section line"). A thickness of the cut is not
+  needed for meshes; it will matter for point clouds.
+- **Two-point alignment.** `furniture_align_points {id, from, to, resize}` turns and moves a
+  piece so that the middle between two points on it lands on the middle between their
+  targets; with `resize` it is scaled so that both fit. In the plan `uiStore.pointPick`
+  takes the four clicks (`alignPoints.ts`), with the magnetism of dimensions; the overlay
+  draws each pair as a numbered point with an arrow.
+- **Ground.** `terrain.ts`: `groundHoles` gives the footprints of terrain objects shown in
+  3D; `buildGround` cuts them out of the flat ground (the first of two overlapping ones).
+- **Map as background image.** The north dialog turns the downloaded map into the plan
+  (`mapBackground`), writes the attribution onto the image and sets it with
+  `background_image_set`; the map tiles are the ones the dialog had already loaded.
+- **Self-test beside an open app.** The app is single-instance by its identifier. A build
+  with `pnpm tauri build --debug --no-bundle -c <json with another identifier>` runs beside
+  the app the user has open; started with its own `APPDATA`, it keeps the furniture library
+  apart. It does not own the live-control pipe, so it is driven through the debugging port
+  only. Package 7 was checked this way.
+- Left open: point clouds (LAS/LAZ, E57, PLY without faces), GeoTIFF, DXF and IFC, a common
+  geographic zero point for several data sets, cuts in exports and prints, a parcel boundary
+  with setback areas, contour lines.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
