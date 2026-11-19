@@ -287,3 +287,60 @@ fn key_points_are_saved_with_their_view() {
     assert_eq!(p["pitch"], json!(-15.0));
     assert_eq!(p["field_of_view"], json!(80.0));
 }
+
+#[test]
+fn move_changes_the_order_and_can_be_undone() {
+    let r = Registry::standard();
+    let mut doc = three_points(&r);
+    let before = snapshot(&doc);
+    let xs = |r: &Registry, doc: &mut Document| -> Vec<f64> {
+        points(r, doc)
+            .iter()
+            .map(|p| p["x"].as_f64().unwrap())
+            .collect()
+    };
+    // First to the end
+    let moved = run(
+        &r,
+        &mut doc,
+        "camera_path_move",
+        json!({ "index": 0, "to": 2 }),
+    );
+    assert_eq!(moved["index"], 2);
+    assert_eq!(moved["count"], 3);
+    assert_eq!(xs(&r, &mut doc), [100.0, 200.0, 0.0]);
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+    // Last to the middle
+    run(
+        &r,
+        &mut doc,
+        "camera_path_move",
+        json!({ "index": 2, "to": 1 }),
+    );
+    assert_eq!(xs(&r, &mut doc), [100.0, 0.0, 200.0]);
+    // The order is saved
+    let mut reopened = save_and_reopen(&r, &mut doc, "camera_path_move");
+    assert_eq!(xs(&r, &mut reopened), [100.0, 0.0, 200.0]);
+}
+
+#[test]
+fn move_refuses_places_outside_the_path() {
+    let r = Registry::standard();
+    let mut doc = three_points(&r);
+    let before = snapshot(&doc);
+    run_err(
+        &r,
+        &mut doc,
+        "camera_path_move",
+        json!({ "index": 3, "to": 0 }),
+    );
+    let err = run_err(
+        &r,
+        &mut doc,
+        "camera_path_move",
+        json!({ "index": 0, "to": 3 }),
+    );
+    assert!(err.contains("3 key points"), "{err}");
+    assert_eq!(snapshot(&doc), before);
+}

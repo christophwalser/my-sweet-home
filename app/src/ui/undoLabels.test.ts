@@ -15,6 +15,9 @@ describe("stepLabel", () => {
     expect(stepLabel("room_walls_update")).toBe("Room: changed");
     expect(stepLabel("furniture_ungroup")).toBe("Furniture: ungrouped");
     expect(stepLabel("dimension_add_height")).toBe("Dimension: added");
+    expect(stepLabel("viewpoint_rename")).toBe("Point of view: renamed");
+    expect(stepLabel("camera_path_move")).toBe("Point of view: moved");
+    expect(stepLabel("edit_move")).toBe("Selection: moved");
   });
 
   it("shows the name of a command it does not know", () => {

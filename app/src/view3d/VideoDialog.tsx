@@ -1,6 +1,7 @@
 // "Create video" panel of the 3D view: camera path (key points), video settings,
 // rendering with preview and saving as MP4. The panel is not modal, so the 3D view can
-// be moved to the next key point while it is open.
+// be moved to the next key point while it is open. Each key point shows what the camera
+// sees there, a click goes to it, and the path is drawn in the plan while the panel is open.
 
 import { save } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -39,9 +40,12 @@ const WIDTHS = [320, 480, 640, 960, 1280, 1920, 2560, 3840];
 export default function VideoDialog({
   baseName,
   currentPose,
+  thumbnails,
   start,
   onClose,
 }: {
+  /** Small pictures of the scene seen from the given cameras (data URLs, "" if none) */
+  thumbnails: (poses: CameraPose[]) => string[];
   /** File name without extension proposed when saving */
   baseName: string;
   /** Camera of the 3D view, added as key point */
@@ -68,6 +72,25 @@ export default function VideoDialog({
   const preview = useRef<HTMLDivElement>(null);
   const started = useRef(0);
   const rendering = progress !== null && video === null;
+  const [pictures, setPictures] = useState<string[]>([]);
+
+  // The plan draws the camera path while the panel is open
+  useEffect(() => {
+    useStore.setState({ cameraPathShown: true });
+    return () => useStore.setState({ cameraPathShown: false });
+  }, []);
+
+  // What the camera sees at each key point
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `thumbnails` renders the scene of the moment
+  useEffect(() => {
+    if (info && !rendering) setPictures(thumbnails(info.points.map(fromDegrees)));
+  }, [info]);
+
+  /** Moves the 3D view to a key point. */
+  const goTo = (p: CameraPathInfo["points"][number]) => {
+    const mode = useStore.getState().viewMode === "observer" ? "observer" : "aerial";
+    void run("camera_set", { mode, ...p, activate: true });
+  };
 
   // Path and settings live in the home: reload them after every change
   // biome-ignore lint/correctness/useExhaustiveDependencies: reload when the home changes
@@ -177,10 +200,43 @@ export default function VideoDialog({
         {points.map((p, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: key points have no ID
           <li key={i}>
-            <span>
-              x {Math.round(p.x)}, y {Math.round(p.y)}, z {Math.round(p.z)} {t("cm ·")}{" "}
-              {Math.round(p.yaw)}°
-            </span>
+            <button
+              type="button"
+              className="video-point-go"
+              disabled={rendering}
+              onClick={() => goTo(p)}
+              title={t("Move the 3D view to this point")}
+            >
+              {pictures[i] ? (
+                <img className="viewpoints-picture" src={pictures[i]} alt="" />
+              ) : (
+                <span className="viewpoints-picture" />
+              )}
+              <span>
+                x {Math.round(p.x)}, y {Math.round(p.y)}, z {Math.round(p.z)} {t("cm ·")}{" "}
+                {Math.round(p.yaw)}°
+              </span>
+            </button>
+            <button
+              type="button"
+              className="video-point-remove"
+              disabled={rendering || i === 0}
+              onClick={() => void run("camera_path_move", { index: i, to: i - 1 })}
+              aria-label={t("Move point {v0} up", { v0: i + 1 })}
+              title={t("Earlier in the path")}
+            >
+              {"▲"}
+            </button>
+            <button
+              type="button"
+              className="video-point-remove"
+              disabled={rendering || i === points.length - 1}
+              onClick={() => void run("camera_path_move", { index: i, to: i + 1 })}
+              aria-label={t("Move point {v0} down", { v0: i + 1 })}
+              title={t("Later in the path")}
+            >
+              {"▼"}
+            </button>
             <button
               type="button"
               className="video-point-remove"

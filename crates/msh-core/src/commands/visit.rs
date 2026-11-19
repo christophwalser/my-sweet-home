@@ -81,6 +81,14 @@ struct NameParams {
 }
 
 #[derive(Deserialize, JsonSchema)]
+struct RenameParams {
+    /// Name of the point of view
+    name: String,
+    /// Its new name
+    new_name: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct NoParams {}
 
 pub(super) fn register(r: &mut Registry) {
@@ -131,7 +139,8 @@ pub(super) fn register(r: &mut Registry) {
     r.add(
         "viewpoint_store",
         "Stores a point of view under a name: the current camera of the 3D view (or of the given \
-         mode), or a position and direction given here.",
+         mode), or a position and direction given here. A point of view that has this name \
+         already is set to the new view and keeps its place in the list.",
         true,
         |doc, p: StoreParams| {
             let name = p.name.trim();
@@ -150,16 +159,23 @@ pub(super) fn register(r: &mut Registry) {
                 attrs,
                 ..Default::default()
             };
-            // Newest first, as in Sweet Home 3D's menu
-            home.cameras.retain(|c| {
-                !(c.attrs.role == STORED_ROLE && c.attrs.name.as_deref() == Some(name))
-            });
-            let first = home
-                .cameras
-                .iter()
-                .position(|c| c.attrs.role == STORED_ROLE)
-                .unwrap_or(home.cameras.len());
-            home.cameras.insert(first, camera);
+            let same =
+                |c: &Camera| c.attrs.role == STORED_ROLE && c.attrs.name.as_deref() == Some(name);
+            if let Some(at) = home.cameras.iter().position(same) {
+                // Set to the new view where it is: the list keeps its order
+                home.cameras[at] = camera;
+                let mut seen = false;
+                home.cameras
+                    .retain(|c| !same(c) || !std::mem::replace(&mut seen, true));
+            } else {
+                // Newest first, as in Sweet Home 3D's menu
+                let first = home
+                    .cameras
+                    .iter()
+                    .position(|c| c.attrs.role == STORED_ROLE)
+                    .unwrap_or(home.cameras.len());
+                home.cameras.insert(first, camera);
+            }
             let mut count = 0;
             home.cameras.retain(|c| {
                 if c.attrs.role != STORED_ROLE {
@@ -194,6 +210,30 @@ pub(super) fn register(r: &mut Registry) {
             let json = pose_json(a);
             home.attrs.camera = Some(mode.role().into());
             Ok(json)
+        },
+    );
+    r.add(
+        "viewpoint_rename",
+        "Renames a stored point of view. The new name must not be in use.",
+        true,
+        |doc, p: RenameParams| {
+            let new_name = p.new_name.trim();
+            if new_name.is_empty() {
+                return Err(CommandError::failed("the name must not be empty"));
+            }
+            let home = doc.home_mut();
+            find_stored(home, &p.name)?;
+            if new_name != p.name && find_stored(home, new_name).is_ok() {
+                return Err(CommandError::failed(format!(
+                    "there is a point of view named '{new_name}' already"
+                )));
+            }
+            if let Some(c) = home.cameras.iter_mut().find(|c| {
+                c.attrs.role == STORED_ROLE && c.attrs.name.as_deref() == Some(p.name.as_str())
+            }) {
+                c.attrs.name = Some(new_name.to_owned());
+            }
+            Ok(json!({ "points_of_view": stored_json(home) }))
         },
     );
     r.add(

@@ -84,7 +84,8 @@ Terrain models, laser scans or neighbor houses imported as furniture are marked 
 - Or double-click a piece in the catalog (or press **Enter**) and click in the plan: the piece hangs at the pointer at its size. **Shift+click** places several, **Esc** ends it.
 - **Replace the selection with this** in the menu of a catalog item swaps the selected pieces for it; place, angle, elevation and level stay.
 - The catalog remembers the open categories, lists **Favorites** (menu of an item) and the pieces **used last** on top, and shows the items as a list or as tiles. Its rows take the keyboard: arrow keys, **Enter**, **Delete**, **Ctrl+D** and the menu key.
-- Doors and windows snap into the nearest wall, take its thickness and show the distances to the wall ends and other openings.
+- **View › Magnetism › Snap to the grid** (or the switch in the status bar) puts drawn points and moved elements on the grid lines; it is off at first. The grid that catches is the one you see: its distance is set in the status bar. Points, faces and alignments of objects win over the grid; switch **Objects** off to get the grid alone. **Alt** switches all catching off for a moment.
+- Doors and windows snap into the nearest wall, take its thickness and show the distances to the wall ends and other openings. Dragged along the wall they follow the mouse in whole centimeters of free space and catch only the middle of the free space and openings in line with them; **Alt** switches the catching off. They keep the side they open to until you pull them out of the wall on the other side. In a wall thicker than the door, drag it across the wall to set it in the middle, flush with a side or anywhere between. Exact distances to the wall ends or the next opening are typed under **Distance on the left / right** in the properties.
 - Pieces dropped onto a table, a shelf or another piece land on top of it.
 
 ## Changing furniture
@@ -119,17 +120,19 @@ Everything you import is stored in Sweet Home 3D's library folders, so both prog
 
 # 3D view
 
-- **Aerial view**: drag to turn around the home, right-drag to move, the wheel zooms. Double-click a surface to turn around that point.
+- **Aerial view**: drag to turn around the home, right-drag to move, the wheel zooms towards the pointer. Double-click a surface to turn around that point. The arrow keys turn the view, **Shift** and the arrow keys move it, **+** and **-** zoom; the view stops at the horizon.
+- **Select and move**: a click selects furniture, a wall or a room, in the plan too; **Ctrl** or **Shift** adds to the selection. What is selected in the plan is outlined in 3D. Drag a selected piece of furniture to move it over the floor (**Esc** cancels). **Esc** in the 3D view drops the selection, **Del** deletes it.
+- **Views** shows the home from the top, from the north, east, south or west and in four isometric views, fits the home or zooms to the selection. **Parallel projection** draws the aerial view without perspective. The arrow at the bottom right points north.
 - **Virtual visit**: drag to look around, **W A S D** or the arrow keys to walk, **Q / E** down and up, **Shift** faster. Walls stop you; open doors let you through. The visitor is shown in the plan and can be moved there.
-- **Points of view** stores and recalls camera positions.
-- **3D settings** set ground and sky, light and wall transparency, the location (search by address) and the date and time of the sun. The location can also be set in the properties of the home. **Align north with the map** shows the walls over a map of the location: turn them with the mouse wheel until they match the building, and the compass points north. Drag the walls to move them, drag beside them to move the map; **Ctrl+wheel** or the buttons zoom.
-- Lamps light the virtual visit; walls stop the light of the lamps nearest to you.
+- **Points of view** stores camera positions with a small picture. Click one to go there; **Rename** (or **F2**), **Update** (sets it to the current view) and **Delete** (asks first) are beside it. **Esc** closes the menu.
+- **3D settings** set ground and sky, light and wall transparency, the location (search by address) and the date and time of the sun. The sliders show their effect while you drag them. **Time of day** and **Day of the year** move the sun, **Play the day** lets it run; **Shadows** is there too. **Section** cuts the home open above a height or from one side, to look inside; it is not stored and not part of photos. The location can also be set in the properties of the home. **Align north with the map** shows the walls over a map of the location: turn them with the mouse wheel until they match the building, and the compass points north. Drag the walls to move them, drag beside them to move the map; **Ctrl+wheel** or the buttons zoom.
+- The lamps of the level you stand on light the virtual visit; walls stop the light of the lamps nearest to you.
 
 # Photos and videos
 
-- **Create photo** renders the current 3D view: **Draft** in seconds, **Good** and **Best** with path tracing (soft shadows, indirect light, glass). Lenses: normal, fisheye or a 360° panorama.
-- Choose stored points of view in the photo dialog to render a photo of each into a folder in one go.
-- **Create video** renders a flight along a camera path that you record from points in the 3D view.
+- **Create photo** renders the current 3D view: **Draft** in seconds, **Good** and **Best** with path tracing (soft shadows, indirect light, glass). Lenses: normal, fisheye or a 360° panorama. The panel stays beside the view, so you can still turn it. Sizes: the proportions of the view, HD, Full HD, 4K or A4 at 300 dpi. **File format** chooses PNG or JPEG. Size, quality and format are remembered.
+- Choose stored points of view in the photo panel to render a photo of each into a folder in one go.
+- **Create video** renders a flight along a camera path that you record from points in the 3D view. Each point shows what the camera sees there; click it to go there, the arrows change the order. The path is drawn in the plan while the panel is open.
 
 # Print and export
 

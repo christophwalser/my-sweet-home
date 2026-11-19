@@ -38,10 +38,12 @@ fn patch_list(prev: &Value, patch: &ListPatch) -> Value {
     }
 }
 
+/// The home and its wall outlines as a window gets them: parsed from the JSON text.
 fn state(home: &Home) -> (Value, Value) {
+    let parsed = |text: String| serde_json::from_str(&text).unwrap();
     (
-        serde_json::to_value(home).unwrap(),
-        serde_json::to_value(wall_shapes(home)).unwrap(),
+        parsed(serde_json::to_string(home).unwrap()),
+        parsed(serde_json::to_string(&wall_shapes(home)).unwrap()),
     )
 }
 
@@ -182,4 +184,29 @@ fn equal_states_have_no_changes() {
     );
     let shapes = wall_shapes(doc.home());
     assert!(home_changes(doc.home(), doc.home(), &shapes, &shapes).is_empty());
+}
+
+#[test]
+fn changes_carry_the_numbers_of_the_whole_home() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    // A pitch that is no short decimal as f32 (90 degrees are 1.5707964 rad)
+    run(
+        &r,
+        &mut doc,
+        "camera_set",
+        json!({ "mode": "aerial", "x": 863.15, "y": 585, "z": 1767.6, "pitch": 90 }),
+    );
+    let before = doc.home().clone();
+    let shapes = wall_shapes(&before);
+    // The sun changes the time of the cameras, nothing of where they are
+    run(&r, &mut doc, "sun_update", json!({ "time": "15:00" }));
+    let changes = home_changes(&before, doc.home(), &shapes, &shapes);
+    let sent = serde_json::to_string(&changes.fields["cameras"]).unwrap();
+    // The same values as in the text of the whole home (the order of the keys may differ)
+    let whole: Value =
+        serde_json::from_str(&serde_json::to_string(&doc.home().cameras).unwrap()).unwrap();
+    assert_eq!(changes.fields["cameras"], whole);
+    assert!(sent.contains("1.5707964"), "{sent}");
+    assert!(sent.contains("863.15,"), "{sent}");
 }

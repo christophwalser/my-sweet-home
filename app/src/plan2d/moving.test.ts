@@ -256,3 +256,155 @@ describe("pieces turning to the side they are pulled to", () => {
     expect(slot?.angle).toBeCloseTo(Math.PI);
   });
 });
+
+describe("doors and windows that are easy to place by hand", () => {
+  const wall = makeWall("w", [0, 0], [400, 0], { thickness: 20, level: "L1" });
+  const door = makePiece(
+    { id: "door", x: 195, y: 0, width: 80, depth: 20, wall_thickness: 1, angle: 0, level: "L1" },
+    { kind: "DoorOrWindow" },
+  );
+  const opening = (id: string, x: number, y: number, level: string | null) =>
+    makePiece(
+      { id, name: "Window", x, y, width: 80, depth: 20, angle: 0, level },
+      { kind: "DoorOrWindow" },
+    );
+
+  it("is not caught by openings of other wall lines on other levels", () => {
+    // A window upstairs, 3 m beside this wall: no reason to line up with it
+    const other = makeWall("o", [0, 300], [400, 300], { thickness: 20, level: "L1" });
+    const home = makeHome({
+      walls: [wall, other],
+      furniture: [door, opening("up", 120, 300, "L2")],
+    });
+    const shapes = [straightShape(wall), straightShape(other)];
+    const slid = slideInWall(home, shapes, "L1", door, [124, 0], 10, 10, true);
+    expect(slid?.x).toBe(124);
+    expect(slid?.note).toBe("84 cm | 236 cm");
+    expect(slid?.guides).toHaveLength(0);
+  });
+
+  it("lines up with an opening in the same wall line on another level", () => {
+    const home = makeHome({ walls: [wall], furniture: [door, opening("up", 120, 0, "L2")] });
+    const slid = slideInWall(home, [straightShape(wall)], "L1", door, [124, 0], 10, 10, true);
+    expect(slid?.x).toBe(120);
+    expect(slid?.note?.startsWith("in line with Window (other level)")).toBe(true);
+  });
+
+  it("catches alignments at half the distance of the middle", () => {
+    const other = makeWall("o", [0, 300], [400, 300], { thickness: 20, level: "L1" });
+    const home = makeHome({
+      walls: [wall, other],
+      furniture: [door, opening("next", 120, 300, "L1")],
+    });
+    const shapes = [straightShape(wall), straightShape(other)];
+    // 6 cm beside the window of the parallel wall: free, with a snap distance of 10 cm
+    expect(slideInWall(home, shapes, "L1", door, [126, 0], 10, 10, true)?.x).toBe(126);
+    // 6 cm beside the middle of the free space: caught
+    expect(slideInWall(home, shapes, "L1", door, [206, 0], 10, 10, true)?.x).toBe(200);
+  });
+
+  it("keeps the free space to the nearer neighbor in whole steps", () => {
+    const home = makeHome({ walls: [wall], furniture: [door] });
+    const shapes = [straightShape(wall)];
+    // Nearer to the start of the wall: 100.4 - 40 = 60.4 cm of wall before the door
+    expect(slideInWall(home, shapes, "L1", door, [100.4, 0], 10, 2, true)?.note).toBe(
+      "60 cm | 260 cm",
+    );
+    // Zoomed in the steps are finer
+    expect(
+      slideInWall(home, shapes, "L1", door, [100.4, 0], 10, 2, true, undefined, null, 0.5)?.x,
+    ).toBe(100.5);
+    // Nearer to the end of the wall the space after the door counts
+    expect(slideInWall(home, shapes, "L1", door, [300.4, 0], 10, 2, true)?.note).toBe(
+      "260 cm | 60 cm",
+    );
+  });
+
+  it("keeps the side it opens to while the hand strays inside the wall", () => {
+    const home = makeHome({ walls: [wall], furniture: [door] });
+    const shapes = [straightShape(wall)];
+    const held = { wallIndex: 0, angle: 0 };
+    // 6 cm off the axis of a wall 20 cm thick: still in the wall, the door stays as it is
+    expect(wallSlot(home, shapes, "L1", door, [200, -6], 10, true, held)?.angle).toBeCloseTo(0);
+    expect(wallSlot(home, shapes, "L1", door, [200, 6], 10, true, held)?.angle).toBeCloseTo(0);
+    // Pulled out of the wall on the other side it turns, and stays turned on the way back
+    const turned = wallSlot(home, shapes, "L1", door, [200, -12], 10, true, held);
+    expect(turned?.angle).toBeCloseTo(Math.PI);
+    const back = { wallIndex: 0, angle: Math.PI };
+    expect(wallSlot(home, shapes, "L1", door, [200, 3], 10, true, back)?.angle).toBeCloseTo(
+      Math.PI,
+    );
+  });
+
+  it("holds a sliding piece in its wall twice as far", () => {
+    const home = makeHome({ walls: [wall], furniture: [door] });
+    const shapes = [straightShape(wall)];
+    // 25 cm off the axis: 15 cm beside the face of the wall, with a capture distance of 10 cm
+    expect(wallSlot(home, shapes, "L1", door, [195, 25], 10, true)).toBeNull();
+    expect(
+      wallSlot(home, shapes, "L1", door, [195, 25], 10, true, { wallIndex: 0, angle: 0 }),
+    ).not.toBeNull();
+    const slid = slideInWall(home, shapes, "L1", door, [195, 0], 10, 10, false);
+    expect(slid?.state).toEqual({ wallIndex: 0, angle: 0 });
+  });
+});
+
+describe("doors and windows across a wall thicker than they are", () => {
+  // A wall 40 cm thick, a door 10 cm deep: it can sit up to 15 cm off the axis
+  const wall = makeWall("w", [0, 0], [400, 0], { thickness: 40 });
+  const shapes = [straightShape(wall)];
+  const door = makePiece(
+    { id: "door", x: 200, y: 0, width: 80, depth: 10, wall_thickness: 1, angle: 0 },
+    { kind: "DoorOrWindow" },
+  );
+  const home = makeHome({ walls: [wall], furniture: [door] });
+  const slide = (center: Pt, magnetism = true) =>
+    slideInWall(home, shapes, null, door, center, 10, 4, magnetism);
+
+  it("stays where it is across the wall while it is dragged along", () => {
+    const slid = slide([250, 0]);
+    expect(slid?.x).toBe(250);
+    expect(slid?.y).toBeCloseTo(0);
+    expect(slid?.cutThrough).toBe(true);
+    expect(slid?.note).toBe("210 cm | 110 cm · middle of the wall");
+  });
+
+  it("follows the hand across the wall", () => {
+    const slid = slide([250, 7]);
+    expect(slid?.y).toBeCloseTo(7);
+    expect(slid?.note).toBe("210 cm | 110 cm");
+    // Without magnetism also between the whole centimeters
+    expect(slide([250, 6.3], false)?.y).toBeCloseTo(6.3);
+  });
+
+  it("catches the middle and both sides of the wall", () => {
+    expect(slide([250, 1.4])?.y).toBeCloseTo(0);
+    const front = slide([250, 13.5]);
+    expect(front?.y).toBeCloseTo(15);
+    expect(front?.note).toBe("210 cm | 110 cm · flush with the wall");
+    expect(slide([250, -14])?.y).toBeCloseTo(-15);
+  });
+
+  it("does not leave the wall", () => {
+    // 18 cm off the axis is inside the wall (20 cm), but more than the door can go
+    const slid = slide([250, -18], false);
+    expect(slid?.y).toBeCloseTo(-15);
+    expect(slid?.angleDeg).toBe(0);
+  });
+
+  it("is not moved across a wall of its own thickness", () => {
+    const thin = makeWall("t", [0, 0], [400, 0], { thickness: 10 });
+    const slid = slideInWall(
+      makeHome({ walls: [thin], furniture: [door] }),
+      [straightShape(thin)],
+      null,
+      door,
+      [250, 3],
+      10,
+      4,
+      true,
+    );
+    expect(slid?.y).toBeCloseTo(0);
+    expect(slid?.cutThrough).toBe(false);
+  });
+});

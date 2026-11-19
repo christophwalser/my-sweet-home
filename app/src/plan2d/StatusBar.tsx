@@ -32,7 +32,7 @@ export function planScaleRatio(scale: number, pixelRatio: number): number {
 }
 
 type Switch = {
-  key: "magnetism" | "snapAngles" | "snapObjects" | "snapToRulers" | "grid";
+  key: "magnetism" | "snapAngles" | "snapObjects" | "snapToRulers" | "snapGrid" | "grid";
   icon: IconName;
   label: string;
   title: string;
@@ -62,6 +62,12 @@ const SWITCHES: Switch[] = [
     icon: "guide",
     label: t("Guide lines"),
     title: t("Snap to the ends, middles, lines and crossings of the guide lines"),
+  },
+  {
+    key: "snapGrid",
+    icon: "snapgrid",
+    label: t("Grid snap"),
+    title: t("Snap to the grid lines where no object, angle or guide line catches"),
   },
   { key: "grid", icon: "grid", label: t("Grid"), title: t("Show the grid") },
 ];

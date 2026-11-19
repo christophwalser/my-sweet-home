@@ -26,6 +26,8 @@ export type Preferences = {
   snapObjects: boolean;
   /** Magnetism to the ruler guides: their ends, middles, lines and crossings */
   snapToRulers: boolean;
+  /** Magnetism to the grid lines where no object, angle or guide line catches (off at first) */
+  snapGrid: boolean;
   /** Radius of the magnetism in screen pixels */
   snapRadius: number;
   /** Level shown faded under the plan of the shown level, and attracting the pointer */
@@ -104,6 +106,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   snapAngles: true,
   snapObjects: true,
   snapToRulers: true,
+  snapGrid: false,
   snapRadius: 10,
   underlay: "below",
   backgroundOpacity: 70,

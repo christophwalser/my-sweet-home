@@ -10,18 +10,24 @@ function printable(s: string): string {
 }
 
 /**
- * Path of the photo of point of view `view` in folder `dir`: "<base> - <view>.png", made safe
+ * Path of the photo of point of view `view` in folder `dir`: "<base> - <view>.<extension>", made safe
  * for Windows and unique among the names in `used` (which it is added to).
  */
-export function seriesFilePath(dir: string, base: string, view: string, used: Set<string>): string {
+export function seriesFilePath(
+  dir: string,
+  base: string,
+  view: string,
+  used: Set<string>,
+  extension = "png",
+): string {
   const clean = (s: string) =>
     printable(s)
       .replace(INVALID, "_")
       .replace(/[. ]+$/, "")
       .trim() || "photo";
   const stem = `${clean(base)} - ${clean(view)}`;
-  let name = `${stem}.png`;
-  for (let i = 2; used.has(name.toLowerCase()); i++) name = `${stem} (${i}).png`;
+  let name = `${stem}.${extension}`;
+  for (let i = 2; used.has(name.toLowerCase()); i++) name = `${stem} (${i}).${extension}`;
   used.add(name.toLowerCase());
   const sep = dir.endsWith("\\") || dir.endsWith("/") ? "" : "\\";
   return `${dir}${sep}${name}`;

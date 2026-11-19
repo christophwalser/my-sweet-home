@@ -206,6 +206,56 @@ fn dist(a: Pt, b: Pt) -> f32 {
     (a[0] - b[0]).hypot(a[1] - b[1])
 }
 
+/// Walls that meet edge to edge (the miter of a joint, a wall that ends at the side of
+/// another one) are computed in `f32` and may miss each other by a few 1/100000 cm. Their
+/// outlines are grown by this much before they are united, so that such a slit does not open
+/// a room to the outside. Less than the 0.01 cm outlines are rounded to: the outline of the
+/// room stays the same.
+const JOINT_TOLERANCE: f64 = 0.004;
+
+/// The polygon with every edge moved outwards by `by` (corners stay sharp).
+fn grown(ring: &[(f64, f64)], by: f64) -> Vec<(f64, f64)> {
+    let n = ring.len();
+    if n < 3 {
+        return ring.to_vec();
+    }
+    let area: f64 = (0..n)
+        .map(|i| {
+            let (x0, y0) = ring[i];
+            let (x1, y1) = ring[(i + 1) % n];
+            x0 * y1 - x1 * y0
+        })
+        .sum();
+    // Outward normal of the edge from `a` to `b`, by the direction the polygon runs in
+    let side = if area > 0.0 { 1.0 } else { -1.0 };
+    let normal = |a: (f64, f64), b: (f64, f64)| {
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let len = dx.hypot(dy);
+        (len > 1e-9).then(|| (side * dy / len, -side * dx / len))
+    };
+    (0..n)
+        .map(|i| {
+            let prev = ring[(i + n - 1) % n];
+            let p = ring[i];
+            let next = ring[(i + 1) % n];
+            match (normal(prev, p), normal(p, next)) {
+                (Some(a), Some(b)) => {
+                    // Where the two moved edges meet; along the common normal if they are
+                    // parallel, and never further than a sharp corner would reach
+                    let k = 1.0 + a.0 * b.0 + a.1 * b.1;
+                    if k < 0.1 {
+                        (p.0 + (a.0 + b.0) * by, p.1 + (a.1 + b.1) * by)
+                    } else {
+                        (p.0 + (a.0 + b.0) * by / k, p.1 + (a.1 + b.1) * by / k)
+                    }
+                }
+                (Some(a), None) | (None, Some(a)) => (p.0 + a.0 * by, p.1 + a.1 * by),
+                (None, None) => p,
+            }
+        })
+        .collect()
+}
+
 /// Outline of the area enclosed by walls around `p`, like a double-click with the
 /// room tool in Sweet Home 3D. Only walls on `level` are considered (all walls if
 /// `level` is `None`). Returns `None` if `p` is not surrounded by walls.
@@ -223,7 +273,7 @@ pub fn enclosed_area(home: &Home, level: Option<&str>, p: Pt) -> Option<Vec<Pt>>
                 .iter()
                 .map(|q| (f64::from(q[0]), f64::from(q[1])))
                 .collect();
-            Polygon::new(LineString::from(ring), vec![])
+            Polygon::new(LineString::from(grown(&ring, JOINT_TOLERANCE)), vec![])
         })
         .filter(|poly| poly.unsigned_area() > 1e-6)
         .collect();
@@ -541,6 +591,57 @@ mod tests {
         // An open outline encloses nothing
         home.walls.retain(|w| w.attrs.id != "c");
         assert!(enclosed_area(&home, None, [300.0, 150.0]).is_none());
+    }
+
+    #[test]
+    fn enclosed_area_of_walls_that_meet_edge_to_edge() {
+        // Joined walls of different thickness: their miters are computed in f32 and miss
+        // each other by a few 1/100000 cm (taken from a real plan)
+        let mut home = Home::default();
+        let ids = ["a", "b", "c", "d"];
+        let pts = [
+            [117.0, 15.0],
+            [-376.0, 15.0],
+            [-376.0, 435.0],
+            [117.0, 435.0],
+        ];
+        for i in 0..4 {
+            let mut w = wall(
+                ids[i],
+                pts[i],
+                pts[(i + 1) % 4],
+                Some(ids[(i + 3) % 4]),
+                Some(ids[(i + 1) % 4]),
+            );
+            w.attrs.thickness = if i == 3 { 40.0 } else { 30.0 };
+            home.walls.push(w);
+        }
+        let room = enclosed_area(&home, None, [-130.0, 225.0]).expect("room");
+        assert_eq!(room.len(), 4, "{room:?}");
+        let mut xs: Vec<f32> = room.iter().map(|p| p[0]).collect();
+        let mut ys: Vec<f32> = room.iter().map(|p| p[1]).collect();
+        xs.sort_by(f32::total_cmp);
+        ys.sort_by(f32::total_cmp);
+        // The inner sides of the walls, to the hundredth of a centimeter
+        assert_eq!((xs[0], xs[3]), (-361.0, 97.0));
+        assert_eq!((ys[0], ys[3]), (30.0, 420.0));
+    }
+
+    #[test]
+    fn grown_moves_every_edge_outwards() {
+        let square = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)];
+        let out = grown(&square, 1.0);
+        assert_eq!(
+            out,
+            [(-1.0, -1.0), (11.0, -1.0), (11.0, 11.0), (-1.0, 11.0)]
+        );
+        // The other direction of the points gives the same
+        let reversed: Vec<(f64, f64)> = square.iter().rev().copied().collect();
+        let out = grown(&reversed, 1.0);
+        assert!(
+            out.contains(&(-1.0, -1.0)) && out.contains(&(11.0, 11.0)),
+            "{out:?}"
+        );
     }
 
     #[test]

@@ -84,7 +84,8 @@ Geländemodelle, Laserscans oder Nachbarhäuser, die als Möbel importiert sind,
 - Oder doppelklicke ein Möbel im Katalog (oder drücke **Enter**) und klicke in den Plan: Das Möbel hängt in seiner Größe am Mauszeiger. **Shift+Klick** platziert mehrere, **Esc** beendet es.
 - **Auswahl hierdurch ersetzen** im Menü eines Katalogeintrags tauscht die gewählten Möbel dagegen aus; Platz, Winkel, Höhe über Boden und Ebene bleiben.
 - Der Katalog merkt sich die offenen Kategorien, zeigt **Favoriten** (Menü eines Eintrags) und die **zuletzt verwendeten** Möbel oben und stellt die Einträge als Liste oder Kacheln dar. Seine Zeilen lassen sich mit der Tastatur bedienen: Pfeiltasten, **Enter**, **Entf**, **Strg+D** und die Menütaste.
-- Türen und Fenster rasten in der nächsten Wand ein, übernehmen ihre Dicke und zeigen die Abstände zu den Wandenden und anderen Öffnungen.
+- **Ansicht › Magnetismus › Am Raster fangen** (oder der Schalter in der Statusleiste) setzt gezeichnete Punkte und verschobene Elemente auf die Rasterlinien; anfangs ist das aus. Es fängt das Raster, das du siehst: Den Abstand stellst du in der Statusleiste ein. Punkte, Flächen und Fluchten von Objekten haben Vorrang vor dem Raster; schalte **Objekte** aus, um nur das Raster zu haben. **Alt** schaltet jedes Fangen kurz aus.
+- Türen und Fenster rasten in der nächsten Wand ein, übernehmen ihre Dicke und zeigen die Abstände zu den Wandenden und anderen Öffnungen. Entlang der Wand gezogen folgen sie der Maus in ganzen Zentimetern freien Platzes und fangen nur die Mitte des freien Platzes und Öffnungen, die in ihrer Flucht liegen; **Alt** schaltet das Fangen aus. Sie behalten die Seite, zu der sie öffnen, bis du sie auf der anderen Seite aus der Wand ziehst. In einer Wand, die dicker ist als die Tür, ziehst du sie quer zur Wand in die Mitte, bündig an eine Seite oder irgendwo dazwischen. Exakte Abstände zu den Wandenden oder zur nächsten Öffnung tippst du in den Eigenschaften unter **Abstand links / rechts** ein.
 - Möbel, die auf einem Tisch, einem Regal oder einem anderen Möbel abgelegt werden, landen obendrauf.
 
 ## Möbel ändern
@@ -119,17 +120,19 @@ Alles Importierte liegt in den Bibliotheksordnern von Sweet Home 3D, so nutzen e
 
 # 3D-Ansicht
 
-- **Luftbild**: Ziehen dreht um das Haus, Ziehen mit der rechten Maustaste verschiebt, das Mausrad zoomt. Ein Doppelklick auf eine Fläche dreht künftig um diesen Punkt.
+- **Luftbild**: Ziehen dreht um das Haus, Ziehen mit der rechten Maustaste verschiebt, das Mausrad zoomt zum Mauszeiger. Ein Doppelklick auf eine Fläche dreht künftig um diesen Punkt. Die Pfeiltasten drehen die Ansicht, **Umschalt** und die Pfeiltasten verschieben sie, **+** und **-** zoomen; am Horizont ist Schluss.
+- **Auswählen und verschieben**: Ein Klick wählt Möbel, eine Wand oder einen Raum, auch im Plan; **Strg** oder **Umschalt** fügt zur Auswahl hinzu. Was im Plan gewählt ist, ist in 3D umrandet. Ein gewähltes Möbel lässt sich über den Boden ziehen (**Esc** bricht ab). **Esc** in der 3D-Ansicht hebt die Auswahl auf, **Entf** löscht sie.
+- **Ansichten** zeigt das Haus von oben, von Norden, Osten, Süden oder Westen und in vier Isometrien, passt das Haus ein oder zoomt auf die Auswahl. **Parallelprojektion** zeichnet das Luftbild ohne Perspektive. Der Pfeil rechts unten zeigt nach Norden.
 - **Rundgang**: Ziehen schaut umher, **W A S D** oder die Pfeiltasten gehen, **Q / E** runter und rauf, **Umschalt** schneller. Wände halten dich auf, offene Türen lassen dich durch. Der Besucher erscheint im Plan und lässt sich dort verschieben.
-- **Blickpunkte** speichert Kamerapositionen und ruft sie wieder auf.
-- **3D-Einstellungen** legen Boden und Himmel, Licht und Wandtransparenz, den Standort (Suche nach Adresse) sowie Datum und Uhrzeit der Sonne fest. Den Standort kannst du auch in den Eigenschaften des Hauses festlegen. **Norden an der Karte ausrichten** zeigt die Wände über einer Karte des Standorts: Drehe sie mit dem Mausrad, bis sie auf das Gebäude passen, dann zeigt der Kompass nach Norden. Ziehen an den Wänden verschiebt sie, Ziehen daneben verschiebt die Karte; **Strg+Mausrad** oder die Knöpfe zoomen.
-- Lampen beleuchten den Rundgang; Wände halten das Licht der Lampen in deiner Nähe auf.
+- **Blickpunkte** speichert Kamerapositionen mit einem kleinen Bild. Ein Klick springt hin; daneben stehen **Umbenennen** (oder **F2**), **Aktualisieren** (setzt ihn auf die aktuelle Ansicht) und **Löschen** (fragt nach). **Esc** schließt das Menü.
+- **3D-Einstellungen** legen Boden und Himmel, Licht und Wandtransparenz, den Standort (Suche nach Adresse) sowie Datum und Uhrzeit der Sonne fest. Die Schieber zeigen ihre Wirkung schon beim Ziehen. **Tageszeit** und **Tag im Jahr** bewegen die Sonne, **Tag abspielen** lässt sie laufen; **Schatten** steht ebenfalls dort. **Schnitt** schneidet das Haus oberhalb einer Höhe oder von einer Seite auf, um hineinzuschauen; er wird nicht gespeichert und erscheint nicht in Fotos. Den Standort kannst du auch in den Eigenschaften des Hauses festlegen. **Norden an der Karte ausrichten** zeigt die Wände über einer Karte des Standorts: Drehe sie mit dem Mausrad, bis sie auf das Gebäude passen, dann zeigt der Kompass nach Norden. Ziehen an den Wänden verschiebt sie, Ziehen daneben verschiebt die Karte; **Strg+Mausrad** oder die Knöpfe zoomen.
+- Die Lampen der Ebene, auf der du stehst, beleuchten den Rundgang; Wände halten das Licht der Lampen in deiner Nähe auf.
 
 # Fotos und Videos
 
-- **Foto erstellen** rendert die aktuelle 3D-Ansicht: **Entwurf** in Sekunden, **Gut** und **Beste** mit Pathtracing (weiche Schatten, indirektes Licht, Glas). Objektive: normal, Fischauge oder 360°-Panorama.
-- Wähle im Fotodialog gespeicherte Blickpunkte, um in einem Durchgang von jedem ein Foto in einen Ordner zu rendern.
-- **Video erstellen** rendert einen Flug entlang eines Kamerapfads, den du aus Punkten in der 3D-Ansicht aufnimmst.
+- **Foto erstellen** rendert die aktuelle 3D-Ansicht: **Entwurf** in Sekunden, **Gut** und **Beste** mit Pathtracing (weiche Schatten, indirektes Licht, Glas). Objektive: normal, Fischauge oder 360°-Panorama. Das Panel bleibt neben der Ansicht, du kannst sie also weiter drehen. Größen: die Proportionen der Ansicht, HD, Full HD, 4K oder A4 bei 300 dpi. **Dateiformat** wählt PNG oder JPEG. Größe, Qualität und Format werden gemerkt.
+- Wähle im Fotopanel gespeicherte Blickpunkte, um in einem Durchgang von jedem ein Foto in einen Ordner zu rendern.
+- **Video erstellen** rendert einen Flug entlang eines Kamerapfads, den du aus Punkten in der 3D-Ansicht aufnimmst. Jeder Punkt zeigt, was die Kamera dort sieht; ein Klick springt hin, die Pfeile ändern die Reihenfolge. Der Pfad ist im Plan eingezeichnet, solange das Panel offen ist.
 
 # Drucken und Exportieren
 

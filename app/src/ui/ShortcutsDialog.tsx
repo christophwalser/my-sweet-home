@@ -27,6 +27,8 @@ const VIEW_KEYS: [string, string][] = [
   [t("Space (held) + drag"), t("Pan the plan")],
   [t("Right mouse button"), t("Pan the plan; context menu")],
   [t("Mouse wheel"), t("Zoom the plan or the 3D view")],
+  [t("Click in the 3D view"), t("Select furniture, a wall or a room (Ctrl or Shift: add)")],
+  [t("Arrow keys in the aerial view"), t("Turn the view (Shift: move it; + and -: zoom)")],
   [t("W A S D / arrows"), t("Walk in the virtual visit")],
   ["Q / E", t("Move down / up in the virtual visit")],
 ];

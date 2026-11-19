@@ -59,6 +59,7 @@ import {
   type ViewTransform,
 } from "./drawPlan";
 import { type Dock, type DropPreview, dropPreview } from "./dropPreview";
+import { gridAnchor, gridOffset, setPlanScale, snapGridStep } from "./gridSnap";
 import { drawGuides, guideAt, guidesInRect, levelGuides, movedGuides } from "./guides";
 import {
   dragHandle,
@@ -95,6 +96,7 @@ import {
   dockToWall,
   movePreview,
   type Slid,
+  type SlideState,
   selectionJoints,
   slideInWall,
 } from "./moving";
@@ -184,6 +186,10 @@ type Gesture =
       offset: Pt;
       dock: Docked | null;
       slide: Slid | null;
+      /** Wall and side a door or window slid in at the last step of the drag */
+      held?: SlideState | null;
+      /** Point of the selection the grid catches (see `gridAnchor`), found at the first step */
+      anchor?: Pt | null;
       /** Smart guides: what the selection snapped to */
       snap?: MoveSnap | null;
       /** Distances of a single moved piece to its neighbors */
@@ -329,6 +335,7 @@ export default function PlanView() {
   const fitRequest = useStore((s) => s.fitRequest);
   const viewMode = useStore((s) => s.viewMode);
   const visitorPose = useStore((s) => s.visitorPose);
+  const cameraPathShown = useStore((s) => s.cameraPathShown);
   /** A fit was requested; repeated once the images of the home have loaded */
   const pendingFit = useRef(false);
   const showRulers = usePreferences((s) => s.rulers);
@@ -609,7 +616,7 @@ export default function PlanView() {
               "Drag to move · drag the handles to edit · click a distance to type it · Del: delete · Ctrl+C/V: copy/paste · Ctrl+D: duplicate",
             )
           : t(
-              "Click to select, drag for a rubber band (to the left: also what it touches) · Shift+click: add to the selection · Tab: next element under the mouse · double-click: fit",
+              "Click to select, drag for a rubber band (to the left: also what it touches) · Shift+click: add to the selection · Tab: next element under the mouse",
             );
     }
   };
@@ -644,6 +651,8 @@ export default function PlanView() {
     });
     // The status bar names the zoom and the distance of the grid lines
     const shownScale = viewRef.current.scale;
+    // The grid that catches is the one that is drawn
+    setPlanScale(shownScale);
     if (usePointer.getState().scale !== shownScale) {
       queueMicrotask(() => usePointer.setState({ scale: shownScale }));
     }
@@ -733,6 +742,11 @@ export default function PlanView() {
           ? visitorHandlePos(v, pxToCm(1))
           : null;
       })(),
+      cameraPath: cameraPathShown
+        ? (input.home.environment?.cameras ?? [])
+            .filter((c) => c.attrs.role === "cameraPath")
+            .map((c) => ({ x: c.attrs.x, y: c.attrs.y, yaw: c.attrs.yaw }))
+        : null,
       dropPreview: drop.current,
       surfaceTarget: surfaceHover.current,
       accent,
@@ -798,6 +812,11 @@ export default function PlanView() {
     drawRulers,
     viewMode,
     visitorPose,
+    cameraPathShown,
+    // Without these two the drawing kept the grid distance and the opacity of the background
+    // image it was created with: a new choice showed only after the next change of a tool
+    gridSpacing,
+    backgroundOpacity,
   ]);
 
   drawRef.current = draw;
@@ -1432,10 +1451,23 @@ export default function PlanView() {
           pxToCm(snapPx()),
           magnetismActive(e.altKey),
           catalogDepth(single),
+          g2.held ?? null,
+          step,
         );
+        g2.held = g2.slide?.state ?? null;
       } else if (magnetismActive(e.altKey) && !sel.includes(VISITOR_ID)) {
         offset = constrainMove(input.home, sel, offset);
         const singleWall = sel.length === 1 && input.home.walls.some((w) => w.attrs.id === sel[0]);
+        // The grid, if it catches: the selection lands on its lines. What the objects catch
+        // below wins over it. A single wall that moves at a slant across itself keeps that
+        // move.
+        const grid = snapGridStep();
+        if (grid > 0 && !(singleWall && offset[0] !== 0 && offset[1] !== 0)) {
+          if (g2.anchor === undefined) {
+            g2.anchor = gridAnchor(input.home, input.wallShapes, sel);
+          }
+          if (g2.anchor) offset = gridOffset(g2.anchor, offset, grid);
+        }
         // Smart guides: edges and middles to nearby furniture and wall faces, equal gaps
         // (not for a single wall, which keeps its straight move, nor with the axis lock)
         g2.snap = null;
@@ -2267,8 +2299,18 @@ export default function PlanView() {
       // Text fields type; check boxes and drop-downs keep their plain keys (Space, arrows)
       const focus = keyTarget(target);
       if (focus === "text" || (focus === "control" && !e.ctrlKey && !e.metaKey)) return;
-      // Keys typed in the 3D view (walking in the virtual visit) are not for the plan
-      if (target.closest?.(".view3d-canvas") && !e.ctrlKey && !e.metaKey) return;
+      // Keys typed in the 3D view (walking in the virtual visit, turning the aerial view) are
+      // not for the plan, except the ones that act on the selection shown there too: Escape
+      // drops it, Del deletes it
+      if (
+        target.closest?.(".view3d-canvas") &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        e.key !== "Escape" &&
+        e.key !== "Delete"
+      ) {
+        return;
+      }
       const state = useStore.getState();
       const sel = state.selection;
       if (!e.ctrlKey && !e.metaKey && sel.length === 1 && sel[0] === VISITOR_ID) {

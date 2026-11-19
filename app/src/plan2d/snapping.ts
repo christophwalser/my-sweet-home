@@ -18,6 +18,7 @@ import {
 } from "../model";
 import { usePreferences } from "../preferences";
 import { sameLevel, underlayLevel } from "./drawPlan";
+import { gridAlong, snapGridStep, toGrid } from "./gridSnap";
 import { levelGuides } from "./guideData";
 
 export type Segment = [Pt, Pt];
@@ -51,6 +52,11 @@ export type SnapContext = {
   corner?: number[];
   /** No angle magnetism: the direction follows the pointer (preference "Angles" off) */
   freeAngle?: boolean;
+  /**
+   * Distance of the grid lines in cm if the grid catches (preference "Grid"): where nothing
+   * else does, the point lands on a grid line instead of on a whole centimeter
+   */
+  grid?: number;
 };
 
 /** Tolerance of the right-angle magnetism to the wall at the corner. */
@@ -261,6 +267,16 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
       }
     }
     if (snapped) return snapped;
+    if (ctx.grid) {
+      // The grid: the segment keeps its direction and ends on the nearest grid line
+      const onGrid = gridAlong(previous, dir, along, ctx.grid);
+      return {
+        pt: [previous[0] + dir[0] * onGrid, previous[1] + dir[1] * onGrid],
+        marker: null,
+        guides: [],
+        note: note ?? "on the grid",
+      };
+    }
     const rounded = Math.round(along);
     return {
       pt: [previous[0] + dir[0] * rounded, previous[1] + dir[1] * rounded],
@@ -281,8 +297,9 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
     }
   });
   if (best) return { pt: best, marker: best, guides: [], note: lineNote(ctx, bestLine) };
-  let x = Math.round(p[0]);
-  let y = Math.round(p[1]);
+  // Whole centimeters, or the grid lines if they catch
+  let x = ctx.grid ? toGrid(p[0], ctx.grid) : Math.round(p[0]);
+  let y = ctx.grid ? toGrid(p[1], ctx.grid) : Math.round(p[1]);
   const guides: Segment[] = [];
   let bx = r;
   let by = r;
@@ -302,7 +319,12 @@ export function snapDraw(p: Pt, previous: Pt | null, ctx: SnapContext): Snapped 
   if (refY) y = refY[1];
   if (refX) guides.push([refX, [x, y]]);
   if (refY) guides.push([refY, [x, y]]);
-  return { pt: [x, y], marker: null, guides, note: null };
+  return {
+    pt: [x, y],
+    marker: null,
+    guides,
+    note: ctx.grid && !refX && !refY ? "on the grid" : null,
+  };
 }
 
 /** What the point being placed belongs to; decides which targets attract it. */
@@ -615,6 +637,7 @@ export function snapContext(
     fine,
     hints,
     freeAngle: !settings.snapAngles,
+    grid: snapGridStep(settings) || undefined,
   };
 }
 

@@ -64,6 +64,21 @@ export function lightSources(p: Piece): NonNullable<Piece["light_sources"]> {
   return [];
 }
 
+/**
+ * Levels whose lamps light the virtual visit: the one the visitor stands on. Lamps are
+ * lights without floors and ceilings in their way (only the nearest ones are stopped by
+ * walls), so the lamps under the ceiling of the level below lit the foot of the walls
+ * through the floor, as a white band.
+ */
+export function visitLampLevels(
+  home: Home,
+  level: string | null,
+  shown: Set<string | null>,
+): Set<string | null> {
+  if (home.levels.length === 0) return shown;
+  return new Set([...shown].filter((l) => l === level));
+}
+
 /** World positions and colors of all light sources of visible lamps. */
 export function lampLights(
   home: Home,

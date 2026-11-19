@@ -1,6 +1,7 @@
 // Options of the active plan tool, shown above the plan: what the next wall or text will be
 // like. They start from the defaults of the preferences and apply until the window closes.
 
+import { useState } from "react";
 import { t } from "../i18n";
 import { usePreferences } from "../preferences";
 import { type Tool, useStore, type WallLine } from "../store";
@@ -28,6 +29,9 @@ function LengthOption({
   onChange: (cm: number | null) => void;
 }) {
   const unit = useUnit();
+  // What is typed, while the field has the focus: it may be empty or unfinished (the first
+  // digit of a new value deleted), which the value itself cannot be
+  const [typed, setTyped] = useState<string | null>(null);
   return (
     <label className="tool-option" title={title}>
       {label}
@@ -35,13 +39,15 @@ function LengthOption({
         type="number"
         min={0}
         step="any"
-        value={value === null ? "" : toUnit(value, unit)}
+        value={typed ?? (value === null ? "" : toUnit(value, unit))}
         placeholder={placeholder === undefined ? undefined : String(toUnit(placeholder, unit))}
         onChange={(e) => {
+          setTyped(e.currentTarget.value);
           const v = Number.parseFloat(e.currentTarget.value);
           if (Number.isFinite(v) && v > 0) onChange(fromUnit(v, unit));
           else if (e.currentTarget.value === "" && placeholder !== undefined) onChange(null);
         }}
+        onBlur={() => setTyped(null)}
       />
       {unitSymbol(unit)}
     </label>
@@ -55,6 +61,7 @@ function WallOptions({ round }: { round: boolean }) {
   const arc = useStore((s) => s.arcExtent);
   const homeHeight = useStore((s) => s.opened?.home.attrs.wall_height ?? 250);
   const set = useStore.setState;
+  const [typedArc, setTypedArc] = useState<string | null>(null);
   return (
     <>
       <LengthOption
@@ -78,11 +85,13 @@ function WallOptions({ round }: { round: boolean }) {
             min={-340}
             max={340}
             step={5}
-            value={arc}
+            value={typedArc ?? arc}
             onChange={(e) => {
+              setTypedArc(e.currentTarget.value);
               const v = Number.parseFloat(e.currentTarget.value);
               if (Number.isFinite(v) && v !== 0 && Math.abs(v) <= 340) set({ arcExtent: v });
             }}
+            onBlur={() => setTypedArc(null)}
           />
           °
         </label>

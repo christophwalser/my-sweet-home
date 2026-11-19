@@ -540,6 +540,12 @@ const PATHS = {
       <path d="M10 19a6 6 0 0 0-1.6-4.1" />
     </>
   ),
+  snapgrid: (
+    <>
+      <path d="M3 8h18M3 16h18M8 3v18M16 3v18" />
+      <circle cx="16" cy="16" r="3" />
+    </>
+  ),
   snapobject: (
     <>
       <rect x="4" y="4" width="10" height="10" />

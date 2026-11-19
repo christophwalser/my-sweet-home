@@ -40,8 +40,16 @@ impl HomeChanges {
     }
 }
 
+/// JSON value of a part of the home, with the numbers the whole home is sent with.
+///
+/// Through text, not `to_value`: that widens `f32` to `f64`, so a window would get
+/// 1.5707963705062866 in a patch where the whole home said 1.5707964, and take an unchanged
+/// value (the camera of the 3D view, for one) for a changed one.
 fn value<T: Serialize>(v: &T) -> Value {
-    serde_json::to_value(v).unwrap_or(Value::Null)
+    serde_json::to_string(v)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or(Value::Null)
 }
 
 /// Patch of a list, `Err` with the whole list if its elements have no unique IDs, `None`
