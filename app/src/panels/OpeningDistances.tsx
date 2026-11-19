@@ -22,6 +22,12 @@ export default function OpeningDistances({ piece }: { piece: Piece }) {
   const horizontal = Math.abs(slot.u[0]) >= Math.abs(slot.u[1]);
   const forward = horizontal ? slot.u[0] > 0 : slot.u[1] > 0;
   const [first, second] = horizontal ? ["left", "right"] : ["top", "bottom"];
+  const labels: Record<string, string> = {
+    left: t("Distance on the left"),
+    right: t("Distance on the right"),
+    top: t("Distance above"),
+    bottom: t("Distance below"),
+  };
   const beforeName = forward ? first : second;
   const afterName = forward ? second : first;
   const move = (t: number) => {
@@ -50,7 +56,7 @@ export default function OpeningDistances({ piece }: { piece: Piece }) {
       {fields.map((f) => (
         <Field
           key={f.name}
-          label={t("Space {name}", { name: f.name })}
+          label={labels[f.name]}
           type="number"
           unit="cm"
           value={Math.round(f.value * 10) / 10}

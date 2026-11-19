@@ -55,6 +55,14 @@ struct RemoveParams {
 }
 
 #[derive(Deserialize, JsonSchema)]
+struct MoveParams {
+    /// Index of the key point (0-based)
+    index: usize,
+    /// Its new place in the path (0-based)
+    to: usize,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct NoParams {}
 
 #[derive(Deserialize, JsonSchema, Clone, Copy)]
@@ -120,6 +128,29 @@ pub(super) fn register(r: &mut Registry) {
             })?;
             env.cameras.remove(at);
             Ok(json!({ "count": positions.len() - 1 }))
+        },
+    );
+    r.add(
+        "camera_path_move",
+        "Moves a key point of the camera path of the video to another place in the path (both \
+         0-based).",
+        true,
+        |doc, p: MoveParams| {
+            let env = environment(doc.home_mut());
+            let positions: Vec<usize> = path_positions(env);
+            let count = positions.len();
+            let at = *positions.get(p.index).ok_or_else(|| {
+                CommandError::failed(format!("no key point {} (the path has {count})", p.index))
+            })?;
+            if p.to >= count {
+                return Err(CommandError::failed(format!(
+                    "no place {} in the path (it has {count} key points)",
+                    p.to
+                )));
+            }
+            let camera = env.cameras.remove(at);
+            insert_path_camera(env, p.to, camera);
+            Ok(json!({ "index": p.to, "count": count }))
         },
     );
     r.add(

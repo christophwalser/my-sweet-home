@@ -15,6 +15,7 @@ import {
 import { sameLevel } from "./drawPlan";
 import { lengthText, pieceCorners, wallOutline } from "./handles";
 import { pointInPolygon } from "./interaction";
+import { roundTo } from "./moveStep";
 import type { Segment } from "./snapping";
 
 /** Corner between two walls during a move. */
@@ -356,10 +357,15 @@ export function shiftInWall(slot: WallSlot, piece: Piece): number {
   return wx * -Math.sin(slot.angle) + wy * Math.cos(slot.angle);
 }
 
+/** Wall a dragged door or window slides in, and the side it opens to (its angle). */
+export type SlideState = { wallIndex: number; angle: number };
+
 /**
  * The straight wall a door or window at `center` stands in (or is moved to, within
  * `capture` cm of its sides), with the free space around it. With `followSide` the piece
- * turns to open to the side of the wall it is moved to.
+ * turns to open to the side of the wall it is pulled out of. `held` is where it slid a
+ * moment ago: it stays in that wall and on that side a little longer, so a hand that wanders
+ * while it drags along the wall does not make the piece flicker.
  */
 export function wallSlot(
   home: Home,
@@ -369,6 +375,7 @@ export function wallSlot(
   center: Pt,
   capture: number,
   followSide = false,
+  held: SlideState | null = null,
 ): WallSlot | null {
   const a = piece.attrs;
   let best: WallSlot | null = null;
@@ -383,8 +390,13 @@ export function wallSlot(
     const rx = center[0] - start[0];
     const ry = center[1] - start[1];
     const t = rx * u[0] + ry * u[1];
-    const across = Math.abs(rx * -u[1] + ry * u[0]);
-    if (t < 0 || t > len || across > w.thickness / 2 + capture || across >= bestAcross) return;
+    // The wall the piece slides in holds it twice as far and wins against a wall that is
+    // only a little nearer (at a corner)
+    const holds = held?.wallIndex === i;
+    const reach = holds ? capture * 2 : capture;
+    const distance = Math.abs(rx * -u[1] + ry * u[0]);
+    const across = holds ? distance - capture / 2 : distance;
+    if (t < 0 || t > len || distance > w.thickness / 2 + reach || across >= bestAcross) return;
     // Usable length: where both wall faces run (the inner face at corners)
     const shape = wallShapes[i];
     const range = (side: Pt[]) => {
@@ -414,13 +426,13 @@ export function wallSlot(
     // `diff` is the angle between the piece and the wall direction (0..π)
     let angle = diff > Math.PI / 2 ? wallAngle + Math.PI : wallAngle;
     if (followSide) {
-      // While dragging, the piece opens to the side of the wall it is pulled to (like Sweet
-      // Home 3D): it turns when pulled clearly across the wall from where it was. Positive
-      // towards the side the front (local +y) of a piece at `wallAngle` points to.
-      const pulled = rx * -u[1] + ry * u[0] - ((a.x - start[0]) * -u[1] + (a.y - start[1]) * u[0]);
-      if (Math.abs(pulled) > Math.max(w.thickness / 4, 5)) {
-        angle = pulled > 0 ? wallAngle : wallAngle + Math.PI;
-      }
+      // While it slides the piece keeps the side it opens to. It turns (like in Sweet Home
+      // 3D) only when it is pulled out of the wall on the other side: past the face of the
+      // wall, not by the few centimeters a hand strays while dragging along the wall.
+      // Positive towards the side the front (local +y) of a piece at `wallAngle` points to.
+      if (holds && held) angle = held.angle;
+      const side = rx * -u[1] + ry * u[0];
+      if (Math.abs(side) > w.thickness / 2) angle = side > 0 ? wallAngle : wallAngle + Math.PI;
     }
     bestAcross = across;
     best = { wallIndex: i, start, u, thickness: w.thickness, t, prev, next, angle };
@@ -437,12 +449,28 @@ export type Slid = Docked & {
   note: string | null;
   /** The opening goes through the whole wall (the piece is thinner than the wall) */
   cutThrough: boolean;
+  /** Where it slides, handed to the next step of the drag (see `wallSlot`) */
+  state: SlideState;
 };
 
+/** Distance across the walls up to which doors and windows of this level are lined up with. */
+const ALIGN_RANGE = 800;
+
 /**
- * Slides a dragged door or window along the wall it is moved to: it turns along the wall,
- * it is fitted to the wall thickness (see `fitInWall`, `natural` is its catalog depth), and with magnetism it snaps to the middle of the free
- * space and into line with doors and windows of parallel walls (also on other levels).
+ * Slides a dragged door or window along the wall it is moved to: it turns along the wall and
+ * is fitted to the wall thickness (see `fitInWall`, `natural` is its catalog depth).
+ *
+ * With magnetism it snaps to the middle of the free space (within `snap`) and, within half
+ * of that, into line with doors and windows that matter: the ones in the same wall line on
+ * other levels (windows above each other) and the ones of parallel walls of this level up
+ * to `ALIGN_RANGE` away. Everything else in the home is no target, so the positions between
+ * stay reachable with the mouse. Between the targets the free space to the nearer neighbor
+ * is a multiple of `step` (the reveal is a round number).
+ *
+ * In a wall thicker than the piece it also follows the hand across the wall: it stays where
+ * it is while it is dragged along, and it catches the middle of the wall and both sides
+ * (flush) within a small distance. Before, it could only sit flush with the side it opens
+ * to, and jumped there with every move.
  */
 export function slideInWall(
   home: Home,
@@ -454,22 +482,49 @@ export function slideInWall(
   snap: number,
   magnetism: boolean,
   natural?: number,
+  held: SlideState | null = null,
+  step = 1,
 ): Slid | null {
-  const slot = wallSlot(home, wallShapes, levelId, piece, center, capture, true);
+  const slot = wallSlot(home, wallShapes, levelId, piece, center, capture, true, held);
   if (!slot) return null;
   const a = piece.attrs;
   const w = a.width;
-  const { depth, shift, cutThrough } = fitInWall(piece, slot.thickness, natural);
+  const { depth, shift: flush, cutThrough } = fitInWall(piece, slot.thickness, natural);
   const proj = (q: Pt) => (q[0] - slot.start[0]) * slot.u[0] + (q[1] - slot.start[1]) * slot.u[1];
+  // Across the wall: where the hand holds the wall part of the piece, between the two
+  // sides of the wall (`flush` is as far as it can go from the axis)
+  let shift = flush;
+  let acrossNote: string | null = null;
+  if (cutThrough && flush > 0) {
+    const held = { ...piece, attrs: { ...a, x: center[0], y: center[1], angle: slot.angle } };
+    shift = Math.max(-flush, Math.min(flush, shiftInWall(slot, held)));
+    if (magnetism) {
+      const reach = Math.min(snap / 2, flush / 2);
+      const target = [0, flush, -flush].find((v) => Math.abs(v - shift) < reach);
+      shift = target ?? Math.max(-flush, Math.min(flush, roundTo(shift, step)));
+    }
+    acrossNote =
+      Math.abs(shift) < 1e-6
+        ? "middle of the wall"
+        : Math.abs(Math.abs(shift) - flush) < 1e-6
+          ? "flush with the wall"
+          : null;
+  }
   let t = slot.t;
   let note: string | null = null;
   let guideFrom: Pt | null = null;
   let guideAt: "center" | "start" | "end" = "center";
   if (magnetism) {
-    let bestDist = snap;
-    const consider = (target: number, label: string, from: Pt | null, at: typeof guideAt) => {
+    let bestDist = Number.POSITIVE_INFINITY;
+    const consider = (
+      target: number,
+      label: string,
+      from: Pt | null,
+      at: typeof guideAt,
+      reach = snap / 2,
+    ) => {
       const d = Math.abs(target - slot.t);
-      if (d < bestDist) {
+      if (d < reach && d < bestDist) {
         bestDist = d;
         t = target;
         note = label;
@@ -478,10 +533,12 @@ export function slideInWall(
       }
     };
     if (slot.next - slot.prev >= w) {
-      consider((slot.prev + slot.next) / 2, "middle of the free space", null, "center");
+      consider((slot.prev + slot.next) / 2, "middle of the free space", null, "center", snap);
     }
-    // In line with doors and windows of parallel walls (any level)
+    // In line with doors and windows of parallel walls
     const wallAngle = Math.atan2(slot.u[1], slot.u[0]);
+    const acrossWall = (q: Pt) =>
+      Math.abs((q[0] - slot.start[0]) * -slot.u[1] + (q[1] - slot.start[1]) * slot.u[0]);
     forEachPiece(home.furniture, (p) => {
       if (p.kind !== "DoorOrWindow" || p.attrs.id === a.id) return;
       const pa = p.attrs.angle ?? 0;
@@ -497,12 +554,24 @@ export function slideInWall(
       const e2: Pt = [c[0] + ux, c[1] + uy];
       const [lo, hi] = proj(e1) <= proj(e2) ? [e1, e2] : [e2, e1];
       const onOtherLevel = !sameLevel(p.attrs.level, levelId);
+      // Of the other levels only what stands in the same wall line, of this level what is
+      // not too far away
+      const far = onOtherLevel ? slot.thickness / 2 + 30 : ALIGN_RANGE;
+      if (acrossWall(c) > far) return;
       const where = onOtherLevel ? " (other level)" : "";
       consider(tc, `in line with ${p.attrs.name}${where}`, c, "center");
       consider(proj(lo) + w / 2, `edge in line with ${p.attrs.name}${where}`, lo, "start");
       consider(proj(hi) - w / 2, `edge in line with ${p.attrs.name}${where}`, hi, "end");
     });
-    if (!note) t = Math.round(t);
+    if (!note) {
+      // The free space to the nearer neighbor in whole steps
+      const before = t - w / 2 - slot.prev;
+      const after = slot.next - (t + w / 2);
+      t =
+        before <= after
+          ? slot.prev + w / 2 + roundTo(before, step)
+          : slot.next - w / 2 - roundTo(after, step);
+    }
   }
   const [x, y] = centerInWall(slot, piece, t, depth, shift);
   const guides: Segment[] = [];
@@ -524,7 +593,8 @@ export function slideInWall(
   const angleDeg = Math.round((((((slot.angle * 180) / Math.PI) % 360) + 360) % 360) * 100) / 100;
   const left = Math.max(0, t - w / 2 - slot.prev);
   const right = Math.max(0, slot.next - (t + w / 2));
-  const distances = `${lengthText(left)} | ${lengthText(right)}`;
+  const spaces = `${lengthText(left)} | ${lengthText(right)}`;
+  const distances = acrossNote ? `${spaces} · ${acrossNote}` : spaces;
   return {
     x: Math.round(x * 10) / 10,
     y: Math.round(y * 10) / 10,
@@ -535,5 +605,6 @@ export function slideInWall(
     gaps,
     note: note ? `${note} · ${distances}` : distances,
     cutThrough,
+    state: { wallIndex: slot.wallIndex, angle: slot.angle },
   };
 }

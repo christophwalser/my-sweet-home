@@ -14,5 +14,8 @@ describe("seriesFilePath", () => {
       "C:\\Photos\\Haus - kitchen (2).png",
     );
     expect(seriesFilePath("D:", "", "...", used)).toBe("D:\\photo - photo.png");
+    expect(seriesFilePath("D:", "Haus", "Kitchen", new Set(), "jpg")).toBe(
+      "D:\\Haus - Kitchen.jpg",
+    );
   });
 });

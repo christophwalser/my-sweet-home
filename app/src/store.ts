@@ -76,6 +76,8 @@ type State = {
   viewMode: ViewMode;
   /** Live position of the virtual visitor (shown in the plan while walking) */
   visitorPose: CameraPose | null;
+  /** The camera path of the video is drawn in the plan (while the video panel is open) */
+  cameraPathShown: boolean;
   /** Writes the cameras of the 3D view into the home (set by the 3D view, used before saving) */
   cameraSync: (() => Promise<void>) | null;
   /** Catalog of the visible libraries */
@@ -134,6 +136,7 @@ export const useStore = create<State>((set, get) => ({
   loading: false,
   viewMode: "aerial",
   visitorPose: null,
+  cameraPathShown: false,
   cameraSync: null,
   catalog: null,
   catalogAll: null,
@@ -264,7 +267,10 @@ export function applyHome(received: OpenedHome, patched = false): void {
   const ids = newHome ? new Set<string>() : allIds(next);
   useStore.setState({
     opened: next,
-    selection: selection.filter((id) => ids.has(id)),
+    // The same array while nothing left the home: views that follow the selection rest
+    selection: selection.every((id) => ids.has(id))
+      ? selection
+      : selection.filter((id) => ids.has(id)),
     selectedLevel: levelAfterChange(next, newHome ? null : prev, newHome ? null : selectedLevel),
     // A command may switch the camera (e.g. viewpoint_go): follow it
     viewMode:

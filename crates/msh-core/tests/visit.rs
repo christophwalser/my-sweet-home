@@ -59,7 +59,7 @@ fn viewpoints_are_stored_and_restored() {
         "viewpoint_store",
         json!({ "name": "Top", "mode": "aerial", "x": 0, "y": 900, "z": 800, "pitch": 40 }),
     );
-    // Same name replaces; the newest comes first
+    // Same name replaces and keeps its place; a new name comes first
     run(
         &r,
         &mut doc,
@@ -69,10 +69,10 @@ fn viewpoints_are_stored_and_restored() {
     let list = run(&r, &mut doc, "viewpoint_list", json!({}));
     let list = list["points_of_view"].as_array().unwrap();
     assert_eq!(list.len(), 2);
-    assert_eq!(list[0]["name"], json!("Hall"));
-    assert_eq!(list[0]["mode"], json!("observer"));
-    assert_eq!(list[0]["x"], json!(150.0));
-    assert_eq!(list[1]["mode"], json!("aerial"));
+    assert_eq!(list[0]["mode"], json!("aerial"));
+    assert_eq!(list[1]["name"], json!("Hall"));
+    assert_eq!(list[1]["mode"], json!("observer"));
+    assert_eq!(list[1]["x"], json!(150.0));
 
     run(&r, &mut doc, "viewpoint_go", json!({ "name": "Top" }));
     assert_eq!(doc.home().attrs.camera.as_deref(), Some("topCamera"));

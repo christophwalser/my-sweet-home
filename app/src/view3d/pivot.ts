@@ -30,17 +30,19 @@ const FIT_DIRECTION = new THREE.Vector3(0, -0.7, -0.8).normalize();
 
 /**
  * Camera position and target that show the whole home (`box`) and turn around its middle,
- * looking along `dir` (normalized; default from the front and above).
+ * looking along `dir` (normalized; default from the front and above). A box smaller than
+ * `minSize` is shown as if it had that size.
  */
 export function fittedView(
   box: THREE.Box3,
   dir: THREE.Vector3 = FIT_DIRECTION,
+  minSize = 500,
 ): { position: THREE.Vector3; target: THREE.Vector3 } {
   const b = box.isEmpty()
     ? new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(500, 250, 500))
     : box;
   const target = b.getCenter(new THREE.Vector3());
-  const distance = Math.max(b.getSize(new THREE.Vector3()).length(), 500) * 1.063;
+  const distance = Math.max(b.getSize(new THREE.Vector3()).length(), minSize) * 1.063;
   const position = target.clone().addScaledVector(dir, -distance);
   return { position, target };
 }
@@ -101,7 +103,7 @@ export function buildPivotMarker(): {
 }
 
 /** Whether an object is drawn: itself and all its parents visible, and not part of `skip`. */
-function drawn(object: THREE.Object3D, skip: THREE.Object3D | null): boolean {
+export function drawn(object: THREE.Object3D, skip: THREE.Object3D | null): boolean {
   for (let o: THREE.Object3D | null = object; o; o = o.parent) {
     if (!o.visible || o === skip) return false;
   }
@@ -111,7 +113,8 @@ function drawn(object: THREE.Object3D, skip: THREE.Object3D | null): boolean {
 /**
  * The point of the scene under the pointer (`ndc`: -1..1, y up): the nearest drawn surface
  * except the sky, else the point on the horizontal plane at `fallbackHeight`. Null when the
- * pointer looks above the horizon at nothing.
+ * pointer looks above the horizon at nothing. Surfaces cut away by the section `planes` do
+ * not count.
  */
 export function pickPoint(
   camera: THREE.Camera,
@@ -119,10 +122,13 @@ export function pickPoint(
   content: THREE.Object3D,
   sky: THREE.Object3D | null,
   fallbackHeight: number,
+  planes: readonly THREE.Plane[] = [],
 ): THREE.Vector3 | null {
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(ndc, camera);
-  const hit = raycaster.intersectObject(content, true).find((h) => drawn(h.object, sky));
+  const hit = raycaster
+    .intersectObject(content, true)
+    .find((h) => drawn(h.object, sky) && planes.every((p) => p.distanceToPoint(h.point) >= 0));
   if (hit) return hit.point.clone();
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -fallbackHeight);
   return raycaster.ray.intersectPlane(plane, new THREE.Vector3());

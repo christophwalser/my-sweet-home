@@ -65,6 +65,8 @@ export type PlanOverlay = {
   visitor: { x: number; y: number; yaw: number; fov: number } | null;
   /** The visitor is selected: outline and the handle that turns it */
   visitorHandle: Pt | null;
+  /** Key points of the camera path of the video, in their order (yaw in radians) */
+  cameraPath?: { x: number; y: number; yaw: number }[] | null;
   /** Catalog piece dragged over the plan, at its size where it will land */
   dropPreview?: { preview: DropPreview; icon: HTMLImageElement | null } | null;
   /** Surface under a dragged texture or the pipette: a wall side (line) or a floor or piece */
@@ -83,6 +85,46 @@ export const VISITOR_PICK_RADIUS = 26;
 export function visitorHandlePos(v: { x: number; y: number; yaw: number }, px: number): Pt {
   const d = VISITOR_PICK_RADIUS + 18 * px;
   return [v.x - Math.sin(v.yaw) * d, v.y + Math.cos(v.yaw) * d];
+}
+
+/** Camera path of the video: a line through the key points, each with its number. */
+function drawCameraPath(
+  ctx: CanvasRenderingContext2D,
+  points: { x: number; y: number; yaw: number }[],
+  color: string,
+  px: number,
+): void {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 2 * px;
+  ctx.setLineDash([8 * px, 5 * px]);
+  ctx.beginPath();
+  for (const [i, p] of points.entries()) {
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const r = 9 * px;
+  ctx.font = `600 ${11 * px}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  points.forEach((p, i) => {
+    // A tick shows where the camera looks
+    const dir = Math.atan2(Math.cos(p.yaw), -Math.sin(p.yaw));
+    ctx.beginPath();
+    ctx.moveTo(p.x + Math.cos(dir) * r, p.y + Math.sin(dir) * r);
+    ctx.lineTo(p.x + Math.cos(dir) * 2.2 * r, p.y + Math.sin(dir) * 2.2 * r);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(String(i + 1), p.x, p.y + 0.5 * px);
+  });
+  ctx.restore();
 }
 
 /** Body of the visitor with the field of view it sees in the 3D view. */
@@ -135,6 +177,7 @@ export function drawOverlay(
   const px = 1 / view.scale;
   ctx.lineJoin = "round";
 
+  if (overlay.cameraPath?.length) drawCameraPath(ctx, overlay.cameraPath, overlay.accent, px);
   if (overlay.visitor) drawVisitor(ctx, overlay.visitor, overlay.accent, px);
   if (overlay.visitor && overlay.visitorHandle) {
     ctx.strokeStyle = overlay.accent;

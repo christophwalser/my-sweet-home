@@ -6,8 +6,9 @@ import ErrorBoundary from "./ErrorBoundary";
 import { listenView3DActions, syncUiState } from "./layout/view3dWindow";
 import { applyHome, subscribeToHomeChanges, useStore } from "./store";
 import { enableDialogDragging } from "./ui/dialogDragging";
-import { initTheme, useUi } from "./ui/uiStore";
+import { type DialogName, initTheme, useUi } from "./ui/uiStore";
 import View3D from "./view3d/View3D";
+import { isViewAction, runViewAction } from "./view3d/view3dBridge";
 import "./App.css";
 import { followLanguage, t } from "./i18n";
 import { followPreferences } from "./preferences";
@@ -27,7 +28,8 @@ export default function View3DWindow() {
     const stopActions = listenView3DActions((action) => {
       const ui = useUi.getState();
       if (action === "shadows") ui.setShadows(!ui.shadows);
-      else ui.openDialog(action);
+      else if (isViewAction(action)) runViewAction(action);
+      else ui.openDialog(action as DialogName);
     });
     return () => {
       stopTheme();

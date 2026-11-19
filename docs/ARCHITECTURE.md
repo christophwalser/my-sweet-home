@@ -450,7 +450,7 @@ furniture is read by its home reader.
 ### 4.18 Status after P6d (2026-11-07)
 
 - Camera path of the video: commands `camera_path_get`, `camera_path_add` (stored point of view
-  by name, or position with yaw / pitch or a point to look at), `camera_path_remove`,
+  by name, or position with yaw / pitch or a point to look at), `camera_path_remove`, `camera_path_move`,
   `camera_path_clear` and `video_settings_update` (width, aspect ratio 4:3 / 16:9 / 24:10, frame
   rate, speed in m/s). As in Sweet Home 3D the key points are `<camera attribute="cameraPath">`
   elements in the environment and the settings are the `video*` attributes of the environment;
@@ -635,7 +635,7 @@ furniture is read by its home reader.
   commands that change only the view (no undo step, home not marked modified); the UI
   follows camera changes made by commands (CLI, MCP, points of view); `HomeView.cameraMoves`
   counts them, so choosing the same point of view again moves the view too.
-- Points of view: `viewpoint_store` / `viewpoint_go` / `viewpoint_delete` / `viewpoint_list`
+- Points of view: `viewpoint_store` / `viewpoint_go` / `viewpoint_rename` / `viewpoint_delete` / `viewpoint_list`
   (Sweet Home 3D `storedCamera`: `observerCamera` element for the visit, `camera` for the
   aerial view, newest first, at most 50); "Points of view" menu in the 3D view. Going to one
   switches the view mode and selects the level of the point of view.
@@ -1377,6 +1377,98 @@ build: an edit is in the window after about 7 ms and the window is done with it 
 - What is left per edit: about 5 ms for a call to the backend and back (WebView2 and Tauri),
   about 7 ms for rendering the panels and drawing the plan, 0 to 10 ms for the 3D scene (the
   cut of the openings of a moved wall), and the wait for the next frame.
+- Changed parts of a patch are turned into JSON through text (`patch::value`), not through
+  `serde_json::to_value`: that widens `f32` to `f64`, so a patch carried 1.5707963705062866
+  where the whole home said 1.5707964. The 3D view took the stored camera for moved by a
+  command and went back to it at the first change of a camera (the sun, a point of view).
+
+### 4.55 3D view after the UX review (2026-11-18)
+
+Package 6 of the UX review (D1 to D7). What is deliberately left out is listed in
+`OFFENE-PUNKTE.md` of the working copy.
+
+- **Selecting and moving (D1).** A click in the 3D view selects the element under the
+  pointer: objects of the scene are named `piece:<id>`, `wall:<id>`, `floor:<id>` ...
+  (`select3d.ts`, `elementOf`); a piece of a group selects its group, and the plan goes to
+  the level of the element. The selection of the plan is outlined (`SelectionOutline`: a
+  box around furniture, the edges of walls and floors, drawn over everything and only by the
+  render loop, so photos and exports do not contain it). Selecting rebuilds nothing of the
+  scene: its effect only draws the outline anew. Dragging a selected piece moves its objects
+  over the horizontal plane through the grabbed point and runs one `edit_move` on release
+  (Esc cancels, a refused move goes back). The press is taken in the capture phase before
+  the controls of the view. The selection is part of the state the main window and the
+  separate 3D window share (`syncUiState`).
+- **Standard views and projection (D2).** `standardViews.ts` gives the view direction of
+  the top view, the four sides and four isometric views from the north of the compass. The
+  parallel projection is a second (orthographic) camera that the orbit controls move
+  instead; the perspective camera follows it (`syncPerspective`), so points of view, photos
+  and the camera stored in the home keep working. `ctx.place` places both. View actions are
+  commands (`view3d.view.<name>`, `view3d.parallel`, `view3d.fit`, `view3d.zoomSelection`)
+  that reach the view through `view3dBridge.ts`, also in the separate window.
+- **Section (D3).** Two clipping planes (above a height, a share of the home from one side
+  of the plan) are set on the materials of the home, not on the ground and the sky
+  (`setSectionPlanes`, `clipMaterials`); the number of planes of a material never changes,
+  an unused plane lies far away. Clicks ignore what is cut away. The section is view state
+  (`useUi.section`), not stored and not part of photos.
+- **Navigation (D4).** The wheel zooms towards the pointer (`zoomToCursor`), the view stops
+  at the horizon and its pivot stays above the ground, the arrow keys turn (Shift: move, +
+  and -: zoom).
+- **Sun study (D5).** Sliders for the time of day and the day of the year show the sun of
+  that moment while they move (`sun_get` with `at`, no change of the home) and run
+  `sun_update` on release; "Play the day" moves the time on. Light brightness and walls
+  transparency are previewed the same way. A north arrow turns with the view
+  (`northOnScreen`). The settings panel stands at the right edge instead of over the view.
+- **Photo and video (D6).** The photo dialog is a panel beside the view like the video
+  panel, with size presets, JPEG, the remaining time and remembered settings
+  (`photoPresets.ts`). Key points of the video show a picture, go to their place on a click
+  and are moved with `camera_path_move`; the plan draws the path while the panel is open
+  (`cameraPathShown`).
+- **Points of view (D7).** `viewpoint_rename`; `viewpoint_store` under an existing name sets
+  that point of view where it is in the list. Pictures are drawn when the menu opens: the
+  scene is rendered into a corner of the canvas and copied from there before the view is
+  drawn again (`ctx.thumbnails`); they are not stored in the file.
+- **After the hand test (2026-11-18).** Rooms from walls: outlines of walls that meet edge
+  to edge (the miter of joined walls of different thickness) missed each other by a few
+  1/100000 cm, which left the enclosed area open; `enclosed_area` grows the outlines by
+  0.004 cm before it unites them (`JOINT_TOLERANCE`, below the 0.01 cm the outline is
+  rounded to). Doors and windows dragged along a wall (`slideInWall`): only the middle of
+  the free space and openings that matter are snap targets (the same wall line on other
+  levels, parallel walls of the level up to 8 m away, at half the snap distance); before,
+  every parallel opening of the home gave three targets and the wall was covered with
+  them. Between targets the free space to the nearer neighbor is a multiple of the drag
+  step. The piece keeps the side it opens to and its wall while the hand strays
+  (`SlideState`): it turns only when pulled out of the wall on the other side. Escape and
+  Del typed in the 3D view reach the plan (drop or delete the selection). The panels of the
+  3D view stand below the tool bar. The photo preview keeps its proportions, the file
+  format (PNG, JPEG) is chosen in the panel (the dialog of Windows kept ".png" when JPEG
+  was picked there), and while path tracing prepares its scene the view as it is is shown.
+  Number fields of the tool options can be emptied while typing.
+- **After the second hand test (2026-11-19).** In a wall thicker than the piece a dragged
+  door or window follows the hand across the wall too (`slideInWall`: the offset of its
+  wall part from the axis, between the two faces): it stays where it is while it slides
+  along, and catches the middle of the wall and both faces within a small distance. Before,
+  it could only sit flush with the side it opens to and jumped there with every move, so
+  another place across the wall needed the arrow keys. The virtual visit is lit by the
+  lamps of the level the visitor stands on only (`visitLampLevels`): lamps are lights that
+  no floor stops, and the ones under the ceiling of the level below lit the foot of the
+  walls through the floor as a white band. The drawing callback of the plan lists the grid
+  distance and the opacity of the background image among what it depends on: it kept the
+  values it was created with, so a new grid distance showed only after the next change of a
+  tool.
+- **Grid snap (2026-11-19).** Preference `snapGrid` (off at first; command `plan.snapGrid`
+  in the Magnetism menu, a switch in the status bar). `gridSnap.ts`: the grid that catches
+  is the one the plan draws at its zoom (`snapGridStep`, from `gridStep`). While drawing
+  it replaces the rounding to whole centimeters, the last stage of `snapDraw`: the first
+  point lands on a grid point, a segment keeps the direction the angle magnetism gave it and
+  ends on the nearest grid line (`gridAlong`). Points, faces and alignments of objects and
+  guide lines come first. A moved selection lands with its anchor on the grid
+  (`gridAnchor`: the start of the first wall, else the upper left corner of its bounds;
+  `gridOffset`), before the smart guides and the docking to walls, which win. Not caught:
+  pieces dropped from the catalog, the arrow keys, doors sliding in a wall.
+- **Testing in the real app.** The debug or release build is started with
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>`; a script then
+  clicks, drags and types in the real window through the Chrome DevTools Protocol
+  (`Input.dispatchMouseEvent`) and takes screenshots. Package 6 was checked this way.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

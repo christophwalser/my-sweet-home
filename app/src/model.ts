@@ -350,6 +350,8 @@ export type Home = {
       /** Gray light under the ceilings of rooms in photos (black or none: off) */
       ceiling_light_color: number | null;
     };
+    /** Key points of the camera path of the video (role `cameraPath`) */
+    cameras?: Camera[];
     textures: Texture[];
   } | null;
   compass: {

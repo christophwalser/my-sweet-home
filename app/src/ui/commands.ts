@@ -20,6 +20,8 @@ import { newHomeParams, prefs, usePreferences } from "../preferences";
 import { clearRecentHomes, recentHomes, recentLabel, removeRecentHome } from "../recentHomes";
 import { type Tool, useStore, VISITOR_ID } from "../store";
 import { LEVELS_3D_OPTIONS, levels3dMode } from "../view3d/levels3d";
+import { STANDARD_VIEWS, standardViewLabel } from "../view3d/standardViews";
+import { view3dAction } from "../view3d/view3dBridge";
 import type { IconName } from "./Icon";
 import { keyTarget, modalOpen } from "./keyTarget";
 import { planActions } from "./planBridge";
@@ -59,6 +61,8 @@ const hasHome = () => !!store().opened;
 /** Selected elements of the home (the visitor is no element). */
 const selected = () => store().selection.filter((id) => id !== VISITOR_ID);
 const hasSelection = () => hasHome() && selected().length > 0;
+/** The 3D view shows the aerial view (its standard views and the projection apply) */
+const inAerialView = () => hasHome() && store().viewMode !== "observer";
 const run = (command: string, params?: Record<string, unknown>) => store().run(command, params);
 
 /** Selects the elements a command created. */
@@ -674,6 +678,16 @@ const LIST: Command[] = [
       usePreferences.getState().update({ snapToRulers: !usePreferences.getState().snapToRulers }),
   },
   {
+    id: "plan.snapGrid",
+    label: t("Snap to the grid"),
+    icon: "snapgrid",
+    hint: t("Drawn points and moved elements land on the grid lines where no object catches"),
+    keywords: "grid raster magnetism",
+    enabled: () => usePreferences.getState().magnetism,
+    checked: () => usePreferences.getState().snapGrid,
+    run: () => usePreferences.getState().update({ snapGrid: !usePreferences.getState().snapGrid }),
+  },
+  {
     id: "plan.backgroundImport",
     label: t("Import background image…"),
     icon: "background",
@@ -901,6 +915,41 @@ const LIST: Command[] = [
     checked: () => store().viewMode === "observer",
     run: () => store().setViewMode("observer"),
   },
+  ...STANDARD_VIEWS.map(
+    (view): Command => ({
+      id: `view3d.view.${view}`,
+      label: standardViewLabel(view),
+      icon: "aerial",
+      hint: t("Shows the whole home from this side in the 3D view"),
+      keywords: "standard view elevation isometric plan",
+      enabled: inAerialView,
+      run: () => view3dAction(`view:${view}`),
+    }),
+  ),
+  {
+    id: "view3d.parallel",
+    label: t("Parallel projection"),
+    icon: "aerial",
+    hint: t("Draws the aerial view without perspective, as elevations and isometric views need it"),
+    keywords: "orthographic perspective isometric",
+    enabled: inAerialView,
+    checked: () => useUi.getState().parallel,
+    run: () => view3dAction("parallel"),
+  },
+  {
+    id: "view3d.fit",
+    label: t("Fit the home in the 3D view"),
+    icon: "zoomfit",
+    enabled: inAerialView,
+    run: () => view3dAction("fit"),
+  },
+  {
+    id: "view3d.zoomSelection",
+    label: t("Zoom the 3D view to the selection"),
+    icon: "zoomfit",
+    enabled: () => inAerialView() && hasSelection(),
+    run: () => view3dAction("zoomSelection"),
+  },
   {
     id: "view3d.shadows",
     label: t("Shadows"),
@@ -916,8 +965,8 @@ const LIST: Command[] = [
     id: "view3d.settings",
     label: t("3D settings, location and sun…"),
     icon: "settings",
-    hint: t("Ground, sky, light, walls transparency, location, compass, date and time"),
-    keywords: "compass time date city location sun",
+    hint: t("Ground, sky, light, walls transparency, section, location, compass, date and time"),
+    keywords: "compass time date city location sun section cut study",
     enabled: hasHome,
     run: () => open3DDialog("settings3d"),
   },
@@ -1196,6 +1245,7 @@ export const MENUS: Menu[] = [
           cmd("plan.snapAngles"),
           cmd("plan.snapObjects"),
           cmd("plan.snapRulers"),
+          cmd("plan.snapGrid"),
         ],
       },
       sep,
@@ -1312,6 +1362,16 @@ export const MENUS: Menu[] = [
     entries: () => [
       cmd("view3d.aerial"),
       cmd("view3d.visit"),
+      sep,
+      {
+        kind: "submenu",
+        label: t("Standard views"),
+        icon: "aerial",
+        entries: () => STANDARD_VIEWS.map((view) => cmd(`view3d.view.${view}`)),
+      },
+      cmd("view3d.parallel"),
+      cmd("view3d.fit"),
+      cmd("view3d.zoomSelection"),
       sep,
       {
         kind: "submenu",

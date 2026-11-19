@@ -41,12 +41,32 @@ import {
   MAX_LAMP_LIGHTS,
   MAX_PHOTO_LIGHTS,
   refreshLampShadows,
+  visitLampLevels,
 } from "./lights";
 import { clearModelCache, createPieceObject, disposeObject, waitForModels } from "./models";
 import { buildObj } from "./objExport";
 import PhotoDialog from "./PhotoDialog";
 import { type PhotoJob, type PhotoQuality, type PhotoSource, renderPhoto } from "./photo";
-import { buildPivotMarker, fittedView, homeBox, orbitDistance, pickPoint } from "./pivot";
+import { buildPivotMarker, drawn, fittedView, homeBox, orbitDistance, pickPoint } from "./pivot";
+import {
+  clickSelection,
+  clipMaterials,
+  elementOf,
+  isGround,
+  keptBy,
+  levelOfElement,
+  type SceneElement,
+  SelectionOutline,
+  setSectionPlanes,
+  topIds,
+} from "./select3d";
+import {
+  northOnScreen,
+  parallelHalfHeight,
+  perspectiveDistance,
+  type StandardView,
+  viewDirection,
+} from "./standardViews";
 import { stepSurfaces } from "./stepSurfaces";
 import VideoDialog from "./VideoDialog";
 import View3DSettings from "./View3DSettings";
@@ -60,6 +80,7 @@ import {
   type VideoJob,
   type VideoQuality,
 } from "./video";
+import { registerView3D, runViewAction } from "./view3dBridge";
 import { buildColliders, EYE_HEIGHT, levelOfEye, VisitorControls } from "./visitor";
 
 /**
@@ -74,6 +95,13 @@ const DEFAULT_LIGHT_GRAY = 0xd0;
 /** Intensity of the sun and of the ambient light at 100 % brightness. */
 const SUN_INTENSITY = 1.4;
 const AMBIENT_INTENSITY = 1.6;
+/** Distance of the camera of the parallel projection from the point the view turns around. */
+const PARALLEL_DISTANCE = 100000;
+/** A press that moves less than this many pixels is a click. */
+const CLICK_SLOP = 4;
+/** Size of the pictures of the points of view in their menu. */
+const THUMBNAIL_WIDTH = 160;
+const THUMBNAIL_HEIGHT = 100;
 
 /** Sun of the home as returned by `sun_get`. */
 export type SunInfo = {
@@ -156,8 +184,10 @@ export default function View3D() {
   const levelId = useStore((s) => s.selectedLevel);
   const viewMode = useStore((s) => s.viewMode);
   const shadows = useUi((s) => s.shadows);
+  const parallel = useUi((s) => s.parallel);
+  const section = useUi((s) => s.section);
+  const selection = useStore((s) => s.selection);
   const quality = usePreferences((s) => s.quality3d);
-  const setShadows = useUi((s) => s.setShadows);
   const dialog = useUi((s) => s.dialog);
   const openDialog = useUi((s) => s.openDialog);
   const closeDialog = useUi((s) => s.closeDialog);
@@ -166,6 +196,7 @@ export default function View3D() {
   const settingsOpen = dialog === "settings3d";
   const containerRef = useRef<HTMLDivElement>(null);
   const pivotRef = useRef<HTMLDivElement>(null);
+  const northRef = useRef<HTMLDivElement>(null);
   const ctx = useRef<{
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
@@ -190,6 +221,28 @@ export default function View3D() {
     colliderDeps: unknown[] | null;
     /** The next frame is drawn after the window showed the plan (see `requestRender`) */
     renderLater: boolean;
+    /** Camera of the parallel projection (the aerial view only) */
+    ortho: THREE.OrthographicCamera;
+    /** The view is drawn in parallel projection */
+    parallel: boolean;
+    /** Camera the view is drawn with */
+    view: () => THREE.PerspectiveCamera | THREE.OrthographicCamera;
+    /** Places the aerial view: where the camera is and the point it turns around */
+    place: (position: THREE.Vector3, target: THREE.Vector3) => void;
+    setParallel: (on: boolean) => void;
+    /** Outline of the selected elements */
+    outline: SelectionOutline;
+    /** Draws the outline of the selection anew */
+    highlight: () => void;
+    /** Small pictures of the scene seen from the given cameras (data URLs) */
+    thumbnails: (poses: CameraPose[], width?: number, height?: number) => string[];
+    /** Clipping planes of the section (horizontal, vertical) and whether they cut */
+    sectionPlanes: [THREE.Plane, THREE.Plane];
+    sectionOn: boolean;
+    /** Materials carry the section planes */
+    sectionApplied: boolean;
+    /** New content waits for the section planes (see the render loop) */
+    sectionDirty: boolean;
   } | null>(null);
 
   // Renderer, camera and controls live as long as the component
@@ -205,12 +258,21 @@ export default function View3D() {
     );
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Section planes are set on the materials of the home (not on the ground and the sky)
+    renderer.localClippingEnabled = true;
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, 1, 5, 200000);
+    const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, PARALLEL_DISTANCE * 4);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = false;
+    // The wheel zooms towards the point under the pointer, and the view stops at the horizon
+    controls.zoomToCursor = true;
+    controls.maxPolarAngle = Math.PI / 2;
+    const view = () => (state.parallel ? ortho : camera);
+    const outline = new SelectionOutline();
+    scene.add(outline.group);
     const visitor = new VisitorControls(camera, renderer.domElement);
     const content = new THREE.Group();
     const lamps = new THREE.Group();
@@ -230,7 +292,7 @@ export default function View3D() {
       if (!el) return;
       let shown = false;
       if (controls.enabled && (hover || dragging)) {
-        const p = controls.target.clone().project(camera);
+        const p = controls.target.clone().project(view());
         if (p.z > -1 && p.z < 1) {
           const x = ((p.x + 1) / 2) * container.clientWidth;
           const y = ((1 - p.y) / 2) * container.clientHeight;
@@ -250,15 +312,38 @@ export default function View3D() {
     let frame = 0;
     const render = () => {
       frame = 0;
-      // The sky dome stays centered on the viewer
-      state.sky?.position.copy(camera.position);
+      const cam = view();
+      // The sky dome stays centered on the viewer (a parallel view has no sky dome)
+      if (state.sky) {
+        state.sky.position.copy(cam.position);
+        state.sky.visible = !state.parallel;
+      }
+      if (state.sectionDirty) {
+        // New content (a rebuilt scene, a loaded model) gets the section planes
+        state.sectionDirty = false;
+        if (state.sectionOn || state.sectionApplied) {
+          const planes = state.sectionOn ? state.sectionPlanes : null;
+          for (const child of content.children) {
+            if (child.name !== "ground" && child.name !== "sky") clipMaterials(child, planes);
+          }
+          state.sectionApplied = state.sectionOn;
+        }
+      }
       const marked = controls.enabled && (hover || dragging);
       if (marked) {
-        const pixel = (2 * Math.tan((camera.fov * Math.PI) / 360)) / container.clientHeight;
-        pivotMarker.place(controls.target, camera.position.distanceTo(controls.target) * pixel);
+        // Size of a pixel of the screen at the pivot
+        const pixel = state.parallel
+          ? (ortho.top - ortho.bottom) / ortho.zoom / container.clientHeight
+          : ((2 * Math.tan((camera.fov * Math.PI) / 360)) / container.clientHeight) *
+            camera.position.distanceTo(controls.target);
+        pivotMarker.place(controls.target, pixel);
       }
       pivotMarker.group.visible = marked;
-      renderer.render(scene, camera);
+      // The outline of the selection is drawn by this loop only (not in photos)
+      outline.group.visible = !outline.empty;
+      renderer.render(scene, cam);
+      outline.group.visible = false;
+      placeNorth();
       if (perfOn()) {
         // The graphics card works in the background: a performance run waits for it
         renderer.getContext().finish();
@@ -290,7 +375,61 @@ export default function View3D() {
         frame = requestAnimationFrame(render);
       }
     };
-    controls.addEventListener("change", requestRender);
+    // The perspective camera follows the parallel one: points of view, photos and the
+    // camera stored in the home use it
+    const syncPerspective = () => {
+      const dir = controls.target.clone().sub(ortho.position).normalize();
+      const half = (ortho.top - ortho.bottom) / 2 / ortho.zoom;
+      camera.position
+        .copy(controls.target)
+        .addScaledVector(dir, -perspectiveDistance(half, camera.fov));
+      camera.quaternion.copy(ortho.quaternion);
+      camera.updateMatrixWorld();
+    };
+    // The parallel camera shows what the perspective one shows at the pivot
+    const syncParallel = () => {
+      const offset = camera.position.clone().sub(controls.target);
+      const distance = offset.length() || 1;
+      const half = parallelHalfHeight(distance, camera.fov);
+      ortho.top = half;
+      ortho.bottom = -half;
+      ortho.left = -half * camera.aspect;
+      ortho.right = half * camera.aspect;
+      ortho.zoom = 1;
+      ortho.position.copy(controls.target).addScaledVector(offset, PARALLEL_DISTANCE / distance);
+      ortho.quaternion.copy(camera.quaternion);
+      ortho.updateProjectionMatrix();
+    };
+    const setParallel = (on: boolean) => {
+      if (state.parallel === on) return;
+      if (on) syncParallel();
+      else syncPerspective();
+      state.parallel = on;
+      // The controls move whichever camera draws the view
+      (controls as { object: THREE.Camera }).object = on ? ortho : camera;
+      controls.update();
+      requestRender();
+    };
+    const place = (position: THREE.Vector3, target: THREE.Vector3) => {
+      camera.position.copy(position);
+      controls.target.copy(target);
+      // A stored view may look up from below its pivot: the limit at the horizon gives way
+      const polar = new THREE.Spherical().setFromVector3(position.clone().sub(target)).phi;
+      controls.maxPolarAngle = Math.max(Math.PI / 2, polar);
+      camera.lookAt(target);
+      if (state.parallel) syncParallel();
+      controls.update();
+      requestRender();
+    };
+    controls.addEventListener("change", () => {
+      // The view does not dive below the ground
+      if (controls.target.y < 0) {
+        controls.object.position.y -= controls.target.y;
+        controls.target.y = 0;
+      }
+      if (state.parallel) syncPerspective();
+      requestRender();
+    });
     controls.addEventListener("start", () => {
       dragging = true;
       requestRender();
@@ -316,14 +455,14 @@ export default function View3D() {
     const movePivot = (to: THREE.Vector3) => {
       cancelAnimationFrame(pivotAnimation);
       const from = controls.target.clone();
-      const eye = camera.position.clone();
+      const eye = controls.object.position.clone();
       const delta = to.clone().sub(from);
       const start = performance.now();
       const step = (now: number) => {
         const k = Math.min(1, (now - start) / 250);
         const eased = k * (2 - k);
         controls.target.copy(from).addScaledVector(delta, eased);
-        camera.position.copy(eye).addScaledVector(delta, eased);
+        controls.object.position.copy(eye).addScaledVector(delta, eased);
         controls.update();
         requestRender();
         if (k < 1) pivotAnimation = requestAnimationFrame(step);
@@ -337,12 +476,297 @@ export default function View3D() {
         ((e.clientX - r.left) / r.width) * 2 - 1,
         -((e.clientY - r.top) / r.height) * 2 + 1,
       );
-      const point = pickPoint(camera, ndc, content, state.sky, controls.target.y);
+      const point = pickPoint(
+        view(),
+        ndc,
+        content,
+        state.sky,
+        controls.target.y,
+        state.sectionOn ? state.sectionPlanes : [],
+      );
       if (!point) return;
       userMoved.current = true;
       movePivot(point);
     };
     renderer.domElement.addEventListener("dblclick", onDoubleClick);
+
+    // Small pictures of points of view: drawn into a corner of the canvas and copied from
+    // there before the view itself is drawn again, so they are never seen on the screen
+    const thumbnails = (
+      poses: CameraPose[],
+      wanted = THUMBNAIL_WIDTH,
+      wantedHeight = THUMBNAIL_HEIGHT,
+    ): string[] => {
+      const canvas = renderer.domElement;
+      const ratio = renderer.getPixelRatio();
+      // Not larger than the canvas, in the proportions asked for
+      const fit = Math.min(1, canvas.width / ratio / wanted, canvas.height / ratio / wantedHeight);
+      const width = Math.floor(wanted * fit);
+      const height = Math.floor(wantedHeight * fit);
+      if (width < 8 || height < 8) return poses.map(() => "");
+      const out = document.createElement("canvas");
+      out.width = width;
+      out.height = height;
+      const g = out.getContext("2d");
+      if (!g) return poses.map(() => "");
+      const eye = new THREE.PerspectiveCamera(45, width / height, 5, 200000);
+      const full = renderer.getViewport(new THREE.Vector4());
+      renderer.setScissorTest(true);
+      renderer.setScissor(0, 0, width, height);
+      renderer.setViewport(0, 0, width, height);
+      const urls = poses.map((pose) => {
+        applyPose(eye, pose);
+        if (state.sky) {
+          state.sky.position.copy(eye.position);
+          state.sky.visible = true;
+        }
+        renderer.render(scene, eye);
+        g.drawImage(
+          canvas,
+          0,
+          canvas.height - height * ratio,
+          width * ratio,
+          height * ratio,
+          0,
+          0,
+          width,
+          height,
+        );
+        return out.toDataURL("image/jpeg", 0.8);
+      });
+      renderer.setScissorTest(false);
+      renderer.setViewport(full);
+      cancelAnimationFrame(frame);
+      render();
+      return urls;
+    };
+
+    // The north arrow turns with the view
+    const placeNorth = () => {
+      const el = northRef.current;
+      if (!el) return;
+      const m = view().matrixWorld.elements;
+      const north = useStore.getState().opened?.home.compass?.attrs.north_direction ?? 0;
+      const angle = northOnScreen(
+        new THREE.Vector3(m[0], m[1], m[2]),
+        new THREE.Vector3(m[4], m[5], m[6]),
+        north,
+      );
+      el.style.transform = `rotate(${angle}rad)`;
+    };
+
+    // Outline of the selected elements: a box around furniture, the edges of walls and floors
+    const highlight = () => {
+      outline.clear();
+      const { opened: current, selection: ids } = useStore.getState();
+      if (!current || ids.length === 0) return;
+      const selected = new Set(ids);
+      const tops = topIds(current.home);
+      for (const [id, p] of state.pieces) {
+        if (!selected.has(tops.get(id)?.top ?? "")) continue;
+        const a = p.piece.attrs;
+        outline.addBox(p.object, a.width, a.height, a.depth);
+      }
+      for (const part of content.children) {
+        if (part.name !== "walls" && part.name !== "rooms") continue;
+        part.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const [kind, id] = mesh.name.split(":");
+          if ((kind === "wall" || kind === "floor") && selected.has(id)) outline.addEdges(mesh);
+        });
+      }
+    };
+
+    // A click selects the element under the pointer (Ctrl or Shift adds or removes it), and a
+    // selected piece of furniture is moved over the floor by dragging it
+    const raycaster = new THREE.Raycaster();
+    const pointerRay = (e: { clientX: number; clientY: number }) => {
+      const r = renderer.domElement.getBoundingClientRect();
+      raycaster.setFromCamera(
+        new THREE.Vector2(
+          ((e.clientX - r.left) / r.width) * 2 - 1,
+          -((e.clientY - r.top) / r.height) * 2 + 1,
+        ),
+        view(),
+      );
+      return raycaster;
+    };
+    /** Nearest element under the pointer; `element` is null on the ground. */
+    const hitAt = (e: {
+      clientX: number;
+      clientY: number;
+    }): { element: SceneElement | null; point: THREE.Vector3 } | null => {
+      const planes = state.sectionOn ? state.sectionPlanes : [];
+      for (const h of pointerRay(e).intersectObject(content, true)) {
+        if (!drawn(h.object, state.sky) || !keptBy(planes, h.point)) continue;
+        if (isGround(h.object)) return { element: null, point: h.point };
+        const element = elementOf(h.object);
+        if (element) return { element, point: h.point };
+      }
+      return null;
+    };
+    let press: { x: number; y: number } | null = null;
+    let drag: {
+      ids: string[];
+      objects: { object: THREE.Object3D; start: THREE.Vector3 }[];
+      plane: THREE.Plane;
+      origin: THREE.Vector3;
+      delta: THREE.Vector3;
+      moved: boolean;
+    } | null = null;
+    const dropDrag = (back: boolean) => {
+      const d = drag;
+      drag = null;
+      if (!d || !back) return d;
+      for (const o of d.objects) o.object.position.copy(o.start);
+      highlight();
+      requestRender();
+      return d;
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0 || e.target !== renderer.domElement) return;
+      press = { x: e.clientX, y: e.clientY };
+      const { opened: current, selection: ids } = useStore.getState();
+      if (!current || ids.length === 0 || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const selected = new Set(ids);
+      const tops = topIds(current.home);
+      const moving = [...state.pieces].filter(([id]) => selected.has(tops.get(id)?.top ?? ""));
+      if (moving.length === 0) return;
+      // Only the selected furniture first (cheap), then whether it is what the pointer sees
+      const ray = pointerRay(e);
+      if (
+        ray.intersectObjects(
+          moving.map(([, p]) => p.object),
+          true,
+        ).length === 0
+      ) {
+        return;
+      }
+      const hit = hitAt(e);
+      const top = hit?.element?.kind === "furniture" ? tops.get(hit.element.id)?.top : undefined;
+      if (!hit || !top || !selected.has(top)) return;
+      // The view does not turn while furniture is dragged
+      e.stopPropagation();
+      renderer.domElement.focus();
+      drag = {
+        ids: [...new Set(moving.map(([id]) => tops.get(id)?.top ?? id))],
+        objects: moving.map(([, p]) => ({ object: p.object, start: p.object.position.clone() })),
+        plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), -hit.point.y),
+        origin: hit.point.clone(),
+        delta: new THREE.Vector3(),
+        moved: false,
+      };
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!drag || !press) return;
+      if (!drag.moved && Math.hypot(e.clientX - press.x, e.clientY - press.y) < CLICK_SLOP) return;
+      const p = pointerRay(e).ray.intersectPlane(drag.plane, new THREE.Vector3());
+      // Near the horizon the floor under the pointer is endlessly far away
+      if (!p || p.distanceTo(drag.origin) > 20000) return;
+      drag.moved = true;
+      drag.delta.subVectors(p, drag.origin).setY(0);
+      for (const o of drag.objects) o.object.position.copy(o.start).add(drag.delta);
+      highlight();
+      requestRender();
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      const pressed = press;
+      press = null;
+      const d = dropDrag(false);
+      if (d?.moved) {
+        void useStore
+          .getState()
+          .run("edit_move", { ids: d.ids, dx: d.delta.x, dy: d.delta.z })
+          .then((result) => {
+            // Not moved (e.g. the furniture is locked): back to where it was
+            if (result !== undefined) return;
+            for (const o of d.objects) o.object.position.copy(o.start);
+            highlight();
+            requestRender();
+          });
+        return;
+      }
+      if (!pressed || Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) >= CLICK_SLOP) {
+        return;
+      }
+      const store = useStore.getState();
+      const current = store.opened;
+      if (!current) return;
+      const element = hitAt(e)?.element ?? null;
+      let id: string | null = null;
+      let level: string | null | undefined;
+      if (element?.kind === "furniture") {
+        const top = topIds(current.home).get(element.id);
+        id = top?.top ?? null;
+        level = top?.level;
+      } else if (element) {
+        id = element.id;
+        level = levelOfElement(current.home, element);
+      }
+      // The plan shows the level of the element, so that it is seen selected there too
+      if (id && level != null && level !== store.selectedLevel) store.selectLevel(level);
+      store.setSelection(clickSelection(store.selection, id, e.ctrlKey || e.shiftKey));
+    };
+    const onDragKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && drag) {
+        e.stopPropagation();
+        dropDrag(true);
+      }
+    };
+    // Before the controls of the view see the press
+    container.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("keydown", onDragKey, true);
+
+    // Keys of the aerial view: arrows turn, Shift + arrows move, + and - zoom
+    const onKey = (e: KeyboardEvent) => {
+      if (!controls.enabled || e.ctrlKey || e.metaKey || e.altKey) return;
+      const cam = controls.object;
+      const offset = cam.position.clone().sub(controls.target);
+      const turn = (theta: number, phi: number) => {
+        const s = new THREE.Spherical().setFromVector3(offset);
+        s.theta += theta;
+        s.phi = THREE.MathUtils.clamp(s.phi + phi, 0.001, controls.maxPolarAngle);
+        cam.position.copy(controls.target).add(offset.setFromSpherical(s));
+      };
+      // In shares of the height of the view
+      const pan = (x: number, y: number) => {
+        const height = state.parallel
+          ? (ortho.top - ortho.bottom) / ortho.zoom
+          : 2 * offset.length() * Math.tan((camera.fov * Math.PI) / 360);
+        const m = cam.matrixWorld.elements;
+        const move = new THREE.Vector3(m[0], m[1], m[2])
+          .multiplyScalar(x * height)
+          .add(new THREE.Vector3(m[4], m[5], m[6]).multiplyScalar(y * height));
+        cam.position.add(move);
+        controls.target.add(move);
+      };
+      const zoom = (factor: number) => {
+        if (state.parallel) {
+          ortho.zoom *= factor;
+          ortho.updateProjectionMatrix();
+        } else {
+          cam.position.copy(controls.target).addScaledVector(offset, 1 / factor);
+        }
+      };
+      const step = THREE.MathUtils.degToRad(5);
+      if (e.key === "ArrowLeft") e.shiftKey ? pan(-0.1, 0) : turn(-step, 0);
+      else if (e.key === "ArrowRight") e.shiftKey ? pan(0.1, 0) : turn(step, 0);
+      else if (e.key === "ArrowUp") e.shiftKey ? pan(0, 0.1) : turn(0, -step);
+      else if (e.key === "ArrowDown") e.shiftKey ? pan(0, -0.1) : turn(0, step);
+      else if (e.key === "+" || e.key === "=") zoom(1.25);
+      else if (e.key === "-") zoom(0.8);
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+      userMoved.current = true;
+      controls.update();
+      requestRender();
+    };
+    renderer.domElement.addEventListener("keydown", onKey);
     // Textures of model materials (MTL, Collada, 3DS) load after the model: redraw when
     // each of them arrives, otherwise they stay black until the next interaction
     const manager = THREE.DefaultLoadingManager;
@@ -367,6 +791,18 @@ export default function View3D() {
       parts: new Map(),
       colliderDeps: null,
       renderLater: false,
+      ortho,
+      parallel: false,
+      view,
+      place,
+      setParallel,
+      outline,
+      highlight,
+      thumbnails,
+      sectionPlanes: [new THREE.Plane(), new THREE.Plane()],
+      sectionOn: false,
+      sectionApplied: false,
+      sectionDirty: false,
     };
     ctx.current = state;
     visitor.onChange = (pose) => {
@@ -385,6 +821,10 @@ export default function View3D() {
       camera.aspect = w / h;
       camera.fov = verticalFov(state.hfov, camera.aspect);
       camera.updateProjectionMatrix();
+      const half = (ortho.top - ortho.bottom) / 2;
+      ortho.left = -half * camera.aspect;
+      ortho.right = half * camera.aspect;
+      ortho.updateProjectionMatrix();
       requestRender();
     };
     const ro = new ResizeObserver(resize);
@@ -398,6 +838,13 @@ export default function View3D() {
       renderer.domElement.removeEventListener("pointerenter", onEnter);
       renderer.domElement.removeEventListener("pointerleave", onLeave);
       renderer.domElement.removeEventListener("dblclick", onDoubleClick);
+      renderer.domElement.removeEventListener("keydown", onKey);
+      container.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("keydown", onDragKey, true);
+      scene.remove(outline.group);
+      outline.dispose();
       controls.dispose();
       disposeObject(pivotMarker.group);
       visitor.dispose();
@@ -559,6 +1006,7 @@ export default function View3D() {
         createPieceObject(p, opened.id, base, () => {
           // Loaded furniture also stops the light of lamps
           refreshLampShadows(c.lamps);
+          c.sectionDirty = true;
           c.requestRender();
         });
       if (p.attrs.id) c.pieces.set(p.attrs.id, { piece: p, base, object });
@@ -588,9 +1036,36 @@ export default function View3D() {
       c.colliderDeps = colliderDeps;
     }
     c.visitor.colliders.stepSurfaces = (p) => stepSurfaces(stairObjects, p);
+    c.sectionDirty = true;
     c.requestRender();
     perfMark("3d-build-end");
   }, [opened, levelId]);
+
+  // The selection of the plan is outlined. Only the outline is drawn anew: selecting
+  // rebuilds nothing of the scene.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the outline follows the rebuilt scene and the selection
+  useEffect(() => {
+    const c = ctx.current;
+    if (!c) return;
+    c.highlight();
+    c.requestRender();
+  }, [selection, opened, levelId]);
+
+  // Section planes: the home is cut open at a height and along a vertical plane
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the planes follow the bounds of the rebuilt scene
+  useEffect(() => {
+    const c = ctx.current;
+    if (!c) return;
+    c.sectionOn = setSectionPlanes(c.sectionPlanes, section, homeBox(c.content));
+    c.sectionDirty = true;
+    c.requestRender();
+  }, [section, opened, levelId]);
+
+  // Parallel projection (the aerial view only). Before the camera is placed below: that
+  // places the camera of the projection in use.
+  useEffect(() => {
+    ctx.current?.setParallel(parallel && viewMode !== "observer");
+  }, [parallel, viewMode]);
 
   // Position of the sun from the location, date and time of the home (computed by the
   // core); it follows the clock if the home says so
@@ -635,12 +1110,61 @@ export default function View3D() {
   const sunRef = useRef<SunInfo | null>(null);
   sunRef.current = sun;
 
+  // Sun study: while a slider of the settings is dragged the sun of that moment is shown
+  // without changing the home; the stored sun takes over when it arrives
+  const [sunPreview, setSunPreview] = useState<SunInfo | null>(null);
+  const previewSeq = useRef(0);
+  const previewSun = (at: string | null) => {
+    const seq = ++previewSeq.current;
+    if (!at) {
+      setSunPreview(null);
+      return;
+    }
+    api
+      .execute("sun_get", { at })
+      .then((s) => {
+        if (previewSeq.current === seq) setSunPreview(s as SunInfo);
+      })
+      .catch(() => {});
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new sun of the home ends the preview
+  useEffect(() => {
+    previewSeq.current++;
+    setSunPreview(null);
+  }, [sun]);
+  const shownSun = sunPreview ?? sun;
+
+  // Light and transparency of the walls are shown while their sliders are dragged as well
+  const [envPreview, setEnvPreview] = useState<{ light?: number; wallsAlpha?: number } | null>(
+    null,
+  );
+  const environment = opened?.home.environment;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a changed environment of the home ends the preview
+  useEffect(() => setEnvPreview(null), [environment]);
+  const previewAlpha = envPreview?.wallsAlpha;
+  useEffect(() => {
+    const c = ctx.current;
+    if (!c || previewAlpha === undefined) return;
+    c.content.getObjectByName("walls")?.traverse((o) => {
+      const mats = (o as THREE.Mesh).material;
+      for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) {
+        const transparent = previewAlpha > 0;
+        if (m.transparent !== transparent) m.needsUpdate = true;
+        m.transparent = transparent;
+        m.opacity = 1 - previewAlpha;
+      }
+    });
+    c.requestRender();
+  }, [previewAlpha]);
+  const previewLight = envPreview?.light;
+
   // Light of the sun and the sky: direction, daylight and the brightness of the home
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new level rebuilds the scene and its ambient light
   useEffect(() => {
     const c = ctx.current;
     if (!c || !opened) return;
-    const light = brightness(opened.home);
+    const sun = shownSun;
+    const light = previewLight ?? brightness(opened.home);
     const day = sun ? daylight(sun.elevation) : 1;
     c.sun.intensity = SUN_INTENSITY * light * day;
     // Warmer light when the sun is low
@@ -658,12 +1182,13 @@ export default function View3D() {
     const domeMaterial = dome?.material as THREE.MeshBasicMaterial | undefined;
     domeMaterial?.color.setScalar(skyLight);
     c.requestRender();
-  }, [sun, opened, levelId]);
+  }, [shownSun, previewLight, opened, levelId]);
 
   // Sun shadows (optional, they cost a second render pass)
   useEffect(() => {
     const c = ctx.current;
     if (!c || !opened || levelId === undefined) return;
+    const sun = shownSun;
     const sunDirection = sun
       ? new THREE.Vector3(sun.direction[0], sun.direction[2], sun.direction[1]).normalize()
       : DEFAULT_SUN_DIRECTION;
@@ -690,7 +1215,7 @@ export default function View3D() {
     cam.far = radius * 3.5;
     cam.updateProjectionMatrix();
     c.requestRender();
-  }, [shadows, opened, levelId, sun]);
+  }, [shadows, opened, levelId, shownSun]);
 
   // Quality of the preferences: resolution and shadow detail
   useEffect(() => {
@@ -738,7 +1263,11 @@ export default function View3D() {
         : observer
           ? new THREE.Vector3(observer.attrs.x, observer.attrs.z, observer.attrs.y)
           : c.camera.position.clone();
-      const lights = lampLights(home, levelInfos(home), visibleLevels(home, levelId));
+      const lights = lampLights(
+        home,
+        levelInfos(home),
+        visitLampLevels(home, levelId ?? null, visibleLevels(home, levelId)),
+      );
       c.lamps.add(buildLampLights(lights, viewer, MAX_LAMP_LIGHTS, LAMP_SHADOWS));
     }
     syncShadowMap(c);
@@ -894,8 +1423,7 @@ export default function View3D() {
     }
     c.camera.fov = verticalFov(c.hfov, c.camera.aspect);
     c.camera.updateProjectionMatrix();
-    c.controls.update();
-    c.requestRender();
+    c.place(c.camera.position.clone(), c.controls.target.clone());
   }, [opened, viewMode, levelId]);
 
   // The visitor goes with the selected level (Sweet Home 3D's "adjust elevation to level")
@@ -965,8 +1493,12 @@ export default function View3D() {
           const c = ctx.current;
           if (!c) throw new Error("3D view not available");
           // Same as the render loop: the sky dome stays centered on the viewer
-          c.sky?.position.copy(c.camera.position);
-          c.renderer.render(c.scene, c.camera);
+          const cam = c.view();
+          if (c.sky) {
+            c.sky.position.copy(cam.position);
+            c.sky.visible = !c.parallel;
+          }
+          c.renderer.render(c.scene, cam);
           // Read the canvas right after rendering (no preserveDrawingBuffer needed)
           const data = c.renderer.domElement.toDataURL("image/png");
           await api.captureResult(requestId, data, null);
@@ -1148,18 +1680,38 @@ export default function View3D() {
     };
   }, []);
 
-  /** Shows the whole home in the aerial view from the current direction, turning around its middle. */
-  const fitAerial = () => {
-    const c = ctx.current;
-    if (!c) return;
-    const dir = c.controls.target.clone().sub(c.camera.position).normalize();
-    const view = fittedView(homeBox(c.content), dir);
-    userMoved.current = true;
-    c.camera.position.copy(view.position);
-    c.controls.target.copy(view.target);
-    c.controls.update();
-    c.requestRender();
-  };
+  // Actions of the aerial view that menus, the command search and the view's own buttons
+  // run: fit, zoom to the selection, the standard views and the projection
+  useEffect(
+    () =>
+      registerView3D((action) => {
+        const c = ctx.current;
+        const current = useStore.getState().opened;
+        if (!c || !current) return;
+        if (action === "parallel") {
+          useUi.getState().setParallel(!useUi.getState().parallel);
+          return;
+        }
+        if (useStore.getState().viewMode === "observer") return;
+        const along = c.controls.target.clone().sub(c.view().position).normalize();
+        let fitted: ReturnType<typeof fittedView>;
+        if (action === "fit") {
+          fitted = fittedView(homeBox(c.content), along);
+        } else if (action === "zoomSelection") {
+          const box = c.outline.bounds();
+          if (box.isEmpty()) return;
+          // Not nearer than a room is wide: the camera would stand in the next wall
+          fitted = fittedView(box, along, 400);
+        } else {
+          const north = current.home.compass?.attrs.north_direction ?? 0;
+          const standard = action.slice("view:".length) as StandardView;
+          fitted = fittedView(homeBox(c.content), viewDirection(standard, north));
+        }
+        userMoved.current = true;
+        c.place(fitted.position, fitted.target);
+      }),
+    [],
+  );
 
   return (
     <>
@@ -1176,14 +1728,26 @@ export default function View3D() {
       )}
       {opened && viewMode !== "observer" && (
         <div className="view3d-hint">
-          {t("Drag: turn · right-drag: move · wheel: zoom · double-click: turn around this point")}
+          {t("Click: select · drag: turn · right-drag: move · wheel: zoom · double-click: pivot")}
+        </div>
+      )}
+      {opened && (
+        <div className="view3d-north" title={t("North")}>
+          <div ref={northRef}>
+            <svg viewBox="0 0 32 32" width="34" height="34" aria-hidden="true">
+              <path className="north-needle" d="M16 3 L22 20 L16 16.5 L10 20 Z" />
+              <text x="16" y="30" textAnchor="middle">
+                N
+              </text>
+            </svg>
+          </div>
         </div>
       )}
       {opened && viewMode !== "observer" && (
         <button
           type="button"
           className="overlay-button icon-button"
-          onClick={fitAerial}
+          onClick={() => runViewAction("fit")}
           title={t("Fit the home in the view and turn around its middle")}
           aria-label={t("Fit the home in the view and turn around its middle")}
         >
@@ -1193,6 +1757,29 @@ export default function View3D() {
       {opened && (
         <ViewpointsMenu
           onSettings={() => (settingsOpen ? closeDialog() : openDialog("settings3d"))}
+          thumbnails={(poses) => ctx.current?.thumbnails(poses) ?? []}
+          leading={
+            IN_OWN_WINDOW && (
+              <>
+                <button
+                  type="button"
+                  className="view3d-button"
+                  onClick={() => openDialog("photo")}
+                  title={t("Create a photo of the current view (draft or path traced)")}
+                >
+                  {t("Photo…")}
+                </button>
+                <button
+                  type="button"
+                  className="view3d-button"
+                  onClick={() => openDialog("video")}
+                  title={t("Create a video along a camera path")}
+                >
+                  {t("Video…")}
+                </button>
+              </>
+            )
+          }
           currentPose={() => {
             const c = ctx.current;
             if (!c) throw new Error("3D view not available");
@@ -1204,37 +1791,14 @@ export default function View3D() {
           }}
         />
       )}
-      {opened && (
-        <label className="view3d-option">
-          <input
-            type="checkbox"
-            checked={shadows}
-            onChange={(e) => setShadows(e.currentTarget.checked)}
-          />
-          {t("Shadows")}
-        </label>
+      {settingsOpen && opened && (
+        <View3DSettings
+          sun={shownSun}
+          onClose={closeDialog}
+          onPreviewSun={previewSun}
+          onPreview={setEnvPreview}
+        />
       )}
-      {opened && IN_OWN_WINDOW && (
-        <button
-          type="button"
-          className="view3d-photo"
-          onClick={() => openDialog("photo")}
-          title={t("Create a photo of the current view (draft or path traced)")}
-        >
-          {t("Photo…")}
-        </button>
-      )}
-      {opened && IN_OWN_WINDOW && (
-        <button
-          type="button"
-          className="view3d-video"
-          onClick={() => openDialog("video")}
-          title={t("Create a video along a camera path")}
-        >
-          {t("Video…")}
-        </button>
-      )}
-      {settingsOpen && opened && <View3DSettings sun={sun} onClose={closeDialog} />}
       {videoOpen && opened && (
         <VideoDialog
           baseName={(opened.home.attrs.name ?? "Video").replace(/\.sh3d$/i, "")}
@@ -1243,6 +1807,7 @@ export default function View3D() {
             if (!c) throw new Error("3D view not available");
             return cameraPose(c.camera, c.hfov);
           }}
+          thumbnails={(poses) => ctx.current?.thumbnails(poses) ?? []}
           start={startVideo}
           onClose={closeDialog}
         />
@@ -1251,9 +1816,17 @@ export default function View3D() {
         <PhotoDialog
           viewAspect={ctx.current?.camera.aspect ?? 4 / 3}
           baseName={(opened.home.attrs.name ?? "Photo").replace(/\.sh3d$/i, "")}
-          sun={sun}
+          sun={shownSun}
           lens={homeLens()}
           start={(w, h, q, lens, onProgress) => startPhoto(w, h, q, lens, onProgress)}
+          snapshot={(w, h) => {
+            const c = ctx.current;
+            if (!c) return "";
+            // As wide as the preview of the panel shows it
+            const width = Math.min(w, 800);
+            const pose = cameraPose(c.camera, c.hfov);
+            return c.thumbnails([pose], width, Math.round((width * h) / w))[0] ?? "";
+          }}
           onClose={closeDialog}
         />
       )}

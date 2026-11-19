@@ -1,4 +1,6 @@
-// "Create photo" dialog of the 3D view: size, quality, progress with preview, save as PNG.
+// "Create photo" panel of the 3D view: size (with presets), quality, progress with preview
+// and remaining time, save as PNG or JPEG. The panel is not modal, so the 3D view can be
+// moved while it is open; size and quality are remembered.
 
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -7,6 +9,17 @@ import { t } from "../i18n";
 import { syncCameras, useStore } from "../store";
 import type { Lens } from "./lens";
 import { PHOTO_SAMPLES, type PhotoJob, type PhotoQuality } from "./photo";
+import {
+  formatDuration,
+  formatExtension,
+  loadPhotoSettings,
+  PHOTO_PRESETS,
+  type PhotoFormat,
+  pathForFormat,
+  presetOf,
+  remainingSeconds,
+  savePhotoSettings,
+} from "./photoPresets";
 import { frames, seriesFilePath } from "./photoSeries";
 import type { SunInfo } from "./View3D";
 
@@ -15,6 +28,47 @@ const LENSES: { value: Lens; label: string; hint: string }[] = [
   { value: "fisheye", label: t("Fisheye"), hint: t("180° in a circle") },
   { value: "spherical", label: t("Spherical"), hint: t("360° panorama, twice as wide as high") },
 ];
+
+/** Names of the size presets. */
+function presetLabel(id: string): string {
+  switch (id) {
+    case "hd":
+      return t("HD (1280 × 720)");
+    case "fullhd":
+      return t("Full HD (1920 × 1080)");
+    case "4k":
+      return t("4K (3840 × 2160)");
+    case "a4landscape":
+      return t("A4 landscape at 300 dpi");
+    case "a4portrait":
+      return t("A4 portrait at 300 dpi");
+    case "view":
+      return t("Proportions of the 3D view");
+    default:
+      return t("Own size");
+  }
+}
+
+/** A PNG data URL as JPEG (no transparency: photos have none). */
+function toJpeg(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const g = canvas.getContext("2d");
+      if (!g) {
+        reject(new Error("no canvas"));
+        return;
+      }
+      g.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
+    };
+    img.onerror = () => reject(new Error("the photo cannot be read"));
+    img.src = url;
+  });
+}
 
 const QUALITIES: { value: PhotoQuality; label: string; hint: string }[] = [
   { value: "draft", label: t("Draft"), hint: t("Like the 3D view with sun shadows, in seconds") },
@@ -38,8 +92,14 @@ export default function PhotoDialog({
   sun,
   lens: initialLens,
   start,
+  snapshot,
   onClose,
 }: {
+  /**
+   * Picture of the 3D view as it is (data URL, "" if none), shown at once while a path
+   * traced photo prepares its scene
+   */
+  snapshot: (width: number, height: number) => string;
   /** Sun of the home: date and time of the photo */
   sun: SunInfo | null;
   /** Lens stored in the home */
@@ -57,10 +117,17 @@ export default function PhotoDialog({
   ) => PhotoJob;
   onClose: () => void;
 }) {
-  const [width, setWidth] = useState(1600);
-  const [height, setHeight] = useState(Math.round(1600 / viewAspect));
-  const [keepAspect, setKeepAspect] = useState(true);
-  const [quality, setQuality] = useState<PhotoQuality>("good");
+  // Size and quality of the last photo
+  const [remembered] = useState(() => loadPhotoSettings(viewAspect));
+  const [width, setWidth] = useState(remembered.width);
+  const [height, setHeight] = useState(remembered.height);
+  const [keepAspect, setKeepAspect] = useState(remembered.keepAspect);
+  const [quality, setQuality] = useState<PhotoQuality>(remembered.quality);
+  const [format, setFormat] = useState<PhotoFormat>(remembered.format);
+  useEffect(
+    () => savePhotoSettings({ width, height, keepAspect, quality, format }),
+    [width, height, keepAspect, quality, format],
+  );
   const [lens, setLens] = useState<Lens>(initialLens === "normal" ? "pinhole" : initialLens);
   const run = useStore((s) => s.run);
   const ceilingLights = useStore((s) => {
@@ -106,6 +173,21 @@ export default function PhotoDialog({
     else if (keepAspect) setHeight(Math.max(16, Math.round(w / viewAspect)));
   };
 
+  const preset = lensAspect ? "custom" : presetOf(width, height, keepAspect);
+  const choosePreset = (id: string) => {
+    const fixed = PHOTO_PRESETS.find((p) => p.id === id);
+    if (fixed) {
+      setKeepAspect(false);
+      setWidth(fixed.width);
+      setHeight(fixed.height);
+    } else if (id === "view") {
+      setKeepAspect(true);
+      setHeight(Math.max(16, Math.round(width / viewAspect)));
+    } else {
+      setKeepAspect(false);
+    }
+  };
+
   const changeLens = (l: Lens) => {
     setLens(l);
     const aspect = l === "spherical" ? 2 : l === "fisheye" ? 1 : keepAspect ? viewAspect : null;
@@ -113,17 +195,31 @@ export default function PhotoDialog({
     void run("render_settings_update", { lens: l });
   };
 
-  const render = () => {
+  const render = async () => {
     setPhoto(null);
     setMessage(null);
     setProgress(0);
     started.current = performance.now();
-    const j = start(width, height, quality, lens, setProgress);
-    job.current = j;
-    const box = preview.current;
-    if (box) {
-      box.replaceChildren(j.canvas);
+    // Path tracing prepares its scene first, which takes seconds and blocks the window: the
+    // view as it is now is shown meanwhile, until the first pass of the photo is there
+    const waiting = quality !== "draft" && lens === "pinhole" ? snapshot(width, height) : "";
+    if (waiting) {
+      const img = new Image();
+      img.src = waiting;
+      img.alt = "";
+      preview.current?.replaceChildren(img);
+      await frames(2);
     }
+    let shown = !waiting;
+    const j = start(width, height, quality, lens, (p) => {
+      if (!shown && p > 0) {
+        shown = true;
+        preview.current?.replaceChildren(j.canvas);
+      }
+      setProgress(p);
+    });
+    job.current = j;
+    if (shown) preview.current?.replaceChildren(j.canvas);
     j.done.then(
       (url) => {
         // Fisheye and spherical photos render a panorama first: show the finished photo
@@ -186,7 +282,10 @@ export default function PhotoDialog({
         await frames(3);
         await new Promise((r) => setTimeout(r, 400));
         const url = await renderOne();
-        await api.saveImage(seriesFilePath(dir, baseName, name, used), url);
+        await api.saveImage(
+          seriesFilePath(dir, baseName, name, used, formatExtension(format)),
+          format === "jpeg" ? await toJpeg(url) : url,
+        );
         saved++;
       }
       const seconds = ((performance.now() - started.current) / 1000).toFixed(1);
@@ -208,27 +307,32 @@ export default function PhotoDialog({
 
   const savePhoto = async () => {
     if (!photo) return;
-    const path = await save({
-      defaultPath: `${baseName}.png`,
-      filters: [{ name: "PNG image", extensions: ["png"] }],
+    // The format is chosen in the panel: the dialog of Windows offers this one only
+    const chosen = await save({
+      defaultPath: `${baseName}.${formatExtension(format)}`,
+      filters:
+        format === "jpeg"
+          ? [{ name: "JPEG image", extensions: ["jpg", "jpeg"] }]
+          : [{ name: "PNG image", extensions: ["png"] }],
     });
-    if (!path) return;
+    if (!chosen) return;
+    const path = pathForFormat(chosen, format);
     try {
-      await api.saveImage(path, photo);
+      await api.saveImage(path, format === "jpeg" ? await toJpeg(photo) : photo);
       setMessage(t("Saved to {path}.", { path }));
     } catch (e) {
       setMessage(t("Saving failed: {v0}", { v0: String(e) }));
     }
   };
 
+  const left =
+    rendering && progress !== null && !series
+      ? remainingSeconds(performance.now() - started.current, progress)
+      : null;
+
   return (
-    <div className="dialog-backdrop">
-      <div
-        className="dialog photo-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("Create photo")}
-      >
+    <>
+      <div className="video-panel photo-panel" role="dialog" aria-label={t("Create photo")}>
         <header className="dialog-header">
           <h2>{t("Create photo")}</h2>
           <button type="button" onClick={onClose} aria-label={t("Close")} disabled={rendering}>
@@ -236,6 +340,20 @@ export default function PhotoDialog({
           </button>
         </header>
         <div className="export-grid">
+          <label>
+            {t("Size")}
+            <select
+              value={preset}
+              disabled={rendering || lensAspect !== null}
+              onChange={(e) => choosePreset(e.currentTarget.value)}
+            >
+              {["view", ...PHOTO_PRESETS.map((p) => p.id), "custom"].map((id) => (
+                <option key={id} value={id}>
+                  {presetLabel(id)}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             {t("Width")}
             <span className="export-unit">
@@ -266,19 +384,16 @@ export default function PhotoDialog({
               {t("px")}
             </span>
           </label>
-          <label className="photo-check">
-            <span>
-              <input
-                type="checkbox"
-                checked={keepAspect}
-                disabled={rendering}
-                onChange={(e) => {
-                  setKeepAspect(e.currentTarget.checked);
-                  if (e.currentTarget.checked) setHeight(Math.round(width / viewAspect));
-                }}
-              />{" "}
-              {t("Proportions of the 3D view")}
-            </span>
+          <label>
+            {t("File format")}
+            <select
+              value={format}
+              disabled={rendering}
+              onChange={(e) => setFormat(e.currentTarget.value as PhotoFormat)}
+            >
+              <option value="png">{t("PNG (lossless)")}</option>
+              <option value="jpeg">{t("JPEG (smaller file)")}</option>
+            </select>
           </label>
         </div>
         <fieldset className="photo-quality" disabled={rendering}>
@@ -396,9 +511,12 @@ export default function PhotoDialog({
         {rendering && progress === 0 && quality !== "draft" && (
           <p className="muted small">{t("Preparing the scene for path tracing…")}</p>
         )}
+        {left !== null && (
+          <p className="muted small">{t("About {time} left", { time: formatDuration(left) })}</p>
+        )}
         <div className="dialog-actions">
           {!rendering && (
-            <button type="button" onClick={render}>
+            <button type="button" onClick={() => void render()}>
               {photo ? t("Render again") : t("Render")}
             </button>
           )}
@@ -429,12 +547,12 @@ export default function PhotoDialog({
           )}
           {photo && (
             <button type="button" onClick={() => void savePhoto()}>
-              {t("Save…")}
+              {format === "jpeg" ? t("Save as JPEG…") : t("Save as PNG…")}
             </button>
           )}
-          {message && <span className="small">{message}</span>}
+          {message && <span className="small photo-message">{message}</span>}
         </div>
       </div>
-    </div>
+    </>
   );
 }

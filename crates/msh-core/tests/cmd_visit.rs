@@ -248,3 +248,106 @@ fn aerial_points_of_view_are_saved() {
     assert_eq!(p["z"], json!(700.0));
     assert_eq!(p["pitch"], json!(40.0));
 }
+
+#[test]
+fn storing_under_an_existing_name_keeps_its_place() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    for name in ["Kitchen", "Hall", "Garden"] {
+        run(
+            &r,
+            &mut doc,
+            "viewpoint_store",
+            json!({ "name": name, "mode": "observer", "x": 10 }),
+        );
+    }
+    // Newest first
+    let list = run(&r, &mut doc, "viewpoint_list", json!({}));
+    assert_eq!(names(&list), ["Garden", "Hall", "Kitchen"]);
+    let list = run(
+        &r,
+        &mut doc,
+        "viewpoint_store",
+        json!({ "name": "Hall", "mode": "aerial", "x": 500, "z": 900 }),
+    );
+    assert_eq!(names(&list), ["Garden", "Hall", "Kitchen"]);
+    let hall = &list["points_of_view"][1];
+    assert_eq!(hall["mode"], "aerial");
+    assert_eq!(hall["x"], json!(500.0));
+}
+
+#[test]
+fn viewpoint_rename_keeps_the_view_and_is_an_undo_step() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    run(
+        &r,
+        &mut doc,
+        "viewpoint_store",
+        json!({ "name": "Kitchen", "mode": "observer", "x": 120, "y": 340 }),
+    );
+    run(
+        &r,
+        &mut doc,
+        "viewpoint_store",
+        json!({ "name": "Hall", "mode": "observer", "x": 10 }),
+    );
+    let before = snapshot(&doc);
+    let list = run(
+        &r,
+        &mut doc,
+        "viewpoint_rename",
+        json!({ "name": "Kitchen", "new_name": "  Cooking  " }),
+    );
+    assert_eq!(names(&list), ["Hall", "Cooking"]);
+    assert_eq!(list["points_of_view"][1]["x"], json!(120.0));
+    let after = snapshot(&doc);
+    check_undo_redo(&r, &mut doc, &before, &after);
+    // The renamed point of view is the one that is gone to
+    run(&r, &mut doc, "viewpoint_go", json!({ "name": "Cooking" }));
+    let mut reopened = save_and_reopen(&r, &mut doc, "viewpoint_rename");
+    let list = run(&r, &mut reopened, "viewpoint_list", json!({}));
+    assert_eq!(names(&list), ["Hall", "Cooking"]);
+}
+
+#[test]
+fn viewpoint_rename_refuses_unknown_empty_and_used_names() {
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    for name in ["Kitchen", "Hall"] {
+        run(
+            &r,
+            &mut doc,
+            "viewpoint_store",
+            json!({ "name": name, "mode": "observer" }),
+        );
+    }
+    let before = snapshot(&doc);
+    run_err(
+        &r,
+        &mut doc,
+        "viewpoint_rename",
+        json!({ "name": "Attic", "new_name": "Roof" }),
+    );
+    run_err(
+        &r,
+        &mut doc,
+        "viewpoint_rename",
+        json!({ "name": "Kitchen", "new_name": " " }),
+    );
+    let err = run_err(
+        &r,
+        &mut doc,
+        "viewpoint_rename",
+        json!({ "name": "Kitchen", "new_name": "Hall" }),
+    );
+    assert!(err.contains("Hall"), "{err}");
+    assert_eq!(snapshot(&doc), before);
+    // Its own name is no conflict
+    run(
+        &r,
+        &mut doc,
+        "viewpoint_rename",
+        json!({ "name": "Kitchen", "new_name": "Kitchen" }),
+    );
+}

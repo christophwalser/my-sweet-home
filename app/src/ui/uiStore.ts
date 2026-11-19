@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import type { CatalogDragData } from "../api";
 import { addRecent } from "../panels/recentTextures";
+import { NO_SECTION, type Section } from "../view3d/select3d";
 
 /** Dialogs and panels that commands can open. Only one is open at a time. */
 export type DialogName =
@@ -52,6 +53,12 @@ type UiState = {
   /** Sun shadows in the 3D view (they cost a second render pass) */
   shadows: boolean;
   setShadows: (on: boolean) => void;
+  /** The aerial view is drawn in parallel projection (no perspective) */
+  parallel: boolean;
+  setParallel: (on: boolean) => void;
+  /** Section planes that cut the home open in the 3D view (not stored in the home) */
+  section: Section;
+  setSection: (section: Partial<Section>) => void;
   /** Command search (Ctrl+K) */
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
@@ -131,6 +138,10 @@ export const useUi = create<UiState>((set, get) => ({
   },
   shadows: false,
   setShadows: (shadows) => set({ shadows }),
+  parallel: false,
+  setParallel: (parallel) => set({ parallel }),
+  section: NO_SECTION,
+  setSection: (section) => set({ section: { ...get().section, ...section } }),
   paletteOpen: false,
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   detached: false,

@@ -31,6 +31,9 @@ interface UiState {
   selectedLevel?: string | null;
   viewMode?: ViewMode;
   visitorPose?: CameraPose | null;
+  /** Selected elements (a click in the 3D window selects in the plan and the other way) */
+  selection?: string[];
+  cameraPathShown?: boolean;
 }
 
 /** The 3D window if it is open. */
@@ -77,6 +80,8 @@ export function syncUiState(requestInitial: boolean): () => void {
       selectedLevel: s.selectedLevel,
       viewMode: s.viewMode,
       visitorPose: s.visitorPose,
+      selection: s.selection,
+      cameraPathShown: s.cameraPathShown,
     } satisfies UiState);
   };
   const unsubscribe = useStore.subscribe((s, prev) => {
@@ -84,7 +89,9 @@ export function syncUiState(requestInitial: boolean): () => void {
       !applying &&
       (s.selectedLevel !== prev.selectedLevel ||
         s.viewMode !== prev.viewMode ||
-        s.visitorPose !== prev.visitorPose)
+        s.visitorPose !== prev.visitorPose ||
+        s.selection !== prev.selection ||
+        s.cameraPathShown !== prev.cameraPathShown)
     ) {
       send();
     }
@@ -101,6 +108,8 @@ export function syncUiState(requestInitial: boolean): () => void {
       ...(p.selectedLevel !== undefined && { selectedLevel: p.selectedLevel }),
       ...(p.viewMode && { viewMode: p.viewMode }),
       ...(p.visitorPose !== undefined && { visitorPose: p.visitorPose }),
+      ...(p.selection && { selection: p.selection }),
+      ...(p.cameraPathShown !== undefined && { cameraPathShown: p.cameraPathShown }),
     });
     applying = false;
   });
@@ -120,15 +129,18 @@ const VIEW3D_ACTION_EVENT = "view3d-action";
 /** Actions of the menus that the separate 3D window carries out. */
 export type View3DAction = "photo" | "video" | "settings3d" | "shadows";
 
-/** Asks the separate 3D window to open a dialog or toggle the shadows, and focuses it. */
-export async function sendView3DAction(action: View3DAction): Promise<void> {
+/**
+ * Asks the separate 3D window to open a dialog, toggle the shadows or run an action of the
+ * view itself (`ViewAction` of view3dBridge), and focuses it.
+ */
+export async function sendView3DAction(action: string): Promise<void> {
   await emitTo(view3dLabel(), VIEW3D_ACTION_EVENT, action);
   await (await findView3DWindow())?.setFocus();
 }
 
 /** Runs the handler for the actions sent to this 3D window; returns a function that stops. */
-export function listenView3DActions(handler: (action: View3DAction) => void): () => void {
-  const unlisten = getCurrentWebviewWindow().listen<View3DAction>(VIEW3D_ACTION_EVENT, (e) =>
+export function listenView3DActions(handler: (action: string) => void): () => void {
+  const unlisten = getCurrentWebviewWindow().listen<string>(VIEW3D_ACTION_EVENT, (e) =>
     handler(e.payload),
   );
   return () => {
