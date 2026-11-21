@@ -698,6 +698,13 @@ input[type="radio"]:focus-visible,
   font-size: 12px;
 }
 
+/* Checks a stair does not pass */
+.props ul.warning {
+  margin: 2px 0 6px;
+  padding-left: 18px;
+  color: var(--danger);
+}
+
 .link-button {
   align-self: flex-start;
   border: 0;

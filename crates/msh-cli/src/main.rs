@@ -353,6 +353,8 @@ fn group_about(group: &str) -> &'static str {
         "wall" => "Walls",
         "room" => "Rooms",
         "roof" => "Roofs",
+        "stair" => "Stairs made from their measures",
+        "opening" => "Floor openings (holes in a floor and the ceiling below)",
         "furniture" => "Furniture, doors and windows",
         "label" => "Text labels",
         "dimension" => "Dimension lines",

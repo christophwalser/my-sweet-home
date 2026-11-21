@@ -18,6 +18,7 @@ import { forEachPiece } from "../model";
 import { levelGuides } from "../plan2d/guides";
 import { isRoof } from "../plan2d/roof";
 import { addRoof, startRoofRectangle } from "../plan2d/roofTool";
+import { startOpening, startStair } from "../plan2d/stairTool";
 import { newHomeParams, prefs, usePreferences } from "../preferences";
 import { clearRecentHomes, recentHomes, recentLabel, removeRecentHome } from "../recentHomes";
 import { type Tool, useStore, VISITOR_ID } from "../store";
@@ -744,6 +745,62 @@ const LIST: Command[] = [
     enabled: hasHome,
     run: startRoofRectangle,
   },
+  // Stairs and floor openings
+  {
+    id: "stair.add",
+    label: t("Straight stairs…"),
+    icon: "staircase",
+    hint: t(
+      "Click where the first step starts and the direction the stairs climb in; riser count and tread follow from the height of the level",
+    ),
+    keywords: "staircase steps flight riser tread",
+    enabled: hasHome,
+    run: () => void startStair("straight"),
+  },
+  {
+    id: "stair.addL",
+    label: t("L-shaped stairs…"),
+    icon: "stairl",
+    hint: t(
+      "Click where the first step starts and the direction the stairs climb in; riser count and tread follow from the height of the level",
+    ),
+    keywords: "staircase steps landing quarter turn riser tread",
+    enabled: hasHome,
+    run: () => void startStair("l"),
+  },
+  {
+    id: "stair.addU",
+    label: t("U-shaped stairs…"),
+    icon: "stairu",
+    hint: t(
+      "Click where the first step starts and the direction the stairs climb in; riser count and tread follow from the height of the level",
+    ),
+    keywords: "staircase steps landing half turn riser tread",
+    enabled: hasHome,
+    run: () => void startStair("u"),
+  },
+  {
+    id: "stair.addSpiral",
+    label: t("Spiral stairs…"),
+    icon: "stairspiral",
+    hint: t(
+      "Click where the first step starts and the direction the stairs climb in; riser count and tread follow from the height of the level",
+    ),
+    keywords: "staircase steps helical winding column riser tread",
+    enabled: hasHome,
+    run: () => void startStair("spiral"),
+  },
+  {
+    id: "opening.add",
+    label: t("Floor opening…"),
+    icon: "opening",
+    hint: t(
+      "A hole in the floor of the shown level and in the ceiling below: click two corners along one side and a point on the opposite side",
+    ),
+    keywords: "hole void gallery shaft ceiling slab cut-out",
+    enabled: hasHome,
+    run: startOpening,
+  },
   // Levels
   {
     id: "level.add",
@@ -1326,6 +1383,11 @@ export const MENUS: Menu[] = [
       cmd("tool.polyline"),
       cmd("roof.add"),
       cmd("roof.addRect"),
+      cmd("stair.add"),
+      cmd("stair.addL"),
+      cmd("stair.addU"),
+      cmd("stair.addSpiral"),
+      cmd("opening.add"),
       { kind: "heading", label: t("Annotate") },
       cmd("tool.dimension"),
       cmd("tool.heightdim"),

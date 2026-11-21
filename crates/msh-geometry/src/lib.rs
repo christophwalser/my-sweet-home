@@ -7,6 +7,7 @@
 //! line of the neighbor.
 
 pub mod roof;
+pub mod stair;
 
 use msh_model::{Home, Room, Wall};
 use serde::Serialize;

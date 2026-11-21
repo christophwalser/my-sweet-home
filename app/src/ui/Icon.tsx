@@ -360,6 +360,31 @@ const PATHS = {
       <path d="M3 21h4v-4h4v-4h4V9h4V5h2" />
     </>
   ),
+  stairl: (
+    <>
+      <path d="M4 21V4h16v6H10v11z" />
+      <path d="M4 17h6M4 13h6M14 4v6M17 4v6" />
+    </>
+  ),
+  stairu: (
+    <>
+      <path d="M3 21V4h18v17h-7V10h-4v11z" />
+      <path d="M3 17h7M3 13h7M14 17h7M14 13h7" />
+    </>
+  ),
+  stairspiral: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="1.5" />
+      <path d="M12 3v7.5M20.5 9.2l-7 2.3M17.3 19.3l-4.4-6.1M6.7 19.3l4.4-6.1M3.5 9.2l7 2.3" />
+    </>
+  ),
+  opening: (
+    <>
+      <rect x="4" y="4" width="16" height="16" strokeDasharray="3 2" />
+      <path d="m4 4 16 16M20 4 4 20" />
+    </>
+  ),
   group: (
     <>
       <rect x="3" y="3" width="8" height="8" rx="1" />

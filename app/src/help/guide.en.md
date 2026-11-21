@@ -46,6 +46,15 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. L
 - **3D view › Roofs** leaves the roofs out of the 3D view to look into the rooms from above.
 - A roof is saved as a piece of furniture with a generated model: Sweet Home 3D shows it, but only My Sweet Home can change it. Roofs that meet (an L-shaped house) run through each other; walls are not cut to the roof.
 
+## Stairs and floor openings
+
+- **Plan › Straight stairs…**, **L-shaped stairs…**, **U-shaped stairs…** and **Spiral stairs…** (or the stairs button of the toolbar): click where the first step starts, then in the direction the stairs climb. The outline follows the pointer. The stairs reach up to the next level: the number of risers (about 17.5 cm each) and the tread (step rule 2 × riser + tread = 63 cm) follow from the height.
+- The plan shows the edges of the treads and the walking line from a dot at the bottom to an arrow at the top. Move and turn the stairs like furniture; their size comes from their properties only.
+- The properties set the shape and the way it turns, the height to the floor above, the number of risers, the tread, the treads before the landing, the width (a spiral stair: diameter and column), the gap between the flights of a U, the construction (solid down to the floor or open treads on stringers), the handrails, and the color or texture of the steps. A new height gives a new number of risers and a tread by the step rule.
+- Below the tread the properties show the step rule; in red they name what fails the usual measures for homes (riser 14–20 cm, tread 23–37 cm, step rule 59–65 cm, the headroom under the turn above a spiral stair).
+- Stairs cut the hole they need in the floor above, where the headroom of 2 m ends; Sweet Home 3D cuts it too.
+- **Plan › Floor opening…** cuts a hole in the floor of the shown level and in the ceiling below, e.g. for a gallery or a shaft: two corners along one side and a point on the opposite side, like a roof over a rectangle. The plan shows it dashed and crossed; its width and depth are in its properties or at its handles.
+
 ## Dimensions, texts and lines
 
 - The dimension tool measures between two clicks; a third click places the dimension line.

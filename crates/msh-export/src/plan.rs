@@ -78,6 +78,10 @@ const ROOF: &str = "#b45309";
 
 /// Piece property with what a roof was made from (see `roof_add` of msh-core).
 const ROOF_PROPERTY: &str = "mySweetHome.roof";
+/// Piece property with what a stair was made from (see `stair_add` of msh-core).
+const STAIR_PROPERTY: &str = "mySweetHome.stair";
+/// Piece property with the outline of a floor opening (see `opening_add` of msh-core).
+const OPENING_PROPERTY: &str = "mySweetHome.opening";
 /// Opacity of room floors, as in Sweet Home 3D
 const ROOM_ALPHA: f32 = 0.75;
 const DEFAULT_WALL_PATTERN: &str = "hatchUp";
@@ -278,12 +282,19 @@ pub fn draw_plan(home: &Home, opts: &PlanOptions) -> PlanDrawing {
 
     // Furniture except doors and windows (below the walls). Roofs are drawn as their lines
     // on top of the walls: their view from above would hide the level
+    // Stairs and floor openings show their symbols instead of their view from above
     let roofs: Vec<Vec<RoofLine>> = pieces.iter().filter_map(|p| roof_lines(p)).collect();
     for p in pieces
         .iter()
         .filter(|p| p.kind != PieceKind::DoorOrWindow && roof_lines(p).is_none())
     {
-        draw_piece(&mut s, &mut defs, p, opts, thin);
+        if let Some((lines, walk)) = stair_symbol(p) {
+            draw_stair(&mut s, &lines, &walk, thin);
+        } else if let Some(outline) = opening_outline(p) {
+            draw_opening(&mut s, &outline, thin);
+        } else {
+            draw_piece(&mut s, &mut defs, p, opts, thin);
+        }
     }
 
     // Walls as one area: all outlines with double width first, then all fills, so
@@ -510,23 +521,7 @@ fn roof_lines(p: &Piece) -> Option<Vec<RoofLine>> {
         .value;
     let data: serde_json::Value = serde_json::from_str(value).ok()?;
     let number = |v: &serde_json::Value| v.as_f64().map(|v| v as f32);
-    let size = data.get("size")?.as_array()?;
-    let (made_w, made_d) = (number(size.first()?)?, number(size.get(1)?)?);
-    let a = &p.attrs;
-    let mirror = if a.model_mirrored == Some(true) {
-        -1.0
-    } else {
-        1.0
-    };
-    let sx = if made_w > 0.0 { a.width / made_w } else { 1.0 } * mirror;
-    let sy = if made_d > 0.0 { a.depth / made_d } else { 1.0 };
-    let (sin, cos) = a.angle_or_default().sin_cos();
-    let place = |x: f32, y: f32| {
-        [
-            a.x + x * sx * cos - y * sy * sin,
-            a.y + x * sx * sin + y * sy * cos,
-        ]
-    };
+    let place = placer(p, made_size(&data)?);
     let mut lines = Vec::new();
     for line in data.get("lines")?.as_array()? {
         let line = line.as_array()?;
@@ -542,6 +537,156 @@ fn roof_lines(p: &Piece) -> Option<Vec<RoofLine>> {
         });
     }
     Some(lines)
+}
+
+/// Width and depth a generated piece was made with, from the `size` of its data.
+fn made_size(data: &serde_json::Value) -> Option<[f32; 2]> {
+    let size = data.get("size")?.as_array()?;
+    Some([
+        size.first()?.as_f64()? as f32,
+        size.get(1)?.as_f64()? as f32,
+    ])
+}
+
+/// Places a point of a generated piece (relative to its middle, before its rotation) in the
+/// plan: moved, turned, mirrored, and stretched if another program resized the piece.
+fn placer(p: &Piece, made: [f32; 2]) -> impl Fn(f32, f32) -> [f32; 2] + '_ {
+    let a = &p.attrs;
+    let mirror = if a.model_mirrored == Some(true) {
+        -1.0
+    } else {
+        1.0
+    };
+    let sx = if made[0] > 0.0 {
+        a.width / made[0]
+    } else {
+        1.0
+    } * mirror;
+    let sy = if made[1] > 0.0 {
+        a.depth / made[1]
+    } else {
+        1.0
+    };
+    let (sin, cos) = a.angle_or_default().sin_cos();
+    move |x: f32, y: f32| {
+        [
+            a.x + x * sx * cos - y * sy * sin,
+            a.y + x * sx * sin + y * sy * cos,
+        ]
+    }
+}
+
+fn property_json(p: &Piece, name: &str) -> Option<serde_json::Value> {
+    let value = &p.properties.iter().find(|pr| pr.name == name)?.value;
+    serde_json::from_str(value).ok()
+}
+
+/// A line of the plan from one point to another.
+type Segment = ([f32; 2], [f32; 2]);
+
+/// The edges of the treads and the walking line of a stair (a piece that keeps what it was
+/// made from in [`STAIR_PROPERTY`]) in plan coordinates, or `None` for other pieces.
+fn stair_symbol(p: &Piece) -> Option<(Vec<Segment>, Vec<[f32; 2]>)> {
+    let data = property_json(p, STAIR_PROPERTY)?;
+    let place = placer(p, made_size(&data)?);
+    let number = |v: &serde_json::Value| v.as_f64().map(|v| v as f32);
+    let mut lines = Vec::new();
+    for line in data.get("lines")?.as_array()? {
+        let at = |i: usize| line.get(i).and_then(number);
+        lines.push((place(at(0)?, at(1)?), place(at(2)?, at(3)?)));
+    }
+    let mut walk = Vec::new();
+    for point in data.get("walk")?.as_array()? {
+        walk.push(place(
+            point.get(0).and_then(number)?,
+            point.get(1).and_then(number)?,
+        ));
+    }
+    Some((lines, walk))
+}
+
+/// The outline of a floor opening (a piece with [`OPENING_PROPERTY`]) in plan coordinates.
+fn opening_outline(p: &Piece) -> Option<Vec<[f32; 2]>> {
+    let data = property_json(p, OPENING_PROPERTY)?;
+    let corners: Vec<[f32; 2]> = data
+        .get("outline")?
+        .as_array()?
+        .iter()
+        .filter_map(|q| Some([q.get(0)?.as_f64()? as f32, q.get(1)?.as_f64()? as f32]))
+        .collect();
+    let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+    for q in &corners {
+        for i in 0..2 {
+            lo[i] = lo[i].min(q[i]);
+            hi[i] = hi[i].max(q[i]);
+        }
+    }
+    let place = placer(p, [hi[0] - lo[0], hi[1] - lo[1]]);
+    (corners.len() >= 3).then(|| corners.iter().map(|q| place(q[0], q[1])).collect())
+}
+
+/// A stair as the plan shows it: the edges of its treads and an arrow along its walking line
+/// from a dot at the bottom up to the top.
+fn draw_stair(s: &mut String, lines: &[Segment], walk: &[[f32; 2]], thin: f32) {
+    for ([x1, y1], [x2, y2]) in lines {
+        let _ = write!(
+            s,
+            r#"<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{FURNITURE_STROKE}" stroke-width="{thin}"/>"#
+        );
+    }
+    let n = walk.len();
+    if n < 2 {
+        return;
+    }
+    let _ = write!(
+        s,
+        r#"<polyline points="{}" fill="none" stroke="{FURNITURE_STROKE}" stroke-width="{thin}"/>"#,
+        points(walk)
+    );
+    let [x, y] = walk[0];
+    let _ = write!(
+        s,
+        r#"<circle cx="{x}" cy="{y}" r="{}" fill="{FURNITURE_STROKE}"/>"#,
+        thin * 3.0
+    );
+    let (from, to) = (walk[n - 2], walk[n - 1]);
+    let (dx, dy) = (to[0] - from[0], to[1] - from[1]);
+    let len = dx.hypot(dy);
+    if len > 0.0 {
+        let (ux, uy) = (dx / len, dy / len);
+        let size = thin * 10.0;
+        let back = [to[0] - ux * size, to[1] - uy * size];
+        let head = [
+            to,
+            [back[0] - uy * size * 0.5, back[1] + ux * size * 0.5],
+            [back[0] + uy * size * 0.5, back[1] - ux * size * 0.5],
+        ];
+        let _ = write!(
+            s,
+            r#"<polygon points="{}" fill="{FURNITURE_STROKE}"/>"#,
+            points(&head)
+        );
+    }
+}
+
+/// A floor opening as the plan shows it: its outline dashed, crossed when it has four corners.
+fn draw_opening(s: &mut String, outline: &[[f32; 2]], thin: f32) {
+    let _ = write!(
+        s,
+        r#"<polygon points="{}" fill="none" stroke="{FURNITURE_STROKE}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
+        points(outline),
+        thin * 1.5,
+        thin * 8.0,
+        thin * 4.0
+    );
+    if let [a, b, c, d] = outline {
+        for ([x1, y1], [x2, y2]) in [(a, c), (b, d)] {
+            let _ = write!(
+                s,
+                r#"<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{FURNITURE_STROKE}" stroke-width="{thin}"/>"#
+            );
+        }
+    }
 }
 
 fn draw_piece(s: &mut String, defs: &mut Defs, p: &Piece, opts: &PlanOptions, thin: f32) {

@@ -70,6 +70,15 @@ All notable changes to this project are documented in this file. The format foll
   the plan and in 3D separately, with an opacity in the plan.
 - The map of "Align north with the map" can be used as background image of the plan, true to
   scale and turned like the plan.
+- Stairs made from their measures: straight, L-shaped and U-shaped with a landing, and spiral
+  (`stair_add`, `stair_update`, `stair_calc`). Two clicks place them; the number of risers and
+  the tread follow from the height to the next level by the step rule, the properties show which
+  usual measures fail, and the stairs cut the hole they need in the floor above (in Sweet Home 3D
+  too). Solid or open treads on stringers, handrails, color or texture of the steps. The plan,
+  exports and prints show the treads and the walking line.
+- Floor openings (`opening_add`, `opening_update`): a hole in the floor of a level and the
+  ceiling below, for a gallery or a shaft; saved as a staircase without steps, so Sweet Home 3D
+  cuts it too.
 - Roofs: "Roof over the walls" and "Roof over a rectangle…" add a gable, hip, shed or flat roof
   with a pitch, an overhang and a thickness (`roof_add`, `roof_update`); each edge can be an
   eave or a gable, and the roof covering and the gable walls take a color or a texture. The
