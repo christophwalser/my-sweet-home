@@ -28,6 +28,7 @@ export default function View3DWindow() {
     const stopActions = listenView3DActions((action) => {
       const ui = useUi.getState();
       if (action === "shadows") ui.setShadows(!ui.shadows);
+      else if (action === "roofs") ui.setRoofs(!ui.roofs);
       else if (isViewAction(action)) runViewAction(action);
       else ui.openDialog(action as DialogName);
     });

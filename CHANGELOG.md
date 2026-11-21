@@ -70,6 +70,12 @@ All notable changes to this project are documented in this file. The format foll
   the plan and in 3D separately, with an opacity in the plan.
 - The map of "Align north with the map" can be used as background image of the plan, true to
   scale and turned like the plan.
+- Roofs: "Roof over the walls" and "Roof over a rectangle…" add a gable, hip, shed or flat roof
+  with a pitch, an overhang and a thickness (`roof_add`, `roof_update`); each edge can be an
+  eave or a gable, and the roof covering and the gable walls take a color or a texture. The
+  plan shows a roof as its lines, exports and prints too; "3D view ›
+  Roofs" leaves the roofs out of the 3D view. A roof is saved as a piece of furniture with a
+  generated model, so Sweet Home 3D shows it.
 
 ### Changed
 
@@ -98,6 +104,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ### Fixed
 
+- Undo after saving finds the model of a piece that was deleted or replaced before the save;
+  the saved file still leaves out resources that nothing uses any more.
 - Elements moved with the mouse, or changed with a handle, no longer jump back to their old place
   for a moment when the mouse button is released.
 - In the virtual visit the sky no longer shows through a slit in the ceiling above walls lower

@@ -1521,6 +1521,65 @@ what is new is kept in piece properties `mySweetHome.*`, which Sweet Home 3D kee
   geographic zero point for several data sets, cuts in exports and prints, a parcel boundary
   with setback areas, contour lines.
 
+### 4.57 Roofs (2026-11-19)
+
+Package 8a of the UX review (D8). The file format of Sweet Home 3D has no roofs, so a roof is
+a piece of furniture with a generated model that keeps what it was made from.
+
+- **Generator** (`msh-geometry::roof`). Every eave of a convex outline carries a plane that
+  rises inwards with the pitch; the roof is the lowest of these planes at each point, and a
+  gable edge carries none. One rule gives gable, hip and shed roofs and their mixtures for any
+  convex outline: the surface of an eave is the outline (moved outwards by the overhang)
+  clipped by the half-planes in which its plane is the lowest. Clipping a convex polygon by
+  half-planes needs no polygon library and has no special cases; each edge of a clipped
+  polygon remembers where it comes from, which gives the lines for the plan (eave, verge,
+  ridge, hip) and the faces around the edge. A sloped roof passes through the outline with
+  its upper surface, so the walls end inside the roof; a flat roof lies on them. The walls
+  under gable edges are part of the model. `roof()` returns triangles with a normal each
+  (corners counter-clockwise around it) and the lines.
+- **Outlines with corners that point inwards** carry no single roof here (that needs a
+  straight skeleton). `rectangles()` splits an outline whose edges run in two directions at a
+  right angle into its largest rectangles, each with a roof of its own; the roofs run through
+  each other, which looks right from outside. `roof_areas()` is what "Roof over the walls"
+  uses on the outline of the walls (`walls_outlines()`, the outer ring of their union): the
+  rectangle around the outline if the outline fills it up to 60 cm, else the convex hull if no
+  dent is deeper, else the rectangles (short slanted edges such as a cut inner corner are
+  allowed, the rectangles keep clear of them), else the hull.
+- **Commands** (`commands/roof.rs`). `roof_add` (points or the walls of the level; shape,
+  pitch, overhang, thickness, turn, edges, base, colors) and `roof_update`. The model is an
+  OBJ with normals and the materials `roof_cover`, `roof_soffit` and `roof_gable`, stored like
+  an imported model; the piece lies on the level with its bottom at `base + lowest`. The
+  piece is turned so that the longest edge runs along its width or depth (by no more than
+  45°), and the property `mySweetHome.roof` holds as JSON: shape, turn, the corners relative
+  to the middle of the piece before its rotation, the kind of each edge, pitch, overhang,
+  thickness, colors, the lowest point, the size as made and the lines for the plan. The
+  height the roof starts at is not stored: it is the elevation of the piece minus the lowest
+  point, so lifting the piece with `furniture_update` survives the next change.
+- **Textures.** The mesh carries the place of each corner on its surface in cm (along the
+  eave and up the slope on the covering, along the wall and up on a gable wall, not mirrored
+  seen from outside); the commands divide it by the tile size of the texture. `texture` and
+  `gable_texture` of `roof_add` and `roof_update` take a catalog texture; its image becomes a
+  file of the model (`cover.*`, `gable.*`, `map_Kd` in the MTL), so the textured roof shows
+  in Sweet Home 3D too and is made again from the files of its own model, without the
+  catalog. The property keeps name, catalog ID, file and tile size of each texture.
+- **Resizing.** `furniture_update` makes a roof again when the size of its piece changes: the
+  covered area is stretched, what the roof reaches beyond it stays, and the height follows
+  from the pitch. The handles of the plan therefore resize a roof without changing its pitch.
+- **Undo after saving.** Every change of a roof stores a new model, and saving left out the
+  resources nothing used any more, including those a step of the history needs. `save` now
+  puts the resources back that the undo and redo steps refer to; the file is unchanged.
+- **Plan.** `plan2d/roof.ts` reads the property (cached per piece object). A roof is drawn as
+  its lines on top of the walls, is picked by its lines only, is selected by a rubber band
+  only when it lies inside completely, and is left out of the alignment guides and of the
+  surfaces furniture can stand on. Exports and prints draw the same lines (`msh-export`).
+  "Roof over a rectangle…" uses the point picking of the plan with an outline preview
+  (`PointPick.outline`).
+- **3D.** The model is shown like any piece; "3D view › Roofs" (`roofs` in the UI store,
+  forwarded to the separate 3D window) leaves roofs out.
+- Left open: one roof over an outline with corners that point inwards (valleys), walls cut to
+  the roof, dormers, half-hip and mansard roofs, a pitch for each edge, turning or resizing a
+  texture on the roof, a texture for the underside, editing the corners in the plan.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

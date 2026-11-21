@@ -137,6 +137,7 @@ const LIGHT: PlanColors = {
   text: "#1c2026",
   dimension: "#2f6fde",
   section: "#0f766e",
+  roof: "#b45309",
 };
 
 const DARK: PlanColors = {
@@ -150,6 +151,7 @@ const DARK: PlanColors = {
   text: "#e6e8eb",
   dimension: "#6c9cf2",
   section: "#5eead4",
+  roof: "#fdba74",
 };
 
 const LIGHT_RULER: RulerColors = {
@@ -742,7 +744,15 @@ export default function PlanView() {
       handleDrag,
       rubberBand: g?.kind === "band" ? [g.start, g.end] : null,
       measure: m ? [m.a, measureEnd(m)] : (parallel?.distance ?? null),
-      pointPairs: picking ? { points: picking.points, cursor: pickCursor.current } : null,
+      pointPairs: picking
+        ? {
+            points: picking.points,
+            cursor: pickCursor.current,
+            outline: picking.outline?.(
+              pickCursor.current ? [...picking.points, pickCursor.current] : picking.points,
+            ),
+          }
+        : null,
       snap: snap?.marker ?? null,
       visitor: shownVisitor(g),
       visitorHandle: (() => {

@@ -19,6 +19,7 @@ import {
 import { startAlignPoints } from "../plan2d/alignPoints";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { guideAngle, guideEnd, guideLength, homeGuides } from "../plan2d/guides";
+import { roofOf } from "../plan2d/roof";
 import { usePreferences } from "../preferences";
 import { formatMoney, piecePrice } from "../prices";
 import { currentVisitor, setVisitor, useStore, VISITOR_ID, type WallLine } from "../store";
@@ -46,6 +47,7 @@ import MultiPanel, { common, commonTexture } from "./MultiPanel";
 import OpeningDistances from "./OpeningDistances";
 import { type Dimension, resizedPiece } from "./pieceSize";
 import ReferenceList from "./ReferenceList";
+import RoofPanel from "./RoofPanel";
 import { shownIn, shownOpacity, showParams } from "./referenceObjects";
 import TextStyleFields from "./TextStyleFields";
 import TextureField from "./TextureField";
@@ -1058,6 +1060,8 @@ export default function PropertiesPanel() {
     const a = p.attrs;
     const set = (field: string) => (v: string | number | boolean) =>
       void run("furniture_update", { id, [field]: v });
+    const roof = roofOf(p);
+    if (roof) return <RoofPanel piece={p} roof={roof} levels={home.levels} run={run} />;
     if (isReference(p)) {
       // A reference object is not furniture: only what places it in the plan and 3D
       return (

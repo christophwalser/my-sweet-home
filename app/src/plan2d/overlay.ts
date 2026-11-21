@@ -54,7 +54,7 @@ export type PlanOverlay = {
   /** Distance measured with the measuring tool */
   measure: [Pt, Pt] | null;
   /** Pairs of points being clicked (a point and where it belongs), with the pointer */
-  pointPairs?: { points: Pt[]; cursor: Pt | null } | null;
+  pointPairs?: { points: Pt[]; cursor: Pt | null; outline?: Pt[] | null } | null;
   /** Free spaces beside a door or window being slid along its wall */
   gaps: Gap[];
   /** Automatic dimensions of the selected wall or piece */
@@ -137,6 +137,38 @@ function drawPointPairs(
     ctx.lineTo(to[0] - ux * head + uy * head * 0.5, to[1] - uy * head - ux * head * 0.5);
     ctx.closePath();
     ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Points clicked so far as crosses, and the outline they make with the pointer. */
+function drawPointOutline(
+  ctx: CanvasRenderingContext2D,
+  points: Pt[],
+  outline: Pt[],
+  color: string,
+  px: number,
+): void {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5 * px;
+  if (outline.length > 1) {
+    ctx.setLineDash([6 * px, 4 * px]);
+    ctx.beginPath();
+    ctx.moveTo(outline[0][0], outline[0][1]);
+    for (const [x, y] of outline.slice(1)) ctx.lineTo(x, y);
+    if (outline.length > 2) ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  for (const [x, y] of points) {
+    ctx.beginPath();
+    ctx.arc(x, y, 4 * px, 0, 2 * Math.PI);
+    ctx.moveTo(x - 8 * px, y);
+    ctx.lineTo(x + 8 * px, y);
+    ctx.moveTo(x, y - 8 * px);
+    ctx.lineTo(x, y + 8 * px);
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -233,8 +265,9 @@ export function drawOverlay(
 
   if (overlay.cameraPath?.length) drawCameraPath(ctx, overlay.cameraPath, overlay.accent, px);
   if (overlay.pointPairs) {
-    const { points, cursor } = overlay.pointPairs;
-    drawPointPairs(ctx, points, cursor, overlay.accent, px);
+    const { points, cursor, outline } = overlay.pointPairs;
+    if (outline) drawPointOutline(ctx, points, outline, overlay.accent, px);
+    else drawPointPairs(ctx, points, cursor, overlay.accent, px);
   }
   if (overlay.visitor) drawVisitor(ctx, overlay.visitor, overlay.accent, px);
   if (overlay.visitor && overlay.visitorHandle) {

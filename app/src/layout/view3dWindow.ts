@@ -127,7 +127,7 @@ export function syncUiState(requestInitial: boolean): () => void {
 const VIEW3D_ACTION_EVENT = "view3d-action";
 
 /** Actions of the menus that the separate 3D window carries out. */
-export type View3DAction = "photo" | "video" | "settings3d" | "shadows";
+export type View3DAction = "photo" | "video" | "settings3d" | "shadows" | "roofs";
 
 /**
  * Asks the separate 3D window to open a dialog, toggle the shadows or run an action of the

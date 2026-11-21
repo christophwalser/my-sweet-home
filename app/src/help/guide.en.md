@@ -36,6 +36,16 @@ Choose a tool in the tool bar or in the **Plan** menu, then click in the plan. L
 - The properties set the name, the floor and ceiling (color, texture, matt or shiny) and whether the area is shown. Drag the name or area in the plan to move it.
 - **Walls of this room** in the properties gives all wall sides that face the room the same color, texture, surface and baseboard, whatever the direction each wall was drawn in. A wall longer than the room changes on its whole side.
 
+## Roofs
+
+- **Plan › Roof over the walls** (or the roof button of the toolbar) puts a roof over the walls of the shown level. A house in the shape of an L, T or U gets one roof for each of its rectangles; small steps of the walls and cut corners are roofed over. **Roof over a rectangle…** takes three clicks instead: two corners along one side and a point on the opposite side.
+- The plan shows a roof as its lines: the edge dash-dotted, ridge and hips solid. Click a line to select the roof; clicks inside it reach the rooms and furniture below. Drag the roof or its handles like furniture: the pitch stays, the height follows.
+- The properties set the shape (gable, hip, shed or flat roof), the pitch, the overhang, the thickness and the height of the top of the walls, where the roof starts. **Turn the ridge** lets the ridge of a gable roof run the other way; **Turn the slope** moves the low edge of a shed roof on.
+- Under **Edges** every edge is an eave (the roof rises from it) or a gable (a wall up to the roof), e.g. a hip at one end only.
+- **Roof covering** and **Gable walls** each take a color or a texture, e.g. roof tiles and the plaster of the house. A texture is shown instead of the color in its real size; on the roof its rows run along the eaves.
+- **3D view › Roofs** leaves the roofs out of the 3D view to look into the rooms from above.
+- A roof is saved as a piece of furniture with a generated model: Sweet Home 3D shows it, but only My Sweet Home can change it. Roofs that meet (an L-shaped house) run through each other; walls are not cut to the roof.
+
 ## Dimensions, texts and lines
 
 - The dimension tool measures between two clicks; a third click places the dimension line.

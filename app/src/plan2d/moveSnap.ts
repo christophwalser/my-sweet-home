@@ -13,6 +13,7 @@ import {
   wallAtLevel,
 } from "../model";
 import { elementOutlines } from "./interaction";
+import { isRoof } from "./roof";
 import type { Segment } from "./snapping";
 
 /** Axis-aligned box. */
@@ -90,6 +91,8 @@ export function moveTargets(
   forEachPiece(home.furniture, (p) => {
     const a = p.attrs;
     if (!a.id || skip.has(a.id) || a.visible === false || !piecePickable(home, p, levelId)) return;
+    // The box of a roof lies around the whole house: nothing to align furniture with
+    if (isRoof(p)) return;
     const pts = pieceOutline(p);
     const b = boxOf(pts);
     if (b) addBox(b);
