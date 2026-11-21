@@ -1580,6 +1580,65 @@ a piece of furniture with a generated model that keeps what it was made from.
   the roof, dormers, half-hip and mansard roofs, a pitch for each edge, turning or resizing a
   texture on the roof, a texture for the underside, editing the corners in the plan.
 
+### 4.58 Stairs and floor openings (2026-11-21)
+
+Package 8b of the UX review (D9, D10). Both are pieces of furniture with a generated model and
+a staircase cut-out, like the roofs of 4.57; the code they share with roofs (textures that are
+files of the model, writing the OBJ and MTL, reading the JSON property, the frame of an
+outline) is in `commands/generated.rs`.
+
+- **Generator** (`msh-geometry::stair`). A stair is built in its own frame: the middle of the
+  front edge of the first step at the origin, climbing towards -y of the plan; a stair that
+  turns left is the mirror image of one that turns right. `risers` risers of the same height,
+  the last one onto the floor above, so one tread fewer than risers; a landing takes the place
+  of one tread. Straight (one flight), L (two flights at right angles with a square landing),
+  U (two flights side by side with a landing across both and a gap between them) and spiral
+  (wedges around a column, the tread measured on the walking line in the middle). Every part
+  is a prism of a convex outline: solid steps are blocks down to the floor (a spiral stair:
+  blocks one riser high), open treads have a thickness and lie on two stringers, whose side
+  view is the line through the front edges of the treads cut off at the floor below. A board
+  in front of the floor above (the last riser) makes the model reach up to it. Handrails run
+  90 cm above the front edges of the treads and level along the landings, with posts at the
+  ends, at the corners and no more than 120 cm apart, standing on the step below them. The
+  mesh comes with the edges of the treads and landings for the plan, the walking line, the
+  outline seen from above, and the cut-out: the treads and landings whose top is higher than
+  `cut_from` (the floor above minus its thickness minus a headroom of 2 m), one rectangle per
+  flight; a spiral stair cuts its whole circle.
+- **Checks.** `default_risers` (about 17.5 cm each, none higher than 19 cm) and
+  `default_tread` (step rule 2 × riser + tread = 63 cm). `warnings` names what fails DIN 18065
+  for homes (riser 14–20 cm, tread 23–37 cm, step rule 59–65 cm) and the headroom under the
+  turn above a spiral stair (the risers of one turn times the riser height, less the tread).
+- **Commands** (`commands/stair.rs`). `stair_add` (start point, `angle_deg` of the climbing
+  direction clockwise from up in the plan, shape, turn, width, rise, risers, tread,
+  first_flight, gap, diameter, column, style, thickness, rails, colors, texture),
+  `stair_update` and `stair_calc` (the same without adding: counts, checks and the outline,
+  used by the preview of the tool). Without a rise the stair reaches the next higher level,
+  else the height of its level plus its floor thickness. A new rise sets the riser count, a
+  new riser height the tread, unless they are given too. The piece is not resizable (the
+  steps fit only their measures); its `staircaseCutOutShape` is the cut-out in the unit
+  square of the piece, so Sweet Home 3D cuts the floor too. The property `mySweetHome.stair`
+  keeps the measures, colors, texture, the start relative to the middle of the piece (an
+  update keeps the start where it is), the treads per flight, the size as made, the lines,
+  the walking line and the failed checks. Materials `stair_steps` (color or texture) and
+  `stair_frame` (stringers, column, handrails).
+- **Floor openings** (`commands/opening.rs`). Staircases already cut floors and ceilings, so
+  an opening is a staircase piece on the level whose floor it cuts, from 2 cm below the floor
+  slab (elevation minus floor thickness minus 2) up to the floor, with the cut-out of its
+  outline. The model is the edge of the hole (faces looking into it); in the 3D view of the
+  app the cut floors show that edge themselves, so the piece is left out there. The property
+  `mySweetHome.opening` keeps the outline relative to the middle; `opening_update` and the
+  handles (`furniture_update`) stretch it; a new floor thickness is taken on the next change.
+- **Plan.** `plan2d/stair.ts` reads both properties (cached per piece object). A stair is drawn
+  as the edges of its treads and its walking line from a dot to an arrow, an opening as its
+  outline dashed (crossed when it has four corners), on the level below faint like other
+  pieces reaching up; exports and prints draw the same (`msh-export`). The tools use the point
+  picking of the plan: two points for a stair with its outline from `stair_calc` as preview,
+  three for an opening (the rectangle of a roof).
+- Left open: winders instead of landings, stairs that follow a drawn path, balusters and a
+  railing around the hole above, a stair whose rise follows a later change of the level
+  heights, openings of any outline drawn in the plan (only through `opening_add`), a railing
+  around an opening.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):

@@ -506,10 +506,12 @@ pub(super) fn register(r: &mut Registry) {
                     "x and y can only be changed for one piece at a time (use edit_move)",
                 ));
             }
-            // Roofs are made again when their size changes
+            // Roofs and floor openings are made again when their size changes
             let roofs: Vec<Option<[f32; 3]>> = targets
                 .iter()
-                .map(|t| super::roof::roof_size(doc, t))
+                .map(|t| {
+                    super::roof::roof_size(doc, t).or_else(|| super::opening::opening_size(doc, t))
+                })
                 .collect();
             for target in &targets {
                 let piece = find_piece_mut(doc, target)?;
@@ -694,6 +696,7 @@ pub(super) fn register(r: &mut Registry) {
             for (target, old) in targets.iter().zip(roofs) {
                 if let Some(old) = old {
                     super::roof::refit(doc, target, old)?;
+                    super::opening::refit(doc, target, old)?;
                 }
             }
             Ok(updated(&targets))

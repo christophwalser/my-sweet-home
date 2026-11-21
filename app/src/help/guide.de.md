@@ -46,6 +46,15 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 - **3D-Ansicht › Dächer** lässt die Dächer in der 3D-Ansicht weg, um von oben in die Räume zu sehen.
 - Gespeichert wird ein Dach als Möbelstück mit erzeugtem Modell: Sweet Home 3D zeigt es an, ändern lässt es sich nur in My Sweet Home. Dächer, die aufeinandertreffen (Haus in L-Form), durchdringen sich; Wände werden nicht an das Dach angepasst.
 
+## Treppen und Deckenöffnungen
+
+- **Plan › Gerade Treppe…**, **L-förmige Treppe…**, **U-förmige Treppe…** und **Wendeltreppe…** (oder der Treppen-Knopf der Werkzeugleiste): dort klicken, wo die erste Stufe beginnt, dann in die Richtung, in die die Treppe steigt. Der Umriss folgt dem Zeiger. Die Treppe reicht bis zur nächsten Ebene: Die Anzahl der Steigungen (je etwa 17,5 cm) und der Auftritt (Schrittmaß 2 × Steigung + Auftritt = 63 cm) ergeben sich aus der Höhe.
+- Der Plan zeigt die Kanten der Stufen und die Lauflinie von einem Punkt unten bis zu einem Pfeil oben. Verschieben und drehen wie Möbel; die Größe kommt nur aus den Eigenschaften.
+- Die Eigenschaften legen Form und Drehrichtung fest, die Höhe bis zum Boden darüber, die Anzahl der Steigungen, den Auftritt, die Auftritte vor dem Podest, die Breite (Wendeltreppe: Durchmesser und Spindel), den Abstand der Läufe einer U-Treppe, die Bauart (massiv bis zum Boden oder offene Trittstufen auf Wangen), die Handläufe und Farbe oder Textur der Stufen. Eine neue Höhe ergibt eine neue Anzahl Steigungen und einen Auftritt nach dem Schrittmaß.
+- Unter dem Auftritt steht das Schrittmaß; rot steht dort, was die üblichen Maße für Wohnhäuser verfehlt (Steigung 14–20 cm, Auftritt 23–37 cm, Schrittmaß 59–65 cm, Kopfhöhe unter der Windung darüber bei einer Wendeltreppe).
+- Eine Treppe schneidet das Loch, das sie braucht, in den Boden darüber, ab wo die Kopfhöhe von 2 m endet; Sweet Home 3D schneidet es auch.
+- **Plan › Deckenöffnung…** schneidet ein Loch in den Boden der gezeigten Ebene und in die Decke darunter, z. B. für eine Galerie oder einen Schacht: zwei Ecken einer Seite und einen Punkt gegenüber, wie beim Dach über einem Rechteck. Der Plan zeigt sie gestrichelt und gekreuzt; Breite und Tiefe stehen in ihren Eigenschaften oder an ihren Griffen.
+
 ## Bemaßungen, Texte und Linien
 
 - Das Bemaßungswerkzeug misst zwischen zwei Klicks; ein dritter Klick platziert die Maßlinie.

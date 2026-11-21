@@ -16,6 +16,7 @@ import { VIEW3D_PREFIX } from "../layout/view3dWindow";
 import { forEachPiece, type Home, hiddenIn3d, type Piece } from "../model";
 import { perfMark, perfOn, perfScene } from "../perfMarks";
 import { isRoof } from "../plan2d/roof";
+import { isOpening } from "../plan2d/stair";
 import { usePreferences } from "../preferences";
 import { poseParams, useStore, type ViewMode } from "../store";
 import Icon from "../ui/Icon";
@@ -1006,6 +1007,9 @@ export default function View3D() {
       if (!shown.has(p.attrs.level) || hiddenIn3d(p)) return;
       // Roofs can be left out to look into the rooms from above
       if (!roofsShown && isRoof(p)) return;
+      // A floor opening is only its cut-out here: the floors around the hole show its edge
+      // (its model, the edge of the hole, is for Sweet Home 3D)
+      if (isOpening(p)) return;
       const base = (levels.get(p.attrs.level) ?? levels.get(null))?.elevation ?? 0;
       const object =
         (p.attrs.id ? kept.get(p.attrs.id) : undefined) ??

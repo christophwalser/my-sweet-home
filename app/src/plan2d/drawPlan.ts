@@ -31,6 +31,7 @@ import { curveSegments, polylinePath } from "./curve";
 import { distanceToSegment, pointInPolygon } from "./interaction";
 import { type RoofData, roofLines, roofOf } from "./roof";
 import type { SectionCut } from "./section";
+import { openingOf, openingOutline, stairOf, stairSymbol } from "./stair";
 
 export type ViewTransform = { scale: number; offsetX: number; offsetY: number };
 
@@ -243,6 +244,11 @@ export function drawPlan(
   ctx.save();
   for (const p of backdrop) {
     if (p.kind === "DoorOrWindow" || roofOf(p)) continue;
+    if (stairOf(p) || openingOf(p)) {
+      ctx.globalAlpha = BACKDROP_ALPHA;
+      drawSymbol(ctx, p, colors, px);
+      continue;
+    }
     const cutAt = sectionHeightIn(home, p, levelId);
     if (cutAt !== null) {
       cuts.push([p, cutAt]);
@@ -370,7 +376,7 @@ export function drawPlan(
   // Furniture (below walls so that doors in walls stay readable on top)
   for (const p of pieces) {
     if (p.kind !== "DoorOrWindow" && !backdrop.has(p) && !roofOf(p)) {
-      drawPiece(ctx, p, input, colors, px);
+      if (!drawSymbol(ctx, p, colors, px)) drawPiece(ctx, p, input, colors, px);
     }
   }
 
@@ -634,6 +640,80 @@ function drawSection(
 }
 
 /** The lines of a roof: its edge dash-dotted (it lies above the plan), ridge and hips solid. */
+/**
+ * Draws a stair (the edges of its treads, its walking line from a dot to an arrow) or a floor
+ * opening (its outline dashed, crossed) instead of its view from above. False for other pieces.
+ */
+function drawSymbol(
+  ctx: CanvasRenderingContext2D,
+  p: Piece,
+  colors: PlanColors,
+  px: number,
+): boolean {
+  const stair = stairOf(p);
+  const opening = stair ? null : openingOf(p);
+  if (!stair && !opening) return false;
+  if (p.attrs.visible === false) return true;
+  ctx.save();
+  ctx.strokeStyle = colors.furnitureStroke;
+  ctx.fillStyle = colors.furnitureStroke;
+  ctx.lineWidth = px;
+  ctx.lineJoin = "round";
+  if (stair) {
+    const { lines, walk } = stairSymbol(p, stair);
+    ctx.beginPath();
+    for (const [a, b] of lines) {
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+    }
+    ctx.stroke();
+    if (walk.length >= 2) {
+      ctx.beginPath();
+      tracePath(ctx, walk);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(walk[0][0], walk[0][1], 3 * px, 0, Math.PI * 2);
+      ctx.fill();
+      const to = walk[walk.length - 1];
+      const from = walk[walk.length - 2];
+      const len = Math.hypot(to[0] - from[0], to[1] - from[1]);
+      if (len > 0) {
+        const ux = (to[0] - from[0]) / len;
+        const uy = (to[1] - from[1]) / len;
+        const size = 10 * px;
+        const bx = to[0] - ux * size;
+        const by = to[1] - uy * size;
+        ctx.beginPath();
+        ctx.moveTo(to[0], to[1]);
+        ctx.lineTo(bx - uy * size * 0.5, by + ux * size * 0.5);
+        ctx.lineTo(bx + uy * size * 0.5, by - ux * size * 0.5);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  } else if (opening) {
+    const outline = openingOutline(p, opening);
+    ctx.lineWidth = 1.5 * px;
+    ctx.setLineDash([8 * px, 4 * px]);
+    ctx.beginPath();
+    tracePath(ctx, outline);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (outline.length === 4) {
+      ctx.lineWidth = px;
+      ctx.beginPath();
+      ctx.moveTo(outline[0][0], outline[0][1]);
+      ctx.lineTo(outline[2][0], outline[2][1]);
+      ctx.moveTo(outline[1][0], outline[1][1]);
+      ctx.lineTo(outline[3][0], outline[3][1]);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  return true;
+}
+
 function drawRoof(
   ctx: CanvasRenderingContext2D,
   p: Piece,

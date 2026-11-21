@@ -3,16 +3,18 @@
 //! Home 3D shows it as any other piece; here it can be changed and is made again.
 
 use super::furniture::{find_piece_mut, set_property};
+use super::generated::{
+    ModelPart, ModelTexture, ModelTriangle, bounds, checked_points, frame, kept_image, limited,
+    property_data, rgb, round, set_texture, store_model,
+};
 use super::{new_id, parse_color, resolve_level};
 use crate::Document;
-use crate::catalog::CatalogIndex;
 use crate::registry::{CommandError, Registry};
 use msh_geometry::roof::{self, EdgeKind, LineKind, P2, RoofShape, RoofSpec, Surface};
 use msh_model::{Furniture, Home, Piece, PieceAttrs, PieceKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::fmt::Write;
 
 /// Piece property with what a roof was made from, as JSON (our own; Sweet Home 3D keeps it
 /// and shows the roof as a piece of furniture).
@@ -167,10 +169,10 @@ struct RoofData {
     gable_color: String,
     /// Texture of the roof covering, shown instead of its color
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    texture: Option<RoofTexture>,
+    texture: Option<ModelTexture>,
     /// Texture of the walls under the gables
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    gable_texture: Option<RoofTexture>,
+    gable_texture: Option<ModelTexture>,
     /// Height of the lowest point of the roof above the top of the walls (not positive for
     /// a sloped roof)
     #[serde(default)]
@@ -184,21 +186,6 @@ struct RoofData {
     lines: Vec<(f64, f64, f64, f64, LineKind)>,
 }
 
-/// A texture of a roof. Its image lies among the files of the model of the roof, so the
-/// roof can be made again without the catalog the texture came from.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-struct RoofTexture {
-    name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    catalog_id: Option<String>,
-    /// Name of the image among the files of the model
-    file: String,
-    /// Width and height of one tile of the image in cm
-    width: f64,
-    height: f64,
-}
-
 /// The images of the textures of a roof.
 #[derive(Default, Clone)]
 struct Images {
@@ -208,127 +195,15 @@ struct Images {
 
 /// The images of the textures a roof has, from the files of its model.
 fn kept_images(doc: &Document, model: Option<&str>, data: &RoofData) -> Images {
-    let folder = model
-        .and_then(|m| m.split_once('/'))
-        .map(|(folder, _)| folder);
-    let read = |texture: &Option<RoofTexture>| {
-        let name = format!("{}/{}", folder?, texture.as_ref()?.file);
-        let content = doc.file.contents.iter().find(|c| c.name == name)?;
-        Some(content.data.clone())
-    };
     Images {
-        cover: read(&data.texture),
-        gable: read(&data.gable_texture),
+        cover: kept_image(doc, model, &data.texture),
+        gable: kept_image(doc, model, &data.gable_texture),
     }
-}
-
-/// Sets a texture of a roof from a parameter: nothing if it is not given, no texture for "",
-/// else the catalog texture with this ID. `stem` names its image among the files of the model.
-fn set_texture(
-    texture: &mut Option<RoofTexture>,
-    image: &mut Option<Vec<u8>>,
-    given: &Option<String>,
-    stem: &str,
-) -> Result<(), CommandError> {
-    let Some(id) = given else {
-        return Ok(());
-    };
-    if id.is_empty() {
-        *texture = None;
-        *image = None;
-        return Ok(());
-    }
-    let entry = CatalogIndex::get()
-        .texture_by_id(id)
-        .ok_or_else(|| CommandError::failed(format!("unknown texture '{id}'")))?
-        .clone();
-    let data = msh_catalog::read_resource(&entry.library, &entry.item.image)
-        .map_err(|e| CommandError::failed(e.to_string()))?;
-    let extension = if data.starts_with(b"\x89PNG") {
-        "png".to_owned()
-    } else if data.starts_with(&[0xFF, 0xD8]) {
-        "jpg".to_owned()
-    } else {
-        std::path::Path::new(&entry.item.image)
-            .extension()
-            .and_then(|e| e.to_str())
-            .filter(|e| e.chars().all(|c| c.is_ascii_alphanumeric()))
-            .map_or_else(|| "png".to_owned(), str::to_ascii_lowercase)
-    };
-    let side = |v: f32| if v > 0.0 { f64::from(v) } else { 100.0 };
-    *texture = Some(RoofTexture {
-        name: entry.item.name.clone(),
-        catalog_id: entry.item.id.clone(),
-        file: format!("{stem}.{extension}"),
-        width: side(entry.item.width),
-        height: side(entry.item.height),
-    });
-    *image = Some(data);
-    Ok(())
-}
-
-fn round(v: f64) -> f64 {
-    (v * 100.0).round() / 100.0
 }
 
 /// The roof data of a piece, if it is a roof.
 fn roof_data(piece: &Piece) -> Option<RoofData> {
-    let value = &piece
-        .properties
-        .iter()
-        .find(|p| p.name == ROOF_PROPERTY)?
-        .value;
-    serde_json::from_str(value).ok()
-}
-
-/// The middle of the roof in the plan, the angle its piece is turned by and its corners
-/// relative to that middle before the turn. The longest edge runs along the width or the
-/// depth of the piece, turned by no more than 45°.
-fn frame(points: &[P2]) -> (P2, f64, Vec<P2>) {
-    let n = points.len();
-    let mut longest = (0.0, 0.0);
-    for i in 0..n {
-        let (a, b) = (points[i], points[(i + 1) % n]);
-        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
-        if dx.hypot(dy) > longest.0 + 1e-6 {
-            longest = (dx.hypot(dy), dy.atan2(dx));
-        }
-    }
-    let quarter = std::f64::consts::FRAC_PI_2;
-    let mut angle = longest.1.rem_euclid(quarter);
-    if angle > quarter / 2.0 {
-        angle -= quarter;
-    }
-    if angle.abs() < 1e-9 {
-        angle = 0.0;
-    }
-    let (sin, cos) = angle.sin_cos();
-    let turned: Vec<P2> = points
-        .iter()
-        .map(|p| [p[0] * cos + p[1] * sin, -p[0] * sin + p[1] * cos])
-        .collect();
-    let (lo, hi) = bounds(&turned);
-    let mid = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];
-    let local = turned
-        .iter()
-        .map(|p| [p[0] - mid[0], p[1] - mid[1]])
-        .collect();
-    (
-        [mid[0] * cos - mid[1] * sin, mid[0] * sin + mid[1] * cos],
-        angle,
-        local,
-    )
-}
-
-fn bounds(points: &[P2]) -> (P2, P2) {
-    let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
-    for p in points {
-        for i in 0..2 {
-            lo[i] = lo[i].min(p[i]);
-            hi[i] = hi[i].max(p[i]);
-        }
-    }
-    (lo, hi)
+    property_data(piece, ROOF_PROPERTY)
 }
 
 /// A generated roof, stored in the document.
@@ -342,11 +217,6 @@ struct Generated {
     offset: P2,
     /// Height of the highest point above the top of the walls
     highest: f64,
-}
-
-fn rgb(color: &str) -> Result<[f32; 3], CommandError> {
-    let c = parse_color(color)?.0;
-    Ok([(c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF].map(|v| v as f32 / 255.0))
 }
 
 /// Makes the model of the roof, stores it in the document and updates the values of `data`
@@ -398,109 +268,41 @@ fn generate(
         })
         .collect();
 
-    let number = |v: f64| {
-        let v = (v * 1000.0).round() / 1000.0;
-        // No "-0"
-        if v == 0.0 { 0.0 } else { v }
-    };
-    let mut obj = String::from("mtllib roof.mtl\n");
-    for p in &mesh.positions {
-        let _ = writeln!(
-            obj,
-            "v {} {} {}",
-            number(p[0] - offset[0]),
-            number(p[1]),
-            number(p[2] - offset[1])
-        );
-    }
-    let parts = [
-        (
-            Surface::Cover,
-            "roof_cover",
-            rgb(&data.color)?,
-            data.texture.as_ref().zip(images.cover),
-        ),
-        (Surface::Soffit, "roof_soffit", SOFFIT_COLOR, None),
-        (
-            Surface::Gable,
-            "roof_gable",
-            rgb(&data.gable_color)?,
-            data.gable_texture.as_ref().zip(images.gable),
-        ),
+    let positions: Vec<[f64; 3]> = mesh
+        .positions
+        .iter()
+        .map(|p| [p[0] - offset[0], p[1], p[2] - offset[1]])
+        .collect();
+    let surfaces = [Surface::Cover, Surface::Soffit, Surface::Gable];
+    let triangles: Vec<ModelTriangle> = mesh
+        .triangles
+        .iter()
+        .map(|t| ModelTriangle {
+            corners: t.corners,
+            normal: t.normal,
+            part: surfaces.iter().position(|s| *s == t.surface).unwrap_or(0),
+        })
+        .collect();
+    let parts = vec![
+        ModelPart {
+            name: "roof_cover",
+            color: rgb(&data.color)?,
+            texture: data.texture.clone().zip(images.cover),
+        },
+        ModelPart {
+            name: "roof_soffit",
+            color: SOFFIT_COLOR,
+            texture: None,
+        },
+        ModelPart {
+            name: "roof_gable",
+            color: rgb(&data.gable_color)?,
+            texture: data.gable_texture.clone().zip(images.gable),
+        },
     ];
-    // Texture coordinates: the place of each corner on its surface in tiles of the texture
-    // (in meters without one)
-    let tile = |surface: Surface| {
-        parts
-            .iter()
-            .find(|part| part.0 == surface)
-            .and_then(|part| part.3.as_ref())
-            .map_or([100.0, 100.0], |(texture, _)| {
-                [texture.width, texture.height]
-            })
-    };
-    let mut tiles = vec![[100.0, 100.0]; mesh.positions.len()];
-    for t in &mesh.triangles {
-        for corner in t.corners {
-            tiles[corner as usize] = tile(t.surface);
-        }
-    }
-    let fine = |v: f64| {
-        let v = (v * 10000.0).round() / 10000.0;
-        if v == 0.0 { 0.0 } else { v }
-    };
-    for (uv, tile) in mesh.uvs.iter().zip(&tiles) {
-        let _ = writeln!(
-            obj,
-            "vt {} {}",
-            fine(uv[0] / tile[0]),
-            fine(uv[1] / tile[1])
-        );
-    }
-    for t in &mesh.triangles {
-        let [x, y, z] = t.normal.map(number);
-        let _ = writeln!(obj, "vn {x} {y} {z}");
-    }
-    let mut mtl = String::new();
-    let mut files: Vec<(String, Vec<u8>)> = Vec::new();
-    for (surface, name, color, texture) in parts {
-        if !mesh.triangles.iter().any(|t| t.surface == surface) {
-            continue;
-        }
-        match texture {
-            // The texture is shown as it is, not tinted by the color
-            Some((texture, image)) => {
-                let _ = writeln!(
-                    mtl,
-                    "newmtl {name}\nKd 1 1 1\nKa 0 0 0\nmap_Kd {}\n",
-                    texture.file
-                );
-                files.push((texture.file.clone(), image));
-            }
-            None => {
-                let _ = writeln!(
-                    mtl,
-                    "newmtl {name}\nKd {} {} {}\nKa 0 0 0\n",
-                    color[0], color[1], color[2]
-                );
-            }
-        }
-        let _ = writeln!(obj, "g {name}\nusemtl {name}");
-        for (i, t) in mesh.triangles.iter().enumerate() {
-            if t.surface == surface {
-                let [a, b, c] = t.corners.map(|c| c + 1);
-                let n = i + 1;
-                let _ = writeln!(obj, "f {a}/{a}/{n} {b}/{b}/{n} {c}/{c}/{n}");
-            }
-        }
-    }
-    let model_size =
-        (obj.len() + mtl.len() + files.iter().map(|f| f.1.len()).sum::<usize>()) as i64;
-    files.push(("roof.obj".into(), obj.into_bytes()));
-    files.push(("roof.mtl".into(), mtl.into_bytes()));
-    let folder = doc.add_or_reuse_folder(files);
+    let (model, model_size) = store_model(doc, "roof", &positions, &mesh.uvs, &triangles, parts);
     Ok(Generated {
-        model: format!("{folder}/roof.obj"),
+        model,
         model_size,
         size: [hi[0] - lo[0], hi[2] - lo[2], hi[1] - lo[1]],
         offset,
@@ -568,16 +370,6 @@ fn wall_top(home: &Home, level: Option<&str>) -> f64 {
     f64::from(lowest.or(of_level).unwrap_or(wall_height))
 }
 
-fn checked_points(points: &[[f32; 2]]) -> Result<Vec<P2>, CommandError> {
-    if points.iter().flatten().any(|v| !v.is_finite()) {
-        return Err(CommandError::failed("points must be numbers"));
-    }
-    Ok(points
-        .iter()
-        .map(|p| [f64::from(p[0]), f64::from(p[1])])
-        .collect())
-}
-
 /// The areas that each carry one roof: the outline itself, or its largest rectangles if it
 /// has corners that point inwards.
 fn parts(outline: Vec<P2>) -> Result<Vec<Vec<P2>>, CommandError> {
@@ -597,14 +389,6 @@ fn parts(outline: Vec<P2>) -> Result<Vec<Vec<P2>>, CommandError> {
             )
         }),
         Err(e) => Err(CommandError::failed(e.to_string())),
-    }
-}
-
-fn limited(name: &str, v: Option<f32>, min: f64, max: f64) -> Result<Option<f64>, CommandError> {
-    match v {
-        None => Ok(None),
-        Some(v) if v.is_finite() => Ok(Some(f64::from(v).clamp(min, max))),
-        Some(_) => Err(CommandError::failed(format!("{name} must be a number"))),
     }
 }
 
