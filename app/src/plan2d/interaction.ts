@@ -14,6 +14,7 @@ import {
   wallPolygon,
 } from "../model";
 import { polylinePath } from "./curve";
+import { roofHit, roofOf } from "./roof";
 
 /** Kind of element found by a hit test. */
 export type HitKind = "piece" | "wall" | "room" | "label" | "dimension" | "polyline" | "compass";
@@ -69,6 +70,12 @@ export function pieceContains(piece: Piece, p: Pt): boolean {
   return Math.abs(lx) <= w / 2 && Math.abs(ly) <= d / 2;
 }
 
+/** True if a click at `p` picks the piece: inside its rectangle, or on a line of a roof. */
+function pieceHit(piece: Piece, p: Pt, tolerance: number): boolean {
+  const roof = roofOf(piece);
+  return roof ? roofHit(piece, roof, p, tolerance) : pieceContains(piece, p);
+}
+
 /**
  * All elements at `p`, the one a click selects first (doors and windows on top, then texts,
  * dimensions, furniture, walls, lines and rooms); Tab steps through them.
@@ -107,7 +114,7 @@ export function hitTestAll(
   }
   if (locked) {
     for (const { piece, topId } of pieces) {
-      if (pieceContains(piece, p)) add({ id: topId as string, kind: "piece" });
+      if (pieceHit(piece, p, tolerance)) add({ id: topId as string, kind: "piece" });
     }
     return out;
   }
@@ -135,7 +142,7 @@ export function hitTestAll(
     }
   }
   for (const { piece, topId } of pieces) {
-    if (piece.kind !== "DoorOrWindow" && pieceContains(piece, p)) {
+    if (piece.kind !== "DoorOrWindow" && pieceHit(piece, p, tolerance)) {
       add({ id: topId as string, kind: "piece" });
     }
   }
@@ -318,7 +325,12 @@ export function elementsInRect(
     if (!piecePickable(home, piece, levelId) || !topId) continue;
     if (locked && isBasePlanPiece(piece)) continue;
     const pa = piece.attrs;
-    const isInside = crossing ? rect.polygon(pieceOutline(piece)) : rect.point([pa.x, pa.y]);
+    // A roof lies over the whole house: only a rubber band around all of it selects it
+    const isInside = roofOf(piece)
+      ? pieceOutline(piece).every((q) => rect.point(q))
+      : crossing
+        ? rect.polygon(pieceOutline(piece))
+        : rect.point([pa.x, pa.y]);
     if (topId === pa.id) {
       if (isInside) ids.push(topId);
     } else if (crossing) {

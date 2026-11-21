@@ -36,6 +36,16 @@ Wähle ein Werkzeug in der Werkzeugleiste oder im Menü **Plan** und klicke in d
 - In den Eigenschaften legst du Namen, Boden und Decke (Farbe, Textur, matt oder glänzend) fest und ob die Fläche angezeigt wird. Name und Fläche lassen sich im Plan verschieben.
 - **Wände dieses Raums** in den Eigenschaften gibt allen Wandseiten, die dem Raum zugewandt sind, dieselbe Farbe, Textur, Oberfläche und Sockelleiste, egal in welcher Richtung jede Wand gezeichnet wurde. Eine Wand, die länger ist als der Raum, ändert sich auf ihrer ganzen Seite.
 
+## Dächer
+
+- **Plan › Dach über den Wänden** (oder der Dach-Knopf der Werkzeugleiste) setzt ein Dach über die Wände der gezeigten Ebene. Ein Haus in L-, T- oder U-Form bekommt je Rechteck ein eigenes Dach; kleine Versprünge der Wände und abgeschrägte Ecken werden überdacht. **Dach über einem Rechteck…** nimmt stattdessen drei Klicks: zwei Ecken einer Seite und einen Punkt auf der gegenüberliegenden Seite.
+- Der Plan zeigt ein Dach als Linien: den Rand strichpunktiert, First und Grate durchgezogen. Ein Klick auf eine Linie wählt das Dach; Klicks in seiner Fläche erreichen die Räume und Möbel darunter. Das Dach und seine Griffe ziehst du wie bei Möbeln: Die Neigung bleibt, die Höhe folgt.
+- Die Eigenschaften legen die Form (Sattel-, Walm-, Pult- oder Flachdach), die Dachneigung, den Dachüberstand, die Dicke und die Höhe der Wandoberkante fest, an der das Dach ansetzt. **First drehen** lässt den First eines Satteldachs in die andere Richtung laufen; **Gefälle drehen** setzt die niedrige Kante eines Pultdachs eine Seite weiter.
+- Unter **Kanten** ist jede Kante eine Traufe (dort steigt das Dach an) oder ein Giebel (Wand bis unters Dach), z. B. ein Walm nur an einem Ende.
+- **Dachdeckung** und **Giebelwände** bekommen je eine Farbe oder eine Textur, z. B. Dachziegel und den Putz des Hauses. Eine Textur wird statt der Farbe in ihrer echten Größe gezeigt; auf dem Dach laufen ihre Reihen parallel zur Traufe.
+- **3D-Ansicht › Dächer** lässt die Dächer in der 3D-Ansicht weg, um von oben in die Räume zu sehen.
+- Gespeichert wird ein Dach als Möbelstück mit erzeugtem Modell: Sweet Home 3D zeigt es an, ändern lässt es sich nur in My Sweet Home. Dächer, die aufeinandertreffen (Haus in L-Form), durchdringen sich; Wände werden nicht an das Dach angepasst.
+
 ## Bemaßungen, Texte und Linien
 
 - Das Bemaßungswerkzeug misst zwischen zwei Klicks; ein dritter Klick platziert die Maßlinie.

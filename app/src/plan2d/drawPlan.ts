@@ -29,6 +29,7 @@ import { formatArea, formatLength as formatUnitLength } from "../units";
 import { baseboardOf, baseboardPolygon } from "../view3d/wallSides";
 import { curveSegments, polylinePath } from "./curve";
 import { distanceToSegment, pointInPolygon } from "./interaction";
+import { type RoofData, roofLines, roofOf } from "./roof";
 import type { SectionCut } from "./section";
 
 export type ViewTransform = { scale: number; offsetX: number; offsetY: number };
@@ -47,6 +48,8 @@ export type PlanColors = {
   dimension: string;
   /** Lines of the cut through a reference object (a scan) */
   section: string;
+  /** Lines of a roof */
+  roof: string;
 };
 
 export const DEFAULT_ROOM_FONT = 24;
@@ -239,7 +242,7 @@ export function drawPlan(
   const cuts: [Piece, number][] = [];
   ctx.save();
   for (const p of backdrop) {
-    if (p.kind === "DoorOrWindow") continue;
+    if (p.kind === "DoorOrWindow" || roofOf(p)) continue;
     const cutAt = sectionHeightIn(home, p, levelId);
     if (cutAt !== null) {
       cuts.push([p, cutAt]);
@@ -366,7 +369,9 @@ export function drawPlan(
 
   // Furniture (below walls so that doors in walls stay readable on top)
   for (const p of pieces) {
-    if (p.kind !== "DoorOrWindow" && !backdrop.has(p)) drawPiece(ctx, p, input, colors, px);
+    if (p.kind !== "DoorOrWindow" && !backdrop.has(p) && !roofOf(p)) {
+      drawPiece(ctx, p, input, colors, px);
+    }
   }
 
   // Walls, drawn as one area like Sweet Home 3D: first all outlines with double
@@ -419,6 +424,17 @@ export function drawPlan(
   // Doors and windows on top of walls
   for (const p of pieces) {
     if (p.kind === "DoorOrWindow") drawDoorOrWindow(ctx, p, input, colors, px);
+  }
+
+  // Roofs as their lines, on top of the walls they cover (their view from above would hide
+  // the level); faint when they belong to a level below
+  for (const p of pieces) {
+    const roof = roofOf(p);
+    if (!roof || p.attrs.visible === false) continue;
+    ctx.save();
+    ctx.globalAlpha = backdrop.has(p) ? BACKDROP_ALPHA : 1;
+    drawRoof(ctx, p, roof, colors, px);
+    ctx.restore();
   }
 
   // Names of the furniture shown in the plan
@@ -615,6 +631,28 @@ function drawSection(
     ctx.strokeRect(-w / 2, -d / 2, w, d);
   }
   ctx.restore();
+}
+
+/** The lines of a roof: its edge dash-dotted (it lies above the plan), ridge and hips solid. */
+function drawRoof(
+  ctx: CanvasRenderingContext2D,
+  p: Piece,
+  roof: RoofData,
+  colors: PlanColors,
+  px: number,
+): void {
+  ctx.strokeStyle = colors.roof;
+  ctx.lineCap = "round";
+  for (const { a, b, kind } of roofLines(p, roof)) {
+    const edge = kind === "eave" || kind === "verge";
+    ctx.lineWidth = (kind === "ridge" ? 2.25 : 1.25) * px;
+    ctx.setLineDash(edge ? [12 * px, 4 * px, 2 * px, 4 * px] : []);
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
 }
 
 function drawDoorOrWindow(

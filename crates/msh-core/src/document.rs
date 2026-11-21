@@ -107,7 +107,7 @@ impl Document {
             .ok_or_else(|| {
                 msh_format::FormatError::Structure("no file path given for saving".into())
             })?;
-        self.prune_contents();
+        let dropped = self.prune_contents();
         // Like Sweet Home 3D, the home is named after its file: after "Save as" the new one
         if let Some(file_name) = target.file_name() {
             self.file.home.attrs.name = Some(file_name.to_string_lossy().into_owned());
@@ -116,7 +116,9 @@ impl Document {
             // The digests no longer match the resources; Sweet Home 3D accepts files without them
             self.file.content_digests = None;
         }
-        self.file.save(&target)?;
+        let saved = self.file.save(&target);
+        self.keep_for_history(dropped);
+        saved?;
         self.path = Some(target.clone());
         self.modified = false;
         Ok(target)
@@ -276,18 +278,41 @@ impl Document {
             .map_or(0, |n| n + 1)
     }
 
-    /// Removes resources that nothing in the home references any more.
-    fn prune_contents(&mut self) {
+    /// Removes resources that nothing in the home references any more and returns them.
+    fn prune_contents(&mut self) -> Vec<ContentEntry> {
         let refs = referenced_contents(&self.file.home);
-        let before = self.file.contents.len();
-        self.file.contents.retain(|c| {
-            let top = c.name.split('/').next().unwrap_or(&c.name);
-            refs.contains(c.name.as_str()) || refs.iter().any(|r| r.split('/').next() == Some(top))
-        });
-        if self.file.contents.len() != before {
+        let (kept, dropped): (Vec<ContentEntry>, Vec<ContentEntry>) =
+            std::mem::take(&mut self.file.contents)
+                .into_iter()
+                .partition(|c| is_referenced(c, &refs));
+        self.file.contents = kept;
+        if !dropped.is_empty() {
             self.contents_changed = true;
         }
+        dropped
     }
+
+    /// Puts back the resources a saved file left out that a step of the history still
+    /// needs: undoing the removal of a piece (or the change of a generated model) after
+    /// saving must find its model again.
+    fn keep_for_history(&mut self, dropped: Vec<ContentEntry>) {
+        if dropped.is_empty() {
+            return;
+        }
+        let mut refs = HashSet::new();
+        for step in self.undo.iter().chain(&self.redo) {
+            refs.extend(referenced_contents(&step.home));
+        }
+        self.file
+            .contents
+            .extend(dropped.into_iter().filter(|c| is_referenced(c, &refs)));
+    }
+}
+
+/// Whether a resource, or the folder it lies in, is among the referenced names.
+fn is_referenced(content: &ContentEntry, refs: &HashSet<String>) -> bool {
+    let top = content.name.split('/').next().unwrap_or(&content.name);
+    refs.contains(content.name.as_str()) || refs.iter().any(|r| r.split('/').next() == Some(top))
 }
 
 /// Gives every element an ID. Files of older Sweet Home 3D versions have no IDs

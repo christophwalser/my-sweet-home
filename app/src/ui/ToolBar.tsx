@@ -231,6 +231,7 @@ export default function ToolBar() {
         <SplitButton button="walls" variants={["tool.wall", "tool.arcwall"]} />
         <SplitButton button="rooms" variants={["tool.room", "tool.roomauto"]} />
         <ToolButton id="tool.polyline" />
+        <SplitButton button="roofs" variants={["roof.add", "roof.addRect"]} />
         <SplitButton button="dimensions" variants={["tool.dimension", "tool.heightdim"]} />
         <ToolButton id="tool.label" />
         <SplitButton button="measure" variants={["tool.measure", "tool.ruler"]} />

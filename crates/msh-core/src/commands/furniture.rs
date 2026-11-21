@@ -506,6 +506,11 @@ pub(super) fn register(r: &mut Registry) {
                     "x and y can only be changed for one piece at a time (use edit_move)",
                 ));
             }
+            // Roofs are made again when their size changes
+            let roofs: Vec<Option<[f32; 3]>> = targets
+                .iter()
+                .map(|t| super::roof::roof_size(doc, t))
+                .collect();
             for target in &targets {
                 let piece = find_piece_mut(doc, target)?;
                 let a = &mut piece.attrs;
@@ -686,6 +691,11 @@ pub(super) fn register(r: &mut Registry) {
                     a.movable = v.then_some(false);
                 }
             }
+            for (target, old) in targets.iter().zip(roofs) {
+                if let Some(old) = old {
+                    super::roof::refit(doc, target, old)?;
+                }
+            }
             Ok(updated(&targets))
         },
     );
@@ -761,7 +771,7 @@ fn register_align(r: &mut Registry) {
 }
 
 /// Sets or removes a property of our own on a piece.
-fn set_property(piece: &mut Piece, name: &str, value: Option<String>) {
+pub(super) fn set_property(piece: &mut Piece, name: &str, value: Option<String>) {
     piece.properties.retain(|pr| pr.name != name);
     if let Some(value) = value {
         piece.properties.push(msh_model::Property {

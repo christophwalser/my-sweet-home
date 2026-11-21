@@ -23,6 +23,7 @@ mod level;
 mod library;
 mod library_edit;
 mod online;
+mod roof;
 mod room;
 mod rotate;
 mod sun;
@@ -48,6 +49,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     wall::register(r);
     wall_ops::register(r);
     room::register(r);
+    roof::register(r);
     surface::register(r);
     furniture::register(r);
     group::register(r);

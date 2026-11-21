@@ -352,6 +352,7 @@ fn group_about(group: &str) -> &'static str {
         "level" => "Levels (storeys)",
         "wall" => "Walls",
         "room" => "Rooms",
+        "roof" => "Roofs",
         "furniture" => "Furniture, doors and windows",
         "label" => "Text labels",
         "dimension" => "Dimension lines",

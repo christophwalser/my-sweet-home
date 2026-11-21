@@ -15,6 +15,7 @@ import { t } from "../i18n";
 import { VIEW3D_PREFIX } from "../layout/view3dWindow";
 import { forEachPiece, type Home, hiddenIn3d, type Piece } from "../model";
 import { perfMark, perfOn, perfScene } from "../perfMarks";
+import { isRoof } from "../plan2d/roof";
 import { usePreferences } from "../preferences";
 import { poseParams, useStore, type ViewMode } from "../store";
 import Icon from "../ui/Icon";
@@ -185,6 +186,7 @@ export default function View3D() {
   const levelId = useStore((s) => s.selectedLevel);
   const viewMode = useStore((s) => s.viewMode);
   const shadows = useUi((s) => s.shadows);
+  const roofsShown = useUi((s) => s.roofs);
   const parallel = useUi((s) => s.parallel);
   const section = useUi((s) => s.section);
   const selection = useStore((s) => s.selection);
@@ -888,6 +890,7 @@ export default function View3D() {
         const id = p.attrs.id;
         const cached = id ? c.pieces.get(id) : undefined;
         if (!id || !cached || cached.piece !== p || !shownNow.has(p.attrs.level)) return;
+        if (!roofsShown && isRoof(p)) return;
         const base = (levelsNow.get(p.attrs.level) ?? levelsNow.get(null))?.elevation ?? 0;
         if (cached.base !== base) return;
         cached.object.removeFromParent();
@@ -1001,6 +1004,8 @@ export default function View3D() {
     const stairObjects: THREE.Object3D[] = [];
     forEachPiece(home.furniture, (p) => {
       if (!shown.has(p.attrs.level) || hiddenIn3d(p)) return;
+      // Roofs can be left out to look into the rooms from above
+      if (!roofsShown && isRoof(p)) return;
       const base = (levels.get(p.attrs.level) ?? levels.get(null))?.elevation ?? 0;
       const object =
         (p.attrs.id ? kept.get(p.attrs.id) : undefined) ??
@@ -1040,7 +1045,7 @@ export default function View3D() {
     c.sectionDirty = true;
     c.requestRender();
     perfMark("3d-build-end");
-  }, [opened, levelId]);
+  }, [opened, levelId, roofsShown]);
 
   // The selection of the plan is outlined. Only the outline is drawn anew: selecting
   // rebuilds nothing of the scene.

@@ -53,6 +53,9 @@ type UiState = {
   /** Sun shadows in the 3D view (they cost a second render pass) */
   shadows: boolean;
   setShadows: (on: boolean) => void;
+  /** Roofs are shown in the 3D view (off: the view from above looks into the rooms) */
+  roofs: boolean;
+  setRoofs: (on: boolean) => void;
   /** The aerial view is drawn in parallel projection (no perspective) */
   parallel: boolean;
   setParallel: (on: boolean) => void;
@@ -101,6 +104,11 @@ export type PointPick = {
   points: [number, number][];
   /** Called with all points once the last one is clicked */
   onDone: (points: [number, number][]) => void;
+  /**
+   * What the points clicked so far and the pointer make (e.g. the rectangle of a roof); the
+   * plan draws this outline instead of arrows between pairs of points
+   */
+  outline?: (points: [number, number][]) => [number, number][];
 };
 
 /** A click awaited in the plan, with the hint shown meanwhile. */
@@ -150,6 +158,8 @@ export const useUi = create<UiState>((set, get) => ({
   },
   shadows: false,
   setShadows: (shadows) => set({ shadows }),
+  roofs: true,
+  setRoofs: (roofs) => set({ roofs }),
   parallel: false,
   setParallel: (parallel) => set({ parallel }),
   section: NO_SECTION,

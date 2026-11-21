@@ -16,6 +16,8 @@ import {
 } from "../layout/view3dWindow";
 import { forEachPiece } from "../model";
 import { levelGuides } from "../plan2d/guides";
+import { isRoof } from "../plan2d/roof";
+import { addRoof, startRoofRectangle } from "../plan2d/roofTool";
 import { newHomeParams, prefs, usePreferences } from "../preferences";
 import { clearRecentHomes, recentHomes, recentLabel, removeRecentHome } from "../recentHomes";
 import { type Tool, useStore, VISITOR_ID } from "../store";
@@ -721,6 +723,27 @@ const LIST: Command[] = [
     enabled: () => !!currentBackground(),
     run: () => void run("background_image_remove", levelParam()),
   },
+  // Roofs
+  {
+    id: "roof.add",
+    label: t("Roof over the walls"),
+    icon: "roof",
+    hint: t(
+      "Add a roof over the walls of the shown level; its shape, pitch and overhang are in its properties",
+    ),
+    keywords: "gable hip shed flat pitch eave ridge",
+    enabled: hasHome,
+    run: () => addRoof(),
+  },
+  {
+    id: "roof.addRect",
+    label: t("Roof over a rectangle…"),
+    icon: "roof",
+    hint: t("Click two corners along one side and a point on the opposite side"),
+    keywords: "gable hip shed flat pitch eave ridge",
+    enabled: hasHome,
+    run: startRoofRectangle,
+  },
   // Levels
   {
     id: "level.add",
@@ -959,6 +982,27 @@ const LIST: Command[] = [
     run: () => {
       if (useUi.getState().detached) void sendView3DAction("shadows");
       else useUi.getState().setShadows(!useUi.getState().shadows);
+    },
+  },
+  {
+    id: "view3d.roofs",
+    label: t("Roofs"),
+    icon: "roof",
+    hint: t("Show the roofs in the 3D view, or leave them out to look into the rooms"),
+    enabled: () => {
+      let any = false;
+      const home = store().opened?.home;
+      if (home) {
+        forEachPiece(home.furniture, (p) => {
+          if (isRoof(p)) any = true;
+        });
+      }
+      return any;
+    },
+    checked: () => useUi.getState().roofs,
+    run: () => {
+      if (useUi.getState().detached) void sendView3DAction("roofs");
+      else useUi.getState().setRoofs(!useUi.getState().roofs);
     },
   },
   {
@@ -1280,6 +1324,8 @@ export const MENUS: Menu[] = [
       cmd("tool.room"),
       cmd("tool.roomauto"),
       cmd("tool.polyline"),
+      cmd("roof.add"),
+      cmd("roof.addRect"),
       { kind: "heading", label: t("Annotate") },
       cmd("tool.dimension"),
       cmd("tool.heightdim"),
@@ -1381,6 +1427,7 @@ export const MENUS: Menu[] = [
       },
       sep,
       cmd("view3d.shadows"),
+      cmd("view3d.roofs"),
       {
         kind: "submenu",
         label: t("Levels shown"),

@@ -74,6 +74,10 @@ const ROOM_STROKE: &str = "#4b5058";
 const FURNITURE_STROKE: &str = "#4b5058";
 const TEXT: &str = "#1c2026";
 const DIMENSION: &str = "#2f6fde";
+const ROOF: &str = "#b45309";
+
+/// Piece property with what a roof was made from (see `roof_add` of msh-core).
+const ROOF_PROPERTY: &str = "mySweetHome.roof";
 /// Opacity of room floors, as in Sweet Home 3D
 const ROOM_ALPHA: f32 = 0.75;
 const DEFAULT_WALL_PATTERN: &str = "hatchUp";
@@ -272,8 +276,13 @@ pub fn draw_plan(home: &Home, opts: &PlanOptions) -> PlanDrawing {
         }
     }
 
-    // Furniture except doors and windows (below the walls)
-    for p in pieces.iter().filter(|p| p.kind != PieceKind::DoorOrWindow) {
+    // Furniture except doors and windows (below the walls). Roofs are drawn as their lines
+    // on top of the walls: their view from above would hide the level
+    let roofs: Vec<Vec<RoofLine>> = pieces.iter().filter_map(|p| roof_lines(p)).collect();
+    for p in pieces
+        .iter()
+        .filter(|p| p.kind != PieceKind::DoorOrWindow && roof_lines(p).is_none())
+    {
         draw_piece(&mut s, &mut defs, p, opts, thin);
     }
 
@@ -307,6 +316,28 @@ pub fn draw_plan(home: &Home, opts: &PlanOptions) -> PlanDrawing {
     // Doors and windows on top of the walls
     for p in pieces.iter().filter(|p| p.kind == PieceKind::DoorOrWindow) {
         draw_door_or_window(&mut s, &mut defs, p, opts, thin);
+    }
+
+    for line in roofs.iter().flatten() {
+        let ([x1, y1], [x2, y2]) = (line.a, line.b);
+        let (width, dashes) = match line.kind {
+            RoofLineKind::Edge => (
+                thin * 1.25,
+                format!(
+                    r#" stroke-dasharray="{} {} {} {}""#,
+                    thin * 12.0,
+                    thin * 4.0,
+                    thin * 2.0,
+                    thin * 4.0
+                ),
+            ),
+            RoofLineKind::Ridge => (thin * 2.25, String::new()),
+            RoofLineKind::Hip => (thin * 1.25, String::new()),
+        };
+        let _ = write!(
+            s,
+            r#"<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{ROOF}" stroke-width="{width}" stroke-linecap="round"{dashes}/>"#
+        );
     }
 
     // Room names and areas
@@ -450,6 +481,67 @@ pub fn draw_plan(home: &Home, opts: &PlanOptions) -> PlanDrawing {
 fn top_view(defs: &mut Defs, p: &Piece, opts: &PlanOptions) -> Option<String> {
     let name = opts.top_views.get(p.attrs.id.as_deref()?)?;
     defs.image(name, &opts.images)
+}
+
+/// How a line of a roof is drawn.
+#[derive(Clone, Copy, PartialEq)]
+enum RoofLineKind {
+    /// Eave or verge: the edge of the roof, above the plan
+    Edge,
+    Ridge,
+    Hip,
+}
+
+/// A line of a roof in plan coordinates.
+struct RoofLine {
+    a: [f32; 2],
+    b: [f32; 2],
+    kind: RoofLineKind,
+}
+
+/// The lines of a roof (a piece that keeps what it was made from in [`ROOF_PROPERTY`]), or
+/// `None` for other pieces. The lines follow the piece: moved, turned, mirrored, and
+/// stretched if another program resized it.
+fn roof_lines(p: &Piece) -> Option<Vec<RoofLine>> {
+    let value = &p
+        .properties
+        .iter()
+        .find(|pr| pr.name == ROOF_PROPERTY)?
+        .value;
+    let data: serde_json::Value = serde_json::from_str(value).ok()?;
+    let number = |v: &serde_json::Value| v.as_f64().map(|v| v as f32);
+    let size = data.get("size")?.as_array()?;
+    let (made_w, made_d) = (number(size.first()?)?, number(size.get(1)?)?);
+    let a = &p.attrs;
+    let mirror = if a.model_mirrored == Some(true) {
+        -1.0
+    } else {
+        1.0
+    };
+    let sx = if made_w > 0.0 { a.width / made_w } else { 1.0 } * mirror;
+    let sy = if made_d > 0.0 { a.depth / made_d } else { 1.0 };
+    let (sin, cos) = a.angle_or_default().sin_cos();
+    let place = |x: f32, y: f32| {
+        [
+            a.x + x * sx * cos - y * sy * sin,
+            a.y + x * sx * sin + y * sy * cos,
+        ]
+    };
+    let mut lines = Vec::new();
+    for line in data.get("lines")?.as_array()? {
+        let line = line.as_array()?;
+        let at = |i: usize| line.get(i).and_then(number);
+        lines.push(RoofLine {
+            a: place(at(0)?, at(1)?),
+            b: place(at(2)?, at(3)?),
+            kind: match line.get(4).and_then(|k| k.as_str()) {
+                Some("ridge") => RoofLineKind::Ridge,
+                Some("hip") => RoofLineKind::Hip,
+                _ => RoofLineKind::Edge,
+            },
+        });
+    }
+    Some(lines)
 }
 
 fn draw_piece(s: &mut String, defs: &mut Defs, p: &Piece, opts: &PlanOptions, thin: f32) {

@@ -20,6 +20,7 @@ import { usePreferences } from "../preferences";
 import { sameLevel, underlayLevel } from "./drawPlan";
 import { gridAlong, snapGridStep, toGrid } from "./gridSnap";
 import { levelGuides } from "./guideData";
+import { isRoof } from "./roof";
 import { sectionSnapLines } from "./section";
 
 export type Segment = [Pt, Pt];
@@ -532,7 +533,7 @@ export function snapContext(
     // Corners of furniture: points to measure from and guides to align with
     forEachPiece(home.furniture, (p) => {
       const a = p.attrs;
-      if (!piecePickable(home, p, levelId) || a.visible === false) return;
+      if (!piecePickable(home, p, levelId) || a.visible === false || isRoof(p)) return;
       refs.push([a.x, a.y]);
       const w = (a.width_in_plan ?? a.width) / 2;
       const d = (a.depth_in_plan ?? a.depth) / 2;

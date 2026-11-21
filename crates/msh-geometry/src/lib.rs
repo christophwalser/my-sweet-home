@@ -6,6 +6,8 @@
 //! line; at a joined end, each side line is intersected with the matching side
 //! line of the neighbor.
 
+pub mod roof;
+
 use msh_model::{Home, Room, Wall};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -305,6 +307,52 @@ pub fn enclosed_area(home: &Home, level: Option<&str>, p: Pt) -> Option<Vec<Pt>>
     }
     let pts = without_collinear_points(pts);
     (pts.len() >= 3).then_some(pts)
+}
+
+/// Outer outlines of the walls on `level` that close around an area (all walls if `level` is
+/// `None`), the largest first: what a roof over these walls covers. Walls that enclose
+/// nothing, such as a garden wall, have no outline here.
+pub fn walls_outlines(home: &Home, level: Option<&str>) -> Vec<Vec<Pt>> {
+    use geo::{Area, LineString, MultiPolygon, Polygon};
+    let shapes = wall_shapes(home);
+    let polygons: Vec<Polygon<f64>> = home
+        .walls
+        .iter()
+        .zip(&shapes)
+        .filter(|(w, _)| level.is_none() || w.attrs.level.as_deref() == level)
+        .map(|(_, s)| {
+            let ring: Vec<(f64, f64)> = s
+                .polygon()
+                .iter()
+                .map(|q| (f64::from(q[0]), f64::from(q[1])))
+                .collect();
+            Polygon::new(LineString::from(grown(&ring, JOINT_TOLERANCE)), vec![])
+        })
+        .filter(|poly| poly.unsigned_area() > 1e-6)
+        .collect();
+    if polygons.is_empty() {
+        return Vec::new();
+    }
+    let union: MultiPolygon<f64> = geo::unary_union(&polygons);
+    let mut outlines: Vec<(f64, Vec<Pt>)> = union
+        .iter()
+        .filter(|poly| !poly.interiors().is_empty())
+        .filter_map(|poly| {
+            let mut pts: Vec<Pt> = poly
+                .exterior()
+                .coords()
+                .map(|c| [round_cm(c.x), round_cm(c.y)])
+                .collect();
+            if pts.len() > 1 && pts.first() == pts.last() {
+                pts.pop();
+            }
+            let pts = without_collinear_points(pts);
+            let area = Polygon::new(poly.exterior().clone(), vec![]).unsigned_area();
+            (pts.len() >= 3).then_some((area, pts))
+        })
+        .collect();
+    outlines.sort_by(|a, b| b.0.total_cmp(&a.0));
+    outlines.into_iter().map(|(_, pts)| pts).collect()
 }
 
 /// Point where the name and area of a room are shown: the area centroid of the
