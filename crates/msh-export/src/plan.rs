@@ -504,16 +504,16 @@ enum RoofLineKind {
 }
 
 /// A line of a roof in plan coordinates.
-struct RoofLine {
-    a: [f32; 2],
-    b: [f32; 2],
+pub(crate) struct RoofLine {
+    pub(crate) a: [f32; 2],
+    pub(crate) b: [f32; 2],
     kind: RoofLineKind,
 }
 
 /// The lines of a roof (a piece that keeps what it was made from in [`ROOF_PROPERTY`]), or
 /// `None` for other pieces. The lines follow the piece: moved, turned, mirrored, and
 /// stretched if another program resized it.
-fn roof_lines(p: &Piece) -> Option<Vec<RoofLine>> {
+pub(crate) fn roof_lines(p: &Piece) -> Option<Vec<RoofLine>> {
     let value = &p
         .properties
         .iter()
@@ -582,11 +582,11 @@ fn property_json(p: &Piece, name: &str) -> Option<serde_json::Value> {
 }
 
 /// A line of the plan from one point to another.
-type Segment = ([f32; 2], [f32; 2]);
+pub(crate) type Segment = ([f32; 2], [f32; 2]);
 
 /// The edges of the treads and the walking line of a stair (a piece that keeps what it was
 /// made from in [`STAIR_PROPERTY`]) in plan coordinates, or `None` for other pieces.
-fn stair_symbol(p: &Piece) -> Option<(Vec<Segment>, Vec<[f32; 2]>)> {
+pub(crate) fn stair_symbol(p: &Piece) -> Option<(Vec<Segment>, Vec<[f32; 2]>)> {
     let data = property_json(p, STAIR_PROPERTY)?;
     let place = placer(p, made_size(&data)?);
     let number = |v: &serde_json::Value| v.as_f64().map(|v| v as f32);
@@ -606,7 +606,7 @@ fn stair_symbol(p: &Piece) -> Option<(Vec<Segment>, Vec<[f32; 2]>)> {
 }
 
 /// The outline of a floor opening (a piece with [`OPENING_PROPERTY`]) in plan coordinates.
-fn opening_outline(p: &Piece) -> Option<Vec<[f32; 2]>> {
+pub(crate) fn opening_outline(p: &Piece) -> Option<Vec<[f32; 2]>> {
     let data = property_json(p, OPENING_PROPERTY)?;
     let corners: Vec<[f32; 2]> = data
         .get("outline")?
@@ -1195,7 +1195,7 @@ pub(crate) fn collect_pieces<'a>(items: &'a [Furniture], out: &mut Vec<&'a Piece
     }
 }
 
-fn piece_corners(p: &Piece) -> [[f32; 2]; 4] {
+pub(crate) fn piece_corners(p: &Piece) -> [[f32; 2]; 4] {
     let a = &p.attrs;
     let (s, c) = a.angle_or_default().sin_cos();
     let (hw, hd) = (

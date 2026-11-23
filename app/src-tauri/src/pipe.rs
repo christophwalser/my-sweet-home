@@ -57,7 +57,7 @@ struct TopViewsRequest {
     request_id: u64,
 }
 
-/// Event asking the frontend to export the 3D view as OBJ.
+/// Event asking the frontend to export the 3D view as OBJ or glTF.
 pub const EXPORT_OBJ_EVENT: &str = "export-obj";
 
 /// How long a client waits for the frontend to deliver a 3D capture.
@@ -70,6 +70,10 @@ const EXPORT_TIMEOUT: Duration = Duration::from_secs(120);
 struct ExportRequest {
     request_id: u64,
     path: String,
+    /// "obj" or "glb"
+    format: String,
+    /// Unit of an OBJ file: "cm", "mm", "m" or "in" (glTF is in meters)
+    unit: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -183,7 +187,14 @@ async fn dispatch(app: &AppHandle, req: Request) -> Response {
             Ok(v) => Response::ok(id, v),
             Err(e) => Response::err(id, e),
         },
-        "export_obj" => match export_obj(app, None, req.params["path"].as_str()).await {
+        "export_obj" => match export_obj(
+            app,
+            None,
+            req.params["path"].as_str(),
+            req.params["unit"].as_str(),
+        )
+        .await
+        {
             Ok(v) => Response::ok(id, v),
             Err(e) => Response::err(id, e),
         },
@@ -315,14 +326,23 @@ async fn top_views(app: &AppHandle, window: Option<&str>) -> Result<Value, Strin
     serde_json::from_str(&result).map_err(|e| e.to_string())
 }
 
-/// Asks the frontend to export the 3D view as OBJ and waits for the written files.
+/// Asks the frontend to export the 3D view and waits for the written files: glTF binary for a
+/// path ending in .glb, else OBJ with MTL and textures in `unit` (default cm).
 pub async fn export_obj(
     app: &AppHandle,
     window: Option<&str>,
     path: Option<&str>,
+    unit: Option<&str>,
 ) -> Result<Value, String> {
     let path = path.ok_or("missing \"path\"")?;
     let path = std::path::absolute(path).map_err(|e| e.to_string())?;
+    let glb = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("glb"));
+    let unit = unit.unwrap_or("cm").to_ascii_lowercase();
+    if !matches!(unit.as_str(), "cm" | "mm" | "m" | "in") {
+        return Err(format!("unknown unit '{unit}' (cm, mm, m or in)"));
+    }
     let state = app.state::<AppState>();
     let label = window.map_or_else(|| state.focused(), state::home_label);
     if state.current(Some(&label)).is_none() {
@@ -336,11 +356,13 @@ pub async fn export_obj(
         ExportRequest {
             request_id,
             path: path.display().to_string(),
+            format: if glb { "glb" } else { "obj" }.into(),
+            unit,
         },
     )?;
     let result = tokio::time::timeout(EXPORT_TIMEOUT, rx)
         .await
-        .map_err(|_| "the app did not finish the OBJ export in time".to_string())?
+        .map_err(|_| "the app did not finish the 3D export in time".to_string())?
         .map_err(|_| "the export was cancelled".to_string())??;
     serde_json::from_str(&result).map_err(|e| e.to_string())
 }

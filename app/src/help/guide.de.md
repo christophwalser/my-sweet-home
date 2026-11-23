@@ -162,9 +162,14 @@ Alles Importierte liegt in den Bibliotheksordnern von Sweet Home 3D, so nutzen e
 
 # Drucken und Exportieren
 
-**Datei › Drucken / exportieren** druckt oder speichert die Möbelliste, den Plan jeder Ebene und die 3D-Ansicht als PDF. Wähle Papier, Ausrichtung und Maßstab (z. B. 1:100). Kopf- und Fußzeile können `$pageNumber`, `$pageCount`, `$planScale`, `$name`, `$file`, `$date` und `$time` enthalten.
+**Datei › Drucken / exportieren** druckt oder speichert die Möbelliste, den Plan jeder Ebene und die 3D-Ansicht als PDF. Kopf- und Fußzeile können `$pageNumber`, `$pageCount`, `$planScale`, `$name`, `$file`, `$date` und `$time` enthalten.
 
-Derselbe Dialog exportiert den Plan als PDF, SVG oder PNG, die Möbelliste als CSV und das 3D-Modell als OBJ.
+- **Papier**: A0 bis A5, Letter, Legal, Tabloid oder eine eigene Größe in mm. **Planmaßstab**: an die Seite anpassen, ein Maßstab aus der Liste oder ein beliebiger anderer (z. B. 1:75).
+- Ein Plan, der im gewählten Maßstab nicht auf eine Seite passt, wird auf mehrere Seiten verteilt (jede nennt ihren Teil), und der Dialog sagt das. Für eine Seite ein größeres Papier oder einen kleineren Maßstab wählen.
+- **Schriftfeld auf den Planseiten** setzt unten rechts ein Feld mit Projekt (der Name des Hauses, wenn du keinen einträgst), Ebene, Zeichner, Datum, Blattnummer, Maßstab mit Maßstabsleiste und Nordpfeil.
+- Die **Vorschau** unter der Seiteneinrichtung zeigt die Planseiten so, wie sie gedruckt werden.
+
+Derselbe Dialog exportiert den Plan als PDF, SVG, PNG oder **DXF** (Zeichnung für CAD-Programme, in mm, cm oder m, mit je einem Layer für Wände, Räume, Möbel, Türen und Fenster, Treppen, Dächer, Öffnungen, Bemaßungen, Texte und Linien), die Möbelliste als CSV und das 3D-Modell als **OBJ** (in cm, mm, m oder Zoll) oder **glTF binär** (.glb, in Metern, für Blender, Spiele-Engines und Viewer).
 
 # Einstellungen
 

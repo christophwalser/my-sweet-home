@@ -1,8 +1,9 @@
 // Export of the 3D view's walls, rooms and furniture as Wavefront OBJ with an MTL
 // file and texture images, like Sweet Home 3D's "Export to OBJ format".
-// Units are centimeters, the y axis points up.
+// Units are centimeters unless another unit is chosen, the y axis points up.
 
 import * as THREE from "three";
+import type { ObjUnit } from "../api";
 import { texturePending } from "./textures";
 
 export interface ObjFiles {
@@ -14,15 +15,24 @@ export interface ObjFiles {
   textures: Record<string, string>;
 }
 
+/** Units of an OBJ file per centimeter, with their name. */
+export const OBJ_UNITS: Record<ObjUnit, { perCm: number; name: string }> = {
+  cm: { perCm: 1, name: "centimeters" },
+  mm: { perCm: 10, name: "millimeters" },
+  m: { perCm: 0.01, name: "meters" },
+  in: { perCm: 1 / 2.54, name: "inches" },
+};
+
 /** Groups of the 3D view's content that are exported. */
-const EXPORTED_GROUPS = ["walls", "rooms", "furniture"];
+export const EXPORTED_GROUPS = ["walls", "rooms", "furniture"];
 
 /** Builds the OBJ, MTL and texture files of the exported groups of `content`. */
-export function buildObj(content: THREE.Object3D, mtlName: string): ObjFiles {
+export function buildObj(content: THREE.Object3D, mtlName: string, unit: ObjUnit = "cm"): ObjFiles {
   content.updateMatrixWorld(true);
+  const { perCm, name: unitName } = OBJ_UNITS[unit];
   const lines: string[] = [
     "# Exported by My Sweet Home",
-    "# Units: centimeters, y axis up",
+    `# Units: ${unitName}, y axis up`,
     `mtllib ${mtlName}`,
   ];
   const materials = new Map<string, { name: string; material: THREE.Material }>();
@@ -83,8 +93,9 @@ export function buildObj(content: THREE.Object3D, mtlName: string): ObjFiles {
       const label = objectLabel(mesh, groupName);
       lines.push(`o ${label}_${objectIndex}`);
       for (let i = 0; i < position.count; i++) {
-        v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
-        lines.push(`v ${num(v.x)} ${num(v.y)} ${num(v.z)}`);
+        v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld).multiplyScalar(perCm);
+        const digits = perCm < 1 ? 5 : 3;
+        lines.push(`v ${num(v.x, digits)} ${num(v.y, digits)} ${num(v.z, digits)}`);
       }
       if (normal) {
         for (let i = 0; i < normal.count; i++) {

@@ -120,7 +120,11 @@ fn main() -> Result<()> {
         Some(("export-obj", m)) => {
             let mut client = msh_ipc::Client::connect()?;
             let path = m.get_one::<PathBuf>("path").cloned().unwrap_or_default();
-            let result = client.call("export_obj", json!({ "path": path }))?;
+            let mut params = json!({ "path": path });
+            if let Some(unit) = m.get_one::<String>("unit") {
+                params["unit"] = json!(unit);
+            }
+            let result = client.call("export_obj", params)?;
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
         Some(("status", _)) => {
@@ -253,12 +257,21 @@ fn build_cli(registry: &Registry) -> Command {
         )
         .subcommand(
             Command::new("export-obj")
-                .about("Exports the 3D view of the running app as OBJ file with MTL and textures")
+                .about(
+                    "Exports the 3D view of the running app as OBJ file with MTL and textures, or \
+                     as glTF binary file (.glb, in meters)",
+                )
                 .arg(
                     Arg::new("path")
                         .required(true)
                         .value_parser(clap::value_parser!(PathBuf))
-                        .help("OBJ file to write"),
+                        .help("OBJ or GLB file to write"),
+                )
+                .arg(
+                    Arg::new("unit")
+                        .long("unit")
+                        .value_parser(["cm", "mm", "m", "in"])
+                        .help("Unit of an OBJ file (default cm)"),
                 ),
         )
         .subcommand(Command::new("status").about("Shows whether the app is running and which home is open"));

@@ -15,27 +15,70 @@ pub struct Paper {
 }
 
 impl Paper {
-    pub const A4: Paper = Paper {
-        width_mm: 210.0,
-        height_mm: 297.0,
+    pub const A0: Paper = Paper {
+        width_mm: 841.0,
+        height_mm: 1189.0,
+    };
+    pub const A1: Paper = Paper {
+        width_mm: 594.0,
+        height_mm: 841.0,
+    };
+    pub const A2: Paper = Paper {
+        width_mm: 420.0,
+        height_mm: 594.0,
     };
     pub const A3: Paper = Paper {
         width_mm: 297.0,
         height_mm: 420.0,
     };
+    pub const A4: Paper = Paper {
+        width_mm: 210.0,
+        height_mm: 297.0,
+    };
+    pub const A5: Paper = Paper {
+        width_mm: 148.0,
+        height_mm: 210.0,
+    };
     pub const LETTER: Paper = Paper {
         width_mm: 215.9,
         height_mm: 279.4,
     };
+    pub const LEGAL: Paper = Paper {
+        width_mm: 215.9,
+        height_mm: 355.6,
+    };
+    pub const TABLOID: Paper = Paper {
+        width_mm: 279.4,
+        height_mm: 431.8,
+    };
 
-    /// Paper by name: "a4", "a3" or "letter".
+    /// Paper by name: "a0" to "a5", "letter", "legal", "tabloid", or a size in mm such as
+    /// "500x700" (each side 50 to 5000 mm).
     pub fn by_name(name: &str) -> Option<Paper> {
-        match name.to_ascii_lowercase().as_str() {
-            "a4" => Some(Self::A4),
-            "a3" => Some(Self::A3),
-            "letter" => Some(Self::LETTER),
-            _ => None,
-        }
+        let name = name.trim().to_ascii_lowercase();
+        Some(match name.as_str() {
+            "a0" => Self::A0,
+            "a1" => Self::A1,
+            "a2" => Self::A2,
+            "a3" => Self::A3,
+            "a4" => Self::A4,
+            "a5" => Self::A5,
+            "letter" => Self::LETTER,
+            "legal" => Self::LEGAL,
+            "tabloid" => Self::TABLOID,
+            _ => {
+                let (w, h) = name.split_once(['x', '\u{d7}', '*'])?;
+                let w: f32 = w.trim().replace(',', ".").parse().ok()?;
+                let h: f32 = h.trim().replace(',', ".").parse().ok()?;
+                if !(50.0..=5000.0).contains(&w) || !(50.0..=5000.0).contains(&h) {
+                    return None;
+                }
+                Paper {
+                    width_mm: w.min(h),
+                    height_mm: w.max(h),
+                }
+            }
+        })
     }
 
     /// Width and height of the page in mm.
@@ -60,6 +103,8 @@ pub struct PageOptions {
     pub scale: Option<f32>,
     /// Heading at the top of the page (e.g. home and level name)
     pub title: Option<String>,
+    /// Title block at the bottom right of plan pages
+    pub title_block: Option<TitleBlock>,
 }
 
 impl Default for PageOptions {
@@ -70,8 +115,24 @@ impl Default for PageOptions {
             margin_mm: 12.0,
             scale: None,
             title: None,
+            title_block: None,
         }
     }
+}
+
+/// What the title block of a plan page says. The scale and the sheet number come from the
+/// page.
+#[derive(Debug, Clone, Default)]
+pub struct TitleBlock {
+    /// Name of the project (the home)
+    pub project: String,
+    /// What the sheet shows (e.g. the level)
+    pub drawing: String,
+    /// Who drew the plan
+    pub author: Option<String>,
+    pub date: String,
+    /// North direction of the compass in radians (clockwise in the plan); `None`: no arrow
+    pub north: Option<f32>,
 }
 
 /// One page before its frame (title, footer) is added.
@@ -83,9 +144,18 @@ pub struct Page {
     pub body: String,
     /// Text at the right of the footer (e.g. "1:100")
     pub note: Option<String>,
+    /// Scale denominator of a plan page (100 for 1:100)
+    pub scale: Option<f32>,
+    /// Title block of a plan page
+    pub block: Option<TitleBlock>,
 }
 
 const MM_TO_PT: f32 = 72.0 / 25.4;
+/// Height of the title block and the space between it and the plan, in mm.
+const BLOCK_HEIGHT: f32 = 26.0;
+const BLOCK_GAP: f32 = 3.0;
+/// Widest title block in mm.
+const BLOCK_WIDTH: f32 = 150.0;
 const TITLE_HEIGHT: f32 = 10.0;
 const FOOTER_HEIGHT: f32 = 6.0;
 const TEXT: &str = "#1c2026";
@@ -104,42 +174,109 @@ fn content_area(paper: Paper, landscape: bool, margin: f32, title: bool) -> [f32
     ]
 }
 
-/// The plan on one page. Returns the page and the scale denominator used.
-pub fn plan_page(plan: &PlanDrawing, opts: &PageOptions) -> (Page, f32) {
-    let [vx, vy, vw, vh] = plan.view_box;
-    let landscape = opts.landscape.unwrap_or(vw > vh);
-    let [ax, ay, aw, ah] =
-        content_area(opts.paper, landscape, opts.margin_mm, opts.title.is_some());
-    // Millimeters on paper per centimeter of the plan
-    let fit = (aw / vw).min(ah / vh);
-    let (factor, denominator) = match opts.scale {
-        Some(n) if n > 0.0 => (10.0 / n, n),
-        _ => (fit, 10.0 / fit),
-    };
-    // Centered in the content area; a plan too large for the scale is clipped
-    let (dx, dy) = (ax + (aw - vw * factor) / 2.0, ay + (ah - vh * factor) / 2.0);
-    let body = format!(
-        r#"<clipPath id="plan-area"><rect x="{ax}" y="{ay}" width="{aw}" height="{ah}"/></clipPath><g clip-path="url(#plan-area)"><g transform="translate({dx} {dy}) scale({factor}) translate({} {})">{}</g></g>"#,
-        -vx, -vy, plan.body
-    );
-    (
-        Page {
-            landscape,
-            title: opts.title.clone(),
-            body,
-            note: Some(format!("1:{}", round_scale(denominator))),
-        },
-        denominator,
-    )
+/// The plan on paper pages, with the scale used and how the pages are laid out.
+#[derive(Debug, Clone)]
+pub struct PlanPages {
+    pub pages: Vec<Page>,
+    /// Scale denominator (100 for 1:100)
+    pub scale: f32,
+    /// Columns and rows of pages a plan too large for one page at its scale is split into
+    pub columns: usize,
+    pub rows: usize,
 }
 
-/// A page with the plan as SVG (see [`plan_page`] and [`page_svgs`]).
-pub fn plan_page_svg(plan: &PlanDrawing, opts: &PageOptions) -> (String, f32) {
-    let (page, scale) = plan_page(plan, opts);
-    let svg = page_svgs(&[page], opts.paper, opts.margin_mm, None)
-        .pop()
-        .unwrap_or_default();
-    (svg, scale)
+/// The plan on pages: fitted to one page, or at a scale, split into as many pages as it needs
+/// (each shows its part of the plan, the whole is centered on them). Without a given
+/// orientation a page is portrait or landscape, whichever needs fewer pages or fits better.
+pub fn plan_pages(plan: &PlanDrawing, opts: &PageOptions) -> PlanPages {
+    let [vx, vy, vw, vh] = plan.view_box;
+    let area = |landscape: bool| {
+        let mut a = content_area(opts.paper, landscape, opts.margin_mm, opts.title.is_some());
+        if opts.title_block.is_some() {
+            a[3] = (a[3] - BLOCK_HEIGHT - BLOCK_GAP).max(10.0);
+        }
+        a
+    };
+    // Pages across and down for a plan drawn at `factor` mm per cm
+    let grid = |landscape: bool, factor: f32| {
+        let [_, _, aw, ah] = area(landscape);
+        let across = ((vw * factor / aw) - 0.001).ceil().max(1.0) as usize;
+        let down = ((vh * factor / ah) - 0.001).ceil().max(1.0) as usize;
+        (across, down)
+    };
+    let given = opts.scale.filter(|n| *n > 0.0);
+    let landscape = match (opts.landscape, given) {
+        (Some(l), _) => l,
+        (None, Some(n)) => {
+            let (pc, pr) = grid(false, 10.0 / n);
+            let (lc, lr) = grid(true, 10.0 / n);
+            if pc * pr == lc * lr {
+                vw > vh
+            } else {
+                lc * lr < pc * pr
+            }
+        }
+        (None, None) => vw > vh,
+    };
+    let [ax, ay, aw, ah] = area(landscape);
+    // Millimeters on paper per centimeter of the plan
+    let fit = (aw / vw).min(ah / vh);
+    let (factor, denominator) = match given {
+        Some(n) => (10.0 / n, n),
+        None => (fit, 10.0 / fit),
+    };
+    let (columns, rows) = if given.is_some() {
+        grid(landscape, factor)
+    } else {
+        (1, 1)
+    };
+    // The whole plan centered on the pages
+    let ox = (columns as f32 * aw - vw * factor) / 2.0;
+    let oy = (rows as f32 * ah - vh * factor) / 2.0;
+    let count = columns * rows;
+    let mut pages = Vec::with_capacity(count);
+    for r in 0..rows {
+        for c in 0..columns {
+            let dx = ax + ox - c as f32 * aw;
+            let dy = ay + oy - r as f32 * ah;
+            let body = format!(
+                r#"<clipPath id="plan-area"><rect x="{ax}" y="{ay}" width="{aw}" height="{ah}"/></clipPath><g clip-path="url(#plan-area)"><g transform="translate({dx} {dy}) scale({factor}) translate({} {})">{}</g></g>"#,
+                -vx, -vy, plan.body
+            );
+            let scale = format!("1:{}", round_scale(denominator));
+            let note = if count > 1 {
+                format!(
+                    "{scale} \u{b7} part {} of {count} (row {}, column {})",
+                    r * columns + c + 1,
+                    r + 1,
+                    c + 1
+                )
+            } else {
+                scale
+            };
+            pages.push(Page {
+                landscape,
+                title: opts.title.clone(),
+                body,
+                note: Some(note),
+                scale: Some(denominator),
+                block: opts.title_block.clone(),
+            });
+        }
+    }
+    PlanPages {
+        pages,
+        scale: denominator,
+        columns,
+        rows,
+    }
+}
+
+/// The pages of a plan as SVG documents (see [`plan_pages`] and [`page_svgs`]).
+pub fn plan_pages_svg(plan: &PlanDrawing, opts: &PageOptions) -> (Vec<String>, PlanPages) {
+    let laid = plan_pages(plan, opts);
+    let svgs = page_svgs(&laid.pages, opts.paper, opts.margin_mm, None);
+    (svgs, laid)
 }
 
 /// The furniture list as table pages (all levels, pieces of groups one by one).
@@ -248,6 +385,8 @@ pub fn furniture_pages(
                 title: Some(title.to_string()),
                 body: s,
                 note: Some(format!("{} pieces", rows.len())),
+                scale: None,
+                block: None,
             }
         })
         .collect()
@@ -349,6 +488,8 @@ pub fn image_page(
         title: Some(title.to_string()),
         body,
         note: None,
+        scale: None,
+        block: None,
     })
 }
 
@@ -461,8 +602,8 @@ pub fn page_svgs_framed(
                     escape(t)
                 );
             }
-            // The note of a plan page is its scale ("1:100")
-            let scale = page.note.as_deref().filter(|n| n.starts_with("1:"));
+            let scale_text = page.scale.map(|n| format!("1:{}", round_scale(n)));
+            let scale = scale_text.as_deref();
             if let Some(h) = frame.header.as_deref().filter(|h| !h.is_empty()) {
                 let text = expand_page_format(h, frame, i + 1, count, scale);
                 let _ = write!(
@@ -474,6 +615,9 @@ pub fn page_svgs_framed(
                 );
             }
             s.push_str(&page.body);
+            if let Some(block) = &page.block {
+                title_block(&mut s, block, pw, ph, m, page.scale, i + 1, count);
+            }
             let fy = ph - m;
             let left = match frame.footer.as_deref().filter(|f| !f.is_empty()) {
                 Some(f) => expand_page_format(f, frame, i + 1, count, scale),
@@ -509,9 +653,156 @@ pub fn page_svgs_framed(
         .collect()
 }
 
-/// Scale denominator for display: whole numbers, larger ones rounded to tens.
+/// Draws a title block at the bottom right of a page, above the footer: north arrow, scale
+/// bar, project, drawing, author, date, scale and sheet number.
+#[allow(clippy::too_many_arguments)]
+fn title_block(
+    s: &mut String,
+    block: &TitleBlock,
+    pw: f32,
+    ph: f32,
+    margin: f32,
+    scale: Option<f32>,
+    sheet: usize,
+    sheets: usize,
+) {
+    let w = (pw - 2.0 * margin).min(BLOCK_WIDTH);
+    let h = BLOCK_HEIGHT;
+    let x0 = pw - margin - w;
+    let y0 = ph - margin - FOOTER_HEIGHT - h + 1.0;
+    let line = 0.25;
+    let _ = write!(
+        s,
+        r##"<rect x="{x0}" y="{y0}" width="{w}" height="{h}" fill="#ffffff" stroke="{TEXT}" stroke-width="0.35"/>"##
+    );
+    // Cells: north arrow, scale bar, texts
+    let arrow_w = if block.north.is_some() { 16.0 } else { 0.0 };
+    let bar_w = if scale.is_some() { 38.0 } else { 0.0 };
+    let text_x = x0 + arrow_w + bar_w;
+    for x in [x0 + arrow_w, text_x] {
+        if x > x0 + 0.1 {
+            let _ = write!(
+                s,
+                r#"<line x1="{x}" y1="{y0}" x2="{x}" y2="{}" stroke="{TEXT}" stroke-width="{line}"/>"#,
+                y0 + h
+            );
+        }
+    }
+    if let Some(north) = block.north {
+        let (cx, cy, r) = (x0 + arrow_w / 2.0, y0 + h / 2.0 + 2.0, 5.5);
+        let _ = write!(
+            s,
+            r#"<g transform="translate({cx} {cy}) rotate({})"><circle r="{r}" fill="none" stroke="{TEXT}" stroke-width="{line}"/><path d="M0 {}L{} {}L0 {}L{} {}Z" fill="{TEXT}"/><text y="{}" font-size="3" text-anchor="middle" fill="{TEXT}">N</text></g>"#,
+            north.to_degrees(),
+            -r,
+            r * 0.35,
+            r * 0.55,
+            r * 0.3,
+            -r * 0.35,
+            r * 0.55,
+            -r - 1.2
+        );
+    }
+    if let Some(denominator) = scale {
+        // The longest round length that fits the cell, in m
+        let room_mm = bar_w - 8.0;
+        let mm_per_m = 1000.0 / denominator;
+        let length = [
+            0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0,
+        ]
+        .into_iter()
+        .rev()
+        .find(|m| m * mm_per_m <= room_mm)
+        .unwrap_or(0.1);
+        let bar = length * mm_per_m;
+        let (bx, by) = (x0 + arrow_w + 4.0, y0 + h / 2.0);
+        for k in 0..4 {
+            let fill = if k % 2 == 0 { TEXT } else { "#ffffff" };
+            let _ = write!(
+                s,
+                r#"<rect x="{}" y="{by}" width="{}" height="1.6" fill="{fill}" stroke="{TEXT}" stroke-width="0.15"/>"#,
+                bx + bar * k as f32 / 4.0,
+                bar / 4.0
+            );
+        }
+        let label = if length < 1.0 {
+            format!("{} cm", (length * 100.0).round())
+        } else {
+            format!("{length} m")
+        };
+        let _ = write!(
+            s,
+            r#"<text x="{bx}" y="{}" font-size="2.4" text-anchor="middle" fill="{TEXT}">0</text><text x="{}" y="{}" font-size="2.4" text-anchor="middle" fill="{TEXT}">{label}</text><text x="{}" y="{}" font-size="3.2" font-weight="600" text-anchor="middle" fill="{TEXT}">1:{}</text>"#,
+            by - 1.2,
+            bx + bar,
+            by - 1.2,
+            x0 + arrow_w + bar_w / 2.0,
+            y0 + h - 4.0,
+            round_scale(denominator)
+        );
+    }
+    // Texts: project, drawing, then author, date and sheet in small cells
+    let tw = x0 + w - text_x;
+    let row1 = y0 + 9.0;
+    let row2 = y0 + 16.5;
+    let _ = write!(
+        s,
+        r#"<line x1="{text_x}" y1="{}" x2="{}" y2="{}" stroke="{TEXT}" stroke-width="{line}"/>"#,
+        y0 + 19.0,
+        x0 + w,
+        y0 + 19.0
+    );
+    let fit = |text: &str, width: f32, font: f32| {
+        let max = ((width - 3.0) / (font * 0.55)).max(1.0) as usize;
+        if text.chars().count() > max {
+            let cut: String = text.chars().take(max.saturating_sub(1)).collect();
+            format!("{cut}\u{2026}")
+        } else {
+            text.to_string()
+        }
+    };
+    let _ = write!(
+        s,
+        r#"<text x="{}" y="{row1}" font-size="4.6" font-weight="600" fill="{TEXT}">{}</text><text x="{}" y="{row2}" font-size="3.4" fill="{TEXT}">{}</text>"#,
+        text_x + 2.0,
+        escape(&fit(&block.project, tw, 4.6)),
+        text_x + 2.0,
+        escape(&fit(&block.drawing, tw, 3.4)),
+    );
+    let cells = [
+        ("Drawn by", block.author.clone().unwrap_or_default()),
+        ("Date", block.date.clone()),
+        ("Sheet", format!("{sheet} / {sheets}")),
+    ];
+    let cell_w = tw / cells.len() as f32;
+    for (k, (label, value)) in cells.iter().enumerate() {
+        let cx = text_x + cell_w * k as f32;
+        if k > 0 {
+            let _ = write!(
+                s,
+                r#"<line x1="{cx}" y1="{}" x2="{cx}" y2="{}" stroke="{TEXT}" stroke-width="{line}"/>"#,
+                y0 + 19.0,
+                y0 + h
+            );
+        }
+        let _ = write!(
+            s,
+            r#"<text x="{}" y="{}" font-size="1.8" fill="{MUTED}">{label}</text><text x="{}" y="{}" font-size="2.6" fill="{TEXT}">{}</text>"#,
+            cx + 1.5,
+            y0 + 21.3,
+            cx + 1.5,
+            y0 + 24.6,
+            escape(&fit(value, cell_w, 2.6))
+        );
+    }
+}
+
+/// Scale denominator for display: a given whole number as it is (1:75), a fitted scale as a
+/// whole number, larger ones rounded to tens.
 fn round_scale(n: f32) -> String {
-    if n >= 20.0 {
+    if (n - n.round()).abs() < 0.01 {
+        format!("{}", n.round())
+    } else if n >= 20.0 {
         format!("{}", (n / 10.0).round() * 10.0)
     } else {
         format!("{}", n.round())

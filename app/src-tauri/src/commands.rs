@@ -283,15 +283,27 @@ pub async fn capture_3d_image(
         .ok_or_else(|| "no image".to_string())
 }
 
-/// Exports the 3D view as OBJ (from the export dialog); the window showing the 3D
-/// view builds and writes the files.
+/// Exports the 3D view as OBJ in a unit, or as glTF binary for a path ending in .glb (from
+/// the export dialog); the window showing the 3D view builds and writes the files.
 #[tauri::command]
 pub async fn export_obj(
     path: String,
+    unit: Option<String>,
     window: WebviewWindow,
     app: tauri::AppHandle,
 ) -> Result<serde_json::Value, String> {
-    crate::pipe::export_obj(&app, Some(window.label()), Some(&path)).await
+    crate::pipe::export_obj(&app, Some(window.label()), Some(&path), unit.as_deref()).await
+}
+
+/// Writes a binary file given as base64 (e.g. a glTF export). Returns the written path.
+#[tauri::command]
+pub fn write_binary_file(path: String, data: String) -> Result<Vec<String>, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|e| e.to_string())?;
+    std::fs::write(&path, bytes).map_err(|e| format!("cannot write {path}: {e}"))?;
+    Ok(vec![path])
 }
 
 /// Result of a 3D capture requested over the pipe: a PNG data URL or an error.

@@ -1,4 +1,4 @@
-//! File exports: plan as SVG, PNG or PDF, furniture list as CSV.
+//! File exports: plan as SVG, PNG, PDF or DXF, furniture list as CSV.
 
 use crate::Document;
 use crate::registry::{CommandError, Registry};
@@ -14,6 +14,8 @@ enum PlanFormat {
     Svg,
     Png,
     Pdf,
+    /// Drawing for CAD programs (AutoCAD R12), a layer for each kind of element
+    Dxf,
 }
 
 /// How furniture is drawn in exported and printed plans.
@@ -36,21 +38,38 @@ struct TopViews {
     pieces: HashMap<String, String>,
 }
 
+/// The title block of plan pages.
+#[derive(Deserialize, JsonSchema, Default)]
+struct TitleBlockParams {
+    /// Name of the project (default: the name of the home)
+    project: Option<String>,
+    /// Who drew the plan
+    author: Option<String>,
+}
+
 #[derive(Deserialize, JsonSchema)]
 struct PlanParams {
-    /// File to write (.svg, .png or .pdf)
-    path: PathBuf,
-    /// "svg", "png" or "pdf" (default: from the file extension)
+    /// File to write (.svg, .png, .pdf or .dxf); a PDF without a path returns its pages as
+    /// SVG documents (a preview)
+    path: Option<PathBuf>,
+    /// "svg", "png", "pdf" or "dxf" (default: from the file extension)
     format: Option<PlanFormat>,
+    /// DXF: unit of the drawing "mm" (default), "cm" or "m"
+    unit: Option<String>,
     /// Level ID (default: selected level); "all" exports every level (PDF: one page per
-    /// level, SVG/PNG: one file per level with the level name appended)
+    /// level, SVG/PNG/DXF: one file per level with the level name appended)
     level: Option<String>,
-    /// PDF: paper size "a4" (default), "a3" or "letter"
+    /// PDF: paper size "a0" to "a5", "letter", "legal", "tabloid" or a size in mm such as
+    /// "500x700" (default "a4")
     paper: Option<String>,
-    /// PDF: landscape page (default: whichever fits the plan better)
+    /// PDF: landscape page (default: whichever needs fewer pages or fits the plan better)
     landscape: Option<bool>,
-    /// PDF: scale denominator, e.g. 100 for 1:100 (default: fit to the page)
+    /// PDF: scale denominator, any number such as 100 for 1:100 or 75 for 1:75 (default: fit
+    /// to the page). A plan too large for one page at this scale is split into several pages
     scale: Option<f32>,
+    /// PDF: a title block at the bottom right of each page (project, level, author, date,
+    /// scale, scale bar, north arrow, sheet number)
+    title_block: Option<TitleBlockParams>,
     /// PNG: width in pixels (default 2000)
     width: Option<u32>,
     /// Furniture "top_view" (default: seen from above) or "catalog" (icons)
@@ -73,12 +92,16 @@ struct DocumentParams {
     view_3d: Option<bool>,
     /// Plan level ID or "all" (default: all levels, one page each)
     level: Option<String>,
-    /// Paper size "a4" (default), "a3" or "letter"
+    /// Paper size "a0" to "a5", "letter", "legal", "tabloid" or a size in mm such as
+    /// "500x700" (default "a4")
     paper: Option<String>,
     /// Landscape pages (default: per page, whichever fits better)
     landscape: Option<bool>,
-    /// Plan scale denominator, e.g. 100 for 1:100 (default: fit to the page)
+    /// Plan scale denominator, any number such as 100 for 1:100 (default: fit to the page).
+    /// A plan too large for one page at this scale is split into several pages
     scale: Option<f32>,
+    /// A title block at the bottom right of each plan page
+    title_block: Option<TitleBlockParams>,
     /// Columns of the furniture list (default: the home's furniture table columns)
     columns: Option<Vec<String>>,
     /// Image of the 3D view as PNG (base64 or data URL)
@@ -109,9 +132,7 @@ struct CsvParams {
 pub(super) fn register(r: &mut Registry) {
     r.add(
         "export_plan",
-        "Exports the 2D plan as shown in the app (walls with patterns, rooms, furniture seen from \
-         above or as icons, doors and windows, dimensions, labels, compass) as SVG, PNG or PDF \
-         file. PDF pages can use a scale such as 1:100.",
+        "Exports the 2D plan as shown in the app (walls with patterns, rooms, furniture seen from          above or as icons, doors and windows, dimensions, labels, compass) as SVG, PNG or PDF          file, or as DXF drawing for CAD programs (a layer for each kind of element, in mm, cm          or m). PDF pages (A0 to A5, Letter or any size) can use any scale such as 1:100, split          a plan too large for one page into several pages and carry a title block; without a          path the PDF pages are returned as SVG documents for a preview.",
         false,
         |doc, p: PlanParams| export_plan(doc, p),
     );
@@ -145,19 +166,43 @@ fn export_plan(doc: &Document, p: PlanParams) -> Result<serde_json::Value, Comma
     let home = doc.home();
     let format = match p.format {
         Some(f) => f,
-        None => match extension(&p.path).as_deref() {
+        None if p.path.is_none() => PlanFormat::Pdf,
+        None => match p.path.as_deref().and_then(extension).as_deref() {
             Some("svg") => PlanFormat::Svg,
             Some("png") => PlanFormat::Png,
             Some("pdf") => PlanFormat::Pdf,
+            Some("dxf") => PlanFormat::Dxf,
             _ => {
                 return Err(CommandError::failed(
-                    "give a format or a file name ending in .svg, .png or .pdf",
+                    "give a format or a file name ending in .svg, .png, .pdf or .dxf",
                 ));
             }
         },
     };
 
     let selected = select_levels(home, p.level.as_deref())?;
+    if format == PlanFormat::Dxf {
+        let unit = match p.unit.as_deref() {
+            None => msh_export::DxfUnit::default(),
+            Some(name) => msh_export::DxfUnit::by_name(name).ok_or_else(|| {
+                CommandError::failed(format!("unknown unit '{name}' (mm, cm or m)"))
+            })?,
+        };
+        let Some(target) = &p.path else {
+            return Err(CommandError::failed("give the path of the file to write"));
+        };
+        let mut paths = Vec::new();
+        for level in &selected {
+            let path = match level {
+                Some(l) if selected.len() > 1 => with_suffix(target, &l.attrs.name),
+                _ => target.clone(),
+            };
+            let dxf = msh_export::plan_dxf(home, level.map(|l| l.attrs.id.as_str()), unit);
+            write(&path, dxf.as_bytes())?;
+            paths.push(path);
+        }
+        return Ok(json!({ "paths": paths, "layers": msh_export::DXF_LAYERS.map(|l| l.0) }));
+    }
     let home_name = home_title(doc);
     let mut notes = Vec::new();
     let top_views = top_views(p.furniture_icons, p.top_views, &mut notes)?;
@@ -167,38 +212,60 @@ fn export_plan(doc: &Document, p: PlanParams) -> Result<serde_json::Value, Comma
         PlanFormat::Pdf => {
             let paper = paper(p.paper.as_deref())?;
             let mut scales = Vec::new();
-            let pages: Vec<String> = drawings
-                .iter()
-                .map(|(level, drawing)| {
-                    let title = match level {
-                        Some(l) => format!("{home_name} - {}", l.attrs.name),
-                        None => home_name.clone(),
-                    };
-                    let (page, scale) = msh_export::plan_page_svg(
-                        drawing,
-                        &msh_export::PageOptions {
-                            paper,
-                            landscape: p.landscape,
-                            scale: p.scale,
-                            title: Some(title),
-                            ..Default::default()
-                        },
-                    );
-                    scales.push(scale.round());
-                    page
-                })
-                .collect();
-            let pdf = msh_export::pdf_from_svg_pages(&pages).map_err(CommandError::failed)?;
-            write(&p.path, &pdf)?;
-            Ok(json!({ "path": p.path, "pages": pages.len(), "scales": scales, "notes": notes }))
+            let mut pages: Vec<String> = Vec::new();
+            let mut landscape = Vec::new();
+            for (level, drawing) in &drawings {
+                let title = match level {
+                    Some(l) => format!("{home_name} - {}", l.attrs.name),
+                    None => home_name.clone(),
+                };
+                let opts = msh_export::PageOptions {
+                    paper,
+                    landscape: p.landscape,
+                    scale: p.scale,
+                    title: Some(title),
+                    title_block: title_block(doc, p.title_block.as_ref(), *level),
+                    ..Default::default()
+                };
+                let (svgs, laid) = msh_export::plan_pages_svg(drawing, &opts);
+                if laid.pages.len() > 1 {
+                    notes.push(split_note(*level, &laid, p.paper.as_deref()));
+                }
+                scales.push(laid.scale.round());
+                landscape.extend(laid.pages.iter().map(|page| page.landscape));
+                pages.extend(svgs);
+            }
+            // Sheet numbers of the title blocks count all pages
+            let pages = renumber_sheets(pages);
+            match &p.path {
+                Some(path) => {
+                    let pdf =
+                        msh_export::pdf_from_svg_pages(&pages).map_err(CommandError::failed)?;
+                    write(path, &pdf)?;
+                    Ok(
+                        json!({ "path": path, "pages": pages.len(), "scales": scales, "notes": notes }),
+                    )
+                }
+                None => Ok(json!({
+                    "pages": pages,
+                    "landscape": landscape,
+                    "paper_mm": [paper.width_mm, paper.height_mm],
+                    "scales": scales,
+                    "notes": notes,
+                })),
+            }
         }
+        PlanFormat::Dxf => unreachable!("written above"),
         PlanFormat::Svg | PlanFormat::Png => {
+            let Some(target) = &p.path else {
+                return Err(CommandError::failed("give the path of the file to write"));
+            };
             let several = drawings.len() > 1;
             let mut paths = Vec::new();
             for (level, drawing) in &drawings {
                 let path = match level {
-                    Some(l) if several => with_suffix(&p.path, &l.attrs.name),
-                    _ => p.path.clone(),
+                    Some(l) if several => with_suffix(target, &l.attrs.name),
+                    _ => target.clone(),
                 };
                 let [x, y, w, h] = drawing.view_box;
                 let svg = format!(
@@ -346,9 +413,86 @@ fn paper(name: Option<&str>) -> Result<msh_export::Paper, CommandError> {
     match name {
         None => Ok(msh_export::Paper::A4),
         Some(name) => msh_export::Paper::by_name(name).ok_or_else(|| {
-            CommandError::failed(format!("unknown paper '{name}' (a4, a3 or letter)"))
+            CommandError::failed(format!(
+                "unknown paper '{name}' (a0 to a5, letter, legal, tabloid, or width x height in \
+                 mm such as 500x700)"
+            ))
         }),
     }
+}
+
+/// The title block of the plan pages of a level, if wanted.
+fn title_block(
+    doc: &Document,
+    given: Option<&TitleBlockParams>,
+    level: Option<&msh_model::Level>,
+) -> Option<msh_export::TitleBlock> {
+    let given = given?;
+    let home = doc.home();
+    Some(msh_export::TitleBlock {
+        project: given
+            .project
+            .clone()
+            .filter(|p| !p.trim().is_empty())
+            .unwrap_or_else(|| home_title(doc)),
+        drawing: match level {
+            Some(l) => format!("Plan - {}", l.attrs.name),
+            None => "Plan".into(),
+        },
+        author: given.author.clone().filter(|a| !a.trim().is_empty()),
+        date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        north: home
+            .compass
+            .as_ref()
+            .map(|c| c.attrs.north_direction.unwrap_or(0.0)),
+    })
+}
+
+/// What a plan split into several pages says in the notes of the result.
+fn split_note(
+    level: Option<&msh_model::Level>,
+    laid: &msh_export::PlanPages,
+    paper: Option<&str>,
+) -> String {
+    let what = level.map_or_else(
+        || "the plan".to_string(),
+        |l| format!("the plan of {}", l.attrs.name),
+    );
+    format!(
+        "{what} does not fit on one {} page at 1:{}: it is split into {} pages ({} across, {} \
+         down); choose a larger paper or a smaller scale for one page",
+        paper.unwrap_or("a4").to_ascii_uppercase(),
+        laid.scale.round(),
+        laid.pages.len(),
+        laid.columns,
+        laid.rows
+    )
+}
+
+/// Replaces the sheet numbers of the title blocks ("1 / 1" per plan) by the numbers among
+/// all pages.
+fn renumber_sheets(pages: Vec<String>) -> Vec<String> {
+    let count = pages.len();
+    pages
+        .into_iter()
+        .enumerate()
+        .map(|(i, svg)| sheet_number(svg, i + 1, count))
+        .collect()
+}
+
+fn sheet_number(svg: String, sheet: usize, count: usize) -> String {
+    // The sheet cell is the only text after the label "Sheet"
+    let Some(label) = svg.find(">Sheet</text>") else {
+        return svg;
+    };
+    let rest = &svg[label..];
+    let Some(open) = rest[13..].find('>').map(|i| label + 13 + i + 1) else {
+        return svg;
+    };
+    let Some(close) = svg[open..].find("</text>").map(|i| open + i) else {
+        return svg;
+    };
+    format!("{}{sheet} / {count}{}", &svg[..open], &svg[close..])
 }
 
 const PAGE_MARGIN: f32 = 12.0;
@@ -383,7 +527,7 @@ fn export_document(doc: &Document, p: DocumentParams) -> Result<serde_json::Valu
                 Some(l) => format!("{title} - {}", l.attrs.name),
                 None => format!("{title} - Plan"),
             };
-            let (page, _) = msh_export::plan_page(
+            let laid = msh_export::plan_pages(
                 &drawing,
                 &msh_export::PageOptions {
                     paper,
@@ -391,9 +535,13 @@ fn export_document(doc: &Document, p: DocumentParams) -> Result<serde_json::Valu
                     margin_mm: PAGE_MARGIN,
                     scale: p.scale,
                     title: Some(page_title),
+                    title_block: title_block(doc, p.title_block.as_ref(), level),
                 },
             );
-            pages.push(page);
+            if laid.pages.len() > 1 {
+                notes.push(split_note(level, &laid, p.paper.as_deref()));
+            }
+            pages.extend(laid.pages);
         }
     }
     if p.view_3d.unwrap_or(true) {
@@ -448,7 +596,13 @@ fn export_document(doc: &Document, p: DocumentParams) -> Result<serde_json::Valu
         date: now.format("%Y-%m-%d").to_string(),
         time: now.format("%H:%M").to_string(),
     };
-    let svgs = msh_export::page_svgs_framed(&pages, paper, PAGE_MARGIN, Some(&title), &frame);
+    let svgs = renumber_sheets(msh_export::page_svgs_framed(
+        &pages,
+        paper,
+        PAGE_MARGIN,
+        Some(&title),
+        &frame,
+    ));
     match &p.path {
         Some(path) => {
             let pdf = msh_export::pdf_from_svg_pages(&svgs).map_err(CommandError::failed)?;

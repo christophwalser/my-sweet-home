@@ -1639,6 +1639,45 @@ outline) is in `commands/generated.rs`.
   heights, openings of any outline drawn in the plan (only through `opening_add`), a railing
   around an opening.
 
+### 4.59 Output: paper, title block, DXF and glTF (2026-11-21)
+
+Package 8c of the UX review (H1, H2). Dimensioning (H3) and the catalog (H4, H5) follow.
+
+- **Pages** (`msh-export::pages`). Papers A0 to A5, Letter, Legal, Tabloid and any size in mm
+  (`Paper::by_name("500x700")`). `plan_pages` replaces `plan_page`: fitted, the plan takes one
+  page; at a scale, it takes as many pages as it needs, columns × rows of the content area,
+  the whole plan centered on them, each page clipped to its part and noted "part 2 of 6 (row
+  1, column 2)". Without a given orientation the one with fewer pages wins. A given whole
+  scale is shown as it is (1:75); a fitted one is rounded as before. `Page` now carries its
+  scale and its title block; `$planScale` comes from the scale instead of the footer note.
+- **Title block.** `TitleBlock` (project, drawing, author, date, north direction) is drawn by
+  `page_svgs_framed` at the bottom right above the footer, 26 mm high and up to 150 mm wide:
+  north arrow (from the compass), scale bar (the longest round length that fits, in
+  alternating quarters) with the scale, project and drawing, and cells for author, date and
+  sheet. The plan area shrinks by the height of the block. The commands number the sheets
+  over all pages of a document (`renumber_sheets`).
+- **Commands.** `export_plan` and `export_document` take the new papers, any scale and
+  `title_block` (`project`, `author`); a split plan adds a note to the result. `export_plan`
+  without a path returns the PDF pages as SVG documents, which the dialog shows as preview
+  (with catalog icons, so it is quick).
+- **DXF** (`msh-export::dxf`). AutoCAD R12 (AC1009) text: header with `$INSUNITS`, tables
+  with a continuous line type and twelve layers with colors, entities as LINE, POLYLINE
+  (VERTEX, SEQEND), CIRCLE and centered TEXT; the y axis is turned up and the unit is mm, cm
+  or m. Walls are their outlines, rooms their polygons with name and area, furniture, doors
+  and windows their rectangles, stairs, roofs and openings the lines the plan shows of them,
+  dimensions the extension lines, the line with ticks and the length, texts line by line,
+  lines as polylines, the compass a circle with an arrow. Text outside ASCII is written as
+  `\U+XXXX`. `export_plan` writes it for `format: "dxf"` or a path ending in .dxf, one file
+  per level for "all".
+- **glTF and OBJ units.** The 3D export event carries a format and a unit: a path ending in
+  .glb makes `view3d/gltfExport.ts` copy the exported groups (sharing geometry and materials)
+  under a root scaled to meters and write them with three.js's `GLTFExporter` as one binary
+  file (`write_binary_file`); textures go along with `KHR_texture_transform`. OBJ vertices are
+  scaled to cm, mm, m or inches (`buildObj(…, unit)`). `msh export-obj` takes a .glb path and
+  `--unit`.
+- Left open: DXF with blocks for furniture and door swings, DWG and IFC, reading DXF, a title
+  block layout of one's own, crop marks and overlap for split pages.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
