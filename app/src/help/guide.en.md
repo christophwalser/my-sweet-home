@@ -162,9 +162,14 @@ Everything you import is stored in Sweet Home 3D's library folders, so both prog
 
 # Print and export
 
-**File › Print / export** prints or saves the furniture list, the plan of each level and the 3D view as PDF. Choose paper, orientation and scale (e.g. 1:100). Header and footer may contain `$pageNumber`, `$pageCount`, `$planScale`, `$name`, `$file`, `$date` and `$time`.
+**File › Print / export** prints or saves the furniture list, the plan of each level and the 3D view as PDF. Header and footer may contain `$pageNumber`, `$pageCount`, `$planScale`, `$name`, `$file`, `$date` and `$time`.
 
-The same dialog exports the plan as PDF, SVG or PNG, the furniture list as CSV and the 3D model as OBJ.
+- **Paper**: A0 to A5, Letter, Legal, Tabloid or a size of your own in mm. **Plan scale**: fit to page, a listed scale or any other (e.g. 1:75).
+- A plan that does not fit on one page at its scale is split into several pages (each says which part it is), and the dialog says so. Choose a larger paper or a smaller scale to keep it on one page.
+- **Title block on plan pages** adds a box at the bottom right: project (the name of the home unless you type one), the level, who drew it, the date, the sheet number, the scale with a scale bar and a north arrow.
+- The **preview** under the page setup shows the plan pages as they will be printed.
+
+The same dialog exports the plan as PDF, SVG, PNG or **DXF** (a drawing for CAD programs, in mm, cm or m, with a layer for walls, rooms, furniture, doors and windows, stairs, roofs, openings, dimensions, texts and lines), the furniture list as CSV and the 3D model as **OBJ** (in cm, mm, m or inches) or **glTF binary** (.glb, in meters, for Blender, game engines and viewers).
 
 # Preferences
 

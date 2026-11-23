@@ -1992,6 +1992,31 @@ body.resizing-horizontal {
   overflow-wrap: anywhere;
 }
 
+/* Thumbnails of the plan pages with the page setup */
+.export-preview {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 4px;
+}
+
+.export-preview:empty {
+  display: none;
+}
+
+.export-preview img {
+  height: 120px;
+  flex: none;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
+}
+
+.export-warning {
+  margin: 0;
+  color: var(--danger);
+}
+
 .export-checks {
   display: flex;
   flex-wrap: wrap;

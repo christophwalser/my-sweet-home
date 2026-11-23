@@ -294,3 +294,136 @@ fn document_pages_get_the_header_and_footer_of_the_page_setup() {
     // The default footer is replaced
     assert!(!pages[1].contains("Page 2 of 2"));
 }
+
+#[test]
+fn plan_pdf_without_path_is_a_preview_split_when_too_large() {
+    let r = Registry::standard();
+    let mut doc = flat(&r);
+    // The room of 4 × 3 m at 1:20 is 200 × 150 mm with the margin around it: more than one
+    // A5 page, one A3 page
+    let preview = export(
+        &r,
+        &mut doc,
+        "export_plan",
+        json!({ "paper": "a5", "scale": 20, "furniture_icons": "catalog" }),
+    );
+    let pages = preview["pages"].as_array().unwrap();
+    assert!(pages.len() > 1, "{}", pages.len());
+    assert_eq!(preview["landscape"].as_array().unwrap().len(), pages.len());
+    let note = preview["notes"][0].as_str().unwrap();
+    assert!(note.contains("split into") && note.contains("A5"), "{note}");
+    assert!(pages[1].as_str().unwrap().contains("part 2 of"));
+    let a3 = export(
+        &r,
+        &mut doc,
+        "export_plan",
+        json!({ "paper": "a3", "scale": 20, "furniture_icons": "catalog" }),
+    );
+    assert_eq!(a3["pages"].as_array().unwrap().len(), 1);
+    assert!(a3["notes"].as_array().unwrap().is_empty());
+    // Any paper size and any scale
+    let custom = export(
+        &r,
+        &mut doc,
+        "export_plan",
+        json!({ "paper": "1000x700", "scale": 75, "furniture_icons": "catalog" }),
+    );
+    assert_eq!(custom["paper_mm"], json!([700.0, 1000.0]));
+    assert!(custom["pages"][0].as_str().unwrap().contains("1:75"));
+    let err = run_err(&r, &mut doc, "export_plan", json!({ "paper": "b5" }));
+    assert!(err.contains("a0 to a5"), "{err}");
+    // SVG and PNG need a path
+    let err = run_err(&r, &mut doc, "export_plan", json!({ "format": "svg" }));
+    assert!(err.contains("path"), "{err}");
+}
+
+#[test]
+fn title_blocks_number_the_sheets_of_all_levels() {
+    let r = Registry::standard();
+    let mut doc = flat(&r);
+    run(&r, &mut doc, "level_add", json!({ "name": "Upper" }));
+    let result = export(
+        &r,
+        &mut doc,
+        "export_document",
+        json!({
+            "furniture": false, "view_3d": false, "furniture_icons": "catalog",
+            "title_block": { "author": "C. W." },
+        }),
+    );
+    let pages: Vec<&str> = result["pages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    assert_eq!(pages.len(), 2);
+    assert!(pages[0].contains(">Test<") && pages[0].contains("Plan - Level 0"));
+    assert!(pages[1].contains("Plan - Upper") && pages[1].contains("C. W."));
+    assert!(pages[0].contains(">1 / 2<") && pages[1].contains(">2 / 2<"));
+    // A given project name replaces the name of the home
+    let named = export(
+        &r,
+        &mut doc,
+        "export_plan",
+        json!({ "level": "all", "title_block": { "project": "Villa" }, "furniture_icons": "catalog" }),
+    );
+    assert!(named["pages"][0].as_str().unwrap().contains(">Villa<"));
+}
+
+#[test]
+fn plan_as_dxf_with_layers_and_units() {
+    let r = Registry::standard();
+    let mut doc = flat(&r);
+    run(
+        &r,
+        &mut doc,
+        "wall_add",
+        json!({ "x_start": 0, "y_start": 0, "x_end": 400, "y_end": 0 }),
+    );
+    run(&r, &mut doc, "stair_add", json!({ "x": 300, "y": 280 }));
+    let dir = out_dir("cmd-export-dxf");
+    let path = dir.join("plan.dxf");
+    let result = export(&r, &mut doc, "export_plan", json!({ "path": path }));
+    assert_eq!(result["paths"][0], json!(path));
+    assert!(
+        result["layers"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("STAIRS"))
+    );
+    let dxf = std::fs::read_to_string(&path).unwrap();
+    assert!(dxf.is_ascii() && dxf.ends_with("0\nEOF\n"));
+    for layer in ["WALLS", "ROOMS", "ROOM_NAMES", "FURNITURE", "STAIRS"] {
+        assert!(dxf.contains(&format!("8\n{layer}\n")), "{layer}");
+    }
+    assert!(dxf.contains("1\nOffice\n"));
+    // The room corner (400, 300) cm in mm, y up
+    assert!(dxf.contains("10\n4000\n20\n-3000\n"));
+    // In meters
+    let meters = dir.join("plan-m.dxf");
+    export(
+        &r,
+        &mut doc,
+        "export_plan",
+        json!({ "path": meters, "unit": "m" }),
+    );
+    let dxf = std::fs::read_to_string(&meters).unwrap();
+    assert!(dxf.contains("10\n4\n20\n-3\n"));
+    let err = run_err(
+        &r,
+        &mut doc,
+        "export_plan",
+        json!({ "path": meters, "unit": "ft" }),
+    );
+    assert!(err.contains("mm, cm or m"), "{err}");
+    // One file per level
+    run(&r, &mut doc, "level_add", json!({ "name": "Upper" }));
+    let all = export(
+        &r,
+        &mut doc,
+        "export_plan",
+        json!({ "path": path, "level": "all" }),
+    );
+    assert_eq!(all["paths"].as_array().unwrap().len(), 2);
+}

@@ -90,6 +90,7 @@ pub fn run() {
             commands::catalog_load,
             commands::model_stage,
             commands::write_obj_files,
+            commands::write_binary_file,
             commands::export_obj,
             commands::capture_3d_image,
             commands::save_image,

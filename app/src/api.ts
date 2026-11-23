@@ -5,6 +5,9 @@ import type { OpenedHome } from "./model";
 
 export type AppInfo = { name: string; version: string };
 
+/** Unit of an exported OBJ file. */
+export type ObjUnit = "cm" | "mm" | "m" | "in";
+
 export type CatalogKind = "furniture" | "textures";
 
 export type LibraryInfo = {
@@ -73,8 +76,15 @@ export const api = {
     invoke<void>("save_file", data, { headers: { path: encodeURIComponent(path) } }),
   /** PNG (base64) of the 3D view, rendered by the window that shows it. */
   capture3d: () => invoke<string>("capture_3d_image"),
-  /** Exports the 3D view as OBJ through the window that shows it. */
-  exportObj: (path: string) => invoke<{ paths: string[] }>("export_obj", { path }),
+  /**
+   * Exports the 3D view through the window that shows it: glTF binary for a path ending in
+   * .glb, else OBJ in `unit` (default cm).
+   */
+  exportObj: (path: string, unit?: ObjUnit) =>
+    invoke<{ paths: string[] }>("export_obj", { path, unit: unit ?? null }),
+  /** Writes a binary file given as base64. */
+  writeBinaryFile: (path: string, data: string) =>
+    invoke<string[]>("write_binary_file", { path, data }),
   /** Writes an OBJ export (OBJ at `path`, MTL and textures next to it). */
   writeObjFiles: (path: string, obj: string, mtl: string, textures: Record<string, string>) =>
     invoke<string[]>("write_obj_files", { path, obj, mtl, textures }),

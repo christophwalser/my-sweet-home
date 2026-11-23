@@ -8,6 +8,7 @@ import {
   api,
   CAPTURE_EVENT,
   EXPORT_OBJ_EVENT,
+  type ObjUnit,
   RENDER_PHOTO_EVENT,
   RENDER_VIDEO_EVENT,
 } from "../api";
@@ -34,6 +35,7 @@ import {
   WallGeometryCache,
 } from "./buildScene";
 import { applyPose, type CameraPose, cameraDirection, cameraPose, verticalFov } from "./camera";
+import { buildGlb } from "./gltfExport";
 import type { Lens } from "./lens";
 import {
   buildCeilingLights,
@@ -1668,23 +1670,30 @@ export default function View3D() {
 
   // OBJ export requested by the export dialog, the CLI or the MCP server
   useEffect(() => {
-    const unlisten = getCurrentWebviewWindow().listen<{ requestId: number; path: string }>(
-      EXPORT_OBJ_EVENT,
-      async (e) => {
-        const { requestId, path } = e.payload;
-        try {
-          await waitForModels(60000);
-          const c = ctx.current;
-          if (!c) throw new Error("3D view not available");
-          const mtlName = `${(path.split(/[\\/]/).pop() ?? "home").replace(/\.[^.]*$/, "")}.mtl`;
-          const files = buildObj(c.content, mtlName);
-          const paths = await api.writeObjFiles(path, files.obj, files.mtl, files.textures);
+    const unlisten = getCurrentWebviewWindow().listen<{
+      requestId: number;
+      path: string;
+      format?: "obj" | "glb";
+      unit?: ObjUnit;
+    }>(EXPORT_OBJ_EVENT, async (e) => {
+      const { requestId, path, format, unit } = e.payload;
+      try {
+        await waitForModels(60000);
+        const c = ctx.current;
+        if (!c) throw new Error("3D view not available");
+        if (format === "glb") {
+          const paths = await api.writeBinaryFile(path, await buildGlb(c.content));
           await api.captureResult(requestId, JSON.stringify({ paths }), null);
-        } catch (err) {
-          await api.captureResult(requestId, null, String(err));
+          return;
         }
-      },
-    );
+        const mtlName = `${(path.split(/[\\/]/).pop() ?? "home").replace(/\.[^.]*$/, "")}.mtl`;
+        const files = buildObj(c.content, mtlName, unit ?? "cm");
+        const paths = await api.writeObjFiles(path, files.obj, files.mtl, files.textures);
+        await api.captureResult(requestId, JSON.stringify({ paths }), null);
+      } catch (err) {
+        await api.captureResult(requestId, null, String(err));
+      }
+    });
     return () => {
       void unlisten.then((off) => off());
     };

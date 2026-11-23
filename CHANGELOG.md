@@ -70,6 +70,13 @@ All notable changes to this project are documented in this file. The format foll
   the plan and in 3D separately, with an opacity in the plan.
 - The map of "Align north with the map" can be used as background image of the plan, true to
   scale and turned like the plan.
+- Printing and PDF: papers A0 to A5, Letter, Legal, Tabloid or any size in mm, any plan scale
+  (e.g. 1:75), and a title block on plan pages (project, level, author, date, sheet, scale with
+  scale bar, north arrow). A plan too large for one page at its scale is split into several
+  pages instead of being cut off, with a warning; the dialog shows a preview of the plan pages.
+- Plan as DXF drawing for CAD programs (`export_plan` with `format: "dxf"`), in mm, cm or m,
+  with a layer for each kind of element.
+- 3D model as glTF binary (.glb, in meters), and OBJ in cm, mm, m or inches.
 - Stairs made from their measures: straight, L-shaped and U-shaped with a landing, and spiral
   (`stair_add`, `stair_update`, `stair_calc`). Two clicks place them; the number of risers and
   the tread follow from the height to the next level by the step rule, the properties show which

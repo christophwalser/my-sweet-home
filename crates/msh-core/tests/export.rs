@@ -159,7 +159,7 @@ fn plan_exports_to_svg_png_and_pdf() {
         r.execute(
             &mut doc,
             "export_plan",
-            json!({ "path": pdf, "paper": "a0" })
+            json!({ "path": pdf, "paper": "b5" })
         )
         .is_err()
     );
