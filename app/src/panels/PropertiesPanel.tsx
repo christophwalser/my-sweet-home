@@ -17,6 +17,7 @@ import {
   type Wall,
 } from "../model";
 import { startAlignPoints } from "../plan2d/alignPoints";
+import { chainOf, elevationMarkOf, selectedChain } from "../plan2d/dimensionStyle";
 import { DEFAULT_ROOM_FONT } from "../plan2d/drawPlan";
 import { guideAngle, guideEnd, guideLength, homeGuides } from "../plan2d/guides";
 import { roofOf } from "../plan2d/roof";
@@ -27,11 +28,12 @@ import { currentVisitor, setVisitor, useStore, VISITOR_ID, type WallLine } from 
 import { deleteLevel } from "../ui/commands";
 import { WALL_LINES } from "../ui/ToolOptions";
 import { useUi } from "../ui/uiStore";
-import { formatArea, formatLength } from "../units";
+import { formatArea } from "../units";
 import { spotAngle } from "../view3d/lights";
 import { modelMaterialNames } from "../view3d/models";
 import { levelOfEye } from "../view3d/visitor";
 import BackgroundImageSection from "./BackgroundImageSection";
+import { ChainSection, DimensionStyleSection, ElevationMarkFields } from "./DimensionPanel";
 import {
   ARROW_STYLES,
   byRole,
@@ -890,6 +892,12 @@ export default function PropertiesPanel() {
           </p>
         )}
         {wallActions}
+        {(() => {
+          const chain = selectedChain(home, selection);
+          return (
+            chain && <ChainSection home={home} chain={chain} selection={selection} run={run} />
+          );
+        })()}
         {groupButton}
         <MultiPanel home={home} selection={selection} run={run} />
         {actions}
@@ -1013,6 +1021,7 @@ export default function PropertiesPanel() {
         )}
         <ReferenceObjectsSection home={home} run={run} />
         <CompassSection home={home} run={run} />
+        {home.dimension_lines.length > 0 && <DimensionStyleSection home={home} run={run} />}
         <p className="muted">{t("Click an element in the plan to edit it.")}</p>
       </div>
     );
@@ -1728,12 +1737,17 @@ export default function PropertiesPanel() {
 
   const label = home.labels.find((l) => l.attrs.id === id);
   if (label) {
+    const mark = elevationMarkOf(label);
     const set = (field: string) => (v: string | number | boolean) =>
       void run("label_update", { id, [field]: v });
     return (
       <div className="props">
-        <h2>{t("Label")}</h2>
-        <Field label={t("Text")} type="text" value={label.text} onCommit={set("text")} />
+        <h2>{mark ? t("Elevation mark") : t("Label")}</h2>
+        {mark ? (
+          <ElevationMarkFields id={id} mark={mark} run={run} />
+        ) : (
+          <Field label={t("Text")} type="text" value={label.text} onCommit={set("text")} />
+        )}
         <Field label="X" type="number" unit="cm" value={label.attrs.x} onCommit={set("x")} />
         <Field label="Y" type="number" unit="cm" value={label.attrs.y} onCommit={set("y")} />
         <TextStyleFields
@@ -1811,6 +1825,7 @@ export default function PropertiesPanel() {
   const dim = home.dimension_lines.find((d) => d.attrs.id === id);
   if (dim) {
     const a = dim.attrs;
+    const chain = chainOf(dim);
     const set = (field: string) => (v: string | number | boolean) =>
       void run("dimension_update", { id, [field]: v });
     return (
@@ -1818,13 +1833,19 @@ export default function PropertiesPanel() {
         <h2>
           {a.x_start === a.x_end && a.y_start === a.y_end ? t("Height dimension") : t("Dimension")}
         </h2>
-        <p className="muted small">
-          {t("Length:")}{" "}
-          {formatLength(
+        <Field
+          label={t("Length")}
+          type="number"
+          unit="cm"
+          value={
             a.x_start === a.x_end && a.y_start === a.y_end
               ? Math.abs((a.elevation_end ?? 0) - (a.elevation_start ?? 0))
-              : Math.hypot(a.x_end - a.x_start, a.y_end - a.y_start),
-          )}
+              : Math.hypot(a.x_end - a.x_start, a.y_end - a.y_start)
+          }
+          onCommit={set("length")}
+        />
+        <p className="muted small">
+          {t("A typed length moves the end of the dimension; what it measures stays.")}
         </p>
         <Field
           label={t("X start")}
@@ -1855,6 +1876,7 @@ export default function PropertiesPanel() {
           prefix=""
           onChange={(params) => void run("dimension_update", { id, ...params })}
         />
+        {chain && <ChainSection home={home} chain={chain} selection={selection} run={run} />}
         {actions}
       </div>
     );

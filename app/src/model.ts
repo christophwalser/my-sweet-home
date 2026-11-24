@@ -309,6 +309,8 @@ export type DimensionLine = {
     visible_in_3d: boolean | null;
   };
   text_style: TextStyle | null;
+  /** Free properties (e.g. `mySweetHome.dimensionChain`) */
+  properties?: { name: string; value: string }[];
 };
 
 export type Label = {
@@ -325,6 +327,8 @@ export type Label = {
   };
   text_style: TextStyle | null;
   text: string;
+  /** Free properties (e.g. `mySweetHome.elevationMark`) */
+  properties?: { name: string; value: string }[];
 };
 
 export type Home = {

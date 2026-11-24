@@ -3,8 +3,10 @@
 //! dimensions, texts, lines and the compass, each kind on a layer of its own. The y axis
 //! points up as usual in CAD (the plan's points down).
 
+use crate::dimension::{EndMark, dimension_style};
 use crate::plan::{
-    collect_pieces, format_length, opening_outline, piece_corners, roof_lines, stair_symbol,
+    ARROW, DOT, MARK, collect_pieces, dimension_font, opening_outline, piece_corners, roof_lines,
+    stair_symbol,
 };
 use msh_geometry::wall_shapes;
 use msh_model::{Home, Piece, PieceKind};
@@ -67,7 +69,6 @@ pub const LAYERS: [(&str, u8); 12] = [
 
 const ROOM_FONT: f32 = 24.0;
 const LABEL_FONT: f32 = 18.0;
-const DIMENSION_FONT: f32 = 18.0;
 
 /// Writes group codes and values.
 struct Writer {
@@ -310,7 +311,8 @@ pub fn plan_dxf(home: &Home, level: Option<&str>, unit: DxfUnit) -> String {
         w.polyline("LINES", &points, pl.attrs.closed_path == Some(true));
     }
 
-    // Dimensions: extension lines, the dimension line with ticks and the length
+    // Dimensions: extension lines, the dimension line with its marks and the length
+    let style = dimension_style(home);
     for d in home
         .dimension_lines
         .iter()
@@ -331,17 +333,30 @@ pub fn plan_dxf(home: &Home, level: Option<&str>, unit: DxfUnit) -> String {
         w.line("DIMENSIONS", along(0.0, 0.0), along(0.0, beyond));
         w.line("DIMENSIONS", along(length, 0.0), along(length, beyond));
         w.line("DIMENSIONS", along(0.0, off), along(length, off));
-        for s in [0.0, length] {
-            w.line(
-                "DIMENSIONS",
-                along(s - 5.0, off + 5.0),
-                along(s + 5.0, off - 5.0),
-            );
+        for (s, inward) in [(0.0, 1.0), (length, -1.0)] {
+            match style.mark {
+                EndMark::Slash => w.line(
+                    "DIMENSIONS",
+                    along(s - MARK, off + MARK),
+                    along(s + MARK, off - MARK),
+                ),
+                EndMark::Arrow => {
+                    for side in [ARROW * 0.25, -ARROW * 0.25] {
+                        w.line(
+                            "DIMENSIONS",
+                            along(s, off),
+                            along(s + inward * ARROW, off + side),
+                        );
+                    }
+                }
+                EndMark::Dot => w.circle("DIMENSIONS", along(s, off), DOT),
+                EndMark::None => {}
+            }
         }
         let size = d
             .text_style
             .as_ref()
-            .map_or(DIMENSION_FONT, |t| t.font_size);
+            .map_or(dimension_font(&style), |t| t.font_size);
         let gap = if off > 0.0 { size * 1.0 } else { -size * 0.3 };
         let mut angle = dy.atan2(dx);
         // Readable from below or from the right
@@ -353,7 +368,7 @@ pub fn plan_dxf(home: &Home, level: Option<&str>, unit: DxfUnit) -> String {
             along(length / 2.0, off + gap),
             size,
             angle,
-            &format_length(length),
+            &style.format(length),
         );
     }
 

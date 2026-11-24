@@ -28,6 +28,7 @@ import { type Underlay, usePreferences } from "../preferences";
 import { formatArea, formatLength as formatUnitLength } from "../units";
 import { baseboardOf, baseboardPolygon } from "../view3d/wallSides";
 import { curveSegments, polylinePath } from "./curve";
+import { type DimensionStyle, dimensionStyle, formatDimension } from "./dimensionStyle";
 import { distanceToSegment, pointInPolygon } from "./interaction";
 import { type RoofData, roofLines, roofOf } from "./roof";
 import type { SectionCut } from "./section";
@@ -492,8 +493,9 @@ export function drawPlan(
   }
 
   // Dimension lines
+  const dimStyle = dimensionStyle(home);
   for (const d of home.dimension_lines) {
-    if (sameLevel(d.attrs.level, levelId)) drawDimension(ctx, d, colors, px);
+    if (sameLevel(d.attrs.level, levelId)) drawDimension(ctx, d, dimStyle, colors, px);
   }
 
   // Labels
@@ -806,16 +808,21 @@ function drawDoorOrWindow(
   ctx.restore();
 }
 
+/** Length of an arrow and radius of a dot at the ends of a dimension line in cm. */
+const ARROW = 10;
+const DOT = 2.5;
+
 function drawDimension(
   ctx: CanvasRenderingContext2D,
   dl: Home["dimension_lines"][number],
+  style: DimensionStyle,
   colors: PlanColors,
   px: number,
 ): void {
   const { x_start: xs, y_start: ys, x_end: xe, y_end: ye, offset } = dl.attrs;
   const length = Math.hypot(xe - xs, ye - ys);
   if (length === 0) {
-    drawHeightDimension(ctx, dl, colors, px);
+    drawHeightDimension(ctx, dl, style, colors, px);
     return;
   }
   const angle = Math.atan2(ye - ys, xe - xs);
@@ -834,18 +841,40 @@ function drawDimension(
   // Dimension line with end marks
   ctx.moveTo(0, offset);
   ctx.lineTo(length, offset);
-  for (const x of [0, length]) {
-    ctx.moveTo(x - 5, offset + 5);
-    ctx.lineTo(x + 5, offset - 5);
+  if (style.mark === "slash") {
+    for (const x of [0, length]) {
+      ctx.moveTo(x - 5, offset + 5);
+      ctx.lineTo(x + 5, offset - 5);
+    }
   }
   ctx.stroke();
-  const size = dl.text_style?.font_size ?? DEFAULT_DIMENSION_FONT;
   ctx.fillStyle = color;
-  ctx.font = fontOf(dl.text_style, DEFAULT_DIMENSION_FONT);
+  if (style.mark === "arrow" || style.mark === "dot") {
+    for (const [x, inward] of [
+      [0, 1],
+      [length, -1],
+    ]) {
+      ctx.beginPath();
+      if (style.mark === "dot") ctx.arc(x, offset, DOT, 0, Math.PI * 2);
+      else {
+        ctx.moveTo(x, offset);
+        ctx.lineTo(x + inward * ARROW, offset - ARROW * 0.25);
+        ctx.lineTo(x + inward * ARROW, offset + ARROW * 0.25);
+      }
+      ctx.fill();
+    }
+  }
+  const font = style.fontSize ?? DEFAULT_DIMENSION_FONT;
+  const size = dl.text_style?.font_size ?? font;
+  ctx.font = fontOf(dl.text_style, font);
   ctx.textAlign = "center";
   // Like Sweet Home 3D, the text sits on the outer side of the dimension line
   ctx.textBaseline = offset > 0 ? "top" : "bottom";
-  ctx.fillText(formatLength(length), length / 2, offset + Math.sign(offset || -1) * size * 0.15);
+  ctx.fillText(
+    formatDimension(length, style),
+    length / 2,
+    offset + Math.sign(offset || -1) * size * 0.15,
+  );
   ctx.restore();
 }
 
@@ -856,6 +885,7 @@ function drawDimension(
 function drawHeightDimension(
   ctx: CanvasRenderingContext2D,
   dl: Home["dimension_lines"][number],
+  style: DimensionStyle,
   colors: PlanColors,
   px: number,
 ): void {
@@ -881,10 +911,10 @@ function drawHeightDimension(
   ctx.lineTo(0, r * 0.65);
   ctx.lineTo(r * 0.35, r * 0.3);
   ctx.stroke();
-  ctx.font = fontOf(dl.text_style, DEFAULT_DIMENSION_FONT);
+  ctx.font = fontOf(dl.text_style, style.fontSize ?? DEFAULT_DIMENSION_FONT);
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(`↕ ${formatLength(height)}`, r * 1.6, 0);
+  ctx.fillText(`↕ ${formatDimension(height, style)}`, r * 1.6, 0);
   ctx.restore();
 }
 

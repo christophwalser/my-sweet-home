@@ -26,7 +26,7 @@ export const TOOL_GROUPS: Record<string, string[]> = {
   "1": ["tool.wall", "tool.arcwall"],
   "2": ["tool.room", "tool.roomauto"],
   "3": ["tool.polyline"],
-  "4": ["tool.dimension", "tool.heightdim"],
+  "4": ["tool.dimension", "tool.dimchain", "tool.heightdim", "tool.elevmark"],
   "5": ["tool.label"],
   "6": ["tool.measure", "tool.ruler"],
 };

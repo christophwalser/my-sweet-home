@@ -11,6 +11,7 @@ mod annotate;
 mod arrange;
 mod background;
 mod camera;
+mod dimension;
 mod edit;
 mod export;
 mod flip;
@@ -41,6 +42,7 @@ use crate::registry::{CommandError, Registry};
 use msh_model::{Color, Home};
 
 pub use camera::camera_path_len;
+pub(crate) use dimension::{leave_chain, refresh_elevation_marks};
 
 pub(crate) fn register_all(r: &mut Registry) {
     home::register(r);
@@ -60,6 +62,7 @@ pub(crate) fn register_all(r: &mut Registry) {
     group::register(r);
     guide::register(r);
     annotate::register(r);
+    dimension::register(r);
     edit::register(r);
     flip::register(r);
     rotate::register(r);

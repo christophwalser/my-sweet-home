@@ -236,7 +236,10 @@ export default function ToolBar() {
           button="stairs"
           variants={["stair.add", "stair.addL", "stair.addU", "stair.addSpiral", "opening.add"]}
         />
-        <SplitButton button="dimensions" variants={["tool.dimension", "tool.heightdim"]} />
+        <SplitButton
+          button="dimensions"
+          variants={["tool.dimension", "tool.dimchain", "tool.heightdim", "tool.elevmark"]}
+        />
         <ToolButton id="tool.label" />
         <SplitButton button="measure" variants={["tool.measure", "tool.ruler"]} />
       </Group>

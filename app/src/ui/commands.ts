@@ -190,7 +190,9 @@ export function chooseTool(tool: Tool): void {
     "roomauto",
     "polyline",
     "dimension",
+    "dimchain",
     "heightdim",
+    "elevmark",
     "label",
   ];
   if (creates.includes(tool) && store().opened?.home.attrs.base_plan_locked) {
@@ -534,10 +536,22 @@ const LIST: Command[] = [
   toolCommand("polyline", t("Lines"), "polyline", t("Click to add points, double-click to finish")),
   toolCommand("dimension", t("Dimension"), "dimension", t("Click start and end point")),
   toolCommand(
+    "dimchain",
+    t("Dimension chain along a wall"),
+    "dimchain",
+    t("Click a wall: its doors and windows, the adjoining walls and the whole length, in rows"),
+  ),
+  toolCommand(
     "heightdim",
     t("Height dimension"),
     "heightdim",
     t("Click where the height of the level is measured"),
+  ),
+  toolCommand(
+    "elevmark",
+    t("Elevation mark"),
+    "elevmark",
+    t("Click where the elevation of the floor is shown, e.g. +2.62"),
   ),
   toolCommand("label", t("Text"), "text", t("Click to place a text")),
   toolCommand("measure", t("Measure"), "measure", t("Measure a distance without adding anything")),
@@ -1390,7 +1404,9 @@ export const MENUS: Menu[] = [
       cmd("opening.add"),
       { kind: "heading", label: t("Annotate") },
       cmd("tool.dimension"),
+      cmd("tool.dimchain"),
       cmd("tool.heightdim"),
+      cmd("tool.elevmark"),
       cmd("tool.label"),
       { kind: "heading", label: t("Measure") },
       cmd("tool.measure"),

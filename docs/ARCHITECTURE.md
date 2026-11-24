@@ -1678,6 +1678,43 @@ Package 8c of the UX review (H1, H2). Dimensioning (H3) and the catalog (H4, H5)
 - Left open: DXF with blocks for furniture and door swings, DWG and IFC, reading DXF, a title
   block layout of one's own, crop marks and overlap for split pages.
 
+### 4.60 Dimensions (2026-11-23)
+
+Package 8d of the UX review (H3). Sweet Home 3D has single dimension lines only; chains, the
+style and elevation marks are kept as properties and shown there as ordinary elements.
+
+- **Chain geometry** (`msh-geometry::chain`). `wall_chain` takes a straight wall and a side. The
+  walls of its level that are parallel, lie with the same face on one line (up to 1 cm) and touch
+  belong to the chain. Where it ends: in the miter of a joined wall (exact also at slanted
+  corners); else at the near face of a wall that goes on beyond the face, at the far face of one
+  that ends there (a corner without a joint), or at the end of the wall. Rows: the edges of the
+  cuts of doors and windows (`wallLeft`, `wallWidth`, mirroring), both faces of adjoining walls
+  measured 1 cm beside the face (outside of any miter; slanted joined walls are left out), and the
+  whole. Rows that measure nothing but the whole are dropped. The direction is the one whose texts
+  read from the bottom or the right. `outer_side` is the side that looks into no room and no area
+  closed by walls.
+- **Commands** (`commands/dimension.rs`). `dimension_chain_add` (wall, side, rows, distance,
+  spacing; or points), `dimension_chain_calc` (both sides without adding, for the preview) and
+  `dimension_chain_update`, which measures a chain again and replaces its lines (new IDs; color
+  and text style stay). Each line keeps the chain in `mySweetHome.dimensionChain` (ID, wall, side,
+  rows, distance, spacing); a copy leaves the chain (`leave_chain` in the clipboard, which
+  duplicating a level uses too). A chain does not follow its wall by itself.
+- **Style** (`msh-export::dimension`, `plan2d/dimensionStyle.ts`). `mySweetHome.dimensionStyle` of
+  the home: mark, unit (auto, mm, cm, m, din), decimals, showUnit, comma, fontSize. Both
+  implementations format alike and share their test cases. "auto" is what was before: the unit of
+  the preferences in the app, m and cm in files. Plan, 3D view, SVG, PDF and DXF use the style.
+  The first change in the app takes the decimal sign of its language.
+- **Elevation marks** are labels with `mySweetHome.elevationMark` (height above the floor, kind,
+  comma). Their text is the elevation of the level plus the height; `refresh_elevation_marks` runs
+  after every modifying command in the registry (same undo step), so a moved level, a paste onto
+  another level or a new style cannot leave a stale text. `label_update` with a text makes the
+  mark an ordinary label.
+- **App.** Tools `dimchain` and `elevmark`; the chain is placed like a guide line at a distance
+  (`chainFrom`), also from the context menu of a wall.
+- Left open: angle dimensions, a style for a single dimension, chains between points in the app,
+  chains along round walls, texts that make room for each other in short dimensions, chains that
+  follow their wall.
+
 ## 5. Feature scope (parity with SH3D 7.x)
 
 Required (implemented in phases):
