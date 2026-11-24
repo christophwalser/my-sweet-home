@@ -6,6 +6,7 @@
 //! line; at a joined end, each side line is intersected with the matching side
 //! line of the neighbor.
 
+pub mod chain;
 pub mod roof;
 pub mod stair;
 

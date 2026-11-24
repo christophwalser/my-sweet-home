@@ -36,7 +36,8 @@ describe("tool keys", () => {
     expect(toolShortcut("tool.ruler")).toBe("G");
     expect(toolShortcut("tool.select")).toBe("V");
     expect(toolShortcut("tool.arcwall")).toBe("1, 1");
-    expect(toolShortcut("tool.heightdim")).toBe("4, 1");
+    expect(toolShortcut("tool.dimchain")).toBe("4, 1");
+    expect(toolShortcut("tool.heightdim")).toBe("4, 2");
     expect(toolShortcut("tool.nope")).toBeUndefined();
   });
 

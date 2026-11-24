@@ -13,11 +13,15 @@
 //! - [`furniture_csv`] writes the furniture list.
 
 mod csv;
+mod dimension;
 mod dxf;
 mod pages;
 mod plan;
 
 pub use csv::{COLUMNS as FURNITURE_COLUMNS, furniture_csv, resolve_columns};
+pub use dimension::{
+    DIMENSION_STYLE_PROPERTY, DimensionStyle, DimensionUnit, EndMark, dimension_style,
+};
 pub use dxf::{DxfUnit, LAYERS as DXF_LAYERS, plan_dxf};
 pub use pages::{
     Page, PageFrame, PageOptions, Paper, PlanPages, TitleBlock, expand_page_format,

@@ -3,6 +3,7 @@
 //! with their patterns, doors and windows with sashes, polylines, dimensions,
 //! labels and the compass.
 
+use crate::dimension::{DimensionStyle, EndMark, dimension_style};
 use msh_geometry::wall_shapes;
 use msh_model::{Color, Furniture, Home, Piece, PieceKind, TextStyle};
 use std::collections::HashMap;
@@ -415,12 +416,13 @@ pub fn draw_plan(home: &Home, opts: &PlanOptions) -> PlanDrawing {
     }
 
     // Dimension lines
+    let style = dimension_style(home);
     for d in home
         .dimension_lines
         .iter()
         .filter(|d| on_level(&d.attrs.level))
     {
-        draw_dimension(&mut s, d, thin);
+        draw_dimension(&mut s, d, &style, thin);
     }
 
     // Labels: the last line sits on the label point, earlier lines above it
@@ -855,7 +857,12 @@ fn curve_path(pts: &[[f32; 2]], closed: bool) -> String {
 }
 
 /// A height dimension (one point, two elevations): a marker with the measured height.
-fn draw_height_dimension(s: &mut String, dl: &msh_model::DimensionLine, thin: f32) {
+fn draw_height_dimension(
+    s: &mut String,
+    dl: &msh_model::DimensionLine,
+    style: &DimensionStyle,
+    thin: f32,
+) {
     let a = &dl.attrs;
     let height = (a.elevation_end.unwrap_or(0.0) - a.elevation_start.unwrap_or(0.0)).abs();
     if height < 0.05 {
@@ -881,16 +888,35 @@ fn draw_height_dimension(s: &mut String, dl: &msh_model::DimensionLine, thin: f3
         r * 0.35,
         r * 0.3,
         r * 1.6,
-        font_attrs(dl.text_style.as_ref(), DEFAULT_DIMENSION_FONT),
-        format_length(height)
+        font_attrs(dl.text_style.as_ref(), dimension_font(style)),
+        style.format(height)
     );
 }
 
-fn draw_dimension(s: &mut String, dl: &msh_model::DimensionLine, thin: f32) {
+/// Text size of dimensions without a text style of their own.
+pub(crate) fn dimension_font(style: &DimensionStyle) -> f32 {
+    style
+        .font_size
+        .filter(|v| *v > 0.0)
+        .unwrap_or(DEFAULT_DIMENSION_FONT)
+}
+
+/// Half the length of a slash, length of an arrow and radius of a dot at the ends of a
+/// dimension line in cm.
+pub(crate) const MARK: f32 = 5.0;
+pub(crate) const ARROW: f32 = 10.0;
+pub(crate) const DOT: f32 = 2.5;
+
+fn draw_dimension(
+    s: &mut String,
+    dl: &msh_model::DimensionLine,
+    style: &DimensionStyle,
+    thin: f32,
+) {
     let a = &dl.attrs;
     let length = (a.x_end - a.x_start).hypot(a.y_end - a.y_start);
     if length == 0.0 {
-        draw_height_dimension(s, dl, thin);
+        draw_height_dimension(s, dl, style, thin);
         return;
     }
     let angle = (a.y_end - a.y_start)
@@ -903,7 +929,7 @@ fn draw_dimension(s: &mut String, dl: &msh_model::DimensionLine, thin: f32) {
     let size = dl
         .text_style
         .as_ref()
-        .map_or(DEFAULT_DIMENSION_FONT, |t| t.font_size);
+        .map_or(dimension_font(style), |t| t.font_size);
     // The text sits on the outer side of the dimension line
     let (ty, baseline) = if off > 0.0 {
         (off + size * 0.15, "hanging")
@@ -912,22 +938,40 @@ fn draw_dimension(s: &mut String, dl: &msh_model::DimensionLine, thin: f32) {
     };
     let _ = write!(
         s,
-        r#"<g transform="translate({} {}) rotate({angle})"><path d="M0 0V{ext}M{length} 0V{ext}M0 {off}H{length}M-5 {}L5 {}M{} {}L{} {}" stroke="{color}" stroke-width="{thin}" fill="none"/>"#,
-        a.x_start,
-        a.y_start,
-        off + 5.0,
-        off - 5.0,
-        length - 5.0,
-        off + 5.0,
-        length + 5.0,
-        off - 5.0
+        r#"<g transform="translate({} {}) rotate({angle})"><path d="M0 0V{ext}M{length} 0V{ext}M0 {off}H{length}" stroke="{color}" stroke-width="{thin}" fill="none"/>"#,
+        a.x_start, a.y_start,
     );
+    // Marks at both ends; arrows point outwards
+    for (x, inward) in [(0.0, 1.0), (length, -1.0)] {
+        let _ = match style.mark {
+            EndMark::Slash => write!(
+                s,
+                r#"<path d="M{} {}L{} {}" stroke="{color}" stroke-width="{thin}" fill="none"/>"#,
+                x - MARK,
+                off + MARK,
+                x + MARK,
+                off - MARK
+            ),
+            EndMark::Arrow => write!(
+                s,
+                r#"<path d="M{x} {off}L{} {}V{}Z" fill="{color}"/>"#,
+                x + inward * ARROW,
+                off - ARROW * 0.25,
+                off + ARROW * 0.25
+            ),
+            EndMark::Dot => write!(
+                s,
+                r#"<circle cx="{x}" cy="{off}" r="{DOT}" fill="{color}"/>"#
+            ),
+            EndMark::None => Ok(()),
+        };
+    }
     let _ = write!(
         s,
         r#"<text x="{}" y="{ty}" text-anchor="middle" dominant-baseline="{baseline}" fill="{color}"{}>{}</text></g>"#,
         length / 2.0,
-        font_attrs(dl.text_style.as_ref(), DEFAULT_DIMENSION_FONT),
-        format_length(length)
+        font_attrs(dl.text_style.as_ref(), dimension_font(style)),
+        style.format(length)
     );
 }
 

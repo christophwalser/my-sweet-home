@@ -47,10 +47,19 @@ import { registerPlanActions } from "../ui/planBridge";
 import { useDarkMode, useUi } from "../ui/uiStore";
 import { formatFieldValue, toUnit, unitSymbol } from "../units";
 import { levelOfEye } from "../view3d/visitor";
-import { autoDimensions } from "./autoDims";
+import { autoDimensions, dimensionLine } from "./autoDims";
 import ContextMenu, { type MenuItem } from "./ContextMenu";
 import { type CursorInput, inputKey, inputPoint, inputText } from "./cursorInput";
 import { existingDimensions, existingHeightDimension } from "./dimensionMatch";
+import {
+  type CalcSide,
+  type ChainSide,
+  chainDims,
+  chainIds,
+  decimalComma,
+  MIN_CHAIN_DISTANCE,
+  selectedChain,
+} from "./dimensionStyle";
 import {
   drawPlan,
   type PlanColors,
@@ -298,6 +307,8 @@ const cursorStyle: Record<Tool, string> = {
   arcwall: "crosshair",
   roomauto: "cell",
   heightdim: "crosshair",
+  dimchain: "crosshair",
+  elevmark: "crosshair",
   room: "crosshair",
   polyline: "crosshair",
   dimension: "crosshair",
@@ -410,6 +421,16 @@ export default function PlanView() {
    * along the left normal of the line.
    */
   const offsetFrom = useRef<{ a: Pt; b: Pt; half: number; offset: number } | null>(null);
+  /** Dimension chain being placed: its wall, the chains on both sides, side and distance */
+  const chainFrom = useRef<{
+    wall: string;
+    a: Pt;
+    b: Pt;
+    half: number;
+    calc: Record<ChainSide, CalcSide>;
+    side: ChainSide;
+    distance: number;
+  } | null>(null);
   /** Focuses a field opened by a click once the click is over, with its text selected. */
   const focusField = useCallback((el: HTMLInputElement | null) => {
     if (el)
@@ -426,6 +447,7 @@ export default function PlanView() {
     draft.current.length > 0 ||
     (measure.current !== null && !measure.current.done) ||
     offsetFrom.current !== null ||
+    chainFrom.current !== null ||
     typed.current !== null;
   /** Distance of the selected piece being typed (clicked on its label) */
   const [distanceEdit, setDistanceEdit] = useState<{ id: string; d: Distance } | null>(null);
@@ -528,6 +550,12 @@ export default function PlanView() {
 
   /** Explanation of what the next mouse action does, shown below the plan. */
   const hintText = (): string => {
+    // Also when it was started from the context menu, with the selection tool
+    if (chainFrom.current) {
+      return t(
+        "Move the mouse to the side of the chain and click, or type its distance from the wall + Enter · Esc: cancel",
+      );
+    }
     const g = gesture.current;
     const alt = magnetism ? t("Alt: no magnetism") : t("Alt: magnetism (off in the preferences)");
     if (g?.kind === "handle") return `${HANDLE_HINT[g.handle.kind]} · ${alt}`;
@@ -589,6 +617,10 @@ export default function PlanView() {
         return t("Click inside walls to create the room of that area");
       case "heightdim":
         return t("Click where the height dimension goes; it measures the height of the level");
+      case "dimchain":
+        return t("Click the wall the dimension chain runs along");
+      case "elevmark":
+        return t("Click where the elevation mark goes; it shows the elevation of the floor");
       case "room":
         return drawing
           ? t("Click the next corner · click the first corner, {FINISH}", { FINISH })
@@ -680,6 +712,7 @@ export default function PlanView() {
     const rulerDraft = tool === "ruler" ? measure.current : null;
     const measureEnd = (mm: { a: Pt; b: Pt | null }) => typedAt ?? mm.b ?? mm.a;
     const parallel = offsetFrom.current ? offsetGuide(offsetFrom.current) : null;
+    const chainPreview = chainFrom.current ? chainPreviewDims() : null;
     const handleDrag = g?.kind === "handle" && g.drag ? { drag: g.drag, cursor: g.cursor } : null;
     const overlay: PlanOverlay = {
       selection: sel,
@@ -699,8 +732,10 @@ export default function PlanView() {
             ? selectedDistances().map((d): Gap => [d.a, d.b])
             : [],
       // Size of the selected wall or piece while nothing is dragged
-      autoDims:
-        tool === "select" && sel.length === 1 && !g
+      // or the dimension chain being placed
+      autoDims: chainPreview
+        ? chainPreview
+        : tool === "select" && sel.length === 1 && !g
           ? autoDimensions(input.home, input.wallShapes, sel[0])
           : [],
       dimensionDraft:
@@ -737,7 +772,8 @@ export default function PlanView() {
         !drawing && typed.current
           ? measure.current
             ? measureEnd(measure.current)
-            : (parallel?.distance[1] ?? null)
+            : (parallel?.distance[1] ??
+              (chainPreview?.length ? dimensionLine(chainPreview[0])[0] : null))
           : null,
       handles:
         tool === "select" && sel.length === 1 ? elementHandles(input.home, sel[0], pxToCm(1)) : [],
@@ -927,6 +963,7 @@ export default function PlanView() {
     typed.current = null;
     dimOffset.current = null;
     measure.current = null;
+    chainFrom.current = null;
     draw();
   }, [tool]);
 
@@ -1260,6 +1297,34 @@ export default function PlanView() {
       finishOffsetGuide();
       return;
     }
+    if (chainFrom.current) {
+      finishChain();
+      return;
+    }
+    if (tool === "dimchain") {
+      const wall = hitTestAll(
+        input.home,
+        input.wallShapes,
+        effectiveLevel,
+        p,
+        pxToCm(PICK_PX),
+      ).find((h) => h.kind === "wall");
+      if (wall) void startChain(wall.id);
+      return;
+    }
+    if (tool === "elevmark") {
+      void run("elevation_mark_add", {
+        x: Math.round(p[0]),
+        y: Math.round(p[1]),
+        font_size: prefs().newTextSize,
+        comma: decimalComma(),
+        ...levelParam(),
+      }).then((r) => {
+        const id = (r as { id?: string } | undefined)?.id;
+        if (id) setSelection([id]);
+      });
+      return;
+    }
     if (tool === "select") {
       const dist = distanceUnder(p);
       const selId = useStore.getState().selection[0];
@@ -1393,6 +1458,16 @@ export default function PlanView() {
       const d = Math.max(0, Math.abs(raw) - o.half);
       const snappedD = magnetismActive(e.altKey) ? Math.round(d) : Math.round(d * 10) / 10;
       o.offset = (raw < 0 ? -1 : 1) * (snappedD + o.half);
+      draw();
+      return;
+    }
+    const chain = chainFrom.current;
+    if (chain && !g) {
+      // The side and the distance of the chain follow the mouse (whole cm with magnetism)
+      const raw = edgeOffset(chain.a, chain.b, mouseWorld.current);
+      const d = Math.max(MIN_CHAIN_DISTANCE, Math.abs(raw) - chain.half);
+      chain.side = raw < 0 ? "right" : "left";
+      chain.distance = magnetismActive(e.altKey) ? Math.round(d) : Math.round(d * 10) / 10;
       draw();
       return;
     }
@@ -1608,7 +1683,8 @@ export default function PlanView() {
           typed.current = null;
           setHint(hintText());
           draw();
-        } else if (tool === "select" && e.button === 2) openMenu(e.clientX, e.clientY);
+        } else if (chainFrom.current) cancelChain();
+        else if (tool === "select" && e.button === 2) openMenu(e.clientX, e.clientY);
         else if (isPathTool(tool) && draft.current.length > 0) void finishDraft();
         else if ((tool === "measure" || tool === "ruler") && measure.current) {
           measure.current = null;
@@ -1972,6 +2048,32 @@ export default function PlanView() {
         items.push(reg("wall.detach"));
       }
     }
+    // A dimension chain along a wall, or the chain the selected dimensions belong to
+    if (sel.length === 1 && walls.length === 1 && !walls[0].attrs.arc_extent) {
+      items.push({ separator: true });
+      items.push({
+        label: t("Dimension chain along the wall…"),
+        action: () => void startChain(walls[0].attrs.id),
+      });
+    }
+    const selChain = sel.length > 0 ? selectedChain(home, sel) : null;
+    if (selChain) {
+      const ids = chainIds(home, selChain.id);
+      items.push({ separator: true });
+      if (selChain.wall) {
+        items.push({
+          label: t("Measure the dimension chain again"),
+          action: () =>
+            void run("dimension_chain_update", { id: sel[0] }).then((r) => {
+              const next = (r as { ids?: string[] } | undefined)?.ids;
+              if (next) setSelection(next);
+            }),
+        });
+      }
+      if (ids.length !== sel.length) {
+        items.push({ label: t("Select the whole chain"), action: () => setSelection(ids) });
+      }
+    }
     // Dimensions of a single wall or piece
     if (sel.length === 1 && (walls.length === 1 || furniture.length === 1)) {
       const dims = autoDimensions(home, input.wallShapes, sel[0]);
@@ -2299,6 +2401,61 @@ export default function PlanView() {
     draw();
   };
 
+  /** Starts a dimension chain along a wall: the mouse chooses its side and distance. */
+  const startChain = async (wallId: string) => {
+    const calc = (await run("dimension_chain_calc", { wall: wallId })) as
+      | (Record<ChainSide, CalcSide> & { outside?: ChainSide })
+      | undefined;
+    const wall = useStore.getState().opened?.home.walls.find((w) => w.attrs.id === wallId)?.attrs;
+    if (!calc || !wall) return;
+    chainFrom.current = {
+      wall: wallId,
+      a: [wall.x_start, wall.y_start],
+      b: [wall.x_end, wall.y_end],
+      half: wall.thickness / 2,
+      calc,
+      side: calc.outside ?? "left",
+      distance: 60,
+    };
+    typed.current = null;
+    setHint(hintText());
+    draw();
+  };
+
+  /** Distance of the chain being placed: typed, else from the mouse. */
+  const chainDistance = (): number => {
+    const typedDistance = typed.current
+      ? evalLength(typed.current.length, usePreferences.getState().unit)
+      : null;
+    return typedDistance !== null && typedDistance >= 1
+      ? typedDistance
+      : (chainFrom.current?.distance ?? 60);
+  };
+
+  const chainPreviewDims = () => {
+    const c = chainFrom.current;
+    return c ? chainDims(c.calc[c.side], chainDistance()) : [];
+  };
+
+  const cancelChain = () => {
+    chainFrom.current = null;
+    typed.current = null;
+    setHint(hintText());
+    draw();
+  };
+
+  /** Adds the dimension chain where it is previewed. */
+  const finishChain = () => {
+    const c = chainFrom.current;
+    const distance = chainDistance();
+    cancelChain();
+    if (!c) return;
+    void run("dimension_chain_add", { wall: c.wall, side: c.side, distance }).then((r) => {
+      const ids = (r as { ids?: string[] } | undefined)?.ids;
+      if (ids) setSelection(ids);
+    });
+  };
+
   /** Finishes "Ruler at a distance": adds the parallel ruler. */
   const finishOffsetGuide = () => {
     const o = offsetFrom.current;
@@ -2410,6 +2567,19 @@ export default function PlanView() {
           typed.current = null;
           setHint(hintText());
         } else if (e.key !== "Tab") {
+          const next = inputKey(typed.current, e.key);
+          if (next === undefined) return;
+          typed.current = next;
+        }
+        draw();
+        e.preventDefault();
+        return;
+      }
+      if (chainFrom.current) {
+        // A dimension chain: the typed distance, Enter adds it, Esc cancels
+        if (e.key === "Enter") finishChain();
+        else if (e.key === "Escape") cancelChain();
+        else if (e.key !== "Tab") {
           const next = inputKey(typed.current, e.key);
           if (next === undefined) return;
           typed.current = next;

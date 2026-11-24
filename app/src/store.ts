@@ -30,7 +30,11 @@ export type Tool =
   | "roomauto"
   | "polyline"
   | "dimension"
+  /** Dimension chain along a wall */
+  | "dimchain"
   | "heightdim"
+  /** Elevation mark */
+  | "elevmark"
   | "label"
   | "measure"
   /** Ruler: a guide line that stays in the plan (measuring tool without the length) */

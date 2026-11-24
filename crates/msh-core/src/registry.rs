@@ -140,6 +140,7 @@ impl Registry {
         doc.checkpoint(name);
         match (spec.handler)(doc, params) {
             Ok(v) => {
+                crate::commands::refresh_elevation_marks(doc);
                 doc.commit_checkpoint();
                 doc.modified = true;
                 Ok(v)

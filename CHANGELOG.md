@@ -70,6 +70,16 @@ All notable changes to this project are documented in this file. The format foll
   the plan and in 3D separately, with an opacity in the plan.
 - The map of "Align north with the map" can be used as background image of the plan, true to
   scale and turned like the plan.
+- Dimension chains along a wall (`dimension_chain_add`, `dimension_chain_update`,
+  `dimension_chain_calc`): rows for doors and windows, adjoining walls and the whole length,
+  placed with the mouse or a typed distance, measured again with one click; also between points
+  (command). In the drop-down of the dimension button, so the digits "4, 1" now choose the chain
+  and "4, 2" the height dimension.
+- Dimension style of the home (`dimension_style_set`): marks at the ends, unit and decimals or
+  DIN 1356 with raised millimeters, text size; also in exported and printed plans and in 3D.
+- Elevation marks (`elevation_mark_add`, `elevation_mark_update`), e.g. ▽ +2.62, that follow the
+  elevation of their level.
+- The length of a dimension can be typed in its properties (`dimension_update`).
 - Printing and PDF: papers A0 to A5, Letter, Legal, Tabloid or any size in mm, any plan scale
   (e.g. 1:75), and a title block on plan pages (project, level, author, date, sheet, scale with
   scale bar, north arrow). A plan too large for one page at its scale is split into several

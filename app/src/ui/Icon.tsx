@@ -192,6 +192,18 @@ const PATHS = {
       <path d="m7 9-3 3 3 3M17 9l3 3-3 3" />
     </>
   ),
+  dimchain: (
+    <>
+      <path d="M3 8h18M3 5v6M10 5v6M15 5v6M21 5v6" />
+      <path d="M3 17h18M3 14v6M21 14v6" />
+    </>
+  ),
+  elevmark: (
+    <>
+      <path d="M6 8h10l-5 8z" />
+      <path d="M3 16h18M16 8h5" />
+    </>
+  ),
   heightdim: (
     <>
       <path d="M8 4h8M8 20h8M12 4v16" />

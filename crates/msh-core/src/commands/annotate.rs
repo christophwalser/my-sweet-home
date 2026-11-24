@@ -44,6 +44,9 @@ struct DimensionUpdateParams {
     y_end: Option<f32>,
     /// Distance of the dimension line from the measured points in cm
     offset: Option<f32>,
+    /// Measured length in cm: moves the end in the direction of the dimension, the upper end of
+    /// a height dimension; what it measures stays
+    length: Option<f32>,
     /// Text style of the length: size in cm, font family ("" = default), bold, italic
     font_size: Option<f32>,
     font_name: Option<String>,
@@ -263,7 +266,7 @@ pub(super) fn register(r: &mut Registry) {
     );
     r.add(
         "dimension_update",
-        "Changes the measured points, the offset or the text style of a dimension line.",
+        "Changes the measured points, the length, the offset or the text style of a dimension line.",
         true,
         |doc, p: DimensionUpdateParams| {
             let d = doc
@@ -279,6 +282,21 @@ pub(super) fn register(r: &mut Registry) {
                 ($($f:ident),*) => { $( if let Some(v) = p.$f { a.$f = v; } )* };
             }
             set!(x_start, y_start, x_end, y_end, offset);
+            if let Some(length) = p.length {
+                if !length.is_finite() || length < 0.1 {
+                    return Err(CommandError::failed("the length must be at least 0.1 cm"));
+                }
+                let (dx, dy) = (a.x_end - a.x_start, a.y_end - a.y_start);
+                let old = dx.hypot(dy);
+                if old > 0.0 {
+                    a.x_end = a.x_start + dx / old * length;
+                    a.y_end = a.y_start + dy / old * length;
+                } else {
+                    let start = a.elevation_start.unwrap_or(0.0);
+                    let down = a.elevation_end.unwrap_or(0.0) < start;
+                    a.elevation_end = Some(if down { start - length } else { start + length });
+                }
+            }
             super::text::update_style(
                 &mut d.text_style,
                 18.0,
@@ -308,6 +326,7 @@ pub(super) fn register(r: &mut Registry) {
                     return Err(CommandError::failed("label text must not be empty"));
                 }
                 l.text = t;
+                super::dimension::leave_elevation_mark(l);
             }
             if let Some(v) = p.x {
                 l.attrs.x = v;

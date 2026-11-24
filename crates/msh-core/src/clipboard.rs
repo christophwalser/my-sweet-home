@@ -255,6 +255,7 @@ impl Clipboard {
             a.x_end += dx;
             a.y_end += dy;
             new_ids.push(id);
+            crate::commands::leave_chain(&mut d);
             doc.home_mut().dimension_lines.push(d);
         }
         for mut l in clip.labels {
