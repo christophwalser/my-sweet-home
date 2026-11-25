@@ -3,7 +3,7 @@
 // of the msh-core registry, so UI, CLI and MCP stay equivalent.
 
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { ask, message, open } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../api";
 import { errorText } from "../errorText";
 import { t } from "../i18n";
@@ -25,6 +25,7 @@ import { type Tool, useStore, VISITOR_ID } from "../store";
 import { LEVELS_3D_OPTIONS, levels3dMode } from "../view3d/levels3d";
 import { STANDARD_VIEWS, standardViewLabel } from "../view3d/standardViews";
 import { view3dAction } from "../view3d/view3dBridge";
+import { askConfirm, tell } from "./ask";
 import type { IconName } from "./Icon";
 import { keyTarget, modalOpen } from "./keyTarget";
 import { planActions } from "./planBridge";
@@ -143,10 +144,10 @@ async function openRecent(path: string): Promise<void> {
   if (store().opened?.path?.toLowerCase() === path.toLowerCase()) return;
   if (!(await api.fileExists(path).catch(() => false))) {
     removeRecentHome(path);
-    await message(t("The file {path} no longer exists. It was removed from the list.", { path }), {
-      title: t("Open recent"),
-      kind: "warning",
-    });
+    await tell(
+      t("Open recent"),
+      t("The file {path} no longer exists. It was removed from the list.", { path }),
+    );
     return;
   }
   await openFile(path);
@@ -254,13 +255,15 @@ function moveLevel(by: number): void {
 export async function deleteLevel(): Promise<void> {
   const level = currentLevel();
   if (!level) return;
-  const yes = await ask(
-    t(
+  const yes = await askConfirm({
+    title: t("Delete level"),
+    message: t(
       'Delete the level "{name}" with all walls, rooms, furniture and other elements on it? Undo restores it.',
       { name: level.attrs.name },
     ),
-    { title: t("Delete level"), kind: "warning", okLabel: t("Delete"), cancelLabel: t("Cancel") },
-  );
+    confirm: t("Delete"),
+    danger: true,
+  });
   if (yes) await run("edit_delete", { ids: [level.attrs.id] });
 }
 
@@ -293,12 +296,12 @@ function align(how: string): void {
 
 async function about(): Promise<void> {
   const info = await api.appInfo().catch(() => null);
-  await message(
+  await tell(
+    t("About My Sweet Home"),
     t(
       "My Sweet Home {v0}\n\nA home design app compatible with Sweet Home 3D files (.sh3d, .sh3f, .sh3t). Controllable through the UI, the msh CLI and an MCP server.",
       { v0: info ? `v${info.version}` : "" },
     ),
-    { title: t("About My Sweet Home"), kind: "info" },
   );
 }
 

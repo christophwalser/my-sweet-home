@@ -2,7 +2,6 @@
 // Escape cancels only the question, Tab stays in it, and no key reaches the dialog behind it.
 
 import { useEffect, useRef, useState } from "react";
-import { t } from "../i18n";
 import { useAsk } from "./ask";
 
 export default function AskDialog() {
@@ -54,6 +53,7 @@ function Ask() {
 
   if (!open) return null;
   const missing = !!open.input && text.trim() === "";
+  const [first, ...others] = open.buttons;
   return (
     <div className="dialog-backdrop ask">
       <form
@@ -65,7 +65,7 @@ function Ask() {
         aria-describedby={open.message ? "ask-message" : undefined}
         onSubmit={(e) => {
           e.preventDefault();
-          if (!missing) open.answer(text);
+          if (!missing) open.answer({ id: first.id, text });
         }}
       >
         <header className="dialog-header">
@@ -86,14 +86,26 @@ function Ask() {
         <div className="dialog-actions">
           <button
             type="submit"
-            className={open.danger ? "primary danger" : "primary"}
+            className={first.danger ? "primary danger" : "primary"}
             disabled={missing}
           >
-            {open.confirm}
+            {first.label}
           </button>
-          <button type="button" onClick={() => open.answer(null)}>
-            {t("Cancel")}
-          </button>
+          {others.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              className={b.danger ? "danger" : undefined}
+              onClick={() => open.answer({ id: b.id, text })}
+            >
+              {b.label}
+            </button>
+          ))}
+          {open.cancel !== null && (
+            <button type="button" onClick={() => open.answer(null)}>
+              {open.cancel}
+            </button>
+          )}
         </div>
       </form>
     </div>

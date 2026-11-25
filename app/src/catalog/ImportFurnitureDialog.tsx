@@ -68,6 +68,35 @@ function rotationRowMajor(m: THREE.Matrix4): number[] {
 
 const fmt = (v: number) => String(Math.round(v * 10) / 10);
 
+/** Waits until the textures of a model are loaded, so that its icon shows them. */
+async function texturesLoaded(model: THREE.Object3D): Promise<void> {
+  const missing = () => {
+    let wait = false;
+    model.traverse((o) => {
+      const material = (o as THREE.Mesh).material;
+      for (const m of Array.isArray(material) ? material : material ? [material] : []) {
+        const map = (m as THREE.MeshStandardMaterial).map;
+        if (map && !map.image) wait = true;
+      }
+    });
+    return wait;
+  };
+  for (let i = 0; i < 50 && missing(); i++) await new Promise((r) => setTimeout(r, 100));
+}
+
+/** An error whose text is for the user already. */
+class Explained extends Error {}
+
+const explain = (e: unknown) => (e instanceof Explained ? e.message : errorText(e));
+
+/** A model as it was loaded, before the user changes anything. */
+type Loaded = {
+  staged: Staged;
+  name: string;
+  size: [number, number, number];
+  reference: boolean;
+};
+
 /** Centimeters of a typed size; a unit may be typed with it ("60 cm", "24 in", "1.2 m"). */
 function cmOf(text: string): number {
   return parseLength(text, "cm") ?? Number.NaN;
@@ -115,10 +144,29 @@ export default function ImportFurnitureDialog({
   const [elevation, setElevation] = useState("0");
   const [doorOrWindow, setDoorOrWindow] = useState(false);
   const [staircase, setStaircase] = useState(false);
-  const [addToHome, setAddToHome] = useState(true);
+  /** Models to import one after another, and the one shown */
+  const [queue, setQueue] = useState(() => {
+    const list = useUi.getState().importQueue;
+    return initialPath && list.length > 1 && list[0] === initialPath ? list : [];
+  });
+  const [at, setAt] = useState(0);
+  const several = queue.length > 1;
+  const left = several ? queue.length - at : 1;
+  /** Importing all: ends after the current model */
+  const stop = useRef(false);
+  useEffect(
+    () => () => {
+      stop.current = true;
+    },
+    [],
+  );
+  // Several models would lie on top of each other in the middle of the home
+  const [addToHome, setAddToHome] = useState(!several);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const opened = useStore((s) => s.opened);
+  /** Turned by the user; there is no field that would show it */
+  const turned = useRef(false);
   /** View of the preview: dragging turns it, the wheel zooms, a double-click resets it */
   const orbit = useRef({ ...DEFAULT_ORBIT });
   const drag = useRef<{ x: number; y: number } | null>(null);
@@ -202,7 +250,7 @@ export default function ImportFurnitureDialog({
     if (typeof chosen === "string") await loadModel(chosen);
   };
 
-  const loadModel = async (chosen: string) => {
+  const loadModel = async (chosen: string): Promise<Loaded | null> => {
     setBusy(true);
     setStatus(t("Loading model…"));
     try {
@@ -210,7 +258,7 @@ export default function ImportFurnitureDialog({
       const s = await api.modelStage(await prepareModel(chosen));
       const model = await loadModelUncached(stageResourceUrl(s.id, s.main));
       const t = three.current;
-      if (!t) return;
+      if (!t) return null;
       if (t.model) disposeObject(t.model);
       t.model = model;
       const identity = new THREE.Matrix4();
@@ -237,11 +285,26 @@ export default function ImportFurnitureDialog({
       setTerrain(isTerrain);
       setKeepOrigin(false);
       resetSize(extent, cm);
-      setStaged({ ...s, path: chosen });
-      setName(fileStem(chosen));
+      // What the model before may have had
+      setDoorOrWindow(false);
+      setStaircase(false);
+      setElevation("0");
+      turned.current = false;
+      const loaded: Loaded = {
+        staged: { ...s, path: chosen },
+        name: fileStem(chosen),
+        size: extent ? [extent.x * cm, extent.z * cm, extent.y * cm] : [0, 0, 0],
+        reference: isTerrain,
+      };
+      setStaged(loaded.staged);
+      setName(loaded.name);
       setStatus(null);
+      return loaded;
     } catch (e) {
+      setStaged(null);
+      setName(fileStem(chosen));
       setStatus(errorText(e));
+      return null;
     } finally {
       setBusy(false);
     }
@@ -298,68 +361,160 @@ export default function ImportFurnitureDialog({
     return icon.toDataURL("image/png").split(",")[1];
   };
 
-  const doImport = async () => {
-    if (!staged) return;
+  /** Imports the model shown, as it was entered */
+  const importShown = async (staged: Staged) => {
     const [w, d, h] = [cmOf(size.width), cmOf(size.depth), cmOf(size.height)];
     if (!(w > 0 && d > 0 && h > 0)) {
-      setStatus(t("Width, depth and height must be positive."));
+      throw new Explained(t("Width, depth and height must be positive."));
+    }
+    if (three.current?.model) await texturesLoaded(three.current.model);
+    const r = (await api.execute("furniture_import", {
+      model_path: staged.path,
+      name: name.trim() || fileStem(staged.path),
+      category: category.trim() || "My furniture",
+      ...(creator && { creator }),
+      width: w,
+      depth: d,
+      height: h,
+      elevation: cmOf(elevation) || 0,
+      door_or_window: doorOrWindow,
+      staircase,
+      ...(library ? { library } : {}),
+      model_rotation: rotationRowMajor(rotation),
+      icon_png_base64: iconBase64(),
+    })) as { catalog_id: string };
+    if (addToHome && opened) {
+      const level = useStore.getState().selectedLevel;
+      let [x, y] = homeCenter(opened.home);
+      let above: number | undefined;
+      const extent = render(rotation);
+      if (reference && keepOrigin && extent) {
+        const turned = center.current.clone().applyMatrix4(rotation);
+        const at = originPlacement(turned, extent, [w, d, h]);
+        x = at.x;
+        y = at.y;
+        above = at.elevation + (cmOf(elevation) || 0);
+      }
+      const added = (await api.execute("furniture_add", {
+        catalog_id: r.catalog_id,
+        x,
+        y,
+        ...(above !== undefined ? { elevation: above } : {}),
+        ...(level ? { level } : {}),
+      })) as { id?: string };
+      if (added.id && reference) {
+        await api.execute("furniture_update", { id: added.id, reference: true, terrain });
+      }
+      if (added.id) useStore.getState().setSelection([added.id]);
+    }
+    useUi.getState().noteImport(r.catalog_id);
+  };
+
+  /** Imports a model of the queue as it is: its size, its name, upright as in the file */
+  const importLoaded = async (m: Loaded) => {
+    if (three.current?.model) await texturesLoaded(three.current.model);
+    const r = (await api.execute("furniture_import", {
+      model_path: m.staged.path,
+      name: m.name,
+      category: category.trim() || "My furniture",
+      ...(creator && { creator }),
+      width: m.size[0],
+      depth: m.size[1],
+      height: m.size[2],
+      ...(library ? { library } : {}),
+      model_rotation: rotationRowMajor(new THREE.Matrix4()),
+      icon_png_base64: iconBase64(),
+    })) as { catalog_id: string };
+    useUi.getState().noteImport(r.catalog_id);
+  };
+
+  /** The next model of the queue, or the end */
+  const next = async () => {
+    if (at + 1 >= queue.length) {
+      onClose();
       return;
     }
+    setAt(at + 1);
+    await loadModel(queue[at + 1]);
+  };
+
+  const doImport = async () => {
+    if (!staged) return;
     setBusy(true);
     setStatus(t("Importing…"));
     try {
-      const r = (await api.execute("furniture_import", {
-        model_path: staged.path,
-        name: name.trim() || fileStem(staged.path),
-        category: category.trim() || "My furniture",
-        ...(creator && { creator }),
-        width: w,
-        depth: d,
-        height: h,
-        elevation: cmOf(elevation) || 0,
-        door_or_window: doorOrWindow,
-        staircase,
-        ...(library ? { library } : {}),
-        model_rotation: rotationRowMajor(rotation),
-        icon_png_base64: iconBase64(),
-      })) as { catalog_id: string };
-      if (addToHome && opened) {
-        const level = useStore.getState().selectedLevel;
-        let [x, y] = homeCenter(opened.home);
-        let above: number | undefined;
-        const extent = render(rotation);
-        if (reference && keepOrigin && extent) {
-          const turned = center.current.clone().applyMatrix4(rotation);
-          const at = originPlacement(turned, extent, [w, d, h]);
-          x = at.x;
-          y = at.y;
-          above = at.elevation + (cmOf(elevation) || 0);
-        }
-        const added = (await api.execute("furniture_add", {
-          catalog_id: r.catalog_id,
-          x,
-          y,
-          ...(above !== undefined ? { elevation: above } : {}),
-          ...(level ? { level } : {}),
-        })) as { id?: string };
-        if (added.id && reference) {
-          await api.execute("furniture_update", { id: added.id, reference: true, terrain });
-        }
-        if (added.id) useStore.getState().setSelection([added.id]);
-      }
-      useUi.getState().noteImport();
-      onClose();
+      await importShown(staged);
+      await next();
     } catch (e) {
-      setStatus(errorText(e));
+      setStatus(explain(e));
     } finally {
       setBusy(false);
     }
   };
 
-  // Turning the model has no field that would show the change
-  const turned = useRef(false);
+  /** Imports the model shown as entered and the others as they are */
+  const importAll = async () => {
+    stop.current = false;
+    const failed: string[] = [];
+    let reason = "";
+    setBusy(true);
+    setRunning(true);
+    for (let i = at; i < queue.length; i++) {
+      if (stop.current) {
+        failed.push(...queue.slice(i));
+        break;
+      }
+      try {
+        if (i === at) {
+          if (!staged) throw new Explained(status ?? "");
+          await importShown(staged);
+          continue;
+        }
+        setAt(i);
+        const m = await loadModel(queue[i]);
+        setBusy(true);
+        if (!m) throw new Explained("");
+        if (!(m.size[0] > 0 && m.size[1] > 0 && m.size[2] > 0))
+          throw new Explained(t("Width, depth and height must be positive."));
+        await importLoaded(m);
+      } catch (e) {
+        failed.push(queue[i]);
+        reason = explain(e) || reason;
+      }
+    }
+    const stopped = stop.current;
+    setRunning(false);
+    setBusy(false);
+    if (failed.length === 0) {
+      onClose();
+      return;
+    }
+    // Closed meanwhile
+    if (!three.current) return;
+    setQueue(failed);
+    setAt(0);
+    await loadModel(failed[0]);
+    if (!stopped)
+      setStatus(
+        `${t("Could not be imported: {names}", { names: failed.map(fileStem).join(", ") })} ${reason}`.trim(),
+      );
+  };
+  const [running, setRunning] = useState(false);
+
   const dialog = useRef<HTMLDivElement>(null);
-  useDialogEscape(dialog, onClose, { guard: true, changed: () => turned.current, busy });
+  useDialogEscape(dialog, onClose, {
+    guard: true,
+    changed: () => turned.current || several,
+    busy,
+    question: () =>
+      several
+        ? {
+            title: t("Stop importing?"),
+            message: t("Models not imported yet: {n}", { n: left }),
+            confirm: t("Stop importing"),
+          }
+        : null,
+  });
 
   return (
     <div className="dialog-backdrop">
@@ -372,7 +527,15 @@ export default function ImportFurnitureDialog({
         aria-label={t("Import furniture")}
       >
         <header className="dialog-header">
-          <h2>{t("Import furniture")}</h2>
+          <h2>
+            {t("Import furniture")}
+            {several && (
+              <span className="muted">
+                {" "}
+                {t("{n} of {total}", { n: at + 1, total: queue.length })}
+              </span>
+            )}
+          </h2>
           <button type="button" onClick={onClose} aria-label={t("Close")}>
             ✕
           </button>
@@ -417,9 +580,11 @@ export default function ImportFurnitureDialog({
               }}
             />
             <div className="prop-actions">
-              <button type="button" onClick={() => void chooseModel()} disabled={busy}>
-                {staged ? t("Other model…") : t("Choose model…")}
-              </button>
+              {!several && (
+                <button type="button" onClick={() => void chooseModel()} disabled={busy}>
+                  {staged ? t("Other model…") : t("Choose model…")}
+                </button>
+              )}
             </div>
             {staged && (
               <div
@@ -562,12 +727,45 @@ export default function ImportFurnitureDialog({
               </>
             )}
             <div className="prop-actions">
-              <button type="button" onClick={() => void doImport()} disabled={!staged || busy}>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void doImport()}
+                disabled={!staged || busy}
+              >
                 {t("Import")}
               </button>
-              <button type="button" onClick={onClose}>
-                {t("Cancel")}
-              </button>
+              {several && left > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void importAll()}
+                    disabled={busy}
+                    title={t(
+                      "Import this model as entered and the others with their own name and size, into the same category and without placing them in the home",
+                    )}
+                  >
+                    {t("Import all {n}", { n: left })}
+                  </button>
+                  <button type="button" onClick={() => void next()} disabled={busy}>
+                    {t("Skip")}
+                  </button>
+                </>
+              )}
+              {running ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    stop.current = true;
+                  }}
+                >
+                  {t("Stop")}
+                </button>
+              ) : (
+                <button type="button" onClick={onClose} disabled={busy && several}>
+                  {t("Cancel")}
+                </button>
+              )}
             </div>
             {status && <p className="small">{status}</p>}
           </div>

@@ -27,9 +27,25 @@ import { useStore } from "../store";
 import { useUi } from "../ui/uiStore";
 import { formatPrecise } from "../units";
 import { useCatalogPrefs } from "./catalogPrefs";
+import { CATALOG_SORTS, type CatalogSort, itemsOfLibrary, sortItems } from "./catalogView";
 import { importDroppedFiles } from "./dropImport";
 import FurnitureList from "./FurnitureList";
-import { categoriesFor, itemMenu, libraryOf, openEditor, undoLibrary } from "./library";
+import {
+  categoriesFor,
+  itemMenu,
+  libraryName,
+  libraryOf,
+  openEditor,
+  undoLibrary,
+} from "./library";
+
+/** Names of the orders of the entries (translated when shown). */
+const SORT_LABELS: Record<CatalogSort, () => string> = {
+  library: () => t("As in the libraries"),
+  name: () => t("Name"),
+  largest: () => t("Largest first"),
+  smallest: () => t("Smallest first"),
+};
 
 /** Search results shown before "Show all". */
 const MAX_RESULTS = 300;
@@ -320,6 +336,8 @@ function CatalogPanel() {
   const recentTextures = useUi((s) => s.recentTextures);
   const openKeys = useCatalogPrefs((s) => s.open);
   const tiles = useCatalogPrefs((s) => s.tiles);
+  const sort = useCatalogPrefs((s) => s.sort);
+  const libraryPath = useCatalogPrefs((s) => s.library[kind]);
   const [showAll, setShowAll] = useState(false);
   /** Gives the texture to the selected rooms (floor), walls (both sides) and furniture. */
   const applyTexture = (item: CatalogItem) => {
@@ -410,9 +428,15 @@ function CatalogPanel() {
     return m;
   }, [catalog]);
 
-  const items = useMemo(
+  const allItems = useMemo(
     () => (catalog?.items ?? []).filter((i) => i.kind === kind),
     [catalog, kind],
+  );
+  /** The only library shown; a library that is gone or hidden shows all again */
+  const onlyLibrary = catalog?.libraries.find((l) => l.kind === kind && l.path === libraryPath);
+  const items = useMemo(
+    () => sortItems(itemsOfLibrary(allItems, catalog?.libraries ?? [], libraryPath), sort),
+    [allItems, catalog, libraryPath, sort],
   );
 
   const results = useMemo(() => {
@@ -438,7 +462,7 @@ function CatalogPanel() {
 
   // Favorites and the items used last, as categories above the others
   const pinned = useMemo(() => {
-    const byId = new Map(items.filter((i) => i.id).map((i) => [i.id as string, i]));
+    const byId = new Map(allItems.filter((i) => i.id).map((i) => [i.id as string, i]));
     const pick = (ids: string[]) =>
       ids.map((id) => byId.get(id)).filter((i): i is CatalogItem => i !== undefined);
     const out: [string, string, CatalogItem[]][] = [
@@ -446,7 +470,33 @@ function CatalogPanel() {
       ["*recent", t("Used last"), pick(kind === "furniture" ? recentFurniture : recentTextures)],
     ];
     return out.filter(([, , list]) => list.length > 0);
-  }, [items, favorites, recentFurniture, recentTextures, kind]);
+  }, [allItems, favorites, recentFurniture, recentTextures, kind]);
+
+  /** The menu of the view: order, library, list or tiles */
+  const viewMenu = (): MenuItem[] => {
+    const prefs = useCatalogPrefs.getState();
+    const entry = (label: string, on: boolean, action: () => void): MenuItem => ({
+      label,
+      note: on ? "✓" : undefined,
+      action,
+    });
+    // A file may hold several catalogs: one entry per file
+    const libraries = new Map(
+      (catalog?.libraries ?? []).filter((l) => l.kind === kind).map((l) => [l.path, l]),
+    );
+    return [
+      { heading: t("Order") },
+      ...CATALOG_SORTS.map((s) => entry(SORT_LABELS[s](), sort === s, () => prefs.setSort(s))),
+      { heading: t("Library") },
+      entry(t("All libraries"), !onlyLibrary, () => prefs.setLibrary(kind, null)),
+      ...[...libraries.values()].map((l) =>
+        entry(libraryName(l), onlyLibrary?.path === l.path, () => prefs.setLibrary(kind, l.path)),
+      ),
+      { heading: t("Entries") },
+      entry(t("List"), !tiles, () => prefs.setTiles(false)),
+      entry(t("Tiles"), tiles, () => prefs.setTiles(true)),
+    ];
+  };
 
   const isOpen = (category: string) => openKeys.includes(`${kind}:${category}`);
   const toggle = (category: string) => useCatalogPrefs.getState().toggleOpen(`${kind}:${category}`);
@@ -546,11 +596,14 @@ function CatalogPanel() {
             <button
               type="button"
               className="link-button"
-              aria-pressed={tiles}
-              onClick={() => useCatalogPrefs.getState().setTiles(!tiles)}
-              title={t("Show the items as a list or as large tiles")}
+              aria-haspopup="menu"
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                setMenu({ x: r.left, y: r.bottom + 2, items: viewMenu() });
+              }}
+              title={t("Order of the entries, one library or all, list or tiles")}
             >
-              {tiles ? t("List") : t("Tiles")}
+              {t("View")} ▾
             </button>
           </div>
           {dropMessage && (
@@ -569,6 +622,19 @@ function CatalogPanel() {
                 </button>
               )}
               <button type="button" onClick={() => setDropMessage(null)} aria-label={t("Close")}>
+                ×
+              </button>
+            </div>
+          )}
+          {onlyLibrary && (
+            <div className="catalog-filter">
+              <span>{t("Only “{name}”", { name: libraryName(onlyLibrary) })}</span>
+              <button
+                type="button"
+                onClick={() => useCatalogPrefs.getState().setLibrary(kind, null)}
+                title={t("Show all libraries")}
+                aria-label={t("Show all libraries")}
+              >
                 ×
               </button>
             </div>

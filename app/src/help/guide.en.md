@@ -142,9 +142,10 @@ Choose a currency in **Preferences › General › Prices** to see prices. The p
 - A color field shows the color as #RRGGBB, which can be typed, and lists the colors already used in the home. A field without a color is struck through.
 - **Furniture › Import into the library** imports models (OBJ, DAE, 3DS, glTF, FBX, STL, 3MF, PLY, VRML, ZIP) and textures (JPG, PNG, BMP, GIF, WebP, TIFF, SVG, material packages). Files can also be dropped onto the catalog.
 - **Libraries…** opens the library editor: create libraries, change the properties of items, move them to other categories, import and delete.
-- In the library editor **Ctrl+click**, **Shift+click** and **Ctrl+A** select several items. Their menu and the buttons on the right move them to a category, copy them to another library, duplicate or delete them; category, tags, creator and license are changed for all at once. **Undo** takes the whole action back.
+- In the library editor **Ctrl+click**, **Shift+click** and **Ctrl+A** select several items. Their menu and the buttons on the right move them to a category, copy or move them to another library, duplicate or delete them; tags, creator, license, price, sizes and settings such as "Movable" are changed for all at once. Lengths are typed in the unit of the preferences or with a unit (`1.2 m`). **Undo** takes the whole action back.
 - **Esc** takes back the typed text first, then goes from several items to one and closes the window last. An import you have already filled in asks before it is discarded.
-- **Import…** in the catalog opens the library editor and right away the file dialog: for 3D models under **Furniture**, for images under **Textures**.
+- **Import…** in the catalog opens the library editor and right away the file dialog: for 3D models under **Furniture**, for images under **Textures**. Several models come one after another (**Import all** takes the rest as they are, **Skip** leaves one out), several images in a table with their tile sizes. Afterwards the new items are selected in the editor.
+- **View** in the catalog sets the order of the entries (as in the libraries, by name, by size), shows one library or all, and a list or tiles.
 - **Import › Search online…** in the library editor searches the free libraries of Sweet Home 3D, ambientCG and Poly Haven and imports with one click.
 
 Everything you import is stored in Sweet Home 3D's library folders, so both programs use it.

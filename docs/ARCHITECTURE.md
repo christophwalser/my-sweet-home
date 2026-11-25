@@ -1744,8 +1744,36 @@ Package 8e of the UX review (H4, H5).
 - `EditableLibrary::open` takes the catalog with items if a file holds several (the default
   catalog of Sweet Home 3D has an empty one for contributions in front). `loadCatalog` reads
   again what changed while it was reading.
-- Left open: the editor is still modal; moving items to another library in one step; the same
-  questions and Escape steps in the other dialogs (the message boxes of Windows stay there).
+- Left open: the editor is still modal; the Escape steps in the other dialogs.
+
+### 4.62 Import and catalog, second part (2026-11-25)
+
+Package 9: open points of the packages 4, 5 and 8e.
+
+- **Stack of dialogs** (`ui/uiStore.ts`). `openDialog` with `returnTo` puts a dialog on top of
+  another one, `closeDialog` goes back one step (editor, online catalogs, furniture import). The
+  library editor stays mounted under the dialogs opened from it (`active`, `inert`), so its
+  selection, search and scroll position need no saving. `useDialogEscape` leaves the keys to the
+  active dialog and gives the focus back.
+- **Queue of models** (`catalog/importQueue.ts`, `ImportFurnitureDialog`). `modelQueue` sorts the
+  models by name and takes one that comes in several formats once. "Import all" imports the shown
+  one as entered and the others as they are; the icon waits for the textures. What could not be
+  imported stays in the queue. `noteImport` collects the catalog IDs; the editor selects them and
+  offers to undo as many steps.
+- **Table of textures** (`ImportTexturesDialog`): name and tile size per image, category, creator
+  and width for all; the height follows the proportions (`tileHeight`), also for a single image.
+  `texture_import` checks the first bytes of images it keeps as they are.
+- **Library editor.** `library_copy_items` with `move` writes both libraries as one step and keeps
+  the catalog IDs (a new one only if the target has it already). `library_items` with `indexes` and
+  `values` gives the keys of several items for the fields they share. Lengths are shown and typed in
+  the unit of the preferences (`catalog/lengthText.ts`); the files keep centimeters.
+- **Catalog view** (`catalog/catalogView.ts`): order and library filter, kept per user; the filter
+  per kind. Favorites and the items used last are not filtered.
+- **Questions** (`ui/ask.ts`): `askChoice` with several buttons and `tell`. All message boxes of
+  Windows are gone (the permission `dialog:allow-message` too); file dialogs stay those of Windows.
+  Before it asks, a window that closes is restored if it is minimized.
+- Left open: the editor is still modal, the Escape steps in the other dialogs, placing several
+  imported models in the home, the fields of the furniture import in the unit of the preferences.
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

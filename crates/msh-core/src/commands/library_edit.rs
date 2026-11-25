@@ -75,6 +75,10 @@ struct ItemsParams {
     lang: Option<String>,
     /// Maximum number of results (default 200)
     limit: Option<usize>,
+    /// Only the items with these indexes (with `path`)
+    indexes: Option<Vec<u32>>,
+    /// Also gives all keys of each item ("values", as library_item does)
+    values: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -133,6 +137,10 @@ struct CopyParams {
     names: Option<Vec<String>>,
     /// Language of `name` and `names`, e.g. "de"
     lang: Option<String>,
+    /// Moves the items: they are removed from `from`, and keep their catalog ID, so that
+    /// favorites and homes still find them
+    #[serde(rename = "move")]
+    move_items: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -492,7 +500,13 @@ pub(super) fn register(r: &mut Registry) {
                 .split_whitespace()
                 .map(str::to_owned)
                 .collect();
-            let limit = p.limit.unwrap_or(200);
+            if p.indexes.is_some() && p.path.is_none() {
+                return Err(CommandError::failed("indexes need a path"));
+            }
+            let limit = p
+                .limit
+                .unwrap_or_else(|| p.indexes.as_ref().map_or(200, Vec::len));
+            let with_values = p.values.unwrap_or(false);
             let paths = match &p.path {
                 Some(path) => {
                     known_library(path)?;
@@ -509,7 +523,7 @@ pub(super) fn register(r: &mut Registry) {
                     continue;
                 }
                 for i in lib.indexes() {
-                    if !lib.has_item(i) {
+                    if !lib.has_item(i) || p.indexes.as_ref().is_some_and(|l| !l.contains(&i)) {
                         continue;
                     }
                     let shown = |k: &str| lib.shown(i, k, lang).unwrap_or_default();
@@ -524,14 +538,19 @@ pub(super) fn register(r: &mut Registry) {
                     if !words.iter().all(|w| hay.contains(w)) {
                         continue;
                     }
-                    items.push(json!({
+                    let values = lib.item(i);
+                    let mut entry = json!({
                         "path": path,
                         "library": lib.name(lang),
                         "index": i,
-                        "id": lib.item(i).get("id"),
+                        "id": values.get("id"),
                         "name": shown("name"),
                         "category": shown("category"),
-                    }));
+                    });
+                    if with_values {
+                        entry["values"] = json!(values);
+                    }
+                    items.push(entry);
                     if items.len() >= limit {
                         break 'libs;
                     }
@@ -628,8 +647,8 @@ pub(super) fn register(r: &mut Registry) {
         "library_copy_items",
         "Copies library items into another library (by default the user's own library), with \
          their models, icons and images; into the same library it duplicates them. Items of \
-         read-only libraries are changed this way: copy, then change the copy. Returns the \
-         indexes of the copies.",
+         read-only libraries are changed this way: copy, then change the copy. With `move` the \
+         items leave the library they are in. Returns the indexes of the copies.",
         false,
         |_doc, p: CopyParams| {
             known_library(&p.from)?;
@@ -666,8 +685,29 @@ pub(super) fn register(r: &mut Registry) {
                 ));
             }
             let same = to == p.from;
+            let moving = p.move_items.unwrap_or(false);
+            // The library the items leave; it must be one that can be changed
+            let mut left = match moving {
+                true if same => {
+                    return Err(CommandError::failed(
+                        "the items are in this library already (use library_move_items for \
+                         another category)",
+                    ));
+                }
+                true => Some(open_editable(&p.from)?),
+                false => None,
+            };
             let mut created = Vec::new();
-            record("copy items", std::slice::from_ref(&to), || {
+            let (label, paths) = match moving {
+                true => ("move to library", vec![p.from.clone(), to.clone()]),
+                false => ("copy items", vec![to.clone()]),
+            };
+            record(label, &paths, || {
+                let ids: Vec<String> = target
+                    .indexes()
+                    .into_iter()
+                    .filter_map(|i| target.item(i).get("id").cloned())
+                    .collect();
                 for (at, &i) in p.indexes.iter().enumerate() {
                     let src = if same { target.clone() } else { source.clone() };
                     let n = target.copy_item_from(&src, i)?;
@@ -679,9 +719,20 @@ pub(super) fn register(r: &mut Registry) {
                     if let Some(name) = name {
                         target.set(n, "name", Some(name.trim()), p.lang.as_deref());
                     }
+                    if moving && let Some(id) = src.item(i).get("id").filter(|id| !ids.contains(id))
+                    {
+                        target.set(n, "id", Some(id), None);
+                    }
                     created.push(n);
                 }
-                target.save()
+                target.save()?;
+                if let Some(left) = &mut left {
+                    for &i in &p.indexes {
+                        left.remove_item(i);
+                    }
+                    left.save()?;
+                }
+                Ok(())
             })
             .map_err(failed)?;
             CatalogIndex::reload();

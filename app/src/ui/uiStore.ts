@@ -13,6 +13,7 @@ export type DialogName =
   | "export"
   | "importFurniture"
   | "importTexture"
+  | "importTextures"
   | "online"
   | "libraries"
   | "backgroundImport"
@@ -36,8 +37,9 @@ type UiState = {
   dialogArg: string | null;
   /** Further values for the open dialog, e.g. category and creator of a catalog item */
   dialogExtra: Record<string, string> | null;
-  /** Dialog to show again when the open one closes (e.g. the online catalogs) */
-  returnTo: DialogName | null;
+  /** Dialogs under the open one, shown again when it closes (the last one first) */
+  stack: DialogName[];
+  /** Opens a dialog; with `returnTo` on top of that one, else in place of all that are open */
   openDialog: (
     dialog: DialogName,
     arg?: string,
@@ -45,9 +47,16 @@ type UiState = {
     extra?: Record<string, string>,
   ) => void;
   closeDialog: () => void;
-  /** Counts finished furniture imports, so a dialog that opened one learns it succeeded */
+  /** Counts finished imports, so a dialog that opened one learns it succeeded */
   importCount: number;
-  noteImport: () => void;
+  /**
+   * Catalog IDs of the items imported since the library editor last looked (null: a library), one
+   * per step of the library history
+   */
+  imported: (string | null)[];
+  noteImport: (catalogId: string | null) => void;
+  /** Files to import one after another (models) or in one table (textures) */
+  importQueue: string[];
   theme: ThemeChoice;
   setTheme: (theme: ThemeChoice) => void;
   /** Sun shadows in the 3D view (they cost a second render pass) */
@@ -143,13 +152,26 @@ export const useUi = create<UiState>((set, get) => ({
   dialog: null,
   dialogArg: null,
   dialogExtra: null,
-  returnTo: null,
+  stack: [],
   openDialog: (dialog, arg, returnTo, extra) =>
-    set({ dialog, dialogArg: arg ?? null, returnTo: returnTo ?? null, dialogExtra: extra ?? null }),
+    set((s) => ({
+      dialog,
+      dialogArg: arg ?? null,
+      dialogExtra: extra ?? null,
+      stack: returnTo ? [...(s.dialog === returnTo ? s.stack : []), returnTo] : [],
+    })),
   closeDialog: () =>
-    set({ dialog: get().returnTo, dialogArg: null, returnTo: null, dialogExtra: null }),
+    set((s) => ({
+      dialog: s.stack[s.stack.length - 1] ?? null,
+      dialogArg: null,
+      dialogExtra: null,
+      stack: s.stack.slice(0, -1),
+    })),
   importCount: 0,
-  noteImport: () => set({ importCount: get().importCount + 1 }),
+  imported: [],
+  noteImport: (catalogId) =>
+    set((s) => ({ importCount: s.importCount + 1, imported: [...s.imported, catalogId] })),
+  importQueue: [],
   theme: loadJson<ThemeChoice>(THEME_KEY, "system"),
   setTheme: (theme) => {
     set({ theme });

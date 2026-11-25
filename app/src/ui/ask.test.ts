@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { askConfirm, askText, useAsk } from "./ask";
+import { askChoice, askConfirm, askText, tell, useAsk } from "./ask";
 
-const answer = (text: string | null) => useAsk.getState().open?.answer(text);
+const answer = (id: string | null, text = "") =>
+  useAsk.getState().open?.answer(id === null ? null : { id, text });
 
 afterEach(() => useAsk.setState({ open: null }));
 
@@ -9,7 +10,7 @@ describe("askConfirm", () => {
   it("is true when the user goes on and closes the question", async () => {
     const asked = askConfirm({ title: "Delete?", confirm: "Delete" });
     expect(useAsk.getState().open?.title).toBe("Delete?");
-    answer("");
+    answer("ok");
     expect(await asked).toBe(true);
     expect(useAsk.getState().open).toBeNull();
   });
@@ -25,7 +26,7 @@ describe("askConfirm", () => {
     const second = askConfirm({ title: "Second", confirm: "Yes" });
     expect(await first).toBe(false);
     expect(useAsk.getState().open?.title).toBe("Second");
-    answer("");
+    answer("ok");
     expect(await second).toBe(true);
   });
 });
@@ -34,16 +35,45 @@ describe("askText", () => {
   it("gives the text without spaces around it", async () => {
     const asked = askText({ title: "New", label: "Name", value: "Old", confirm: "Create" });
     expect(useAsk.getState().open?.input).toEqual({ label: "Name", value: "Old" });
-    answer("  Shop ");
+    answer("ok", "  Shop ");
     expect(await asked).toBe("Shop");
   });
 
   it("is null for an empty text and when cancelled", async () => {
     const empty = askText({ title: "New", label: "Name", confirm: "Create" });
-    answer("   ");
+    answer("ok", "   ");
     expect(await empty).toBeNull();
     const cancelled = askText({ title: "New", label: "Name", confirm: "Create" });
     answer(null);
     expect(await cancelled).toBeNull();
+  });
+});
+
+describe("askChoice", () => {
+  const question = {
+    title: "Save?",
+    buttons: [
+      { id: "save", label: "Save" },
+      { id: "discard", label: "Don't save", danger: true },
+    ],
+    cancel: "Cancel",
+  };
+
+  it("gives the chosen button, or null when cancelled", async () => {
+    const second = askChoice(question);
+    answer("discard");
+    expect(await second).toBe("discard");
+    const cancelled = askChoice(question);
+    answer(null);
+    expect(await cancelled).toBeNull();
+  });
+});
+
+describe("tell", () => {
+  it("has nothing to cancel and ends either way", async () => {
+    const told = tell("About", "Version 1");
+    expect(useAsk.getState().open?.cancel).toBeNull();
+    answer(null);
+    await expect(told).resolves.toBeUndefined();
   });
 });

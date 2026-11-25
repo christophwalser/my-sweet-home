@@ -843,3 +843,111 @@ fn copy_items_takes_a_name_per_item() {
         assert!(err.contains(msg), "{err}");
     }
 }
+
+#[test]
+fn items_move_to_another_library_in_one_step() {
+    let Some(root) = isolated_catalog("items_move_to_another_library_in_one_step") else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let (path, indexes) = shop(&r, &mut doc, &root, &["Crate", "Chest", "Barrel"]);
+    let archive = run(
+        &r,
+        &mut doc,
+        "library_create",
+        json!({ "kind": "furniture", "name": "Archive" }),
+    )["path"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let id = item(&r, &mut doc, &path, indexes[0])["id"].clone();
+    let moved = edit(
+        &r,
+        &mut doc,
+        "library_copy_items",
+        json!({ "from": path, "indexes": [indexes[0], indexes[2]], "to": archive, "move": true }),
+    );
+    assert_eq!(moved["history"]["undo"], "move to library");
+    assert_eq!(names(&r, &mut doc, &path), ["Chest"]);
+    assert_eq!(names(&r, &mut doc, &archive), ["Crate", "Barrel"]);
+    // The same catalog ID: a home or a favorite finds the item where it is now
+    let there = item(
+        &r,
+        &mut doc,
+        &archive,
+        moved["indexes"][0].as_u64().unwrap(),
+    );
+    assert_eq!(there["id"], id);
+    run(
+        &r,
+        &mut doc,
+        "furniture_add",
+        json!({ "catalog_id": id, "x": 0, "y": 0 }),
+    );
+    // One step takes both libraries back
+    edit(&r, &mut doc, "library_undo", json!({}));
+    assert_eq!(names(&r, &mut doc, &path).len(), 3);
+    assert!(names(&r, &mut doc, &archive).is_empty());
+    edit(&r, &mut doc, "library_redo", json!({}));
+    assert_eq!(names(&r, &mut doc, &path), ["Chest"]);
+
+    let err = run_err(
+        &r,
+        &mut doc,
+        "library_copy_items",
+        json!({ "from": path, "indexes": [indexes[1]], "to": path, "move": true }),
+    );
+    assert!(err.contains("already"), "{err}");
+}
+
+#[test]
+fn items_do_not_leave_a_read_only_library() {
+    let Some(root) = isolated_catalog("items_do_not_leave_a_read_only_library") else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let (path, indexes) = shop(&r, &mut doc, &root, &["Crate"]);
+    let set_readonly = |on: bool| {
+        let mut perms = std::fs::metadata(&path).unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(on);
+        std::fs::set_permissions(&path, perms).unwrap();
+    };
+    set_readonly(true);
+    let err = run_err(
+        &r,
+        &mut doc,
+        "library_copy_items",
+        json!({ "from": path, "indexes": indexes, "move": true }),
+    );
+    set_readonly(false);
+    assert!(err.contains("read-only"), "{err}");
+    assert_eq!(names(&r, &mut doc, &path), ["Crate"]);
+}
+
+#[test]
+fn library_items_give_the_values_of_some() {
+    let Some(root) = isolated_catalog("library_items_give_the_values_of_some") else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let (path, indexes) = shop(&r, &mut doc, &root, &["Crate", "Chest", "Barrel"]);
+    let some = edit(
+        &r,
+        &mut doc,
+        "library_items",
+        json!({ "path": path, "indexes": [indexes[2], indexes[0]], "values": true }),
+    );
+    let some = some["items"].as_array().unwrap();
+    assert_eq!(some.len(), 2);
+    assert_eq!(some[0]["name"], "Crate");
+    assert_eq!(some[0]["values"]["width"], "50");
+    assert_eq!(some[1]["name"], "Barrel");
+    let plain = edit(&r, &mut doc, "library_items", json!({ "path": path }));
+    assert!(plain["items"][0].get("values").is_none());
+    let err = run_err(&r, &mut doc, "library_items", json!({ "indexes": [1] }));
+    assert!(err.contains("path"), "{err}");
+}
