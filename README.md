@@ -64,10 +64,10 @@ The app opens `.sh3d` files and standalone `Home.xml` files (e.g. `tests/corpus/
 It shows the 2D plan, the 3D view (aerial view and virtual visit) and the catalog of all
 installed Sweet Home 3D libraries.
 
-Editing in the plan: tools Select, Walls, Room, Line, Dimension, Text above the plan; a hint
-bar at the bottom of the plan explains the next step.
+Editing in the plan: tools above the plan (select, walls, room, line, roof, stairs, dimension,
+text, measure and more); a hint bar at the bottom of the plan explains the next step.
 - Drawing: click the points; finish by clicking the first point (closes the outline), Enter,
-  Esc, a right click or a double-click; Backspace removes the last point; type a number + Enter
+  a right click or a double-click (Esc discards); Backspace removes the last point; type a number + Enter
   for an exact length; drag with the wall tool for a single wall. Magnetism snaps to wall ends
   and corners, alignment guides, right angles to the joined wall, multiples of 45°, the
   directions of nearby walls and 5° steps (Shift: 1° steps, Alt: no magnetism).
@@ -85,19 +85,23 @@ bar at the bottom of the plan explains the next step.
   another home), Ctrl+A selects all; Ctrl+Z / Ctrl+Y.
 - Several selected walls, rooms or pieces of furniture can be edited together in the
   properties panel (common values are shown, different ones as "mixed").
-- Levels: tabs above the plan; the level below is shown faded. Furniture groups (Ctrl+G /
+- Roofs over the walls or a rectangle (gable, hip, shed, flat), stairs made from their measures
+  (straight, L, U, spiral) and floor openings; terrain, scans and neighbor houses as reference
+  objects under the plan.
+- Dimension chains along walls, a dimension style for the home (also DIN 1356) and elevation marks.
+- Levels: tabs above the plan; the level below is shown faded; a level can be duplicated. Furniture groups (Ctrl+G /
   Ctrl+Shift+G), Flip ↔ / ↕, compass settings in the home panel, and the furniture of the home
-  as a sortable list ("In home" tab next to the catalog).
+  as a sortable list below the catalog.
 - Materials of a piece of furniture (color, texture, shininess per model material) in the
   "Materials" section of its properties.
-- Libraries: "Libraries…" imports .sh3f/.sh3t files and removes your own ones; "Import
-  furniture…" imports OBJ, DAE, 3DS, glTF or GLB models, "Import…" in the texture chooser
-  imports images. Imported items go to "My furniture" / "My textures" in Sweet Home 3D's user
-  library folders, so both applications show them.
+- Libraries: "Import…" in the catalog imports models (OBJ, DAE, 3DS, glTF, FBX and more), images
+  and .sh3f/.sh3t files, also several at once; "Libraries…" opens the library editor to change,
+  move, copy and delete items. Imported items go to "My furniture" / "My textures" or a library of
+  your own in Sweet Home 3D's user library folders, so both applications show them.
 - "Print / Export…" (Ctrl+P) prints the home like Sweet Home 3D (furniture list, plan of each
-  level, 3D view; with print preview) or saves it as PDF, and exports the plan as PDF (paper
-  size, orientation, scale such as 1:100, all levels as pages), SVG or PNG, the furniture list
-  as CSV and the 3D view as OBJ with MTL and textures.
+  level, 3D view; with print preview) or saves it as PDF, and exports the plan as PDF (papers up to
+  A0, any scale such as 1:75, title block, all levels as pages), SVG, PNG or DXF, the furniture
+  list as CSV and the 3D view as OBJ with MTL and textures or as glTF.
 - "Photo…" in the 3D view renders the current view as image: draft (with sun shadows, in
   seconds) or path traced on the GPU ("Good" / "Best": soft shadows, indirect light, glass).
 - "Video…" in the 3D view creates an MP4 video along a camera path: add the current view or a
