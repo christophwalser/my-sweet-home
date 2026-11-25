@@ -2582,7 +2582,7 @@ dependencies = [
 
 [[package]]
 name = "msh-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "msh-catalog",
@@ -2606,7 +2606,7 @@ dependencies = [
 
 [[package]]
 name = "msh-catalog"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "msh-format",
  "serde",
@@ -2616,7 +2616,7 @@ dependencies = [
 
 [[package]]
 name = "msh-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -2632,7 +2632,7 @@ dependencies = [
 
 [[package]]
 name = "msh-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -2659,7 +2659,7 @@ dependencies = [
 
 [[package]]
 name = "msh-export"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "krilla",
@@ -2673,7 +2673,7 @@ dependencies = [
 
 [[package]]
 name = "msh-format"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "msh-model",
  "quick-xml",
@@ -2684,7 +2684,7 @@ dependencies = [
 
 [[package]]
 name = "msh-geometry"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "geo",
  "msh-model",
@@ -2693,7 +2693,7 @@ dependencies = [
 
 [[package]]
 name = "msh-ipc"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2701,7 +2701,7 @@ dependencies = [
 
 [[package]]
 name = "msh-model"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",

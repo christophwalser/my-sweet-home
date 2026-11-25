@@ -6,70 +6,54 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-25
+
+Roofs, stairs, terrain and scans, dimension chains, plans to scale on large papers and for CAD, a
+3D view to work in, and a thorough rework of drawing, levels, textures and the library editor.
+
 ### Added
 
-- "Reference object" for furniture such as terrain, laser scans and neighbor houses: the plan
-  shows it faint under the background image and clicks, the rubber band and the magnetism ignore it; the 3D
-  view is unchanged.
-- Walls get a color and a texture for their top ("Top" in their properties), seen in 3D on walls
-  lower than the ceiling; Sweet Home 3D shows the top color and ignores the texture.
-- Rulers can be shown on all levels (checkbox in their properties), e.g. to line up the floors.
-- Rulers can be copied, cut, pasted and duplicated like other elements; color, dashes and "On all
-  levels" can be changed for several selected rulers at once.
-- Reference objects are their own kind of object, like the background image: they are listed in
-  the home details (show or hide each one, change it in its own panel with name, position,
-  elevation and angle) and no longer in the furniture list; the plan shows them faint under
-  every level above theirs. They are still saved as furniture, so Sweet Home 3D opens the file.
-- Magnetism: a wall can start on the face of another wall with one of its sides flush with that
-  wall's corner (snap point "flush with wall corner", using the thickness of the new wall).
-- 3D view: a click selects an element, selected furniture can be dragged, and Escape and Delete
-  work there as in the plan.
-- 3D view: standard views (top, front, back, left, right, isometric), parallel projection, "Fit"
-  and "Zoom to selection" in the new "Views" menu and the "3D view" menu; the wheel zooms to the
-  pointer, the arrow keys and +/- move the view, and an arrow shows north.
-- 3D view: a horizontal or vertical section through the home (3D settings).
-- Sun study in the 3D settings: sliders for the time of day and the day of the year with a live
-  preview, "Play the day" and a switch for shadows.
-- Points of view show a thumbnail and can be renamed (F2) and updated (`viewpoint_rename`;
-  storing under an existing name keeps its place in the list).
-- Photo: size presets, the file format (PNG or JPEG) is chosen in the panel, the remaining time
-  is shown, and the view is shown at once while a higher quality prepares.
-- Video: the key points show thumbnails, a click goes to one, they can be reordered
-  (`camera_path_move`), and the plan shows the camera path while the panel is open.
+#### Drawing and levels
+
+- Walls can be drawn by their left or right side instead of their axis, and keep one side in place
+  when the thickness changes (`wall_add_path` takes `side`, `wall_update` `keep_side` and
+  `direction_deg`); tool options above the plan (thickness, height, draw by, arc, text size).
+- "Rotate…" and "Move…" with typed values for walls, rooms, furniture, texts, dimension lines and
+  guide lines (`edit_rotate`); letter keys for the tools, which can be changed; Space held pans.
+- Ctrl+click and a rubber band with Shift or Ctrl extend the selection; "Select similar".
+- Duplicate a level with its walls and, if wanted, rooms, openings, furniture and annotations
+  (`level_duplicate`); tabs with "+" and a menu; the levels above and the walls can follow a changed
+  elevation or height (`level_update` takes `shift_above`, `adjust_walls` and `elevation_index`).
+- The plan shows the level below, the level above or none under the shown one, and snaps to it.
 - Grid snap ("View › Magnetism › Snap to the grid" or the switch in the status bar, off at
-  first): drawn points and moved elements land on the grid that is drawn; points, faces and
-  alignments of objects win over the grid.
-- The menu bar works with the keyboard as in Windows: Alt or F10 goes to it and shows the access
-  keys, Alt+letter opens a menu, and the arrow keys, Home, End and letters move in it.
-- A "View" menu with zoom, grid, rulers, magnetism, the side panels, plan or 3D view alone, the
-  theme and the size of the user interface.
-- The side panels can be hidden with F6 and F4 or by dragging them shut; the splitters take the
-  arrow keys.
-- Properties are grouped in sections that can be closed (remembered), the actions of the
-  selection stay in view above them, and furniture has a field for its level
-  (`furniture_update` takes `level`).
-- Undo and redo name the step they act on, and the tool bar lists the history.
-- Messages are laid over the window: errors stay until they are closed, saving reports its
-  success, and the status bar lists the messages.
-- The grid has a fixed or an automatic distance; the status bar shows the scale and the grid.
-- A free angle step for the angle magnetism, "Zoom to the selection" in the plan, and an opacity
-  for the background image, which now uses the unit of the preferences.
-- The command search matches loosely and lists the recent commands; the letter keys of the plan
-  tools can be changed.
-- `scripts/perf.ps1` starts the app, runs typical edits and prints the time of each stage.
-- Terrain from height grids: XYZ and ASC files (in meters) are imported as a terrain mesh;
-  marked as terrain, it replaces the flat ground under it in 3D.
-- Furniture import: the unit of the model can be chosen (`furniture_import` takes `unit`), the
-  model can be placed as reference object right away, and it can keep the zero point of its
-  file (`origin` in the result of `furniture_import`).
-- Reference objects can be aligned with two pairs of points clicked in the plan, optionally
-  resized to fit (`furniture_align_points`).
-- Reference objects can show a cut at a height above the floor instead of their view from
-  above, e.g. the walls of a scanned house; the lines of the cut can attract the pointer.
-- Reference objects are listed under the plan in the status bar and can be shown or hidden in
-  the plan and in 3D separately, with an opacity in the plan.
-- The map of "Align north with the map" can be used as background image of the plan, true to
-  scale and turned like the plan.
+  first): drawn points and moved elements land on the grid that is drawn. The grid has a fixed or
+  an automatic distance, and the status bar shows the scale and the grid.
+- Magnetism: a wall can start on the face of another wall with one of its sides flush with that
+  wall's corner; a free angle step.
+- Guide lines can be shown on all levels, copied, cut, pasted and duplicated, and several of them
+  changed at once.
+- "Zoom to the selection" in the plan.
+
+#### Roofs, stairs and openings
+
+- Roofs: "Roof over the walls" and "Roof over a rectangle…" add a gable, hip, shed or flat roof
+  with a pitch, an overhang and a thickness (`roof_add`, `roof_update`); each edge can be an
+  eave or a gable, and the roof covering and the gable walls take a color or a texture. The
+  plan shows a roof as its lines, exports and prints too; "3D view › Roofs" leaves the roofs out
+  of the 3D view. A roof is saved as a piece of furniture with a generated model, so Sweet Home 3D
+  shows it.
+- Stairs made from their measures: straight, L-shaped and U-shaped with a landing, and spiral
+  (`stair_add`, `stair_update`, `stair_calc`). Two clicks place them; the number of risers and
+  the tread follow from the height to the next level by the step rule, the properties show which
+  usual measures fail, and the stairs cut the hole they need in the floor above (in Sweet Home 3D
+  too). Solid or open treads on stringers, handrails, color or texture of the steps. The plan,
+  exports and prints show the treads and the walking line.
+- Floor openings (`opening_add`, `opening_update`): a hole in the floor of a level and the
+  ceiling below, for a gallery or a shaft; saved as a staircase without steps, so Sweet Home 3D
+  cuts it too.
+
+#### Dimensions and output
+
 - Dimension chains along a wall (`dimension_chain_add`, `dimension_chain_update`,
   `dimension_chain_calc`): rows for doors and windows, adjoining walls and the whole length,
   placed with the mouse or a typed distance, measured again with one click; also between points
@@ -87,77 +71,131 @@ All notable changes to this project are documented in this file. The format foll
 - Plan as DXF drawing for CAD programs (`export_plan` with `format: "dxf"`), in mm, cm or m,
   with a layer for each kind of element.
 - 3D model as glTF binary (.glb, in meters), and OBJ in cm, mm, m or inches.
-- Stairs made from their measures: straight, L-shaped and U-shaped with a landing, and spiral
-  (`stair_add`, `stair_update`, `stair_calc`). Two clicks place them; the number of risers and
-  the tread follow from the height to the next level by the step rule, the properties show which
-  usual measures fail, and the stairs cut the hole they need in the floor above (in Sweet Home 3D
-  too). Solid or open treads on stringers, handrails, color or texture of the steps. The plan,
-  exports and prints show the treads and the walking line.
-- Floor openings (`opening_add`, `opening_update`): a hole in the floor of a level and the
-  ceiling below, for a gallery or a shaft; saved as a staircase without steps, so Sweet Home 3D
-  cuts it too.
-- Roofs: "Roof over the walls" and "Roof over a rectangle…" add a gable, hip, shed or flat roof
-  with a pitch, an overhang and a thickness (`roof_add`, `roof_update`); each edge can be an
-  eave or a gable, and the roof covering and the gable walls take a color or a texture. The
-  plan shows a roof as its lines, exports and prints too; "3D view ›
-  Roofs" leaves the roofs out of the 3D view. A roof is saved as a piece of furniture with a
-  generated model, so Sweet Home 3D shows it.
 
+#### Terrain and scans
+
+- Reference objects (terrain, laser scans, neighbor houses): the plan shows them faint under every
+  level above theirs, clicks, the rubber band and the magnetism ignore them. They are listed in
+  the home details and under the plan, can be shown or hidden in the plan and in 3D separately, and
+  have an opacity in the plan. They are saved as furniture, so Sweet Home 3D opens the file.
+- Terrain from height grids: XYZ and ASC files (in meters) are imported as a terrain mesh;
+  marked as terrain, it replaces the flat ground under it in 3D.
+- Furniture import: the unit of the model can be chosen (`furniture_import` takes `unit`), the
+  model can be placed as reference object right away, and it can keep the zero point of its
+  file (`origin` in the result of `furniture_import`).
+- Reference objects can be aligned with two pairs of points clicked in the plan, optionally
+  resized to fit (`furniture_align_points`), and can show a cut at a height above the floor
+  instead of their view from above; the lines of the cut can attract the pointer.
+- The map of "Align north with the map" can be used as background image of the plan, true to
+  scale and turned like the plan; the background image has an opacity.
+
+#### 3D view, photos and videos
+
+- A click selects an element in the 3D view, selected furniture can be dragged, and Escape and
+  Delete work there as in the plan.
+- Standard views (top, front, back, left, right, isometric), parallel projection, "Fit" and "Zoom
+  to selection" in the new "Views" menu and the "3D view" menu; the wheel zooms to the pointer, the
+  arrow keys and +/- move the view, and an arrow shows north.
+- The 3D view shows the selected level, the levels up to it or all (`view3d_update` takes `levels`).
+- A horizontal or vertical section through the home (3D settings).
+- Sun study in the 3D settings: sliders for the time of day and the day of the year with a live
+  preview, "Play the day" and a switch for shadows.
+- Points of view show a thumbnail and can be renamed (F2) and updated (`viewpoint_rename`;
+  storing under an existing name keeps its place in the list).
+- Photo: size presets, the file format (PNG or JPEG) is chosen in the panel, the remaining time
+  is shown, and the view is shown at once while a higher quality prepares.
+- Video: the key points show thumbnails, a click goes to one, they can be reordered
+  (`camera_path_move`), and the plan shows the camera path while the panel is open.
+
+#### Furnishing and textures
+
+- Textures are dragged from the catalog onto a floor, a wall side or a piece, or applied to the
+  selection (`texture_apply`); they can be rotated, resized and shifted (`texture_adjust`); a
+  pipette takes the look of a surface (`surface_copy`).
+- "Walls of this room" changes all wall sides that face a room (`room_walls`,
+  `room_walls_update`); walls get a color and a texture for their top, seen in 3D on walls lower
+  than the ceiling (Sweet Home 3D shows the top color and ignores the texture).
+- Furniture can be replaced by a catalog item (`furniture_replace`), is placed with a click after a
+  double-click in the catalog, and has a field for its level; several pieces get texture, surface
+  and proportional sizes at once.
+- Color fields take #RRGGBB, mark a missing color and offer the colors of the home.
+- The furniture list searches all columns, selects ranges, renames with F2 and combines equal
+  pieces.
+
+#### Catalog and libraries
+
+- Catalog: favorites, pieces used last, remembered categories, list or tiles, the order of the
+  entries (as in the libraries, name, size), a filter for one library, and keyboard use.
 - Library editor: several items can be selected (Ctrl+click, Shift+click, Ctrl+A, arrow keys) and
-  moved, copied to another library, duplicated, deleted or given tags, creator and license at
-  once, undone with one click (`library_update_items`; `library_copy_items` takes `names`).
-- Library editor: items move to another library in one step and keep their catalog ID
-  (`library_copy_items` with `move`); price, VAT, sizes and settings such as "Movable" of several
-  items at once (`library_items` gives the `values` of chosen items); lengths in the unit of the
-  preferences.
+  moved to a category or another library, copied, duplicated, deleted or changed (tags, creator,
+  license, price, VAT, sizes, settings such as "Movable") at once, undone with one click
+  (`library_update_items`; `library_copy_items` takes `names` and `move`; `library_items` gives
+  `values`). Lengths are in the unit of the preferences.
 - Import of several models one after another ("2 of 5", "Import all", "Skip") and of several
   textures in a table with their tile sizes. The height of a tile follows the proportions of the
   image.
-- Catalog: order of the entries (as in the libraries, name, size) and a filter for one library.
+
+#### App
+
+- The menu bar works with the keyboard as in Windows: Alt or F10 goes to it and shows the access
+  keys, Alt+letter opens a menu, and the arrow keys, Home, End and letters move in it.
+- A "View" menu with zoom, grid, rulers, magnetism, the side panels, plan or 3D view alone, the
+  theme and the size of the user interface.
+- The side panels can be hidden with F6 and F4 or by dragging them shut; the splitters take the
+  arrow keys.
+- Properties are grouped in sections that can be closed (remembered), and the actions of the
+  selection stay in view above them.
+- Undo and redo name the step they act on, and the tool bar lists the history.
+- Messages are laid over the window: errors stay until they are closed, saving reports its
+  success, and the status bar lists the messages.
+- The command search matches loosely and lists the recent commands.
+- `scripts/perf.ps1` starts the app, runs typical edits and prints the time of each stage.
 
 ### Changed
 
-- Catalog: one word for one action. Files are imported ("Import…" instead of "Add…" and "Add to
-  library…"), furniture is placed in the home, items and libraries are deleted.
-- Library editor and import dialogs: Escape takes back the typed text first and closes last; a
-  filled in import asks before it is discarded. Names and confirmations are asked in the app's
-  own dialogs instead of those of the browser.
-- Importing and deleting a library are steps of the library history and can be undone.
-- The library editor keeps its selection, search and scroll position while models are imported or
-  the online catalogs are open; what was imported is selected afterwards.
-- Questions before closing, deleting a level, resetting the preferences and recovering homes come
-  in the app's own dialogs instead of those of Windows.
 - Edits are several times faster: after a command the windows get only the changes of the home
   instead of the whole home, unchanged parts of the plan and the 3D view are kept, and the plan
   is shown before the 3D view draws.
+- The lines drawn in the plan to place elements are called guide lines; "ruler" now only means the
+  rulers along the edges.
 - Escape discards a drawing instead of keeping it, and a double-click on an empty place no longer
   fits the plan to the window.
-- The Plan menu groups its tools; the empty Extensions menu and the second entry for the 3D
-  settings are gone.
-- Lengths are shown with one precision everywhere.
-- "Add…" in the catalog opens the file dialog right away for furniture, as it did for textures.
-- A PLY file that is a point cloud is refused with a reason instead of "no triangles".
-
+- "Fit plan to window" fits to the walls of the level (the building); terrain, parcel lines and
+  other things around the house no longer widen it. Levels without walls fit as before.
+- Pasting on another level keeps the position; "Paste style" keeps the thickness and the heights of
+  walls.
 - Doors and windows are easier to place in a wall with the mouse: the wall they are in holds
   them at corners, they align only with openings and walls nearby, they catch the middle of the
   free space, and across a thick wall they follow the pointer and catch its middle and its faces.
-- The photo and video panels and the 3D settings no longer block the window, and the 3D
-  settings no longer open under the tool bar.
-
-- "Fit plan to window" fits to the walls of the level (the building); terrain, parcel lines and
-  other things around the house no longer widen it. Levels without walls fit as before.
-
 - Pieces of a lower level that reach up into the shown level (e.g. a tall terrain model) are
   shown faint in its plan and can no longer be picked or snapped to there; staircases still can.
+- Lengths are shown with one precision everywhere; number fields keep more decimals, mark invalid
+  input, and Escape takes the typed value back.
+- Catalog: one word for one action. Files are imported ("Import…" instead of "Add…" and "Add to
+  library…", and the file dialog opens right away), furniture is placed in the home, items and
+  libraries are deleted.
+- Library editor and import dialogs: Escape takes back the typed text first and closes last; a
+  filled in import asks before it is discarded. The editor keeps its selection, search and scroll
+  position while models are imported or the online catalogs are open.
+- Importing and deleting a library are steps of the library history and can be undone.
+- All questions come in the app's own dialogs instead of those of the browser and of Windows.
+- The photo and video panels and the 3D settings no longer block the window, and the 3D
+  settings no longer open under the tool bar.
+- The Plan menu groups its tools; the empty Extensions menu and the second entry for the 3D
+  settings are gone.
+- A PLY file that is a point cloud is refused with a reason instead of "no triangles".
 
 ### Fixed
 
+- Shortcuts no longer act behind open dialogs, and work after a click on a check box or a list.
 - Undo after saving finds the model of a piece that was deleted or replaced before the save;
   the saved file still leaves out resources that nothing uses any more.
 - Elements moved with the mouse, or changed with a handle, no longer jump back to their old place
   for a moment when the mouse button is released.
+- Rotating several pieces is one undo step.
 - In the virtual visit the sky no longer shows through a slit in the ceiling above walls lower
   than the ceiling (e.g. half-height walls): the ceiling of the room next to them now covers them.
+- In the virtual visit the lamps of the level below no longer brighten the foot of the walls.
 - The snap points on the faces of thick walls no longer disappear when the plan is zoomed in far.
 - A hidden piece of furniture or reference object stays selected and keeps its properties, so it
   can be shown again there (before, it vanished from the panel and the home details).
@@ -166,18 +204,18 @@ All notable changes to this project are documented in this file. The format foll
 - The 3D view no longer jumps back to the stored camera after the first command that touches a
   camera (e.g. a new time of the sun or a stored point of view).
 - "Room from walls" finds rooms enclosed by walls of different thickness that meet edge to edge.
-- In the virtual visit the lamps of the level below no longer brighten the foot of the walls.
 - The preview of a photo keeps its aspect ratio.
 - A new grid distance is drawn at once, not only after the next change of the tool.
-- Number fields of the tool options (e.g. the wall thickness) can be emptied while typing.
 - The distances of an opening are labelled "Distance on the left / right / above / below".
-
 - "Edit as copy" and the properties work for the furniture of Sweet Home 3D's default catalog.
 - Catalog changes that come while the catalog is being read are shown.
-- `texture_import` refuses files that are no images.
 - "Undo" in the message after importing or removing a library took back another change.
-- Importing furniture from the home says when the home does not contain its model, instead of
-  reporting success.
+- `texture_import` refuses files that are no images, and importing furniture from the home says
+  when the home does not contain its model, instead of reporting success.
+
+### Security
+
+- Updated `cookie` and `url` for RUSTSEC-2026-0592 and RUSTSEC-2026-0594.
 
 ## [0.1.0] - 2026-11-15
 
@@ -222,5 +260,6 @@ First public release.
 - Updated `quick-xml` (0.42) and `zip` (9) for RUSTSEC-2026-0194, -0195, -0367, -0368,
   -0369 and -0429.
 
-[Unreleased]: https://github.com/christophwalser/my-sweet-home/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/christophwalser/my-sweet-home/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/christophwalser/my-sweet-home/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/christophwalser/my-sweet-home/releases/tag/0.1.0
