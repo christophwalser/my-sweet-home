@@ -9,8 +9,9 @@
 use crate::catalog::CatalogIndex;
 use crate::catalog_settings::{CatalogSettings, ItemKind};
 use crate::registry::{CommandError, Registry};
+use msh_catalog::library_edit::record;
 use msh_catalog::{
-    CatalogKind, find_all_libraries, is_user_library, open_library, user_library_dir,
+    CatalogError, CatalogKind, find_all_libraries, is_user_library, open_library, user_library_dir,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -141,9 +142,17 @@ pub(super) fn register(r: &mut Registry) {
                 )));
             }
             std::fs::create_dir_all(&dir).map_err(|e| CommandError::failed(e.to_string()))?;
-            std::fs::copy(&p.path, &target).map_err(|e| CommandError::failed(e.to_string()))?;
+            record("import", std::slice::from_ref(&target), || {
+                std::fs::copy(&p.path, &target).map_err(|source| CatalogError::Io {
+                    path: p.path.clone(),
+                    source,
+                })
+            })
+            .map_err(|e| CommandError::failed(e.to_string()))?;
             CatalogIndex::reload();
-            Ok(describe(&target))
+            let mut out = describe(&target);
+            out["history"] = super::library_edit::history_json();
+            Ok(out)
         },
     );
     r.add(
@@ -198,7 +207,7 @@ pub(super) fn register(r: &mut Registry) {
     r.add(
         "library_remove",
         "Removes a library from the user's library folder. The file is moved to a 'removed' \
-         folder next to it, so it can be restored.",
+         folder next to it, so it can be restored; library_undo brings it back too.",
         false,
         |_doc, p: RemoveParams| {
             if !is_user_library(&p.path) {
@@ -220,9 +229,19 @@ pub(super) fn register(r: &mut Registry) {
                 target = removed.join(format!("{}.{n}", name.to_string_lossy()));
                 n += 1;
             }
-            std::fs::rename(&p.path, &target).map_err(|e| CommandError::failed(e.to_string()))?;
+            record("remove library", std::slice::from_ref(&p.path), || {
+                std::fs::rename(&p.path, &target).map_err(|source| CatalogError::Io {
+                    path: p.path.clone(),
+                    source,
+                })
+            })
+            .map_err(|e| CommandError::failed(e.to_string()))?;
             CatalogIndex::reload();
-            Ok(json!({ "removed": p.path, "moved_to": target }))
+            Ok(json!({
+                "removed": p.path,
+                "moved_to": target,
+                "history": super::library_edit::history_json(),
+            }))
         },
     );
 }

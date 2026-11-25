@@ -126,7 +126,7 @@ function ItemRow({
   onMenu: (item: CatalogItem, x: number, y: number) => void;
   /** Double-click or Enter: place the piece, apply the texture */
   onPrimary: (item: CatalogItem) => void;
-  /** Runs the menu entry with this shortcut ("Delete", "Ctrl+D") */
+  /** Runs the menu entry with this shortcut ("Del", "Ctrl+D") */
   onShortcut: (item: CatalogItem, shortcut: string) => void;
 }) {
   const tooltip = [
@@ -155,7 +155,7 @@ function ItemRow({
           rows[rows.indexOf(row) + (e.key === "ArrowDown" ? 1 : -1)]?.focus();
         } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
           // Nothing to do in the list, and not a key of the plan either
-        } else if (e.key === "Delete") onShortcut(item, "Delete");
+        } else if (e.key === "Delete") onShortcut(item, "Del");
         else if (e.ctrlKey && e.key.toLowerCase() === "d") onShortcut(item, "Ctrl+D");
         else if (menuKey) {
           const r = row.getBoundingClientRect();
@@ -308,12 +308,12 @@ function CatalogPanel() {
   /** Files are dragged over the catalog / message about dropped files */
   const [dropping, setDropping] = useState(false);
   const [dropMessage, setDropMessage] = useState<string | null>(null);
-  /** The last message is about a library change that can be undone */
-  const [canUndo, setCanUndo] = useState(false);
+  /** Steps of the library history the last message is about (0: nothing to undo) */
+  const [undoSteps, setUndoSteps] = useState(0);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
-  const notify = (text: string, undo = false) => {
-    setDropMessage(text);
-    setCanUndo(undo);
+  const notify = (text: string, steps = 0) => {
+    setDropMessage(text || null);
+    setUndoSteps(steps);
   };
   const favorites = useCatalogPrefs((s) => s.favorites);
   const recentFurniture = useCatalogPrefs((s) => s.recent);
@@ -357,7 +357,7 @@ function CatalogPanel() {
             toggle: () => useCatalogPrefs.getState().toggleFavorite(id),
           }
         : undefined,
-      edit: (path, index) => openEditor(path, index),
+      edit: ([first]) => openEditor(first?.path, first?.index),
     });
   };
   const openMenu = async (item: CatalogItem, x: number, y: number) =>
@@ -374,11 +374,12 @@ function CatalogPanel() {
     e.preventDefault();
     setDropping(false);
     const files = [...e.dataTransfer.files];
-    setDropMessage(t("Importing…"));
+    notify(t("Importing…"));
     try {
-      setDropMessage((await importDroppedFiles(files)) || null);
+      const { message, steps } = await importDroppedFiles(files);
+      notify(message, steps);
     } catch (err) {
-      setDropMessage(errorText(err));
+      notify(errorText(err));
     }
   };
 
@@ -527,10 +528,12 @@ function CatalogPanel() {
             <button
               type="button"
               className="link-button"
-              onClick={() => useUi.getState().openDialog("libraries", `add:${kind}`)}
-              title={t("Add 3D models, textures, libraries, online items or furniture of the home")}
+              onClick={() => useUi.getState().openDialog("libraries", `import:${kind}`)}
+              title={t(
+                "Import 3D models, textures, libraries, online items or furniture of the home",
+              )}
             >
-              {t("Add…")}
+              {t("Import…")}
             </button>
             <button
               type="button"
@@ -553,13 +556,13 @@ function CatalogPanel() {
           {dropMessage && (
             <div className="catalog-drop-message" role="status">
               <span>{dropMessage}</span>
-              {canUndo && (
+              {undoSteps > 0 && (
                 <button
                   type="button"
                   className="link-button"
                   onClick={() => {
                     setDropMessage(null);
-                    void undoLibrary().catch((e) => notify(errorText(e)));
+                    void undoLibrary(undoSteps).catch((e) => notify(errorText(e)));
                   }}
                 >
                   {t("Undo")}

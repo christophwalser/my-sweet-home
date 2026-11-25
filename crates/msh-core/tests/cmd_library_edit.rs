@@ -665,6 +665,19 @@ fn pieces_of_the_home_are_added_with_their_size() {
     );
     let reused = item(&r, &mut doc, &path, again["indexes"][0].as_u64().unwrap());
     assert_eq!(reused["category"], "Reused");
+    assert_eq!(again["skipped"], json!([]));
+
+    // A home that only refers to the model (as files with furniture of the default catalog do)
+    doc.file.contents.clear();
+    let before = history(&r, &mut doc);
+    let err = run_err(
+        &r,
+        &mut doc,
+        "library_add_from_home",
+        json!({ "ids": [piece], "path": path }),
+    );
+    assert!(err.contains("does not contain the models"), "{err}");
+    assert_eq!(history(&r, &mut doc), before, "nothing to undo");
 }
 
 #[test]
@@ -712,4 +725,121 @@ fn add_from_home_refuses_unknown_pieces_and_wrong_targets() {
         json!({ "ids": [piece], "path": root.join("elsewhere.sh3f") }),
     );
     assert!(err.contains("unknown target library"), "{err}");
+}
+
+#[test]
+fn update_items_changes_several_in_one_step() {
+    let Some(root) = isolated_catalog("update_items_changes_several_in_one_step") else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let (path, indexes) = shop(&r, &mut doc, &root, &["Crate", "Chest", "Barrel"]);
+    let some = [indexes[0], indexes[2]];
+    let changed = edit(
+        &r,
+        &mut doc,
+        "library_update_items",
+        json!({ "path": path, "indexes": some,
+                "set": { "creator": "Jane", "license": "CC0", "category": "Storage" } }),
+    );
+    assert_eq!(changed["history"]["undo"], "change items");
+    for i in some {
+        let it = item(&r, &mut doc, &path, i);
+        assert_eq!(it["values"]["creator"], "Jane");
+        assert_eq!(it["values"]["license"], "CC0");
+        assert_eq!(it["category"], "Storage");
+    }
+    let other = item(&r, &mut doc, &path, indexes[1]);
+    assert!(other["values"].get("creator").is_none());
+    assert_eq!(other["category"], "Boxes");
+    // One step takes it all back
+    edit(&r, &mut doc, "library_undo", json!({}));
+    for i in some {
+        let it = item(&r, &mut doc, &path, i);
+        assert!(it["values"].get("creator").is_none());
+        assert_eq!(it["category"], "Boxes");
+    }
+    edit(&r, &mut doc, "library_redo", json!({}));
+    edit(
+        &r,
+        &mut doc,
+        "library_update_items",
+        json!({ "path": path, "indexes": some, "set": { "license": null } }),
+    );
+    for i in some {
+        let it = item(&r, &mut doc, &path, i);
+        assert!(it["values"].get("license").is_none(), "removed");
+        assert_eq!(it["values"]["creator"], "Jane");
+    }
+}
+
+#[test]
+fn update_items_refuses_what_update_item_refuses() {
+    let Some(root) = isolated_catalog("update_items_refuses_what_update_item_refuses") else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let (path, indexes) = shop(&r, &mut doc, &root, &["Crate", "Chest"]);
+    let before = std::fs::read(&path).unwrap();
+    for (indexes, set, msg) in [
+        (json!(indexes), json!({ "id": "x" }), "cannot be set"),
+        (json!(indexes), json!({ "bad key": "1" }), "invalid key"),
+        (json!(indexes), json!({ "category": "" }), "cannot be empty"),
+        (json!([]), json!({ "price": "1" }), "no items"),
+        (
+            json!([indexes[0], 77]),
+            json!({ "price": "1" }),
+            "no item 77",
+        ),
+    ] {
+        let err = run_err(
+            &r,
+            &mut doc,
+            "library_update_items",
+            json!({ "path": path, "indexes": indexes, "set": set }),
+        );
+        assert!(err.contains(msg), "{set}: {err}");
+    }
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+}
+
+#[test]
+fn copy_items_takes_a_name_per_item() {
+    let Some(root) = isolated_catalog("copy_items_takes_a_name_per_item") else {
+        return;
+    };
+    let r = Registry::standard();
+    let mut doc = new_doc(&r);
+    let (path, indexes) = shop(&r, &mut doc, &root, &["Crate", "Chest"]);
+    let copy = edit(
+        &r,
+        &mut doc,
+        "library_copy_items",
+        json!({ "from": path, "indexes": indexes, "to": path,
+                "names": ["Crate (copy)", " Chest (copy) "] }),
+    );
+    assert_eq!(copy["history"]["undo"], "copy items");
+    let copies = copy["indexes"].as_array().unwrap();
+    assert_eq!(copies.len(), 2);
+    let first = item(&r, &mut doc, &path, copies[0].as_u64().unwrap());
+    assert_eq!(first["name"], "Crate (copy)");
+    let second = item(&r, &mut doc, &path, copies[1].as_u64().unwrap());
+    assert_eq!(second["name"], "Chest (copy)");
+    assert_eq!(names(&r, &mut doc, &path).len(), 4);
+    edit(&r, &mut doc, "library_undo", json!({}));
+    assert_eq!(names(&r, &mut doc, &path).len(), 2);
+    for (list, msg) in [
+        (json!(["One"]), "one name per item"),
+        (json!(["One", " "]), "empty"),
+    ] {
+        let err = run_err(
+            &r,
+            &mut doc,
+            "library_copy_items",
+            json!({ "from": path, "indexes": indexes, "to": path, "names": list }),
+        );
+        assert!(err.contains(msg), "{err}");
+    }
 }

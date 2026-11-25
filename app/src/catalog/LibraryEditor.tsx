@@ -12,19 +12,39 @@ import { language, t } from "../i18n";
 import Splitter from "../layout/Splitter";
 import ContextMenu, { type MenuItem } from "../plan2d/ContextMenu";
 import { useStore } from "../store";
+import { askConfirm, askText } from "../ui/ask";
+import { useDialogEscape } from "../ui/dialogEscape";
 import Icon from "../ui/Icon";
 import { useUi } from "../ui/uiStore";
 import { formatPrecise } from "../units";
 import { disposeObject, loadModelUncached } from "../view3d/models";
 import { importFiles } from "./dropImport";
 import {
+  afterRemoval,
+  clickItem,
+  type ItemSelection,
+  NO_ITEMS,
+  selectAll,
+  selectOnly,
+  sharedValue,
+  walkItems,
+} from "./itemSelection";
+import {
   askCategoryName,
   categoriesFor,
+  copyMenu,
+  deleteItems,
+  duplicateItems,
+  editAsCopy,
   type History,
   historyLabel,
   itemKey,
-  itemMenu,
+  itemsMenu,
   libraryName,
+  type MenuContext,
+  moveMenu,
+  runForItems,
+  type Target,
 } from "./library";
 import { LIBRARY_EXTENSIONS, MODEL_EXTENSIONS, TEXTURE_EXTENSIONS } from "./modelConvert";
 import ShapeEditor from "./ShapeEditor";
@@ -201,6 +221,9 @@ function pieceType(v: Record<string, string>): PieceType {
   return "furniture";
 }
 
+/** Pictures shown of several selected items */
+const MAX_THUMBS = 60;
+
 const FULL_SHAPE = "M0,0 L1,0 L1,1 L0,1 Z";
 
 function formatSize(item: CatalogItem): string {
@@ -209,10 +232,13 @@ function formatSize(item: CatalogItem): string {
     : `${formatPrecise(item.width)} × ${formatPrecise(item.height)}`;
 }
 
-/** A text field that commits its value when it loses the focus or Enter is pressed. */
+/**
+ * A text field that commits its value when it loses the focus or Enter is pressed. Escape takes
+ * the typed text back (`useDialogEscape`).
+ */
 function Field({
   label,
-  value,
+  value: given,
   onCommit,
   disabled,
   unit,
@@ -220,17 +246,20 @@ function Field({
   placeholder,
 }: {
   label: string;
-  value: string;
+  /** null: several items with different values */
+  value: string | null;
   onCommit: (v: string) => void;
   disabled?: boolean;
   unit?: string;
   multiline?: boolean;
   placeholder?: string;
 }) {
+  const value = given ?? "";
+  const hint = given === null ? t("mixed") : placeholder;
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
-  const commit = () => {
-    if (text !== value) onCommit(text);
+  const commit = (typed: string) => {
+    if (typed !== value) onCommit(typed);
   };
   return (
     // biome-ignore lint/a11y/noLabelWithoutControl: the label wraps an input or a text area
@@ -240,21 +269,20 @@ function Field({
         <textarea
           value={text}
           disabled={disabled}
-          placeholder={placeholder}
+          placeholder={hint}
           onChange={(e) => setText(e.target.value)}
-          onBlur={commit}
+          onBlur={(e) => commit(e.target.value)}
         />
       ) : (
         <input
           type="text"
           value={text}
           disabled={disabled}
-          placeholder={placeholder}
+          placeholder={hint}
           onChange={(e) => setText(e.target.value)}
-          onBlur={commit}
+          onBlur={(e) => commit(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            if (e.key === "Escape") setText(value);
+            if (e.key === "Enter") e.currentTarget.blur();
           }}
         />
       )}
@@ -474,8 +502,8 @@ export default function LibraryEditor({
   onClose: close,
 }: {
   /**
-   * "path|index" of an item to show first, or "add" / "add:<kind>" to start adding: the file
-   * dialog for models or images opens right away.
+   * "path|index" of an item to show first, or "import" / "import:<kind>" to start importing:
+   * the file dialog for models or images opens right away.
    */
   initial: string | null;
   onClose: () => void;
@@ -488,24 +516,34 @@ export default function LibraryEditor({
   const loadCatalog = useStore((s) => s.loadCatalog);
   const openDialog = useUi((s) => s.openDialog);
   const setLibraryTarget = useUi((s) => s.setLibraryTarget);
-  const adding = initial === "add" || !!initial?.startsWith("add:");
+  const importing = initial === "import" || !!initial?.startsWith("import:");
   const [kind, setKind] = useState<CatalogKind>(
-    initial === "add:textures" ? "textures" : "furniture",
+    initial === "import:textures" ? "textures" : "furniture",
   );
   const [libPath, setLibPath] = useState<string | null>(null);
-  const [selKey, setSelKey] = useState<string | null>(adding ? null : initial);
+  const [selection, setSelection] = useState<ItemSelection>(() =>
+    selectOnly(importing ? null : initial),
+  );
+  const selKey = selection.primary;
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<Menu | null>(null);
-  const [message, setMessage] = useState<{ text: string; undo: boolean } | null>(null);
+  /** `steps`: steps of the library history the message's Undo button takes back */
+  const [message, setMessage] = useState<{ text: string; steps: number } | null>(null);
   const [history, setHistory] = useState<History>({ undo: null, redo: null });
   const [extraCats, setExtraCats] = useState<string[]>([]);
   const [details, setDetails] = useState<Details | null>(null);
   const [tab, setTab] = useState<"general" | "size" | "type">("general");
   const [closed, setClosed] = useState<Set<string>>(new Set());
   const iconRef = useRef<(() => string | null) | null>(null);
-  const addButton = useRef<HTMLButtonElement>(null);
   const { frame, update: updateFrame, dialog, style, moveStart, resizeStart, panes } = useFrame();
   const side = useRef<HTMLElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  /** The keyboard is in the list of items (also while its focused row is rendered anew) */
+  const listFocus = useRef(false);
+  /** A library just created, shown once the catalog is read */
+  const awaited = useRef<string | null>(null);
+  /** Row that gets the keyboard once it is in the list (copies, after the catalog is read) */
+  const toFocus = useRef<string | null>(importing ? null : initial);
   const toggleMaximized = () => updateFrame({ maximized: !frame.maximized });
 
   useEffect(() => {
@@ -526,10 +564,10 @@ export default function LibraryEditor({
       try {
         const r = (await api.execute(command, params)) as { history?: History };
         if (r?.history) setHistory(r.history);
-        if (note) setMessage({ text: note, undo: true });
+        if (note) setMessage({ text: note, steps: 1 });
         return r as Record<string, unknown>;
       } catch (e) {
-        setMessage({ text: errorText(e), undo: false });
+        setMessage({ text: errorText(e), steps: 0 });
         return null;
       }
     },
@@ -570,7 +608,11 @@ export default function LibraryEditor({
 
   // Default library: the user's own one of this kind, else the first
   useEffect(() => {
-    if (libPath && libraries.some((l) => l.path === libPath)) return;
+    if (libPath && libraries.some((l) => l.path === libPath)) {
+      awaited.current = null;
+      return;
+    }
+    if (libPath && libPath === awaited.current) return;
     const own = libraries.find((l) => l.editable && /My (furniture|textures)\./i.test(l.path));
     setLibPath((own ?? libraries.find((l) => l.editable) ?? libraries[0])?.path ?? null);
   }, [libraries, libPath]);
@@ -620,13 +662,38 @@ export default function LibraryEditor({
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [items, extraCats, libByIndex, searching]);
 
-  const selected = useMemo(() => {
-    if (!selKey || !data) return null;
-    const [path, idx] = selKey.split("|");
-    const l = data.libraries.find((x) => x.path === path);
-    const item = l && data.items.find((i) => i.library === l.index && i.index === Number(idx));
-    return item && l ? { item, lib: l } : null;
-  }, [selKey, data]);
+  /** Keys of the items as listed (not those of closed groups) */
+  const order = useMemo(
+    () =>
+      groups.flatMap(([group, items]) =>
+        closed.has(group)
+          ? []
+          : items.flatMap((i) => {
+              const l = libByIndex.get(i.library);
+              return l ? [itemKey(l.path, i.index)] : [];
+            }),
+      ),
+    [groups, closed, libByIndex],
+  );
+
+  const byKey = useMemo(() => {
+    const m = new Map<string, Target>();
+    for (const item of data?.items ?? []) {
+      const l = libByIndex.get(item.library);
+      const key = l && itemKey(l.path, item.index);
+      if (l && key && !m.has(key)) m.set(key, { item, lib: l });
+    }
+    return m;
+  }, [data, libByIndex]);
+
+  /** The selected items; keys that are not (yet) in the catalog are left out */
+  const targets = useMemo(
+    () => selection.keys.flatMap((k) => byKey.get(k) ?? []),
+    [selection, byKey],
+  );
+  const selected = targets.length === 1 ? targets[0] : null;
+  const several = targets.length > 1;
+  const pickedKeys = useMemo(() => new Set(selection.keys), [selection]);
 
   // Keys of the selected item, reloaded after each change of the catalog
   // biome-ignore lint/correctness/useExhaustiveDependencies: reload after catalog changes
@@ -642,45 +709,90 @@ export default function LibraryEditor({
         lang: language(),
       })
       .then((r) => setDetails(r as Details))
-      .catch((e) => setMessage({ text: errorText(e), undo: false }));
+      .catch((e) => setMessage({ text: errorText(e), steps: 0 }));
   }, [selected, data]);
 
-  const select = useCallback((path: string, index: number) => {
-    setSelKey(itemKey(path, index));
-    setLibPath(path);
+  /** Selects items, e.g. the copies just made */
+  const show = useCallback((items: { path: string; index: number }[]) => {
+    const keys = items.map(({ path, index }) => itemKey(path, index));
+    if (keys.length === 0) return;
+    setSelection({ keys, primary: keys[0], anchor: keys[0] });
+    awaited.current = items[0].path;
+    setLibPath(items[0].path);
+    setQuery("");
+    toFocus.current = keys[0];
   }, []);
 
+  const focusItem = useCallback((key: string | null) => {
+    if (key === null) return;
+    listRef.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)?.focus();
+  }, []);
+
+  // A row that is rendered anew in another group keeps the keyboard
+  // biome-ignore lint/correctness/useExhaustiveDependencies: after changes of the list
+  useEffect(() => {
+    const active = document.activeElement;
+    if (toFocus.current !== null && order.includes(toFocus.current)) {
+      focusItem(toFocus.current);
+      toFocus.current = null;
+    } else if (listFocus.current && (active === document.body || active === dialog.current))
+      focusItem(selKey);
+  }, [order, selKey]);
+
   const notify = useCallback(
-    (text: string, undo = false) => {
-      setMessage({ text, undo });
+    (text: string, steps = 0) => {
+      setMessage(text ? { text, steps } : null);
       void refreshHistory();
     },
     [refreshHistory],
   );
 
-  const undo = useCallback(async () => {
-    const r = await run("library_undo", {});
-    if (r)
-      setMessage({
-        text: t("Undone: {what}", { what: historyLabel(r.undone as string | null) }),
-        undo: false,
-      });
-  }, [run]);
+  const menuContext: MenuContext = {
+    notify,
+    edit: show,
+    deleted: () => {
+      const next = afterRemoval(order, selection.keys);
+      setSelection(selectOnly(next));
+      focusItem(next);
+    },
+  };
+
+  const undo = useCallback(
+    async (steps = 1) => {
+      for (let i = 0; i < steps; i++) {
+        const r = await run("library_undo", {});
+        if (!r) return;
+        setMessage({
+          text: t("Undone: {what}", { what: historyLabel(r.undone as string | null) }),
+          steps: 0,
+        });
+      }
+    },
+    [run],
+  );
   const redo = useCallback(async () => {
     const r = await run("library_redo", {});
     if (r)
       setMessage({
         text: t("Redone: {what}", { what: historyLabel(r.redone as string | null) }),
-        undo: false,
+        steps: 0,
       });
   }, [run]);
 
-  // Escape closes, Ctrl+Z / Ctrl+Y undo and redo library changes
+  // Escape: out of a text field, from several items to one, then it closes
+  useDialogEscape(dialog, onClose, {
+    first: () => {
+      if (!several) return false;
+      setSelection(selectOnly(selKey));
+      return true;
+    },
+  });
+
+  // Ctrl+Z / Ctrl+Y undo and redo library changes
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const typing = (e.target as HTMLElement)?.matches?.("input, textarea, select");
-      if (e.key === "Escape" && !menu) onClose();
-      else if (!typing && e.ctrlKey && e.key.toLowerCase() === "z") {
+      if (!typing && e.ctrlKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
         void undo();
       } else if (!typing && e.ctrlKey && e.key.toLowerCase() === "y") {
@@ -690,16 +802,54 @@ export default function LibraryEditor({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, menu, undo, redo]);
+  }, [undo, redo]);
 
-  const openItemMenu = async (item: CatalogItem, x: number, y: number) => {
-    const l = libByIndex.get(item.library);
-    const cats = await categoriesFor(item.kind, l?.path ?? null);
+  /** A click on an item: with Ctrl or Shift several get selected */
+  const pick = (key: string, path: string, mods: { shiftKey?: boolean; ctrlKey?: boolean }) => {
+    setSelection((s) => clickItem(s, order, key, mods));
+    setLibPath(path);
+  };
+
+  /** The menu of a row: of all selected items if it is one of them, else of this one alone */
+  const openItemMenu = async (target: Target, x: number, y: number) => {
+    const key = itemKey(target.lib.path, target.item.index);
+    const all = pickedKeys.has(key) ? targets : [target];
+    if (!pickedKeys.has(key)) pick(key, target.lib.path, {});
+    const cats = await categoriesFor(target.item.kind, target.lib.path);
     setMenu({
       x,
       y,
-      items: itemMenu(item, l, cats, { notify, edit: select }),
+      items: itemsMenu(all, cats, {
+        ...menuContext,
+        deleted: () => {
+          const next = afterRemoval(
+            order,
+            all.map(({ item, lib: l }) => itemKey(l.path, item.index)),
+          );
+          setSelection(selectOnly(next));
+          focusItem(next);
+        },
+      }),
     });
+  };
+
+  /** Keys of the list: arrow keys, Ctrl+A, Delete and Ctrl+D */
+  const onListKey = (e: React.KeyboardEvent) => {
+    if (!(e.target as HTMLElement).closest(".libed-items li")) return;
+    const key = e.key.toLowerCase();
+    const walk = ({ arrowup: "up", arrowdown: "down", home: "first", end: "last" } as const)[
+      key as "arrowup"
+    ];
+    const editable = targets.length > 0 && targets.every(({ lib: l }) => l.editable);
+    if (walk) {
+      const next = walkItems(selection, order, walk, e.shiftKey);
+      setSelection(next);
+      focusItem(next.primary);
+    } else if (e.ctrlKey && key === "a") setSelection(selectAll(order, selection));
+    else if (key === "delete" && editable) void deleteItems(targets, menuContext);
+    else if (e.ctrlKey && key === "d" && editable) duplicateItems(targets, menuContext);
+    else return;
+    e.preventDefault();
   };
 
   const libraryMenu = (l: LibraryInfo, x: number, y: number) => {
@@ -707,19 +857,24 @@ export default function LibraryEditor({
     if (l.editable) {
       items.push({
         label: t("Rename…"),
-        action: () => {
-          const name = window.prompt(t("New name of the library"), libraryName(l))?.trim();
-          if (name) void run("library_rename", { path: l.path, name }, t("Library renamed"));
+        action: async () => {
+          const name = await askText({
+            title: t("Rename library"),
+            label: t("Name"),
+            value: libraryName(l),
+            confirm: t("Rename"),
+          });
+          if (name && name !== libraryName(l))
+            void run("library_rename", { path: l.path, name }, t("Library renamed"));
         },
       });
       items.push({
         label: t("New category…"),
-        action: () => {
-          const name = askCategoryName();
-          if (name)
-            void run("library_add_category", { path: l.path, name }).then(() =>
-              loadCatalog(language()),
-            );
+        action: async () => {
+          const name = await askCategoryName();
+          if (!name) return;
+          await run("library_add_category", { path: l.path, name });
+          await loadCatalog(language());
         },
       });
     }
@@ -730,18 +885,18 @@ export default function LibraryEditor({
     if (l.editable) {
       items.push({ separator: true });
       items.push({
-        label: t("Remove…"),
+        label: t("Delete…"),
         danger: true,
-        action: () => {
-          if (
-            !window.confirm(
-              t("Remove the library “{name}”? The file is moved to the “removed” folder.", {
-                name: libraryName(l),
-              }),
-            )
-          )
-            return;
-          void run("library_remove", { path: l.path }, t("Library removed"));
+        action: async () => {
+          const sure = await askConfirm({
+            title: t("Delete the library “{name}”?", { name: libraryName(l) }),
+            message: t(
+              "Its items leave the catalog. The file is moved to the “removed” folder; Undo brings the library back.",
+            ),
+            confirm: t("Delete"),
+            danger: true,
+          });
+          if (sure) void run("library_remove", { path: l.path }, t("Library deleted"));
         },
       });
     }
@@ -752,14 +907,20 @@ export default function LibraryEditor({
   };
 
   const newLibrary = async () => {
-    const name = window.prompt(t("Name of the new library"), "")?.trim();
+    const name = await askText({
+      title: t("New library"),
+      label: t("Name"),
+      confirm: t("Create"),
+    });
     if (!name) return;
     const r = await run("library_create", { kind, name }, t("Library created"));
-    if (r?.path) setLibPath(String(r.path));
+    if (!r?.path) return;
+    awaited.current = String(r.path);
+    setLibPath(String(r.path));
   };
 
   /** Asks for model or image files and libraries of the shown kind and imports them */
-  const addFiles = async () => {
+  const importFromFiles = async () => {
     const chosen = await open({
       multiple: true,
       filters: [
@@ -776,20 +937,20 @@ export default function LibraryEditor({
     const paths = Array.isArray(chosen) ? chosen : chosen ? [chosen] : [];
     if (paths.length === 0) return;
     try {
-      const note = await importFiles(paths, "libraries");
-      if (note) notify(note, true);
+      const { message, steps } = await importFiles(paths, "libraries");
+      if (message) notify(message, steps);
     } catch (e) {
       notify(errorText(e));
     }
   };
 
-  const addMenu = (x: number, y: number) => {
+  const importMenu = (x: number, y: number) => {
     const target = lib?.editable ? lib.path : null;
     const items: MenuItem[] = [
       {
         label: t("Files…"),
         note: kind === "furniture" ? t("models, libraries") : t("images, libraries"),
-        action: addFiles,
+        action: importFromFiles,
       },
       {
         label: t("Search online…"),
@@ -804,11 +965,21 @@ export default function LibraryEditor({
         note: t("selected furniture"),
         disabled: selection.length === 0,
         action: () =>
-          void run(
-            "library_add_from_home",
-            { ids: selection, ...(target ? { path: target } : {}) },
-            t("The selected furniture was added to the library"),
-          ),
+          void run("library_add_from_home", {
+            ids: selection,
+            ...(target ? { path: target } : {}),
+          }).then((r) => {
+            if (!r) return;
+            const skipped = r.skipped as string[];
+            notify(
+              skipped.length > 0
+                ? t("Imported without {names}: the home does not contain their models.", {
+                    names: skipped.join(", "),
+                  })
+                : t("The selected furniture was imported into the library"),
+              1,
+            );
+          }),
       });
     }
     items.push({ separator: true });
@@ -820,14 +991,14 @@ export default function LibraryEditor({
     setMenu({ x, y, items });
   };
 
-  // "Add…" of the catalog opens the editor with the file dialog, for furniture and textures
-  // alike; the other sources (online, furniture of the home) are in the Add menu of the editor
-  const addOnStart = useRef(adding);
+  // "Import…" of the catalog opens the editor with the file dialog, for furniture and textures
+  // alike; the other sources (online, furniture of the home) are in the Import menu of the editor
+  const importOnStart = useRef(importing);
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, when the libraries are known
   useEffect(() => {
-    if (!addOnStart.current || !lib) return;
-    addOnStart.current = false;
-    void addFiles();
+    if (!importOnStart.current || !lib) return;
+    importOnStart.current = false;
+    void importFromFiles();
   }, [lib]);
 
   const sel = selected?.item ?? null;
@@ -843,6 +1014,16 @@ export default function LibraryEditor({
   };
   const setKey = (key: string, value: string) =>
     setKeys({ [key]: value.trim() === "" ? null : value });
+  /** Sets a key of all selected items */
+  const setForAll = (key: string, value: string) =>
+    void runForItems("library_update_items", targets, {
+      set: { [key]: value.trim() === "" ? null : value.trim() },
+      lang: language(),
+    })
+      .then((steps) => notify(t("{n} items changed", { n: targets.length }), steps))
+      .catch((e) => notify(errorText(e)));
+  const allEditable = several && targets.every(({ lib: l }) => l.editable);
+  const picked = targets.map((x) => x.item);
   const type = pieceType(v);
   const changeType = (next: PieceType) => {
     const clear: Record<string, string | null> = {
@@ -923,6 +1104,16 @@ export default function LibraryEditor({
       lightSourceDiameter: rows.map((r) => r.d).join(" ") || null,
     });
 
+  /** The categories to move the selected items to, below a button */
+  const openMoveMenu = async (button: HTMLElement) => {
+    const r = button.getBoundingClientRect();
+    const cats = await categoriesFor(kind, targets[0]?.lib.path ?? null);
+    setMenu({ x: r.left, y: r.bottom, items: moveMenu(targets, cats, menuContext) });
+  };
+
+  /** The row Tab goes to: one of the list, the arrow keys go to the others */
+  const tabStop = selKey !== null && order.includes(selKey) ? selKey : order[0];
+
   const modelUrl =
     sel && sel.kind === "furniture" && sel.model ? libResourceUrl(sel.library, sel.model) : null;
   const imageUrl = sel?.icon ? libResourceUrl(sel.library, sel.icon) : null;
@@ -931,6 +1122,7 @@ export default function LibraryEditor({
     <div className="dialog-backdrop">
       <div
         ref={dialog}
+        tabIndex={-1}
         className={`dialog libed${frame.maximized ? " maximized" : ""}`}
         style={style}
         role="dialog"
@@ -957,7 +1149,7 @@ export default function LibraryEditor({
               onClick={() => {
                 setKind("furniture");
                 setLibPath(null);
-                setSelKey(null);
+                setSelection(NO_ITEMS);
               }}
             >
               {t("Furniture")}
@@ -968,7 +1160,7 @@ export default function LibraryEditor({
               onClick={() => {
                 setKind("textures");
                 setLibPath(null);
-                setSelKey(null);
+                setSelection(NO_ITEMS);
               }}
             >
               {t("Textures")}
@@ -1000,15 +1192,14 @@ export default function LibraryEditor({
             {t("Redo")}
           </button>
           <button
-            ref={addButton}
             type="button"
             className="primary"
             onClick={(e) => {
               const r = e.currentTarget.getBoundingClientRect();
-              addMenu(r.left, r.bottom + 4);
+              importMenu(r.left, r.bottom + 4);
             }}
           >
-            {t("Add")} ▾
+            {t("Import")} ▾
           </button>
           <button
             type="button"
@@ -1035,6 +1226,8 @@ export default function LibraryEditor({
                       onClick={() => {
                         setLibPath(l.path);
                         setQuery("");
+                        // Nothing stays selected that is not in the list
+                        if (several) setSelection(NO_ITEMS);
                       }}
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -1085,7 +1278,10 @@ export default function LibraryEditor({
               type="search"
               placeholder={t("Search all libraries…")}
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                if (several) setSelection(selectOnly(selKey));
+              }}
               aria-label={t("Search all libraries")}
             />
             <div className="libed-note muted small">
@@ -1095,9 +1291,22 @@ export default function LibraryEditor({
                   ? t("Your library: everything can be changed. Sweet Home 3D sees it too.")
                   : t(
                       "Part of the installation: read-only. “Edit as copy” puts a copy into your own library.",
-                    )}
+                    )}{" "}
+              {t("Ctrl+click and Shift+click select several items.")}
             </div>
-            <div className="libed-items">
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: keys of the rows, which are buttons */}
+            <div
+              className="libed-items"
+              ref={listRef}
+              onKeyDown={onListKey}
+              onFocus={() => {
+                listFocus.current = true;
+              }}
+              onBlur={(e) => {
+                const to = e.relatedTarget as Node | null;
+                if (to && !e.currentTarget.contains(to)) listFocus.current = false;
+              }}
+            >
               {groups.map(([group, list]) => (
                 <section key={group}>
                   <button
@@ -1120,20 +1329,25 @@ export default function LibraryEditor({
                     <ul>
                       {list.map((i) => {
                         const l = libByIndex.get(i.library);
-                        const key = l ? itemKey(l.path, i.index) : "";
+                        if (!l) return null;
+                        const key = itemKey(l.path, i.index);
+                        const target: Target = { item: i, lib: l };
+                        const stop = key === tabStop ? 0 : -1;
                         return (
                           <li
                             key={`${i.library}:${i.index}`}
-                            className={key === selKey ? "active" : undefined}
+                            className={pickedKeys.has(key) ? "active" : undefined}
                           >
                             <button
                               type="button"
                               className="libed-item"
-                              onClick={() => l && select(l.path, i.index)}
+                              data-key={key}
+                              tabIndex={stop}
+                              aria-pressed={pickedKeys.has(key)}
+                              onClick={(e) => pick(key, l.path, e)}
                               onContextMenu={(e) => {
                                 e.preventDefault();
-                                if (l) select(l.path, i.index);
-                                void openItemMenu(i, e.clientX, e.clientY);
+                                void openItemMenu(target, e.clientX, e.clientY);
                               }}
                             >
                               {i.icon ? (
@@ -1155,11 +1369,11 @@ export default function LibraryEditor({
                             <button
                               type="button"
                               className="libed-more"
+                              tabIndex={stop}
                               aria-label={t("Actions for {name}", { name: i.name })}
                               onClick={(e) => {
-                                if (l) select(l.path, i.index);
                                 const r = e.currentTarget.getBoundingClientRect();
-                                void openItemMenu(i, r.left, r.bottom);
+                                void openItemMenu(target, r.left, r.bottom);
                               }}
                             >
                               ⋯
@@ -1185,8 +1399,27 @@ export default function LibraryEditor({
           />
 
           <section className="libed-preview">
-            {!sel && (
+            {!sel && !several && (
               <div className="muted libed-placeholder">{t("Choose an item on the left.")}</div>
+            )}
+            {several && (
+              <div className="libed-several">
+                {picked.slice(0, MAX_THUMBS).map((i) => (
+                  <figure key={`${i.library}:${i.index}`}>
+                    {i.icon ? (
+                      <img src={libResourceUrl(i.library, i.icon)} alt="" loading="lazy" />
+                    ) : (
+                      <span className="catalog-icon-placeholder" />
+                    )}
+                    <figcaption>{i.name}</figcaption>
+                  </figure>
+                ))}
+                {picked.length > MAX_THUMBS && (
+                  <span className="muted">
+                    {t("and {n} more", { n: picked.length - MAX_THUMBS })}
+                  </span>
+                )}
+              </div>
             )}
             {sel?.kind === "furniture" && type === "door" && details && (
               <ShapeEditor
@@ -1255,7 +1488,94 @@ export default function LibraryEditor({
           />
 
           <section className="libed-props">
-            {sel && details ? (
+            {several ? (
+              <>
+                <div className="libed-props-head">
+                  <strong>{t("{n} items selected", { n: targets.length })}</strong>
+                  <span className="muted small">
+                    {[...new Set(targets.map((x) => libraryName(x.lib)))].join(", ")}
+                  </span>
+                  {!allEditable && (
+                    <div className="libed-readonly">
+                      <span>{t("Some of the items are read-only")}</span>
+                      {targets.every((x) => !x.lib.editable) && (
+                        <button type="button" onClick={() => editAsCopy(targets, menuContext)}>
+                          {t("Edit as copy…")}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div className="libed-actions">
+                    <button
+                      type="button"
+                      disabled={!allEditable}
+                      onClick={(e) => void openMoveMenu(e.currentTarget)}
+                    >
+                      {t("Move to…")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={copyMenu(targets, menuContext).length === 0}
+                      onClick={(e) => {
+                        const r = e.currentTarget.getBoundingClientRect();
+                        setMenu({ x: r.left, y: r.bottom, items: copyMenu(targets, menuContext) });
+                      }}
+                    >
+                      {t("Copy to library…")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!allEditable}
+                      onClick={() => duplicateItems(targets, menuContext)}
+                    >
+                      {t("Duplicate")}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      disabled={!allEditable}
+                      onClick={() => void deleteItems(targets, menuContext)}
+                    >
+                      {t("Delete…")}
+                    </button>
+                  </div>
+                </div>
+                <div className="libed-props-body">
+                  <div className="libed-field">
+                    <span>{t("Category")}</span>
+                    <span className="libed-category">
+                      <span>{sharedValue(picked, (i) => i.category) ?? t("mixed")}</span>
+                    </span>
+                    <span />
+                  </div>
+                  {kind === "furniture" && (
+                    <Field
+                      label={t("Tags")}
+                      value={sharedValue(picked, (i) => i.tags.join(", "))}
+                      disabled={!allEditable}
+                      onCommit={(x) => setForAll("tags", x)}
+                      placeholder={t("comma separated")}
+                    />
+                  )}
+                  <Field
+                    label={t("Creator")}
+                    value={sharedValue(picked, (i) => i.creator ?? "")}
+                    disabled={!allEditable}
+                    onCommit={(x) => setForAll("creator", x)}
+                  />
+                  <Field
+                    label={t("License")}
+                    value={sharedValue(picked, (i) => i.license ?? "")}
+                    disabled={!allEditable}
+                    onCommit={(x) => setForAll("license", x)}
+                    placeholder="CC0, CC-BY 4.0, GPL…"
+                  />
+                  <div className="muted small">
+                    {t("What you enter here is set for all selected items.")}
+                  </div>
+                </div>
+              </>
+            ) : sel && details ? (
               <>
                 <div className="libed-props-head">
                   <strong>{sel.name}</strong>
@@ -1263,16 +1583,7 @@ export default function LibraryEditor({
                   {!editable && (
                     <div className="libed-readonly">
                       <span>{t("Read-only (part of the installation).")}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const items = itemMenu(sel, selected?.lib, [], { notify, edit: select });
-                          const copy = items.find(
-                            (m) => "action" in m && m.label === t("Edit as copy…"),
-                          );
-                          if (copy && "action" in copy) copy.action();
-                        }}
-                      >
+                      <button type="button" onClick={() => editAsCopy(targets, menuContext)}>
                         {t("Edit as copy…")}
                       </button>
                     </div>
@@ -1314,20 +1625,7 @@ export default function LibraryEditor({
                           <button
                             type="button"
                             disabled={!editable}
-                            onClick={async (e) => {
-                              const r = e.currentTarget.getBoundingClientRect();
-                              const cats = await categoriesFor(
-                                sel.kind,
-                                selected?.lib.path ?? null,
-                              );
-                              const entries = itemMenu(sel, selected?.lib, cats, {
-                                notify,
-                                edit: select,
-                              });
-                              const move = entries.find((m) => "items" in m);
-                              if (move && "items" in move)
-                                setMenu({ x: r.left, y: r.bottom, items: move.items });
-                            }}
+                            onClick={(e) => void openMoveMenu(e.currentTarget)}
                           >
                             {t("Move to…")}
                           </button>
@@ -1603,12 +1901,12 @@ export default function LibraryEditor({
         {message && (
           <div className="libed-message" role="status">
             <span>{message.text}</span>
-            {message.undo && history.undo && (
+            {message.steps > 0 && history.undo && (
               <button
                 type="button"
                 onClick={() => {
                   setMessage(null);
-                  void undo();
+                  void undo(message.steps);
                 }}
               >
                 {t("Undo")}

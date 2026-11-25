@@ -100,6 +100,13 @@ const RULES: Rule[] = [
     () => t("The file is no furniture or texture library."),
   ],
   [/^the user library folder is unknown$/, () => t("The folder of your libraries is unknown.")],
+  [
+    /^the home does not contain the models of these pieces/,
+    () =>
+      t(
+        "The home does not contain the models of this furniture. Copy its items in the catalog instead.",
+      ),
+  ],
   [/^the icon is not a PNG image$/, () => t("The icon must be a PNG image.")],
   [
     /^the model contains no triangles$/,

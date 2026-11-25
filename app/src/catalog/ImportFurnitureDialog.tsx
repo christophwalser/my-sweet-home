@@ -13,6 +13,7 @@ import { api, stageResourceUrl } from "../api";
 import { errorText } from "../errorText";
 import { t } from "../i18n";
 import { useStore } from "../store";
+import { useDialogEscape } from "../ui/dialogEscape";
 import { useUi } from "../ui/uiStore";
 import { parseLength } from "../units";
 import { disposeObject, loadModelUncached } from "../view3d/models";
@@ -355,18 +356,21 @@ export default function ImportFurnitureDialog({
     }
   };
 
-  // Escape closes the dialog
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // Turning the model has no field that would show the change
+  const turned = useRef(false);
+  const dialog = useRef<HTMLDivElement>(null);
+  useDialogEscape(dialog, onClose, { guard: true, changed: () => turned.current, busy });
 
   return (
     <div className="dialog-backdrop">
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={t("Import furniture")}>
+      <div
+        ref={dialog}
+        tabIndex={-1}
+        className="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Import furniture")}
+      >
         <header className="dialog-header">
           <h2>{t("Import furniture")}</h2>
           <button type="button" onClick={onClose} aria-label={t("Close")}>
@@ -375,7 +379,7 @@ export default function ImportFurnitureDialog({
         </header>
         <p className="muted small">
           {t(
-            'OBJ (with its MTL and texture files), DAE, 3DS, glTF, GLB, FBX, 3MF, STL, PLY, VRML, or a ZIP or KMZ archive with a model; for terrain a height grid as XYZ or ASC (in meters). The piece is added to your library "My furniture", which Sweet Home 3D uses too; formats Sweet Home 3D cannot read are converted to OBJ. Files can also be dropped onto the catalog.',
+            'OBJ (with its MTL and texture files), DAE, 3DS, glTF, GLB, FBX, 3MF, STL, PLY, VRML, or a ZIP or KMZ archive with a model; for terrain a height grid as XYZ or ASC (in meters). The piece goes into your library "My furniture", which Sweet Home 3D uses too; formats Sweet Home 3D cannot read are converted to OBJ. Files can also be dropped onto the catalog.',
           )}
         </p>
         <div className="import-layout">
@@ -422,15 +426,18 @@ export default function ImportFurnitureDialog({
                 className="prop-actions"
                 title={t("Turn the model until it stands upright and faces you")}
               >
-                <button type="button" onClick={() => rotate("x")}>
-                  ⟳ X
-                </button>
-                <button type="button" onClick={() => rotate("y")}>
-                  ⟳ Y
-                </button>
-                <button type="button" onClick={() => rotate("z")}>
-                  ⟳ Z
-                </button>
+                {(["x", "y", "z"] as const).map((axis) => (
+                  <button
+                    key={axis}
+                    type="button"
+                    onClick={() => {
+                      turned.current = true;
+                      rotate(axis);
+                    }}
+                  >
+                    ⟳ {axis.toUpperCase()}
+                  </button>
+                ))}
               </div>
             )}
           </div>

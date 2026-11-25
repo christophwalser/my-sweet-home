@@ -11,8 +11,10 @@ import { api } from "../api";
 import { errorText } from "../errorText";
 import { formatNumber, t } from "../i18n";
 import { type CatalogFeed, usePreferences } from "../preferences";
+import { useDialogEscape } from "../ui/dialogEscape";
 import Icon from "../ui/Icon";
 import { useUi } from "../ui/uiStore";
+import { askReplaceLibrary } from "./dropImport";
 
 type Kind = "furniture" | "textures";
 
@@ -177,13 +179,8 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
     }
   }, [st.source, st.kind, enabled]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const dialog = useRef<HTMLDivElement>(null);
+  useDialogEscape(dialog, onClose);
 
   const chooseSource = (s: SourceTab) => {
     const kind = s.kinds.includes(st.kind) ? st.kind : s.kinds[0];
@@ -204,7 +201,7 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
           await api.execute("library_import", { path: d.path });
         } catch (e) {
           if (!String(e).includes("exists already")) throw e;
-          if (!window.confirm(t("{v0} exists already. Replace it?", { v0: d.name }))) {
+          if (!(await askReplaceLibrary(d.name))) {
             setItemState(item.id, "");
             return;
           }
@@ -242,6 +239,8 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
   return (
     <div className="dialog-backdrop">
       <div
+        ref={dialog}
+        tabIndex={-1}
         className="dialog online-dialog"
         role="dialog"
         aria-modal="true"
