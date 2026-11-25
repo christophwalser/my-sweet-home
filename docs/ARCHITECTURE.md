@@ -945,9 +945,10 @@ furniture is read by its home reader.
 
 - One place for everything about libraries; it replaces the libraries dialog and takes in the
   import steps. Principle: one way per result. The catalog in the side bar keeps two entries,
-  "Add…" (opens the editor and at once the file dialog for models or images, for furniture and
+  "Import…" (opens the editor and at once the file dialog for models or images, for furniture and
   textures alike since 2026-11-18; online search and furniture of the home are in the editor's
-  Add menu; files dropped onto the catalog lead to the same import) and "Libraries…"; the menus offer "Add to library…" and
+  Import menu; files dropped onto the catalog lead to the same import) and "Libraries…"; the
+  menus offer "Import into the library…" and
   "Libraries…". Moving items to another category is no longer done by drag and drop but through
   the item's context menu ("Move to" with the categories and "New category…"), the same menu in
   the catalog and in the editor (`catalog/library.ts`, `plan2d/ContextMenu.tsx` with sub-entries).
@@ -1714,6 +1715,37 @@ style and elevation marks are kept as properties and shown there as ordinary ele
 - Left open: angle dimensions, a style for a single dimension, chains between points in the app,
   chains along round walls, texts that make room for each other in short dimensions, chains that
   follow their wall.
+
+### 4.61 Catalog: several items, Escape and words (2026-11-24)
+
+Package 8e of the UX review (H4, H5).
+
+- **Selection** (`catalog/itemSelection.ts`). Keys, primary item and anchor of a range; a click,
+  Ctrl and Shift, the arrow keys, Ctrl+A. The list has one tab stop. A row that is rendered anew
+  in another category keeps the keyboard; copies and new libraries get it once the catalog is
+  read (`toFocus`, `awaited` in the editor).
+- **Actions for items** (`catalog/library.ts`). `itemsMenu` is the menu of one or several items,
+  the same in the catalog and the editor; move, copy, duplicate and delete take a list of items
+  and run one command per library (`byLibrary`). The message remembers how many steps of the
+  library history that were, its Undo button takes all of them back. Items of the installation
+  can only be copied. `library_update_items` sets the same keys of several items in one step;
+  `library_copy_items` takes a name per copy.
+- **History.** `library_import` and `library_remove` are recorded like the other changes; before,
+  the Undo button after them took back an older change.
+- **Escape** (`ui/dialogEscape.ts`) in the editor, the import dialogs and the online catalogs: a
+  search is emptied, another text field gets back its text and is left, several items become
+  one, and only then the dialog closes. With `guard` it asks first if a field that had the focus
+  has another value than then. The dialog takes the focus when it opens, so that keys do not go to
+  the list behind it.
+- **Questions** (`ui/ask.ts`, `ui/AskDialog.tsx`): `askConfirm` and `askText` replace
+  `window.confirm` and `window.prompt`. The dialog takes the whole keyboard.
+- **Words.** "Import" for files into a library, "Place in the home" for furniture, "Delete" for
+  items and libraries. The commands keep their names (`library_remove`, `library_remove_items`).
+- `EditableLibrary::open` takes the catalog with items if a file holds several (the default
+  catalog of Sweet Home 3D has an empty one for contributions in front). `loadCatalog` reads
+  again what changed while it was reading.
+- Left open: the editor is still modal; moving items to another library in one step; the same
+  questions and Escape steps in the other dialogs (the message boxes of Windows stay there).
 
 ## 5. Feature scope (parity with SH3D 7.x)
 

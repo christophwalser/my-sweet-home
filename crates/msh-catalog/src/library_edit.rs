@@ -106,18 +106,33 @@ impl EditableLibrary {
             .filter(|n| !n.ends_with('/'))
             .map(|n| n.into_owned())
             .collect();
-        let (main, kind) = names
-            .iter()
-            .find_map(|n| kind_of_entry(n).map(|k| (n.clone(), k)))
-            .ok_or_else(|| CatalogError::NoCatalog {
-                path: path.to_owned(),
-            })?;
-        let stem = main.trim_end_matches(".properties").to_owned();
         let mut read = |name: &str| -> Result<Vec<u8>, CatalogError> {
             let mut f = zip.by_name(name).map_err(zip_err(path))?;
             let declared = f.size();
             read_entry(&mut f, declared).map_err(io_err(path))
         };
+        // A file may hold several catalogs; the one with items counts (the default catalog of
+        // Sweet Home 3D comes with an empty one for contributions)
+        let mains: Vec<(String, CatalogKind)> = names
+            .iter()
+            .filter_map(|n| kind_of_entry(n).map(|k| (n.clone(), k)))
+            .collect();
+        let mut with_items = None;
+        if mains.len() > 1 {
+            for (name, kind) in &mains {
+                let keys = properties::parse(&read(name)?);
+                if keys.keys().any(|k| k.starts_with("name#")) {
+                    with_items = Some((name.clone(), *kind));
+                    break;
+                }
+            }
+        }
+        let (main, kind) = with_items
+            .or_else(|| mains.into_iter().next())
+            .ok_or_else(|| CatalogError::NoCatalog {
+                path: path.to_owned(),
+            })?;
+        let stem = main.trim_end_matches(".properties").to_owned();
         let mut props = BTreeMap::new();
         let mut localized = BTreeMap::new();
         let mut files = Vec::new();
@@ -749,6 +764,31 @@ mod tests {
         assert_eq!(catalogs[0].furniture.len(), 2);
         assert_eq!(catalogs[0].furniture[0].category, "Stühle");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_empty_catalog_does_not_hide_the_one_with_items() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("msh-libedit-several-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("Furniture.jar");
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+        for (name, text) in [
+            ("io/ContributedFurnitureCatalog.properties", "# none yet\n"),
+            (
+                "io/DefaultFurnitureCatalog.properties",
+                "id=x\nname#7=Chair\ncategory#7=Seats\n",
+            ),
+            ("io/DefaultFurnitureCatalog_de.properties", "name#7=Stuhl\n"),
+        ] {
+            zip.start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            zip.write_all(text.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+        let lib = EditableLibrary::open(&path).unwrap();
+        assert!(lib.has_item(7));
+        assert_eq!(lib.shown(7, "name", Some("de")).as_deref(), Some("Stuhl"));
     }
 
     #[test]

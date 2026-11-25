@@ -103,8 +103,18 @@ All notable changes to this project are documented in this file. The format foll
   Roofs" leaves the roofs out of the 3D view. A roof is saved as a piece of furniture with a
   generated model, so Sweet Home 3D shows it.
 
+- Library editor: several items can be selected (Ctrl+click, Shift+click, Ctrl+A, arrow keys) and
+  moved, copied to another library, duplicated, deleted or given tags, creator and license at
+  once, undone with one click (`library_update_items`; `library_copy_items` takes `names`).
+
 ### Changed
 
+- Catalog: one word for one action. Files are imported ("Import…" instead of "Add…" and "Add to
+  library…"), furniture is placed in the home, items and libraries are deleted.
+- Library editor and import dialogs: Escape takes back the typed text first and closes last; a
+  filled in import asks before it is discarded. Names and confirmations are asked in the app's
+  own dialogs instead of those of the browser.
+- Importing and deleting a library are steps of the library history and can be undone.
 - Edits are several times faster: after a command the windows get only the changes of the home
   instead of the whole home, unchanged parts of the plan and the 3D view are kept, and the plan
   is shown before the 3D view draws.
@@ -149,6 +159,12 @@ All notable changes to this project are documented in this file. The format foll
 - A new grid distance is drawn at once, not only after the next change of the tool.
 - Number fields of the tool options (e.g. the wall thickness) can be emptied while typing.
 - The distances of an opening are labelled "Distance on the left / right / above / below".
+
+- "Edit as copy" and the properties work for the furniture of Sweet Home 3D's default catalog.
+- Catalog changes that come while the catalog is being read are shown.
+- "Undo" in the message after importing or removing a library took back another change.
+- Importing furniture from the home says when the home does not contain its model, instead of
+  reporting success.
 
 ## [0.1.0] - 2026-11-15
 

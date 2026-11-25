@@ -94,6 +94,19 @@ struct UpdateParams {
 }
 
 #[derive(Deserialize, JsonSchema)]
+struct UpdateItemsParams {
+    /// Path of the library (see library_list)
+    path: PathBuf,
+    /// Indexes of the items to change
+    indexes: Vec<u32>,
+    /// Keys to set in each of the items, as in library_update_item, e.g. {"creator": "Jane",
+    /// "license": "CC0", "movable": "false"}; null removes a key
+    set: BTreeMap<String, Option<String>>,
+    /// Language of the texts being changed, e.g. "de"
+    lang: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct MoveParams {
     /// Path of the library (see library_list)
     path: PathBuf,
@@ -116,7 +129,9 @@ struct CopyParams {
     to: Option<PathBuf>,
     /// Name of the copies (only with one item), e.g. "Sofa (copy)"
     name: Option<String>,
-    /// Language of `name`, e.g. "de"
+    /// Names of the copies of several items, in the order of `indexes`
+    names: Option<Vec<String>>,
+    /// Language of `name` and `names`, e.g. "de"
     lang: Option<String>,
 }
 
@@ -170,6 +185,18 @@ struct NoParams {}
 /// First path segment of a resource name of a home (`1/door.obj` â†’ `1`).
 fn top_segment(name: &str) -> &str {
     name.split('/').next().unwrap_or(name)
+}
+
+/// Whether the home brings the model of a piece (furniture of the default catalog may only
+/// refer to it).
+fn has_model(doc: &crate::Document, piece: &msh_model::Piece) -> bool {
+    piece.attrs.model.as_deref().is_some_and(|model| {
+        let top = top_segment(model);
+        doc.file
+            .contents
+            .iter()
+            .any(|c| top_segment(&c.name) == top)
+    })
 }
 
 /// Adds a piece of the home with its model and icon to `lib`; returns the new index.
@@ -358,7 +385,51 @@ fn check_items(lib: &EditableLibrary, indexes: &[u32]) -> Result<(), CommandErro
     }
 }
 
-fn history_json() -> Value {
+/// Refuses keys of items that have their own commands, invalid keys and an empty name or
+/// category.
+fn check_set(set: &BTreeMap<String, Option<String>>) -> Result<(), CommandError> {
+    if let Some(k) = set
+        .keys()
+        .find(|k| k.as_str() == "id" || RESOURCE_KEYS.contains(&k.as_str()))
+    {
+        return Err(CommandError::failed(format!("'{k}' cannot be set here")));
+    }
+    if let Some(k) = set
+        .keys()
+        .find(|k| k.is_empty() || !k.chars().all(|c| c.is_ascii_alphanumeric()))
+    {
+        return Err(CommandError::failed(format!("invalid key '{k}'")));
+    }
+    for key in ["name", "category"] {
+        match set.get(key) {
+            Some(None) => {
+                return Err(CommandError::failed(format!("'{key}' cannot be removed")));
+            }
+            Some(Some(v)) if v.trim().is_empty() => {
+                return Err(CommandError::failed(format!("'{key}' cannot be empty")));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// Sets checked keys of an item (see `check_set`).
+fn set_keys(
+    lib: &mut EditableLibrary,
+    index: u32,
+    set: &BTreeMap<String, Option<String>>,
+    lang: Option<&str>,
+) {
+    for (key, value) in set {
+        match (key.as_str(), value) {
+            ("category", Some(c)) => lib.move_to_category(index, c, lang),
+            (_, v) => lib.set(index, key, v.as_deref(), lang),
+        }
+    }
+}
+
+pub(super) fn history_json() -> Value {
     let (undo, redo) = history_state();
     json!({ "undo": undo, "redo": redo })
 }
@@ -490,41 +561,10 @@ pub(super) fn register(r: &mut Registry) {
         |_doc, p: UpdateParams| {
             let mut lib = open_editable(&p.path)?;
             check_items(&lib, &[p.index])?;
-            if let Some(k) = p
-                .set
-                .keys()
-                .find(|k| k.as_str() == "id" || RESOURCE_KEYS.contains(&k.as_str()))
-            {
-                return Err(CommandError::failed(format!("'{k}' cannot be set here")));
-            }
-            if let Some(k) = p
-                .set
-                .keys()
-                .find(|k| k.is_empty() || !k.chars().all(|c| c.is_ascii_alphanumeric()))
-            {
-                return Err(CommandError::failed(format!("invalid key '{k}'")));
-            }
+            check_set(&p.set)?;
             let lang = p.lang.as_deref();
-            for (key, value) in [
-                ("name", p.set.get("name")),
-                ("category", p.set.get("category")),
-            ] {
-                if let Some(None) = value {
-                    return Err(CommandError::failed(format!("'{key}' cannot be removed")));
-                }
-                if let Some(Some(v)) = value
-                    && v.trim().is_empty()
-                {
-                    return Err(CommandError::failed(format!("'{key}' cannot be empty")));
-                }
-            }
             record("change item", std::slice::from_ref(&p.path), || {
-                for (key, value) in &p.set {
-                    match (key.as_str(), value) {
-                        ("category", Some(c)) => lib.move_to_category(p.index, c, lang),
-                        (_, v) => lib.set(p.index, key, v.as_deref(), lang),
-                    }
-                }
+                set_keys(&mut lib, p.index, &p.set, lang);
                 lib.save()
             })
             .map_err(failed)?;
@@ -535,6 +575,29 @@ pub(super) fn register(r: &mut Registry) {
             let mut out = item_json(&lib, p.index, lang);
             out["history"] = history_json();
             Ok(out)
+        },
+    );
+    r.add(
+        "library_update_items",
+        "Changes the same keys of several library items at once (creator, license, tags, \
+         movable, ...; see library_update_item). One step for library_undo.",
+        false,
+        |_doc, p: UpdateItemsParams| {
+            let mut lib = open_editable(&p.path)?;
+            check_items(&lib, &p.indexes)?;
+            check_set(&p.set)?;
+            record("change items", std::slice::from_ref(&p.path), || {
+                for &i in &p.indexes {
+                    set_keys(&mut lib, i, &p.set, p.lang.as_deref());
+                }
+                lib.save()
+            })
+            .map_err(failed)?;
+            if p.set.contains_key("category") {
+                clear_category_overrides(&lib, &p.indexes);
+            }
+            CatalogIndex::reload();
+            Ok(json!({ "path": p.path, "indexes": p.indexes, "history": history_json() }))
         },
     );
     r.add(
@@ -572,6 +635,14 @@ pub(super) fn register(r: &mut Registry) {
             known_library(&p.from)?;
             let source = EditableLibrary::open(&p.from).map_err(failed)?;
             check_items(&source, &p.indexes)?;
+            if let Some(names) = &p.names {
+                if names.len() != p.indexes.len() {
+                    return Err(CommandError::failed("give one name per item"));
+                }
+                if names.iter().any(|n| n.trim().is_empty()) {
+                    return Err(CommandError::failed("a name is empty"));
+                }
+            }
             let to = match p.to {
                 Some(t) => t,
                 None => {
@@ -597,11 +668,16 @@ pub(super) fn register(r: &mut Registry) {
             let same = to == p.from;
             let mut created = Vec::new();
             record("copy items", std::slice::from_ref(&to), || {
-                for &i in &p.indexes {
+                for (at, &i) in p.indexes.iter().enumerate() {
                     let src = if same { target.clone() } else { source.clone() };
                     let n = target.copy_item_from(&src, i)?;
-                    if let (Some(name), 1) = (&p.name, p.indexes.len()) {
-                        target.set(n, "name", Some(name), p.lang.as_deref());
+                    let name = match (&p.names, &p.name) {
+                        (Some(names), _) => names.get(at),
+                        (None, Some(name)) if p.indexes.len() == 1 => Some(name),
+                        _ => None,
+                    };
+                    if let Some(name) = name {
+                        target.set(n, "name", Some(name.trim()), p.lang.as_deref());
                     }
                     created.push(n);
                 }
@@ -708,7 +784,8 @@ pub(super) fn register(r: &mut Registry) {
     r.add(
         "library_add_from_home",
         "Adds pieces of the open home (with their models, icons and current size) as new items \
-         to a library, e.g. to reuse a piece whose size or colors were changed.",
+         to a library, e.g. to reuse a piece whose size or colors were changed. Pieces whose \
+         model the home does not contain are skipped (their names are returned).",
         false,
         |doc, p: FromHomeParams| {
             let path = match p.path {
@@ -738,6 +815,18 @@ pub(super) fn register(r: &mut Registry) {
                     "none of the IDs is a piece of the home",
                 ));
             }
+            let skipped: Vec<String> = pieces
+                .iter()
+                .filter(|p| !has_model(doc, p))
+                .map(|p| p.attrs.name.clone())
+                .collect();
+            pieces.retain(|p| has_model(doc, p));
+            if pieces.is_empty() {
+                return Err(CommandError::failed(
+                    "the home does not contain the models of these pieces: copy their items \
+                     in the catalog instead",
+                ));
+            }
             let mut added = Vec::new();
             record("add from home", std::slice::from_ref(&path), || {
                 for piece in &pieces {
@@ -749,7 +838,12 @@ pub(super) fn register(r: &mut Registry) {
             })
             .map_err(failed)?;
             CatalogIndex::reload();
-            Ok(json!({ "path": path, "indexes": added, "history": history_json() }))
+            Ok(json!({
+                "path": path,
+                "indexes": added,
+                "skipped": skipped,
+                "history": history_json(),
+            }))
         },
     );
     r.add(

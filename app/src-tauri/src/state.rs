@@ -510,6 +510,7 @@ pub fn execute<R: Runtime>(
             | "library_create"
             | "library_rename"
             | "library_update_item"
+            | "library_update_items"
             | "library_move_items"
             | "library_copy_items"
             | "library_remove_items"

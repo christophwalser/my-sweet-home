@@ -101,6 +101,9 @@ type State = {
   clearError: () => void;
 };
 
+/** The catalog changed while it was being read. */
+let catalogStale = false;
+
 /** Level to select after the home changed: keep the current one if it still exists. */
 function levelAfterChange(
   next: OpenedHome,
@@ -199,19 +202,26 @@ export const useStore = create<State>((set, get) => ({
   setViewMode: (viewMode) => set({ viewMode }),
 
   loadCatalog: async (lang) => {
-    if (get().catalogLoading) return;
+    // What changed while the catalog is being read needs reading it again
+    if (get().catalogLoading) {
+      catalogStale = true;
+      return;
+    }
     set({ catalogLoading: true });
     try {
-      const all = await api.catalogLoad(lang);
-      const shown = new Set(all.libraries.filter((l) => !l.hidden).map((l) => l.index));
-      set({
-        catalogAll: all,
-        catalog: {
-          ...all,
-          libraries: all.libraries.filter((l) => shown.has(l.index)),
-          items: all.items.filter((i) => shown.has(i.library)),
-        },
-      });
+      do {
+        catalogStale = false;
+        const all = await api.catalogLoad(lang);
+        const shown = new Set(all.libraries.filter((l) => !l.hidden).map((l) => l.index));
+        set({
+          catalogAll: all,
+          catalog: {
+            ...all,
+            libraries: all.libraries.filter((l) => shown.has(l.index)),
+            items: all.items.filter((i) => shown.has(i.library)),
+          },
+        });
+      } while (catalogStale);
     } catch (e) {
       set({ error: errorText(e) });
     } finally {

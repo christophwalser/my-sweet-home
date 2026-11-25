@@ -3,10 +3,11 @@
 // texture library "My textures" (shared with Sweet Home 3D).
 
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { errorText } from "../errorText";
 import { t } from "../i18n";
+import { useDialogEscape } from "../ui/dialogEscape";
 import { useUi } from "../ui/uiStore";
 import { formatFieldValue, parseLength, toUnit, unitSymbol, useUnit } from "../units";
 import CategoryField from "./CategoryField";
@@ -78,13 +79,8 @@ export default function ImportTextureDialog({
     [preview],
   );
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const dialog = useRef<HTMLDivElement>(null);
+  useDialogEscape(dialog, onClose, { guard: true, busy });
 
   const choose = async () => {
     const chosen = await open({
@@ -133,6 +129,8 @@ export default function ImportTextureDialog({
   return (
     <div className="dialog-backdrop">
       <div
+        ref={dialog}
+        tabIndex={-1}
         className="dialog import-texture-dialog"
         role="dialog"
         aria-modal="true"
@@ -146,7 +144,7 @@ export default function ImportTextureDialog({
         </header>
         <p className="muted small">
           {t(
-            'JPEG, PNG, BMP, GIF, WebP, TIFF or SVG images, or a PBR material package (ZIP, its color map is used). The texture is added to your library "My textures", which Sweet Home 3D uses too. Files can also be dropped onto the catalog.',
+            'JPEG, PNG, BMP, GIF, WebP, TIFF or SVG images, or a PBR material package (ZIP, its color map is used). The texture goes into your library "My textures", which Sweet Home 3D uses too. Files can also be dropped onto the catalog.',
           )}
         </p>
         <div className="import-layout">

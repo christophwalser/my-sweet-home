@@ -30,6 +30,7 @@ import StatusBar from "./plan2d/StatusBar";
 import { collectTopViews } from "./plan2d/topView";
 import { addRecentHome } from "./recentHomes";
 import { applyHome, subscribeToHomeChanges, useStore } from "./store";
+import AskDialog from "./ui/AskDialog";
 import CommandPalette from "./ui/CommandPalette";
 import { chooseFile, command, detach3D, handleGlobalShortcut, runCommand } from "./ui/commands";
 import { enableDialogDragging } from "./ui/dialogDragging";
@@ -363,6 +364,7 @@ export default function App() {
       )}
       {dialog === "duplicateLevel" && <LevelDuplicateDialog onClose={closeDialog} />}
       {dialog === "help" && <HelpDialog onClose={closeDialog} />}
+      <AskDialog />
       {paletteOpen && <CommandPalette />}
 
       {(error || notice) && (

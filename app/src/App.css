@@ -1713,6 +1713,42 @@ input[type="radio"]:focus-visible,
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
 }
 
+/* Takes the focus itself, so that keys do not go to what is behind it */
+.dialog:focus {
+  outline: none;
+}
+
+/* A question stands above the dialog that asks it */
+.dialog-backdrop.ask {
+  z-index: 70;
+}
+
+.ask-dialog {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.ask-dialog p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.ask-dialog .dialog-actions {
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.ask-dialog button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.ask-dialog button.primary.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #ffffff;
+}
+
 .dialog-header {
   display: flex;
   align-items: center;
@@ -3591,6 +3627,8 @@ body.moving-dialog * {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Shift+click selects items, not text */
+  user-select: none;
 }
 
 .libed-group {
@@ -3720,6 +3758,48 @@ body.moving-dialog * {
 
 .libed-tabs {
   align-self: flex-start;
+}
+
+.libed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.libed-actions button.danger:not(:disabled) {
+  color: var(--danger);
+}
+
+.libed-several {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 10px;
+}
+
+.libed-several figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.libed-several img,
+.libed-several .catalog-icon-placeholder {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.libed-several figcaption {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
 }
 
 .libed-readonly {

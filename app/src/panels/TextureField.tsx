@@ -246,7 +246,7 @@ export default function TextureField({ label, current, mixed, onCommit, target }
             <button
               type="button"
               onClick={() => void chooseImage()}
-              title={t("Import an image as texture (added to your library 'My textures')")}
+              title={t("Import an image as texture (goes into your library 'My textures')")}
             >
               {t("Import…")}
             </button>

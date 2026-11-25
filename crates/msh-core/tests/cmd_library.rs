@@ -132,6 +132,16 @@ fn library_import_copies_into_the_user_folder() {
         "library_import",
         json!({ "path": file, "replace": true }),
     );
+    // Undo takes back the replacing first, then the import
+    let history = lib_cmd(&r, &mut doc, "library_history", json!({}));
+    assert_eq!(history["undo"], "import");
+    lib_cmd(&r, &mut doc, "library_undo", json!({}));
+    assert!(target.is_file());
+    lib_cmd(&r, &mut doc, "library_undo", json!({}));
+    assert!(!target.exists());
+    assert!(search(&r, &mut doc, "bench zq7k", "furniture").is_empty());
+    lib_cmd(&r, &mut doc, "library_redo", json!({}));
+    assert!(target.is_file());
     // The copy in the user folder cannot be imported onto itself
     let err = run_err(&r, &mut doc, "library_import", json!({ "path": target }));
     assert!(err.contains("already in the user folder"), "{err}");
@@ -333,6 +343,14 @@ fn library_remove_moves_the_file_aside() {
         again["moved_to"],
         json!(removed_dir.join("Old Zq7k.sh3f.1"))
     );
+    // Undo brings the library back (the file moved aside stays), redo removes it again
+    assert_eq!(again["history"]["undo"], "remove library");
+    lib_cmd(&r, &mut doc, "library_undo", json!({}));
+    assert!(Path::new(&path).is_file());
+    assert_eq!(search(&r, &mut doc, "lamp zq7k", "furniture").len(), 1);
+    lib_cmd(&r, &mut doc, "library_redo", json!({}));
+    assert!(!Path::new(&path).exists());
+    assert!(removed_dir.join("Old Zq7k.sh3f.1").is_file());
     // Only libraries of the user folder can be removed
     let err = run_err(&r, &mut doc, "library_remove", json!({ "path": file }));
     assert!(err.contains("only libraries"), "{err}");

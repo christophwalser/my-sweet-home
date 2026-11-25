@@ -899,12 +899,12 @@ const LIST: Command[] = [
   // Furniture
   {
     id: "furniture.import",
-    label: t("Add to library…"),
+    label: t("Import into the library…"),
     icon: "import",
-    hint: t("Add 3D models, textures, libraries, online items or furniture of the home"),
+    hint: t("Import 3D models, textures, libraries, online items or furniture of the home"),
     keywords:
-      "import model obj dae 3ds gltf fbx texture image pbr material online internet ambientcg poly haven sh3f sh3t",
-    run: () => useUi.getState().openDialog("libraries", "add"),
+      "add model obj dae 3ds gltf fbx texture image pbr material online internet ambientcg poly haven sh3f sh3t",
+    run: () => useUi.getState().openDialog("libraries", "import"),
   },
   {
     id: "furniture.libraries",
