@@ -106,6 +106,14 @@ All notable changes to this project are documented in this file. The format foll
 - Library editor: several items can be selected (Ctrl+click, Shift+click, Ctrl+A, arrow keys) and
   moved, copied to another library, duplicated, deleted or given tags, creator and license at
   once, undone with one click (`library_update_items`; `library_copy_items` takes `names`).
+- Library editor: items move to another library in one step and keep their catalog ID
+  (`library_copy_items` with `move`); price, VAT, sizes and settings such as "Movable" of several
+  items at once (`library_items` gives the `values` of chosen items); lengths in the unit of the
+  preferences.
+- Import of several models one after another ("2 of 5", "Import all", "Skip") and of several
+  textures in a table with their tile sizes. The height of a tile follows the proportions of the
+  image.
+- Catalog: order of the entries (as in the libraries, name, size) and a filter for one library.
 
 ### Changed
 
@@ -115,6 +123,10 @@ All notable changes to this project are documented in this file. The format foll
   filled in import asks before it is discarded. Names and confirmations are asked in the app's
   own dialogs instead of those of the browser.
 - Importing and deleting a library are steps of the library history and can be undone.
+- The library editor keeps its selection, search and scroll position while models are imported or
+  the online catalogs are open; what was imported is selected afterwards.
+- Questions before closing, deleting a level, resetting the preferences and recovering homes come
+  in the app's own dialogs instead of those of Windows.
 - Edits are several times faster: after a command the windows get only the changes of the home
   instead of the whole home, unchanged parts of the plan and the 3D view are kept, and the plan
   is shown before the 3D view draws.
@@ -162,6 +174,7 @@ All notable changes to this project are documented in this file. The format foll
 
 - "Edit as copy" and the properties work for the furniture of Sweet Home 3D's default catalog.
 - Catalog changes that come while the catalog is being read are shown.
+- `texture_import` refuses files that are no images.
 - "Undo" in the message after importing or removing a library took back another change.
 - Importing furniture from the home says when the home does not contain its model, instead of
   reporting success.

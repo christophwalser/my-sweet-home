@@ -5,6 +5,7 @@ import { api } from "./api";
 import ErrorBoundary from "./ErrorBoundary";
 import { listenView3DActions, syncUiState } from "./layout/view3dWindow";
 import { applyHome, subscribeToHomeChanges, useStore } from "./store";
+import AskDialog from "./ui/AskDialog";
 import { enableDialogDragging } from "./ui/dialogDragging";
 import { type DialogName, initTheme, useUi } from "./ui/uiStore";
 import View3D from "./view3d/View3D";
@@ -110,6 +111,7 @@ export default function View3DWindow() {
           <View3D />
         </ErrorBoundary>
       </section>
+      <AskDialog />
     </div>
   );
 }

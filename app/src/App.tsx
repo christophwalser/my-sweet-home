@@ -1,11 +1,11 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { message } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import { api, docResourceUrl, TOP_VIEWS_EVENT } from "./api";
 import CatalogPanel from "./catalog/CatalogPanel";
 import ImportFurnitureDialog from "./catalog/ImportFurnitureDialog";
 import ImportTextureDialog from "./catalog/ImportTextureDialog";
+import ImportTexturesDialog from "./catalog/ImportTexturesDialog";
 import LibraryEditor from "./catalog/LibraryEditor";
 import OnlineDialog from "./catalog/OnlineDialog";
 import ErrorBoundary from "./ErrorBoundary";
@@ -31,6 +31,7 @@ import { collectTopViews } from "./plan2d/topView";
 import { addRecentHome } from "./recentHomes";
 import { applyHome, subscribeToHomeChanges, useStore } from "./store";
 import AskDialog from "./ui/AskDialog";
+import { askChoice } from "./ui/ask";
 import CommandPalette from "./ui/CommandPalette";
 import { chooseFile, command, detach3D, handleGlobalShortcut, runCommand } from "./ui/commands";
 import { enableDialogDragging } from "./ui/dialogDragging";
@@ -113,6 +114,7 @@ export default function App() {
   const editingLevel = useUi((s) => s.editingLevel);
   const setEditingLevel = useUi((s) => s.setEditingLevel);
   const dialog = useUi((s) => s.dialog);
+  const stack = useUi((s) => s.stack);
   const closeDialog = useUi((s) => s.closeDialog);
   const dialogArg = useUi((s) => s.dialogArg);
   const paletteOpen = useUi((s) => s.paletteOpen);
@@ -277,21 +279,25 @@ export default function App() {
     const off = getCurrentWebviewWindow().onCloseRequested(async (event) => {
       const current = useStore.getState().opened;
       if (!current?.modified) return;
-      const answer = await message(
-        t('Save the changes of "{v0}" before closing?', {
+      // Closed from the task bar the window may be behind others or minimized
+      const window = getCurrentWebviewWindow();
+      await window.unminimize().catch(() => {});
+      await window.setFocus().catch(() => {});
+      const answer = await askChoice({
+        title: t('Save the changes of "{v0}" before closing?', {
           v0: homeTitle(current.home.attrs.name, current.path),
         }),
-        {
-          title: t("My Sweet Home"),
-          kind: "warning",
-          buttons: { yes: t("Save"), no: t("Don't save"), cancel: t("Cancel") },
-        },
-      );
-      if (answer === "Yes" || answer === t("Save")) {
+        buttons: [
+          { id: "save", label: t("Save") },
+          { id: "discard", label: t("Don't save"), danger: true },
+        ],
+        cancel: t("Cancel"),
+      });
+      if (answer === "save") {
         await useStore.getState().save();
         // Saving was cancelled or failed: keep the window
         if (useStore.getState().opened?.modified) event.preventDefault();
-      } else if (!(answer === "No" || answer === t("Don't save"))) {
+      } else if (answer !== "discard") {
         event.preventDefault();
       }
     });
@@ -338,13 +344,21 @@ export default function App() {
           onClose={closeDialog}
         />
       )}
+      {(dialog === "libraries" || stack.includes("libraries")) && (
+        // Stays as it is under the dialogs opened from it (import, online catalogs)
+        <LibraryEditor
+          initial={dialog === "libraries" ? dialogArg : null}
+          active={dialog === "libraries"}
+          onClose={closeDialog}
+        />
+      )}
       {dialog === "importFurniture" && (
         <ImportFurnitureDialog initialPath={dialogArg ?? undefined} onClose={closeDialog} />
       )}
       {dialog === "importTexture" && (
         <ImportTextureDialog initialPath={dialogArg ?? undefined} onClose={closeDialog} />
       )}
-      {dialog === "libraries" && <LibraryEditor initial={dialogArg} onClose={closeDialog} />}
+      {dialog === "importTextures" && <ImportTexturesDialog onClose={closeDialog} />}
       {dialog === "online" && <OnlineDialog onClose={closeDialog} />}
       {(dialog === "backgroundImport" || dialog === "backgroundModify") && opened && (
         <BackgroundImageWizard
@@ -633,23 +647,24 @@ async function offerRecovery(): Promise<void> {
   const names = found
     .map((r) => `• ${homeTitle(r.name, r.path)} (${formatDateTime(new Date(r.savedAt * 1000))})`)
     .join("\n");
-  const answer = await message(
-    t(
+  const answer = await askChoice({
+    title: t("Recover homes"),
+    message: t(
       "My Sweet Home was not closed properly. These homes had unsaved changes:\n\n{names}\n\nOpen them again?",
       { names },
     ),
-    {
-      title: t("Recover homes"),
-      kind: "info",
-      buttons: { yes: t("Open"), no: t("Discard"), cancel: t("Later") },
-    },
-  );
-  if (answer === "Yes" || answer === t("Open")) {
+    buttons: [
+      { id: "open", label: t("Open") },
+      { id: "discard", label: t("Discard"), danger: true },
+    ],
+    cancel: t("Later"),
+  });
+  if (answer === "open") {
     // The first one in this window, the others in new windows
     const [first, ...others] = found;
     applyHome(await api.recoveryOpen(first.key));
     for (const r of others) await api.newWindow(undefined, r.key);
-  } else if (answer === "No" || answer === t("Discard")) {
+  } else if (answer === "discard") {
     await api.recoveryDiscard(found.map((r) => r.key));
   }
 }

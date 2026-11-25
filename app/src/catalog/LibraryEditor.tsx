@@ -16,7 +16,7 @@ import { askConfirm, askText } from "../ui/ask";
 import { useDialogEscape } from "../ui/dialogEscape";
 import Icon from "../ui/Icon";
 import { useUi } from "../ui/uiStore";
-import { formatPrecise } from "../units";
+import { formatPrecise, unitSymbol, useUnit } from "../units";
 import { disposeObject, loadModelUncached } from "../view3d/models";
 import { importFiles } from "./dropImport";
 import {
@@ -29,8 +29,10 @@ import {
   sharedValue,
   walkItems,
 } from "./itemSelection";
+import { lengthsText, lengthsValue, lengthText, lengthValue } from "./lengthText";
 import {
   askCategoryName,
+  byLibrary,
   categoriesFor,
   copyMenu,
   deleteItems,
@@ -45,6 +47,7 @@ import {
   moveMenu,
   runForItems,
   type Target,
+  transferMenu,
 } from "./library";
 import { LIBRARY_EXTENSIONS, MODEL_EXTENSIONS, TEXTURE_EXTENSIONS } from "./modelConvert";
 import ShapeEditor from "./ShapeEditor";
@@ -248,7 +251,9 @@ function Field({
   label: string;
   /** null: several items with different values */
   value: string | null;
-  onCommit: (v: string) => void;
+  /** false: the text is not accepted, the field goes back to its value */
+  // biome-ignore lint/suspicious/noConfusingVoidType: most fields accept every text
+  onCommit: (v: string) => void | boolean;
   disabled?: boolean;
   unit?: string;
   multiline?: boolean;
@@ -259,7 +264,7 @@ function Field({
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
   const commit = (typed: string) => {
-    if (typed !== value) onCommit(typed);
+    if (typed !== value && onCommit(typed) === false) setText(value);
   };
   return (
     // biome-ignore lint/a11y/noLabelWithoutControl: the label wraps an input or a text area
@@ -291,6 +296,55 @@ function Field({
   );
 }
 
+/** A length of the library file (cm), shown and typed in the unit of the preferences. */
+function LengthField({
+  label,
+  value,
+  onCommit,
+  required,
+  disabled,
+  placeholder,
+}: {
+  label: string;
+  value: string | null;
+  onCommit: (cm: string) => void;
+  /** Must not be empty or zero */
+  required?: boolean;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  const unit = useUnit();
+  return (
+    <Field
+      label={label}
+      value={value === null ? null : lengthText(value, unit)}
+      unit={unitSymbol(unit)}
+      disabled={disabled}
+      placeholder={placeholder}
+      onCommit={(typed) => {
+        const cm = lengthValue(typed, unit);
+        if (cm === null || (required && !(Number(cm) > 0))) return false;
+        onCommit(cm);
+      }}
+    />
+  );
+}
+
+/** What can be allowed or not for a piece of furniture: key, label and the default. */
+const FLAGS: [string, () => string, boolean][] = [
+  ["movable", () => t("Movable"), true],
+  ["resizable", () => t("Resizable"), true],
+  ["deformable", () => t("Deformable (width, depth and height separately)"), true],
+  ["texturable", () => t("Texturable"), true],
+  ["horizontallyRotatable", () => t("Can be tilted"), true],
+  ["backFaceShown", () => t("Show back faces"), false],
+];
+
+/** Whether a flag is set in the values of an item. */
+function flagOf(values: Record<string, string>, key: string, def: boolean): boolean {
+  return values[key] === undefined ? def : values[key] === "true";
+}
+
 function Check({
   label,
   checked,
@@ -298,7 +352,8 @@ function Check({
   disabled,
 }: {
   label: string;
-  checked: boolean;
+  /** null: several items with different settings */
+  checked: boolean | null;
   onChange: (v: boolean) => void;
   disabled?: boolean;
 }) {
@@ -306,7 +361,10 @@ function Check({
     <label className="libed-check">
       <input
         type="checkbox"
-        checked={checked}
+        ref={(el) => {
+          if (el) el.indeterminate = checked === null;
+        }}
+        checked={checked === true}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
       />
@@ -499,6 +557,7 @@ function ModelPreview({
 
 export default function LibraryEditor({
   initial,
+  active,
   onClose: close,
 }: {
   /**
@@ -506,6 +565,8 @@ export default function LibraryEditor({
    * the file dialog for models or images opens right away.
    */
   initial: string | null;
+  /** Not under a dialog opened from here (import, online catalogs) */
+  active: boolean;
   onClose: () => void;
 }) {
   const onClose = useCallback(() => {
@@ -536,6 +597,7 @@ export default function LibraryEditor({
   const [closed, setClosed] = useState<Set<string>>(new Set());
   const iconRef = useRef<(() => string | null) | null>(null);
   const { frame, update: updateFrame, dialog, style, moveStart, resizeStart, panes } = useFrame();
+  const unit = useUnit();
   const side = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   /** The keyboard is in the list of items (also while its focused row is rendered anew) */
@@ -750,6 +812,7 @@ export default function LibraryEditor({
   const menuContext: MenuContext = {
     notify,
     edit: show,
+    moved: show,
     deleted: () => {
       const next = afterRemoval(order, selection.keys);
       setSelection(selectOnly(next));
@@ -781,6 +844,7 @@ export default function LibraryEditor({
 
   // Escape: out of a text field, from several items to one, then it closes
   useDialogEscape(dialog, onClose, {
+    active,
     first: () => {
       if (!several) return false;
       setSelection(selectOnly(selKey));
@@ -790,6 +854,7 @@ export default function LibraryEditor({
 
   // Ctrl+Z / Ctrl+Y undo and redo library changes
   useEffect(() => {
+    if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       const typing = (e.target as HTMLElement)?.matches?.("input, textarea, select");
       if (!typing && e.ctrlKey && e.key.toLowerCase() === "z") {
@@ -802,7 +867,60 @@ export default function LibraryEditor({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+  }, [undo, redo, active]);
+
+  // Back from an import: the new items are selected, and one Undo takes the import back
+  useEffect(() => {
+    useUi.setState({ imported: [] });
+  }, []);
+  useEffect(() => {
+    if (!active || !data) return;
+    const { imported } = useUi.getState();
+    if (imported.length === 0) return;
+    const ids = new Set(imported);
+    const found = data.items.filter((i) => i.id !== null && ids.has(i.id));
+    // The catalog does not show them yet
+    if (found.length < imported.filter((id) => id !== null).length) return;
+    useUi.setState({ imported: [] });
+    show(
+      found.flatMap((i) => {
+        const l = libByIndex.get(i.library);
+        return l ? [{ path: l.path, index: i.index }] : [];
+      }),
+    );
+    notify(
+      found.length === 1
+        ? t("“{name}” was imported", { name: found[0].name })
+        : t("{n} imports done", { n: imported.length }),
+      imported.length,
+    );
+  }, [active, data, libByIndex, show, notify]);
+
+  // Keys of several items, for the fields they share
+  const [pickedValues, setPickedValues] = useState<Record<string, string>[]>([]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reload after catalog changes
+  useEffect(() => {
+    if (!several) {
+      setPickedValues([]);
+      return;
+    }
+    let alive = true;
+    Promise.all(
+      byLibrary(targets).map(
+        ({ path, items }) =>
+          api.execute("library_items", {
+            path,
+            indexes: items.map((i) => i.index),
+            values: true,
+          }) as Promise<{ items: { values: Record<string, string> }[] }>,
+      ),
+    )
+      .then((r) => alive && setPickedValues(r.flatMap((x) => x.items.map((i) => i.values))))
+      .catch((e) => alive && setMessage({ text: errorText(e), steps: 0 }));
+    return () => {
+      alive = false;
+    };
+  }, [targets, several, data]);
 
   /** A click on an item: with Ctrl or Shift several get selected */
   const pick = (key: string, path: string, mods: { shiftKey?: boolean; ctrlKey?: boolean }) => {
@@ -1015,15 +1133,17 @@ export default function LibraryEditor({
   const setKey = (key: string, value: string) =>
     setKeys({ [key]: value.trim() === "" ? null : value });
   /** Sets a key of all selected items */
-  const setForAll = (key: string, value: string) =>
+  const setForAll = (key: string, value: string | null) =>
     void runForItems("library_update_items", targets, {
-      set: { [key]: value.trim() === "" ? null : value.trim() },
+      set: { [key]: value === null || value.trim() === "" ? null : value.trim() },
       lang: language(),
     })
       .then((steps) => notify(t("{n} items changed", { n: targets.length }), steps))
       .catch((e) => notify(errorText(e)));
   const allEditable = several && targets.every(({ lib: l }) => l.editable);
   const picked = targets.map((x) => x.item);
+  /** The value the selected items share for a key (null: they differ or are not read yet) */
+  const shared = (key: string, def = "") => sharedValue(pickedValues, (v) => v[key] ?? def);
   const type = pieceType(v);
   const changeType = (next: PieceType) => {
     const clear: Record<string, string | null> = {
@@ -1119,7 +1239,7 @@ export default function LibraryEditor({
   const imageUrl = sel?.icon ? libResourceUrl(sel.library, sel.icon) : null;
 
   return (
-    <div className="dialog-backdrop">
+    <div className="dialog-backdrop" inert={!active}>
       <div
         ref={dialog}
         tabIndex={-1}
@@ -1457,7 +1577,7 @@ export default function LibraryEditor({
                   }}
                 />
                 <span className="muted small">
-                  {t("On a wall of 4 × 2.5 m – one tile is {w} × {h} cm", {
+                  {t("On a wall of 4 × 2.5 m – one tile is {w} × {h}", {
                     w: formatPrecise(sel.width),
                     h: formatPrecise(sel.height),
                   })}
@@ -1525,6 +1645,20 @@ export default function LibraryEditor({
                     </button>
                     <button
                       type="button"
+                      disabled={!allEditable || transferMenu(targets, menuContext).length === 0}
+                      onClick={(e) => {
+                        const r = e.currentTarget.getBoundingClientRect();
+                        setMenu({
+                          x: r.left,
+                          y: r.bottom,
+                          items: transferMenu(targets, menuContext),
+                        });
+                      }}
+                    >
+                      {t("Move to library…")}
+                    </button>
+                    <button
+                      type="button"
                       disabled={!allEditable}
                       onClick={() => duplicateItems(targets, menuContext)}
                     >
@@ -1570,6 +1704,70 @@ export default function LibraryEditor({
                     onCommit={(x) => setForAll("license", x)}
                     placeholder="CC0, CC-BY 4.0, GPL…"
                   />
+                  {kind === "furniture" && (
+                    <>
+                      <Field
+                        label={t("Price")}
+                        value={shared("price")}
+                        disabled={!allEditable}
+                        onCommit={(x) => setForAll("price", x.replace(",", "."))}
+                      />
+                      <Field
+                        label={t("VAT")}
+                        value={shared("valueAddedTaxPercentage")}
+                        unit="%"
+                        disabled={!allEditable}
+                        onCommit={(x) => setForAll("valueAddedTaxPercentage", x.replace(",", "."))}
+                      />
+                      <hr />
+                    </>
+                  )}
+                  <LengthField
+                    label={t("Width")}
+                    required
+                    value={shared("width")}
+                    disabled={!allEditable}
+                    onCommit={(x) => setForAll("width", x)}
+                  />
+                  {kind === "furniture" && (
+                    <LengthField
+                      label={t("Depth")}
+                      required
+                      value={shared("depth")}
+                      disabled={!allEditable}
+                      onCommit={(x) => setForAll("depth", x)}
+                    />
+                  )}
+                  <LengthField
+                    label={t("Height")}
+                    required
+                    value={shared("height")}
+                    disabled={!allEditable}
+                    onCommit={(x) => setForAll("height", x)}
+                  />
+                  {kind === "furniture" && (
+                    <>
+                      <LengthField
+                        label={t("Elevation")}
+                        value={shared("elevation", "0")}
+                        disabled={!allEditable}
+                        onCommit={(x) => setForAll("elevation", x)}
+                      />
+                      <hr />
+                      {FLAGS.map(([key, label, def]) => {
+                        const on = sharedValue(pickedValues, (v) => String(flagOf(v, key, def)));
+                        return (
+                          <Check
+                            key={key}
+                            label={label()}
+                            checked={on === null ? null : on === "true"}
+                            disabled={!allEditable}
+                            onChange={(x) => setForAll(key, x === def ? null : String(x))}
+                          />
+                        );
+                      })}
+                    </>
+                  )}
                   <div className="muted small">
                     {t("What you enter here is set for all selected items.")}
                   </div>
@@ -1616,7 +1814,10 @@ export default function LibraryEditor({
                         label={t("Name")}
                         value={sel.name}
                         disabled={!editable}
-                        onCommit={(x) => x.trim() && setKeys({ name: x.trim() })}
+                        onCommit={(x) => {
+                          if (x.trim() === "") return false;
+                          setKeys({ name: x.trim() });
+                        }}
                       />
                       <div className="libed-field">
                         <span>{t("Category")}</span>
@@ -1690,53 +1891,39 @@ export default function LibraryEditor({
                   )}
                   {tab === "size" && sel.kind === "furniture" && (
                     <>
-                      <Field
+                      <LengthField
                         label={t("Width")}
+                        required
                         value={v.width ?? ""}
-                        unit="cm"
                         disabled={!editable}
-                        onCommit={(x) => setKey("width", x.replace(",", "."))}
+                        onCommit={(x) => setKey("width", x)}
                       />
-                      <Field
+                      <LengthField
                         label={t("Depth")}
+                        required
                         value={v.depth ?? ""}
-                        unit="cm"
                         disabled={!editable}
-                        onCommit={(x) => setKey("depth", x.replace(",", "."))}
+                        onCommit={(x) => setKey("depth", x)}
                       />
-                      <Field
+                      <LengthField
                         label={t("Height")}
+                        required
                         value={v.height ?? ""}
-                        unit="cm"
                         disabled={!editable}
-                        onCommit={(x) => setKey("height", x.replace(",", "."))}
+                        onCommit={(x) => setKey("height", x)}
                       />
-                      <Field
+                      <LengthField
                         label={t("Elevation")}
                         value={v.elevation ?? "0"}
-                        unit="cm"
                         disabled={!editable}
-                        onCommit={(x) => setKey("elevation", x.replace(",", "."))}
+                        onCommit={(x) => setKey("elevation", x)}
                       />
                       <hr />
-                      {(
-                        [
-                          ["movable", t("Movable"), true],
-                          ["resizable", t("Resizable"), true],
-                          [
-                            "deformable",
-                            t("Deformable (width, depth and height separately)"),
-                            true,
-                          ],
-                          ["texturable", t("Texturable"), true],
-                          ["horizontallyRotatable", t("Can be tilted"), true],
-                          ["backFaceShown", t("Show back faces"), false],
-                        ] as [string, string, boolean][]
-                      ).map(([key, label, def]) => (
+                      {FLAGS.map(([key, label, def]) => (
                         <Check
                           key={key}
-                          label={label}
-                          checked={v[key] === undefined ? def : v[key] === "true"}
+                          label={label()}
+                          checked={flagOf(v, key, def)}
                           disabled={!editable}
                           onChange={(on) => setKeys({ [key]: on === def ? null : String(on) })}
                         />
@@ -1745,19 +1932,19 @@ export default function LibraryEditor({
                   )}
                   {tab === "size" && sel.kind === "textures" && (
                     <>
-                      <Field
+                      <LengthField
                         label={t("Width")}
+                        required
                         value={v.width ?? ""}
-                        unit="cm"
                         disabled={!editable}
-                        onCommit={(x) => setKey("width", x.replace(",", "."))}
+                        onCommit={(x) => setKey("width", x)}
                       />
-                      <Field
+                      <LengthField
                         label={t("Height")}
+                        required
                         value={v.height ?? ""}
-                        unit="cm"
                         disabled={!editable}
-                        onCommit={(x) => setKey("height", x.replace(",", "."))}
+                        onCommit={(x) => setKey("height", x)}
                       />
                     </>
                   )}
@@ -1792,24 +1979,18 @@ export default function LibraryEditor({
                       </div>
                       {type === "door" && (
                         <>
-                          <Field
+                          <LengthField
                             label={t("Wall part of the depth")}
                             value={v.doorOrWindowWallThickness ?? ""}
-                            unit="cm"
                             disabled={!editable}
-                            onCommit={(x) =>
-                              setKey("doorOrWindowWallThickness", x.replace(",", "."))
-                            }
+                            onCommit={(x) => setKey("doorOrWindowWallThickness", x)}
                             placeholder={t("whole depth")}
                           />
-                          <Field
+                          <LengthField
                             label={t("Distance to the back")}
                             value={v.doorOrWindowWallDistance ?? ""}
-                            unit="cm"
                             disabled={!editable}
-                            onCommit={(x) =>
-                              setKey("doorOrWindowWallDistance", x.replace(",", "."))
-                            }
+                            onCommit={(x) => setKey("doorOrWindowWallDistance", x)}
                             placeholder="0"
                           />
                           <Check
@@ -1873,18 +2054,24 @@ export default function LibraryEditor({
                             {t("Add light source")}
                           </button>
                           <div className="muted small">
-                            {t("Positions in cm from the left, back and bottom of the piece.")}
+                            {t("Positions in {unit} from the left, back and bottom of the piece.", {
+                              unit: unitSymbol(unit),
+                            })}
                           </div>
                         </>
                       )}
                       {type === "shelf" && (
                         <Field
                           label={t("Shelf heights")}
-                          value={v.shelfElevations ?? ""}
-                          unit="cm"
+                          value={lengthsText(v.shelfElevations ?? "", unit)}
+                          unit={unitSymbol(unit)}
                           disabled={!editable}
-                          onCommit={(x) => setKey("shelfElevations", x.replace(/[,;]+/g, " "))}
-                          placeholder="38 76 114"
+                          onCommit={(x) => {
+                            const cm = lengthsValue(x, unit);
+                            if (cm === null) return false;
+                            setKey("shelfElevations", cm);
+                          }}
+                          placeholder={lengthsText("38 76 114", unit)}
                         />
                       )}
                     </>
@@ -1942,17 +2129,26 @@ function LightRow({
   onChange: (row: { x: string; y: string; z: string; color: string; d: string }) => void;
   onRemove: () => void;
 }) {
-  const cell = (key: "x" | "y" | "z" | "d") => (
-    <input
-      type="text"
-      defaultValue={row[key]}
-      disabled={disabled}
-      aria-label={key.toUpperCase()}
-      onBlur={(e) =>
-        e.target.value !== row[key] && onChange({ ...row, [key]: e.target.value.replace(",", ".") })
-      }
-    />
-  );
+  const unit = useUnit();
+  const cell = (key: "x" | "y" | "z" | "d") => {
+    const shown = lengthText(row[key], unit);
+    return (
+      <input
+        type="text"
+        // Follows changes from elsewhere (undo)
+        key={`${key}|${shown}`}
+        defaultValue={shown}
+        disabled={disabled}
+        aria-label={key.toUpperCase()}
+        onBlur={(e) => {
+          if (e.target.value === shown) return;
+          const cm = lengthValue(e.target.value, unit);
+          if (cm) onChange({ ...row, [key]: cm });
+          else e.target.value = shown;
+        }}
+      />
+    );
+  };
   return (
     <>
       {cell("x")}

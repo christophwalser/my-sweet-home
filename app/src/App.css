@@ -352,6 +352,9 @@ input[type="radio"]:focus-visible,
   gap: 6px;
 }
 
+.libed-field input[type="text"],
+.libed-field textarea,
+.import-textures-table input[type="text"],
 .prop-row input[type="text"] {
   font: inherit;
   color: inherit;
@@ -362,6 +365,9 @@ input[type="radio"]:focus-visible,
   min-width: 0;
 }
 
+.libed-field input[type="text"]:focus,
+.libed-field textarea:focus,
+.import-textures-table input[type="text"]:focus,
 .prop-row input[type="text"]:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
@@ -1730,6 +1736,12 @@ input[type="radio"]:focus-visible,
 .ask-dialog p {
   margin: 0;
   line-height: 1.45;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.ask-dialog button.danger:not(.primary) {
+  color: var(--danger);
 }
 
 .ask-dialog .dialog-actions {
@@ -3157,6 +3169,88 @@ body.moving-dialog * {
 }
 
 /* Texture import */
+.import-textures-dialog {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.import-textures-common {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 18px;
+}
+
+.import-textures-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.import-textures-table th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.import-textures-table th,
+.import-textures-table td {
+  padding: 3px 6px;
+  vertical-align: middle;
+}
+
+.import-textures-table td:nth-child(3) input {
+  width: 100%;
+}
+
+.import-textures-table td:nth-child(n + 4) input {
+  width: 90px;
+}
+
+.import-textures-table img,
+.import-textures-table .catalog-icon-placeholder {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.import-fields button.primary,
+.import-textures-dialog button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.catalog-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
+}
+
+.catalog-filter span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-filter button {
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: inherit;
+}
+
 .import-texture-dialog {
   width: min(640px, calc(100vw - 32px));
 }

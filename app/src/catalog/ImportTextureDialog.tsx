@@ -11,22 +11,9 @@ import { useDialogEscape } from "../ui/dialogEscape";
 import { useUi } from "../ui/uiStore";
 import { formatFieldValue, parseLength, toUnit, unitSymbol, useUnit } from "../units";
 import CategoryField from "./CategoryField";
-import { extensionOf, TEXTURE_EXTENSIONS } from "./modelConvert";
-
-/** Images the WebView shows as preview (TIFF and ZIP have none). */
-const PREVIEW_TYPES: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  gif: "image/gif",
-  bmp: "image/bmp",
-  webp: "image/webp",
-  svg: "image/svg+xml",
-};
-
-function fileStem(path: string): string {
-  return (path.split(/[\\/]/).pop() ?? path).replace(/\.[^.]+$/, "");
-}
+import { fileStem, imagePreview } from "./imagePreview";
+import { TEXTURE_EXTENSIONS } from "./modelConvert";
+import { tileHeight } from "./tileSize";
 
 export default function ImportTextureDialog({
   initialPath,
@@ -51,19 +38,16 @@ export default function ImportTextureDialog({
     setPath(chosen);
     setName(fileStem(chosen));
     setStatus(null);
-    const type = PREVIEW_TYPES[extensionOf(chosen)];
     setPreview((old) => {
       if (old) URL.revokeObjectURL(old);
       return null;
     });
-    if (type) {
-      try {
-        const bytes = await api.readFile(chosen);
-        setPreview(URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type })));
-      } catch {
-        // No preview, the import still works
-      }
-    }
+    const image = await imagePreview(chosen);
+    if (!image) return;
+    setPreview(image.url);
+    // The tile has the proportions of the image
+    const cm = parseLength(width, unit);
+    if (cm !== null) setHeight(formatFieldValue(toUnit(tileHeight(cm, image.ratio), unit), unit));
   };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: loads once for the given file
@@ -101,7 +85,7 @@ export default function ImportTextureDialog({
     setBusy(true);
     setStatus(t("Importing…"));
     try {
-      await api.execute("texture_import", {
+      const added = (await api.execute("texture_import", {
         path,
         name: name.trim() || fileStem(path),
         category: category.trim() || "My textures",
@@ -109,7 +93,8 @@ export default function ImportTextureDialog({
         width: w,
         height: h,
         ...(useUi.getState().libraryTarget ? { library: useUi.getState().libraryTarget } : {}),
-      });
+      })) as { catalog_id: string };
+      useUi.getState().noteImport(added.catalog_id);
       onClose();
     } catch (e) {
       setStatus(errorText(e));

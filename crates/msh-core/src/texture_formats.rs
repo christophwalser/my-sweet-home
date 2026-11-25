@@ -68,15 +68,27 @@ fn convert(data: Vec<u8>, ext: &str) -> Result<TextureImage, String> {
         inner_name: None,
     };
     match ext {
-        "jpg" | "jpeg" | "png" | "bmp" | "gif" => Ok(TextureImage {
-            data,
-            extension: if ext == "jpeg" {
-                "jpg".into()
-            } else {
-                ext.into()
-            },
-            inner_name: None,
-        }),
+        "jpg" | "jpeg" | "png" | "bmp" | "gif" => {
+            // Kept as it is, so at least its first bytes must be those of an image
+            if !matches!(
+                image::guess_format(&data),
+                Ok(image::ImageFormat::Jpeg
+                    | image::ImageFormat::Png
+                    | image::ImageFormat::Bmp
+                    | image::ImageFormat::Gif)
+            ) {
+                return Err("cannot read the image: it is no JPEG, PNG, BMP or GIF".into());
+            }
+            Ok(TextureImage {
+                data,
+                extension: if ext == "jpeg" {
+                    "jpg".into()
+                } else {
+                    ext.into()
+                },
+                inner_name: None,
+            })
+        }
         "webp" | "tif" | "tiff" => {
             let format = if ext == "webp" {
                 image::ImageFormat::WebP

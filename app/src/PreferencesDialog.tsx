@@ -1,13 +1,13 @@
 // Preferences dialog: plan, units and magnetism, defaults of new elements, 3D view and general
 // settings, on tabs. Changes apply at once and are kept for all windows of the app.
 
-import { ask } from "@tauri-apps/plugin-dialog";
 import { type ReactNode, useEffect, useState } from "react";
 import CatalogFeedsPage from "./CatalogFeedsPage";
 import { LANGUAGES, type LanguageChoice, languageChoice, setLanguage, t } from "./i18n";
 import { DASH_STYLES, Field, WALL_PATTERNS } from "./panels/fields";
 import { type Preferences, usePreferences } from "./preferences";
 import { useStore } from "./store";
+import { askConfirm } from "./ui/ask";
 import { command } from "./ui/commands";
 import { toolLetters, withToolKey } from "./ui/toolKeys";
 import { type ThemeChoice, useUi } from "./ui/uiStore";
@@ -565,9 +565,10 @@ export default function PreferencesDialog({
           <button
             type="button"
             onClick={async () => {
-              const sure = await ask(t("Set all preferences back to their default values?"), {
-                title: t("Preferences"),
-                kind: "warning",
+              const sure = await askConfirm({
+                title: t("Set all preferences back to their default values?"),
+                confirm: t("Reset all"),
+                danger: true,
               });
               if (!sure) return;
               p.reset();

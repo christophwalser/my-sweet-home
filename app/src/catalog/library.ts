@@ -31,6 +31,7 @@ const HISTORY_LABELS: Record<string, () => string> = {
   "change items": () => t("change items"),
   "move items": () => t("move items"),
   "copy items": () => t("copy items"),
+  "move to library": () => t("move to library"),
   "remove items": () => t("delete items"),
   "rename library": () => t("rename library"),
   "create library": () => t("create library"),
@@ -106,6 +107,7 @@ export async function runForItems(
 async function copyItems(
   targets: Target[],
   to: string | "own" | "duplicate",
+  move = false,
 ): Promise<{ copies: { path: string; index: number }[]; steps: number }> {
   const groups = byLibrary(targets);
   const copies: { path: string; index: number }[] = [];
@@ -121,7 +123,7 @@ async function copyItems(
           }
         : to === "own"
           ? {}
-          : { to }),
+          : { to, move }),
     })) as { to: string; indexes: number[] };
     copies.push(...r.indexes.map((index) => ({ path: r.to, index })));
   }
@@ -165,6 +167,8 @@ export type MenuContext = {
   edit: (items: { path: string; index: number }[]) => void;
   /** Called when the items were deleted */
   deleted?: () => void;
+  /** Called when the items are in another library, with their place there */
+  moved?: (items: { path: string; index: number }[]) => void;
 };
 
 /** Entries of an item's context menu in the catalog. */
@@ -316,6 +320,28 @@ export function copyMenu(targets: Target[], ctx: MenuContext): MenuItem[] {
   });
 }
 
+/** The entry "Move to library": as copying, but the items leave their library. */
+export function transferMenu(targets: Target[], ctx: MenuContext): MenuItem[] {
+  return copyTargets(targets).map((l): MenuItem => {
+    const library = libraryName(l);
+    return {
+      label: library,
+      action: () =>
+        void copyItems(targets, l.path, true)
+          .then(({ copies, steps }) => {
+            ctx.notify(
+              targets.length === 1
+                ? t("“{name}” was moved to “{library}”", { name: targets[0].item.name, library })
+                : t("{n} items were moved to “{library}”", { n: targets.length, library }),
+              steps,
+            );
+            ctx.moved?.(copies);
+          })
+          .catch((e) => ctx.notify(errorText(e))),
+    };
+  });
+}
+
 /**
  * Entries of the context menu of one or several items. Read-only items (libraries of the
  * installation) can only be copied, to be edited in the user's own library.
@@ -344,6 +370,8 @@ export function itemsMenu(targets: Target[], categories: string[], ctx: MenuCont
   }
   entries.push({ label: t("Move to"), items: moveMenu(targets, categories, ctx) });
   entries.push(...copyEntry);
+  const transfers = transferMenu(targets, ctx);
+  if (transfers.length > 0) entries.push({ label: t("Move to library"), items: transfers });
   entries.push({
     label: t("Duplicate"),
     shortcut: "Ctrl+D",

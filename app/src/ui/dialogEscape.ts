@@ -46,7 +46,9 @@ function stateOf(el: Element): string {
 /**
  * Escape for the dialog `ref`. With `guard` a filled in dialog asks before it closes: one of its
  * fields was changed by the user, or `changed` says so (for what has no field). `first` may take
- * the key before the dialog closes; `busy` keeps the dialog open.
+ * the key before the dialog closes; `busy` keeps the dialog open. A dialog that is not `active`
+ * lies under another one: it leaves the key alone, and gets the focus back when that one closes.
+ * `question` replaces the text of the question.
  */
 export function useDialogEscape(
   ref: RefObject<HTMLElement | null>,
@@ -56,6 +58,8 @@ export function useDialogEscape(
     changed?: () => boolean;
     first?: () => boolean;
     busy?: boolean;
+    active?: boolean;
+    question?: () => { title: string; message: string; confirm: string } | null;
   } = {},
 ): void {
   const latest = useRef({ onClose, options });
@@ -70,6 +74,14 @@ export function useDialogEscape(
     };
   }, [ref]);
 
+  /** Where the focus was last in the dialog */
+  const last = useRef<HTMLElement | null>(null);
+  const active = options.active !== false;
+  useEffect(() => {
+    if (!active || ref.current?.contains(document.activeElement)) return;
+    (last.current?.isConnected ? last.current : ref.current)?.focus();
+  }, [active, ref]);
+
   useEffect(() => {
     /** The fields that had the focus, with their state when they first got it */
     const first = new Map<Element, string>();
@@ -77,7 +89,9 @@ export function useDialogEscape(
     let before = "";
     const onFocus = (e: FocusEvent) => {
       const el = e.target as Element;
-      if (!ref.current?.contains(el) || !el.matches("input, textarea, select")) return;
+      if (!ref.current?.contains(el)) return;
+      last.current = el as HTMLElement;
+      if (!el.matches("input, textarea, select")) return;
       before = stateOf(el);
       if (!first.has(el) && (el as HTMLInputElement).type !== "search") first.set(el, before);
     };
@@ -89,6 +103,7 @@ export function useDialogEscape(
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
       const { onClose, options } = latest.current;
+      if (options.active === false) return;
       const el = document.activeElement as TextField | null;
       const inField = !!el && !!ref.current?.contains(el) && keyTarget(el) === "text";
       const step = escapeStep(
@@ -112,9 +127,11 @@ export function useDialogEscape(
           if (step === "close") onClose();
           else
             void askConfirm({
-              title: t("Discard your input?"),
-              message: t("What you entered in this window is lost."),
-              confirm: t("Discard"),
+              ...(options.question?.() ?? {
+                title: t("Discard your input?"),
+                message: t("What you entered in this window is lost."),
+                confirm: t("Discard"),
+              }),
               danger: true,
             }).then((yes) => yes && latest.current.onClose());
       }

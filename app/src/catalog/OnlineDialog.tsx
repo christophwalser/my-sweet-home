@@ -207,9 +207,10 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
           }
           await api.execute("library_import", { path: d.path, replace: true });
         }
+        useUi.getState().noteImport(null);
       } else if (d.type === "texture") {
         const width = d.width_cm ?? 100;
-        await api.execute("texture_import", {
+        const added = (await api.execute("texture_import", {
           path: d.path,
           name: d.name,
           category: d.category ?? current.label,
@@ -217,7 +218,8 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
           width,
           height: d.height_cm ?? width,
           ...(useUi.getState().libraryTarget ? { library: useUi.getState().libraryTarget } : {}),
-        });
+        })) as { catalog_id: string };
+        useUi.getState().noteImport(added.catalog_id);
       } else {
         // Models: the furniture import sets icon, upright position and size, then comes back
         useOnline.setState({
@@ -227,6 +229,7 @@ export default function OnlineDialog({ onClose }: { onClose: () => void }) {
         const extra: Record<string, string> = {};
         if (d.category) extra.category = d.category;
         if (d.creator) extra.creator = d.creator;
+        useUi.setState({ importQueue: [d.path] });
         openDialog("importFurniture", d.path, "online", extra);
         return;
       }

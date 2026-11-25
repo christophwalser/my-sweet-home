@@ -405,6 +405,13 @@ fn texture_import_refuses_bad_files_and_sizes() {
     let txt = root.join("notes.txt");
     std::fs::write(&txt, "hello").unwrap();
     run_err(&r, &mut doc, "texture_import", json!({ "path": txt }));
+    // The name alone makes no image
+    for name in ["fake.png", "fake.jpg", "fake.bmp", "fake.gif"] {
+        let fake = root.join(name);
+        std::fs::write(&fake, "hello").unwrap();
+        let err = run_err(&r, &mut doc, "texture_import", json!({ "path": fake }));
+        assert!(err.contains("cannot read the image"), "{name}: {err}");
+    }
     let png = root.join("tile.png");
     std::fs::write(&png, png_bytes(2, 2)).unwrap();
     for size in [json!({ "width": 0 }), json!({ "width": 50, "height": -1 })] {
