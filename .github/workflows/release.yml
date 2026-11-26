@@ -74,7 +74,11 @@ jobs:
         run: |
           $version = '${{ steps.version.outputs.version }}'
           $out = New-Item -ItemType Directory -Force dist-release
-          Copy-Item target/release/bundle/msi/*.msi $out
+          # GitHub replaces spaces in the names of release files by dots: named so right away, the
+          # names in SHA256SUMS.txt are those of the downloads
+          foreach ($msi in Get-ChildItem target/release/bundle/msi/*.msi) {
+            Copy-Item $msi.FullName (Join-Path $out.FullName ($msi.Name -replace ' ', '.'))
+          }
           $legal = 'app/src-tauri/resources/legal'
           Copy-Item "$legal/THIRD-PARTY-NOTICES.txt" $out
           # Portable CLI: msh.exe with the license files

@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Fixed
+
+- `SHA256SUMS.txt` of a release names the installer as it is downloaded, so `sha256sum --check`
+  finds it.
+
 ## [0.2.0] - 2026-11-25
 
 Roofs, stairs, terrain and scans, dimension chains, plans to scale on large papers and for CAD, a
