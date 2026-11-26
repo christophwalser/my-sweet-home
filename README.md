@@ -24,7 +24,7 @@ project**; see [NOTICE.md](NOTICE.md).
 
 ## Download and installation
 
-1. Download the latest `My Sweet Home_<version>_x64_en-US.msi` from the
+1. Download the latest `My.Sweet.Home_<version>_x64_en-US.msi` from the
    [releases page](https://github.com/christophwalser/my-sweet-home/releases).
 2. Optional: check it against `SHA256SUMS.txt` of the release
    (`Get-FileHash .\My*.msi -Algorithm SHA256`) or verify its build provenance with the
